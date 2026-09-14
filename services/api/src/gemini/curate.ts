@@ -23,6 +23,9 @@ async function callGemini(storyText: string, mediaRefs: string[]): Promise<Curat
     model: "gemini-2.5-flash",
     contents: buildPrompt(storyText, mediaRefs),
   });
+  if (!response.text) {
+    throw new Error("empty Gemini response");
+  }
   return JSON.parse(response.text) as CurationResult;
 }
 
