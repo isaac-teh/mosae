@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { setPendingMedia } from "@/lib/pendingMedia";
+import { Logo } from "@/components/Logo";
 
 const STEPS = [
   { emoji: "🖼️", title: "Pick your moments", body: "Photos and videos from a trip, a birthday, or an ordinary Sunday." },
@@ -48,7 +49,7 @@ export default function Home() {
       <div aria-hidden className="pointer-events-none absolute -left-28 top-72 size-64 rounded-full bg-honey-tint blur-3xl" />
 
       <header className="relative flex h-14 items-center justify-between px-5">
-        <span className="font-serif text-[22px] leading-none tracking-[-0.2px] text-ink">Mosaé</span>
+        <Logo />
         <span className="rounded-full bg-surface-pill px-3 py-1 text-[11px] font-semibold uppercase leading-[14px] tracking-[0.55px] text-ink-soft">
           Beta
         </span>

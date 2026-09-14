@@ -16,6 +16,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-jakarta)", "system-ui", "sans-serif"],
+        display: ["var(--font-fraunces)", "Georgia", "serif"],
         serif: ["var(--font-newsreader)", "Georgia", "serif"],
       },
     },
