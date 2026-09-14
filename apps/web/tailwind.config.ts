@@ -11,10 +11,12 @@ const config: Config = {
         track: "#e5e2dd",
         line: "#ebe8e3",
         ink: { DEFAULT: "#1c1c19", soft: "#59413b", faint: "#8c716a" },
+        honey: { DEFAULT: "#855300", tint: "rgba(255,221,184,0.5)", deep: "#2a1700" },
         brand: { DEFAULT: "#a83212", bright: "#ca4a28", tint: "#ffdbd2", deep: "#3c0800", dot: "#e0bfb7" },
       },
       fontFamily: {
         sans: ["var(--font-jakarta)", "system-ui", "sans-serif"],
+        serif: ["var(--font-newsreader)", "Georgia", "serif"],
       },
     },
   },

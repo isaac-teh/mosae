@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getStorageClient } from "@/lib/firebase/client";
 import { StepProgress } from "@/components/StepProgress";
+import { getPendingMedia } from "@/lib/pendingMedia";
 
 type Picked = {
   id: string;
@@ -20,28 +21,29 @@ function formatDuration(seconds: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+// Object URLs live for the tab session; the handful of previews is not worth revoking
+// (revoking on unmount breaks previews under React StrictMode's double mount).
+function toPicked(files: File[]): Picked[] {
+  return files.map((file) => ({
+    id: `${file.name}-${file.size}-${file.lastModified}`,
+    file,
+    previewUrl: URL.createObjectURL(file),
+    isVideo: file.type.startsWith("video/"),
+    selected: true,
+  }));
+}
+
 // Figma: "Pick the Memory - Camera Roll" (1:128)
 export default function PickMemoryPage() {
-  const [items, setItems] = useState<Picked[]>([]);
+  const [items, setItems] = useState<Picked[]>(() => toPicked(getPendingMedia()));
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
-  // Revoke object URLs only when leaving the screen; they stay in use while selections change.
-  useEffect(() => () => itemsRef.current.forEach((i) => URL.revokeObjectURL(i.previewUrl)), []);
-
   function addFiles(files: FileList | null) {
     if (!files) return;
-    const next = Array.from(files).map<Picked>((file) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}`,
-      file,
-      previewUrl: URL.createObjectURL(file),
-      isVideo: file.type.startsWith("video/"),
-      selected: true,
-    }));
+    const next = toPicked(Array.from(files));
     setItems((prev) => {
       const seen = new Set(prev.map((p) => p.id));
       return [...prev, ...next.filter((n) => !seen.has(n.id))];
@@ -97,7 +99,7 @@ export default function PickMemoryPage() {
 
       <header className="sticky top-0 z-30 bg-canvas/85 shadow-[0_1px_8px_rgba(54,49,44,0.04)] backdrop-blur-md">
         <div className="flex h-14 items-center justify-between pl-5 pr-4">
-          <button type="button" onClick={() => router.back()} className="text-sm font-medium leading-[22px] text-brand">
+          <button type="button" onClick={() => router.push("/")} className="text-sm font-medium leading-[22px] text-brand">
             Cancel
           </button>
           <h1 className="text-sm font-bold tracking-[-0.35px] text-ink">Camera Roll</h1>
