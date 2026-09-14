@@ -27,7 +27,11 @@ export async function dispatchDue(
       delivered += 1;
     } catch (error) {
       console.error("outbox dispatch failed", task.workKey, error);
-      await failDispatch(db, task, now, error instanceof Error ? error.message : String(error));
+      try {
+        await failDispatch(db, task, now, error instanceof Error ? error.message : String(error));
+      } catch (failError) {
+        console.error("outbox failure recording failed", task.workKey, failError);
+      }
       failed += 1;
     }
   }

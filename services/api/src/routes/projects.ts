@@ -31,7 +31,7 @@ function handleError(res: Response, error: unknown): void {
 
 function parseEntries(body: unknown): NewEntryInput[] | null {
   const entries = (body as { entries?: unknown })?.entries;
-  if (!Array.isArray(entries)) return null;
+  if (!Array.isArray(entries) || entries.length === 0) return null;
   const ok = entries.every(
     (e) =>
       typeof e?.fileName === "string" &&

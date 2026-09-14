@@ -94,6 +94,12 @@ describe("projects routes", () => {
       "uploads/user-1/p1/s1/a1/original",
     );
   });
+  it("rejects an empty entries array", async () => {
+    const res = await request(buildApp()).post("/api/projects/p1/upload-sessions").send({ entries: [] });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "invalid_entry" });
+    expect(store.openSession).not.toHaveBeenCalled();
+  });
   it("rejects encoded slashes in project IDs before calling the store", async () => {
     const res = await request(buildApp())
       .post("/api/projects/p1%2FuploadSessions%2Fs1/upload-sessions")

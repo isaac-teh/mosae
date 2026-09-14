@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -16,15 +16,17 @@ const { curateRouter } = await import("./curate.js");
 function buildApp() {
   const app = express();
   app.use(express.json());
-  app.use("/api/curate", curateRouter);
+  app.use("/api/curate", curateRouter((_req, res, next) => { res.locals.userId = "user-1"; next(); }));
   return app;
 }
 
 describe("POST /api/curate", () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
   beforeEach(() => {
     vi.mocked(curateStory).mockReset();
     vi.mocked(saveCurationPlan).mockReset();
   });
+  afterEach(() => error.mockClear());
 
   it("returns 201 with the saved plan id on success", async () => {
     vi.mocked(curateStory).mockResolvedValue({
@@ -36,7 +38,7 @@ describe("POST /api/curate", () => {
 
     const res = await request(buildApp())
       .post("/api/curate")
-      .send({ userId: "user-1", storyText: "our trip", mediaRefs: ["gs://bucket/a.jpg"] });
+      .send({ storyText: "our trip", mediaRefs: ["gs://bucket/a.jpg"] });
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ planId: "plan-123" });
@@ -50,9 +52,10 @@ describe("POST /api/curate", () => {
 
     const res = await request(buildApp())
       .post("/api/curate")
-      .send({ userId: "user-1", storyText: "our trip", mediaRefs: ["gs://bucket/a.jpg"] });
+      .send({ storyText: "our trip", mediaRefs: ["gs://bucket/a.jpg"] });
 
     expect(res.status).toBe(502);
     expect(res.body).toEqual({ error: "curation_failed" });
+    expect(error).toHaveBeenCalledWith("curation failed", expect.any(Error));
   });
 });

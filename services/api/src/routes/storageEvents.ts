@@ -36,7 +36,9 @@ export function storageEventsRouter(deps: {
             : "application/octet-stream",
         now: now(),
       });
-      if (
+      if (result.kind === "wrong_bucket") {
+        console.error("storage finalize wrong bucket", { expectedBucket: deps.bucket, receivedBucket: bucket });
+      } else if (
         result.kind !== "accepted" &&
         result.kind !== "ignored_path" &&
         result.kind !== "duplicate"

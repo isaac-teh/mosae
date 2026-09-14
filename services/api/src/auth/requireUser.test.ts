@@ -20,6 +20,13 @@ describe("requireUser", () => {
     expect(verify).not.toHaveBeenCalled();
   });
 
+  it("rejects an Authorization header without the Bearer prefix", async () => {
+    const verify = vi.fn();
+    const res = await request(buildApp(verify)).get("/me").set("Authorization", "token");
+    expect(res.status).toBe(401);
+    expect(verify).not.toHaveBeenCalled();
+  });
+
   it("rejects tokens that fail verification", async () => {
     const res = await request(buildApp(() => Promise.reject(new Error("expired"))))
       .get("/me")

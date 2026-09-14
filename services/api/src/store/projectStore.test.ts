@@ -49,6 +49,11 @@ describe("projectStore (emulator)", () => {
     ).rejects.toMatchObject({ code: "not_found" });
   });
 
+  it("rejects more than 500 entries", async () => {
+    const project = await newProject();
+    await expect(openSession(adminDb, { userId: project.userId, projectId: project.id, entries: Array.from({ length: 501 }, () => photo), now: 1 })).rejects.toMatchObject({ code: "too_many_entries" });
+  });
+
   it("blocks new entries after close without finalizing pending ones", async () => {
     const project = await newProject();
     const { session } = await openSession(adminDb, { userId: project.userId, projectId: project.id, entries: [photo], now: 1 });

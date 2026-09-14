@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
 import type { Firestore } from "firebase-admin/firestore";
@@ -32,7 +32,10 @@ const payload = {
   contentType: "image/jpeg",
 };
 describe("POST /events/storage-finalize", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => { warn.mockClear(); error.mockClear(); });
   it("records the finalize event and triggers dispatch when accepted", async () => {
     vi.mocked(recordFinalize).mockResolvedValue({
       kind: "accepted",

@@ -1,12 +1,14 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
+import { requireUser } from "../auth/requireUser.js";
 import { curateStory } from "../gemini/curate.js";
 import { saveCurationPlan } from "../firestore/curationPlan.js";
 
-export const curateRouter = Router();
+export function curateRouter(auth: RequestHandler = requireUser()): Router {
+const router = Router();
+router.use(auth);
 
-curateRouter.post("/", async (req, res) => {
-  const { userId, storyText, mediaRefs } = req.body as {
-    userId: string;
+router.post("/", async (req, res) => {
+  const { storyText, mediaRefs } = req.body as {
     storyText: string;
     mediaRefs: string[];
   };
@@ -21,7 +23,7 @@ curateRouter.post("/", async (req, res) => {
   }
 
   const planId = await saveCurationPlan({
-    userId,
+    userId: res.locals.userId,
     storyText,
     selectedMediaRefs: curation.selectedMediaRefs,
     pacing: curation.pacing,
@@ -31,3 +33,5 @@ curateRouter.post("/", async (req, res) => {
 
   res.status(201).json({ planId });
 });
+return router;
+}
