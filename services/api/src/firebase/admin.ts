@@ -3,6 +3,9 @@ import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
 export function getAdminApp(): App {
+  if ((process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST) && process.env.FIREBASE_PRIVATE_KEY) {
+    throw new Error("mixed_emulator_and_credentials");
+  }
   const existing = getApps()[0];
   if (existing) return existing;
 
