@@ -82,7 +82,7 @@ function TellStoryForm() {
     setError(null);
     const focus = themes.length ? `\n\nFocus on: ${themes.join(", ")}` : "";
     try {
-      const { planId } = await submitStory("user-1", `${storyText.trim()}${focus}`, projectId ? [projectId] : []);
+      const { planId } = await submitStory(`${storyText.trim()}${focus}`, projectId ? [projectId] : []);
       router.push(`/review-moments?planId=${planId}`);
     } catch (e) {
       console.error("submit failed", e);
