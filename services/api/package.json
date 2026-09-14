@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run --exclude \"src/store/**\"",
@@ -14,7 +14,8 @@
     "@google-cloud/tasks": "^5.5.0",
     "@google/genai": "^0.12.0",
     "express": "^4.19.0",
-    "firebase-admin": "^12.3.0"
+    "firebase-admin": "^12.3.0",
+    "google-auth-library": "^9.15.1"
   },
   "devDependencies": {
     "@types/express": "^4.17.0",
