@@ -6,7 +6,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "vitest run"
+    "test": "vitest run --exclude \"src/store/**\"",
+    "vitest:store": "vitest run src/store --no-file-parallelism",
+    "test:emulator": "cd ../.. && firebase emulators:exec --only firestore --project demo-mosae \"npm run vitest:store -w services/api\""
   },
   "dependencies": {
     "@google/genai": "^0.12.0",
