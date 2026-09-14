@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getStorage } from "firebase/storage";
+import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -13,12 +13,26 @@ const firebaseConfig = {
 
 export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
+const useEmulators = process.env.NEXT_PUBLIC_USE_EMULATORS === "true";
+let authConnected = false;
+let storageConnected = false;
+
 export function getAuthClient() {
-  return getAuth(firebaseApp);
+  const auth = getAuth(firebaseApp);
+  if (useEmulators && !authConnected) {
+    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+    authConnected = true;
+  }
+  return auth;
 }
 
 export function getStorageClient() {
-  return getStorage(firebaseApp);
+  const storage = getStorage(firebaseApp);
+  if (useEmulators && !storageConnected) {
+    connectStorageEmulator(storage, "127.0.0.1", 9199);
+    storageConnected = true;
+  }
+  return storage;
 }
 
 export function getDbClient() {
