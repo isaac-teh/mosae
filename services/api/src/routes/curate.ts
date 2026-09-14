@@ -14,7 +14,8 @@ curateRouter.post("/", async (req, res) => {
   let curation;
   try {
     curation = await curateStory(storyText, mediaRefs);
-  } catch {
+  } catch (error) {
+    console.error("curation failed", error);
     res.status(502).json({ error: "curation_failed" });
     return;
   }

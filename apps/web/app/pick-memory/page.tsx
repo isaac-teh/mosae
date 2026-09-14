@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "@/lib/firebase/client";
+import { getStorageClient } from "@/lib/firebase/client";
 
 export default function PickMemoryPage() {
   const [uploading, setUploading] = useState(false);
@@ -15,7 +15,7 @@ export default function PickMemoryPage() {
 
     const refs: string[] = [];
     for (const file of Array.from(files)) {
-      const storageRef = ref(storage, `uploads/${Date.now()}-${file.name}`);
+      const storageRef = ref(getStorageClient(), `uploads/${Date.now()}-${file.name}`);
       await uploadBytes(storageRef, file);
       refs.push(await getDownloadURL(storageRef));
     }

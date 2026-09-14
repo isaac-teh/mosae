@@ -1,10 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { submitStory } from "@/lib/api";
 
 export default function TellStoryPage() {
+  return (
+    <Suspense fallback={null}>
+      <TellStoryForm />
+    </Suspense>
+  );
+}
+
+function TellStoryForm() {
   const [storyText, setStoryText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const router = useRouter();
