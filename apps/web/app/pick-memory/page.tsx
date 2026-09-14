@@ -2,8 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { getStorageClient } from "@/lib/firebase/client";
+import { uploadMedia, type UploadProgress } from "@/lib/uploads";
 import { StepProgress } from "@/components/StepProgress";
 import { getPendingMedia } from "@/lib/pendingMedia";
 
@@ -37,6 +36,7 @@ function toPicked(files: File[]): Picked[] {
 export default function PickMemoryPage() {
   const [items, setItems] = useState<Picked[]>(() => toPicked(getPendingMedia()));
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -68,13 +68,16 @@ export default function PickMemoryPage() {
     setUploading(true);
     setError(null);
     try {
-      const refs: string[] = [];
-      for (const { file } of selected) {
-        const storageRef = ref(getStorageClient(), `uploads/${Date.now()}-${file.name}`);
-        await uploadBytes(storageRef, file);
-        refs.push(await getDownloadURL(storageRef));
+      const result = await uploadMedia(
+        selected.map((i) => i.file),
+        { mode: "memory", onProgress: setProgress },
+      );
+      if (result.finished === 0) {
+        setError("Upload failed. Please try again.");
+        setUploading(false);
+        return;
       }
-      const params = new URLSearchParams({ mediaRefs: JSON.stringify(refs) });
+      const params = new URLSearchParams({ projectId: result.projectId, count: String(result.finished) });
       router.push(`/tell-story?${params.toString()}`);
     } catch (e) {
       console.error("upload failed", e);
@@ -186,7 +189,10 @@ export default function PickMemoryPage() {
         <div className="flex items-center justify-between rounded-full border border-line bg-canvas/90 p-[11px] shadow-xl backdrop-blur-md">
           <div className="min-w-0 flex-1 pl-3 pr-2">
             <p className="truncate text-xs font-semibold text-ink">
-              {error ?? (uploading ? "Uploading..." : `${selected.length} selected`)}
+              {error ??
+                (uploading && progress
+                  ? `Uploading ${progress.finishedFiles + progress.failedFiles} of ${progress.totalFiles}`
+                  : `${selected.length} selected`)}
             </p>
             <p className="truncate text-xs leading-[18px] text-ink-soft">
               {photoCount} {photoCount === 1 ? "photo" : "photos"}, {videoCount} {videoCount === 1 ? "video" : "videos"}

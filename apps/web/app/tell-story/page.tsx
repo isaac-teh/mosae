@@ -43,7 +43,8 @@ function TellStoryForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const mediaRefs: string[] = JSON.parse(searchParams.get("mediaRefs") ?? "[]");
+  const projectId = searchParams.get("projectId");
+  const count = Number(searchParams.get("count") ?? 0);
   const canSubmit = storyText.trim().length > 0 || themes.length > 0;
 
   function toggleTheme(theme: string) {
@@ -81,7 +82,7 @@ function TellStoryForm() {
     setError(null);
     const focus = themes.length ? `\n\nFocus on: ${themes.join(", ")}` : "";
     try {
-      const { planId } = await submitStory("user-1", `${storyText.trim()}${focus}`, mediaRefs);
+      const { planId } = await submitStory("user-1", `${storyText.trim()}${focus}`, projectId ? [projectId] : []);
       router.push(`/review-moments?planId=${planId}`);
     } catch (e) {
       console.error("submit failed", e);
@@ -117,7 +118,7 @@ function TellStoryForm() {
         </h2>
         <p className="mt-1 text-sm leading-[22.75px] text-ink-soft">
           Mosaé will listen to your intent and curate the most meaningful moments from your{" "}
-          {mediaRefs.length || "selected"} {mediaRefs.length === 1 ? "memory" : "memories"}.
+          {count || "selected"} {count === 1 ? "memory" : "memories"}.
         </p>
 
         <div className="mt-4 flex min-h-[280px] flex-col justify-between rounded-2xl bg-surface p-6 shadow-md">
