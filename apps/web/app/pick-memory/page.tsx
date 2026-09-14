@@ -66,6 +66,7 @@ export default function PickMemoryPage() {
   async function handleNext() {
     if (!anySelected) return;
     setUploading(true);
+    setProgress(null);
     setError(null);
     try {
       const result = await uploadMedia(
@@ -190,8 +191,10 @@ export default function PickMemoryPage() {
           <div className="min-w-0 flex-1 pl-3 pr-2">
             <p className="truncate text-xs font-semibold text-ink">
               {error ??
-                (uploading && progress
-                  ? `Uploading ${progress.finishedFiles + progress.failedFiles} of ${progress.totalFiles}`
+                (uploading
+                  ? progress
+                    ? `Uploading ${progress.finishedFiles + progress.failedFiles} of ${progress.totalFiles}`
+                    : "Uploading..."
                   : `${selected.length} selected`)}
             </p>
             <p className="truncate text-xs leading-[18px] text-ink-soft">

@@ -5,25 +5,29 @@ function file(name: string, size: number, type = "image/jpeg") {
   return new File([new Uint8Array(size)], name, { type });
 }
 
-function fakeDeps(options: { failPath?: string } = {}) {
+function fakeDeps(options: { failPath?: string; rejectLaterEntries?: boolean; shortEntries?: boolean } = {}) {
   const calls: { path: string; body?: unknown }[] = [];
   let entryCounter = 0;
   const post = vi.fn(async (path: string, body?: unknown) => {
     calls.push({ path, body });
     if (path === "/api/projects") return { project: { id: "p1" } };
     if (path === "/api/projects/p1/upload-sessions" || path.endsWith("/entries")) {
+      if (options.rejectLaterEntries && path.endsWith("/entries")) throw new Error("entry_registration_failed");
       const entries = (body as { entries: { fileName: string }[] }).entries.map((e) => {
         entryCounter += 1;
         return { assetId: `a${entryCounter}`, fileName: e.fileName, storagePath: `uploads/u/p1/s1/a${entryCounter}/original` };
       });
-      return path.endsWith("/entries") ? { entries } : { session: { id: "s1" }, entries };
+      const registeredEntries = options.shortEntries ? entries.slice(0, -1) : entries;
+      return path.endsWith("/entries") ? { entries: registeredEntries } : { session: { id: "s1" }, entries: registeredEntries };
     }
     return {};
   }) as unknown as UploadDeps["post"];
 
   let inFlight = 0;
   let maxInFlight = 0;
+  let putFileCalls = 0;
   const putFile: UploadDeps["putFile"] = async (storagePath, f, onBytes) => {
+    putFileCalls += 1;
     inFlight += 1;
     maxInFlight = Math.max(maxInFlight, inFlight);
     await new Promise((r) => setTimeout(r, 1));
@@ -31,7 +35,7 @@ function fakeDeps(options: { failPath?: string } = {}) {
     if (storagePath === options.failPath) throw Object.assign(new Error("denied"), { code: "storage/unauthorized" });
     onBytes(f.size);
   };
-  return { deps: { post, putFile }, calls, maxInFlight: () => maxInFlight };
+  return { deps: { post, putFile }, calls, maxInFlight: () => maxInFlight, putFileCalls: () => putFileCalls };
 }
 
 describe("uploadMedia", () => {
@@ -79,6 +83,26 @@ describe("uploadMedia", () => {
       path: "/api/projects/p1/upload-sessions/s1/entries/a1/outcome",
       body: { kind: "failed", reason: "storage/unauthorized" },
     });
+    expect(calls.at(-1)?.path).toBe("/api/projects/p1/upload-sessions/s1/close");
+  });
+
+  it("closes the session when a later entry-registration batch rejects", async () => {
+    const { deps, calls } = fakeDeps({ rejectLaterEntries: true });
+    const files = Array.from({ length: 501 }, (_, i) => file(`f${i}.jpg`, 1));
+
+    await expect(uploadMedia(files, { mode: "memory" }, deps)).rejects.toThrow("entry_registration_failed");
+
+    expect(calls.at(-1)?.path).toBe("/api/projects/p1/upload-sessions/s1/close");
+  });
+
+  it("closes the session without uploading when entry registration is short", async () => {
+    const { deps, calls, putFileCalls } = fakeDeps({ shortEntries: true });
+
+    await expect(uploadMedia([file("a.jpg", 10), file("b.jpg", 10)], { mode: "memory" }, deps)).rejects.toThrow(
+      "entry_registration_mismatch",
+    );
+
+    expect(putFileCalls()).toBe(0);
     expect(calls.at(-1)?.path).toBe("/api/projects/p1/upload-sessions/s1/close");
   });
 });

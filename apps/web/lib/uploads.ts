@@ -47,45 +47,61 @@ export async function uploadMedia(
   });
   const sessionPath = `${base}/${first.session.id}`;
   const entries = [...first.entries];
-  for (let start = ENTRY_BATCH; start < files.length; start += ENTRY_BATCH) {
-    const batch = await post<{ entries: RegisteredEntry[] }>(`${sessionPath}/entries`, {
-      entries: files.slice(start, start + ENTRY_BATCH).map(toInput),
-    });
-    entries.push(...batch.entries);
-  }
+  let mainPathFailed = false;
 
-  const sent = new Array<number>(files.length).fill(0);
-  const progress: UploadProgress = {
-    totalFiles: files.length,
-    finishedFiles: 0,
-    failedFiles: 0,
-    bytesSent: 0,
-    totalBytes: files.reduce((sum, f) => sum + f.size, 0),
-  };
-  const report = () => options.onProgress?.({ ...progress, bytesSent: sent.reduce((a, b) => a + b, 0) });
+  try {
+    for (let start = ENTRY_BATCH; start < files.length; start += ENTRY_BATCH) {
+      const batch = await post<{ entries: RegisteredEntry[] }>(`${sessionPath}/entries`, {
+        entries: files.slice(start, start + ENTRY_BATCH).map(toInput),
+      });
+      entries.push(...batch.entries);
+    }
 
-  let next = 0;
-  async function worker() {
-    while (next < files.length) {
-      const index = next++;
-      const entry = entries[index];
-      try {
-        await putFile(entry.storagePath, files[index], (bytes) => {
-          sent[index] = bytes;
-          report();
-        });
-        sent[index] = files[index].size;
-        progress.finishedFiles += 1;
-      } catch (error) {
-        progress.failedFiles += 1;
-        const reason = (error as { code?: string }).code ?? "upload_error";
-        await post(`${sessionPath}/entries/${entry.assetId}/outcome`, { kind: "failed", reason }).catch(() => undefined);
+    if (entries.length !== files.length) throw new Error("entry_registration_mismatch");
+
+    const sent = new Array<number>(files.length).fill(0);
+    const progress: UploadProgress = {
+      totalFiles: files.length,
+      finishedFiles: 0,
+      failedFiles: 0,
+      bytesSent: 0,
+      totalBytes: files.reduce((sum, f) => sum + f.size, 0),
+    };
+    const report = () => options.onProgress?.({ ...progress, bytesSent: sent.reduce((a, b) => a + b, 0) });
+
+    let next = 0;
+    async function worker() {
+      while (next < files.length) {
+        const index = next++;
+        const entry = entries[index];
+        if (!entry) throw new Error("entry_registration_mismatch");
+        try {
+          await putFile(entry.storagePath, files[index], (bytes) => {
+            sent[index] = bytes;
+            report();
+          });
+          sent[index] = files[index].size;
+          progress.finishedFiles += 1;
+        } catch (error) {
+          progress.failedFiles += 1;
+          const reason = (error as { code?: string }).code ?? "upload_error";
+          await post(`${sessionPath}/entries/${entry.assetId}/outcome`, { kind: "failed", reason }).catch(() => undefined);
+        }
+        report();
       }
-      report();
+    }
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker));
+    return { projectId: project.id, finished: progress.finishedFiles, failed: progress.failedFiles };
+  } catch (error) {
+    mainPathFailed = true;
+    throw error;
+  } finally {
+    try {
+      await post(`${sessionPath}/close`);
+    } catch (error) {
+      if (mainPathFailed) console.error("failed to close upload session", error);
+      else throw error;
     }
   }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker));
-  await post(`${sessionPath}/close`);
-  return { projectId: project.id, finished: progress.finishedFiles, failed: progress.failedFiles };
 }
