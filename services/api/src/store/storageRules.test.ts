@@ -42,6 +42,9 @@ describe("storage.rules (emulator)", () => {
   it("rejects non-media content types", async () => {
     const storage = env.authenticatedContext("alice").storage();
     await assertFails(storage.ref(original("alice").replace("a1", "a3")).put(jpeg, { contentType: "application/pdf" }).then(() => undefined));
+    await assertFails(storage.ref(original("alice").replace("a1", "a5")).put(new Uint8Array(), { contentType: "image/jpeg" }).then(() => undefined));
+    await assertFails(storage.ref(original("alice").replace("a1", "a6")).put(jpeg, { contentType: "image/" }).then(() => undefined));
+    await assertFails(storage.ref("uploads/alice/p1/s1/a1/x/original").put(jpeg, { contentType: "image/jpeg" }).then(() => undefined));
   });
 
   it("allows owners to read, and denies overwrite and delete", async () => {

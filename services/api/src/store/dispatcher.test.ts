@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { adminDb } from "../firebase/admin.js";
 import { buildOriginalPath } from "../domain/ids.js";
 import { DISPATCH_LEASE_MS } from "../domain/outbox.js";
@@ -48,15 +48,18 @@ describe("dispatchDue (emulator)", () => {
   });
 
   it("returns a task to pending when the queue fails, then delivers on the next run", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const projectId = await acceptedUpload(1);
     const queue = new InMemoryTaskQueue();
     queue.failOnce(await taskId(projectId), new Error("queue unavailable"));
     const first = await dispatchDue(adminDb, queue, 100, 1000);
     expect(first.failed).toBe(1);
+    expect(error).toHaveBeenCalledWith("outbox dispatch failed", expect.any(String), expect.any(Error));
     expect(await taskState(projectId)).toMatchObject({ state: "pending", lastError: "queue unavailable" });
 
     await dispatchDue(adminDb, queue, 200, 1000);
     expect(await taskState(projectId)).toMatchObject({ state: "delivered" });
+    error.mockRestore();
   });
 
   it("recovers a task claimed by a crashed dispatcher after its lease expires", async () => {
