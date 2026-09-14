@@ -12,6 +12,7 @@ import {
   type TaskQueue,
 } from "./queue/taskQueue.js";
 import { dispatchDue } from "./outbox/dispatcher.js";
+import { apiCors } from "./http/cors.js";
 
 const config = loadConfig();
 const queue: TaskQueue = config.tasks
@@ -26,8 +27,10 @@ const serviceAuth = requireServiceCaller({
   allowedEmails: config.invokerEmails,
 });
 const app = express();
+app.use("/api", apiCors(config));
+app.use("/api", express.json({ limit: "2mb" }));
 app.use(express.json({ limit: "2mb" }));
-app.use("/api/curate", curateRouter);
+app.use("/api/curate", curateRouter());
 app.use("/api/projects", projectsRouter({ db: adminDb }));
 app.use(
   "/events",

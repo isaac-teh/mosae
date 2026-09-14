@@ -4,6 +4,7 @@ export type Config = {
   storageBucket: string;
   serviceUrl: string;
   invokerEmails: string[];
+  allowedOrigins: string[];
   tasks: { project: string; location: string; queue: string; invokerServiceAccount: string } | null;
 };
 
@@ -18,6 +19,8 @@ const TASK_KEYS = ["GCP_PROJECT_ID", "TASKS_LOCATION", "TASKS_QUEUE", "TASKS_INV
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const production = env.NODE_ENV === "production";
   const invokers = production ? required(env, "INVOKER_SERVICE_ACCOUNTS") : (env.INVOKER_SERVICE_ACCOUNTS ?? "");
+  const allowedOrigins = (production ? required(env, "ALLOWED_ORIGINS") : (env.ALLOWED_ORIGINS ?? ""))
+    .split(",").map((origin) => origin.trim()).filter(Boolean);
   const hasTasks = TASK_KEYS.every((key) => env[key]);
   if (production && !hasTasks) TASK_KEYS.forEach((key) => required(env, key));
 
@@ -27,6 +30,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     storageBucket: required(env, "FIREBASE_STORAGE_BUCKET"),
     serviceUrl: required(env, "SERVICE_URL"),
     invokerEmails: invokers.split(",").map((s) => s.trim()).filter(Boolean),
+    allowedOrigins,
     tasks: hasTasks
       ? {
           project: env.GCP_PROJECT_ID!,

@@ -11,12 +11,18 @@ describe("loadConfig", () => {
 
   it("requires bucket and service URL everywhere", () => {
     expect(() => loadConfig({ SERVICE_URL: "x" })).toThrow("missing env FIREBASE_STORAGE_BUCKET");
+    expect(() => loadConfig({ FIREBASE_STORAGE_BUCKET: "b" })).toThrow("missing env SERVICE_URL");
   });
 
   it("requires Cloud Tasks and invokers in production", () => {
-    expect(() => loadConfig({ ...base, NODE_ENV: "production", INVOKER_SERVICE_ACCOUNTS: "a@b" })).toThrow("missing env GCP_PROJECT_ID");
-    const config = loadConfig({ ...base, ...tasks, NODE_ENV: "production", INVOKER_SERVICE_ACCOUNTS: "a@b, c@d" });
+    expect(() => loadConfig({ ...base, NODE_ENV: "production", INVOKER_SERVICE_ACCOUNTS: "a@b", ALLOWED_ORIGINS: "https://web.example" })).toThrow("missing env GCP_PROJECT_ID");
+    const config = loadConfig({ ...base, ...tasks, NODE_ENV: "production", INVOKER_SERVICE_ACCOUNTS: "a@b, c@d", ALLOWED_ORIGINS: "https://web.example" });
     expect(config.invokerEmails).toEqual(["a@b", "c@d"]);
     expect(config.tasks?.queue).toBe("q");
+  });
+
+  it("trims allowed origins and requires them in production", () => {
+    expect(loadConfig({ ...base, ALLOWED_ORIGINS: " https://web.example, https://admin.example " }).allowedOrigins).toEqual(["https://web.example", "https://admin.example"]);
+    expect(() => loadConfig({ ...base, ...tasks, NODE_ENV: "production", INVOKER_SERVICE_ACCOUNTS: "a@b" })).toThrow("missing env ALLOWED_ORIGINS");
   });
 });
