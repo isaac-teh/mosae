@@ -26,30 +26,30 @@ afterAll(async () => {
 describe("storage.rules (emulator)", () => {
   it("lets a user upload an image or video original to their own path", async () => {
     const storage = env.authenticatedContext("alice").storage();
-    await assertSucceeds(storage.ref(original("alice")).put(jpeg, { contentType: "image/jpeg" }));
-    await assertSucceeds(storage.ref(original("alice").replace("a1", "a2")).put(jpeg, { contentType: "video/mp4" }));
+    await assertSucceeds(storage.ref(original("alice")).put(jpeg, { contentType: "image/jpeg" }).then(() => undefined));
+    await assertSucceeds(storage.ref(original("alice").replace("a1", "a2")).put(jpeg, { contentType: "video/mp4" }).then(() => undefined));
   });
 
   it("rejects other users' paths, anonymous callers, and non-original objects", async () => {
     const alice = env.authenticatedContext("alice").storage();
-    await assertFails(alice.ref(original("bob")).put(jpeg, { contentType: "image/jpeg" }));
-    await assertFails(alice.ref("uploads/alice/p1/s1/a1/thumb.jpg").put(jpeg, { contentType: "image/jpeg" }));
-    await assertFails(alice.ref("renders/alice/p1/out.mp4").put(jpeg, { contentType: "video/mp4" }));
+    await assertFails(alice.ref(original("bob")).put(jpeg, { contentType: "image/jpeg" }).then(() => undefined));
+    await assertFails(alice.ref("uploads/alice/p1/s1/a1/thumb.jpg").put(jpeg, { contentType: "image/jpeg" }).then(() => undefined));
+    await assertFails(alice.ref("renders/alice/p1/out.mp4").put(jpeg, { contentType: "video/mp4" }).then(() => undefined));
     const nobody = env.unauthenticatedContext().storage();
-    await assertFails(nobody.ref(original("alice")).put(jpeg, { contentType: "image/jpeg" }));
+    await assertFails(nobody.ref(original("alice")).put(jpeg, { contentType: "image/jpeg" }).then(() => undefined));
   });
 
   it("rejects non-media content types", async () => {
     const storage = env.authenticatedContext("alice").storage();
-    await assertFails(storage.ref(original("alice").replace("a1", "a3")).put(jpeg, { contentType: "application/pdf" }));
+    await assertFails(storage.ref(original("alice").replace("a1", "a3")).put(jpeg, { contentType: "application/pdf" }).then(() => undefined));
   });
 
   it("allows owners to read, and denies overwrite and delete", async () => {
     const alice = env.authenticatedContext("alice").storage();
     const ref = alice.ref(original("alice").replace("a1", "a4"));
-    await assertSucceeds(ref.put(jpeg, { contentType: "image/jpeg" }));
+    await assertSucceeds(ref.put(jpeg, { contentType: "image/jpeg" }).then(() => undefined));
     await assertSucceeds(ref.getMetadata());
-    await assertFails(ref.put(jpeg, { contentType: "image/jpeg" }));
+    await assertFails(ref.put(jpeg, { contentType: "image/jpeg" }).then(() => undefined));
     await assertFails(ref.delete());
     await assertFails(env.authenticatedContext("bob").storage().ref(ref.fullPath).getMetadata());
   });
