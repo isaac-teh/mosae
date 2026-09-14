@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildOriginalPath, parseOriginalPath, workKey, PIPELINE_VERSION } from "./ids.js";
+import {
+  buildOriginalPath,
+  isValidId,
+  parseOriginalPath,
+  workKey,
+  PIPELINE_VERSION,
+} from "./ids.js";
 
 const p = { userId: "u1", projectId: "p1", sessionId: "s1", assetId: "a1" };
 
@@ -18,14 +24,30 @@ describe("original storage paths", () => {
   });
 
   it("rejects ids with unsafe characters when building", () => {
-    expect(() => buildOriginalPath({ ...p, assetId: "a/1" })).toThrow("invalid id");
+    expect(() => buildOriginalPath({ ...p, assetId: "a/1" })).toThrow(
+      "invalid id",
+    );
+  });
+});
+
+describe("isValidId", () => {
+  it("accepts storage-safe IDs and rejects unsafe values", () => {
+    expect(isValidId("asset_123-abc")).toBe(true);
+    expect(isValidId("asset/123")).toBe(false);
+    expect(isValidId("")).toBe(false);
   });
 });
 
 describe("workKey", () => {
   it("includes every identity component", () => {
     expect(
-      workKey({ projectId: "p1", assetId: "a1", generation: "17", stage: "ingest", pipelineVersion: PIPELINE_VERSION }),
+      workKey({
+        projectId: "p1",
+        assetId: "a1",
+        generation: "17",
+        stage: "ingest",
+        pipelineVersion: PIPELINE_VERSION,
+      }),
     ).toBe("p1:a1:17:ingest:1");
   });
 });
