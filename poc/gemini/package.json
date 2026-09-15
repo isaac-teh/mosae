@@ -1,0 +1,27 @@
+{
+  "name": "gemini-media-understanding-poc",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ingest": "tsx 01-ingest.ts",
+    "analyze": "tsx 02-analyze.ts",
+    "catalog": "tsx 03-catalog.ts",
+    "story": "tsx 04-story.ts",
+    "compose": "tsx 05-compose.ts",
+    "preview": "tsx 06-preview.ts",
+    "report": "tsx 07-report.ts",
+    "all": "tsx all.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^2.22.0",
+    "exiftool-vendored": "^38.0.1",
+    "sharp": "^0.35.4",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}
