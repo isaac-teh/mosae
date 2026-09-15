@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Mosaé",
+    "slug": "mosae",
+    "scheme": "mosae",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#fcf9f4",
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router", "expo-font"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
