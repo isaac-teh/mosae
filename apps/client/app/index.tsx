@@ -5,6 +5,7 @@ import { type Href, useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 import { isMedia, setPendingMedia } from "@mosae/core";
 import { Logo } from "@/components/Logo";
+import { LandingGlow } from "@/components/LandingGlow";
 import { DropZone } from "@/components/DropZone";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
 import { ShieldIcon, SparklesIcon } from "@/components/icons";
@@ -39,8 +40,7 @@ export default function Home() {
         contentContainerClassName="relative overflow-hidden pb-32"
         style={{ overflow: "visible" }}
       >
-        <View className="absolute -right-24 -top-24 size-72 rounded-full bg-brand-tint/60 blur-3xl" style={{ filter: "blur(64px)", pointerEvents: "none" }} />
-        <View className="absolute -left-28 top-72 size-64 rounded-full bg-honey-tint blur-3xl" style={{ filter: "blur(64px)", pointerEvents: "none" }} />
+        <LandingGlow />
         <View className="relative h-14 flex-row items-center justify-between px-5"><Logo /><View className="rounded-full bg-surface-pill px-3 py-1"><Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-ink-soft">Beta</Text></View></View>
         <View className="relative px-5 pt-6">
           <Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-brand-bright">Your memories, directed</Text>
