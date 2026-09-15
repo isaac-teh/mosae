@@ -10,7 +10,7 @@
     "test": "vitest run --exclude \"src/store/**\"",
     "vitest:store": "vitest run src/store --no-file-parallelism",
     "test:emulator": "cd ../.. && firebase emulators:exec --only firestore,storage --project demo-mosae \"npm run vitest:store -w services/api\"",
-    "replay:finalize": "tsx scripts/replayFinalize.ts"
+    "replay:finalize": "tsx --env-file=.env scripts/replayFinalize.ts"
   },
   "dependencies": {
     "@google-cloud/tasks": "^5.5.0",

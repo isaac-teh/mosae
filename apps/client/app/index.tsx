@@ -49,8 +49,8 @@ export default function Home() {
         </View>
         <View className="relative px-5 pt-7">
           <DropZone onFiles={start} onDraggingChange={setDragging}>
-            <Pressable role="button" onPress={() => pickerRef.current?.open()} className={`group w-full items-center rounded-3xl border-2 border-dashed px-6 pb-7 pt-8 shadow-md ${dragging ? "border-brand bg-brand-tint/40" : "border-brand-dot bg-surface"}`}>
-              <View aria-hidden className="relative mb-5 h-[92px] w-[150px] items-center justify-center"><View className="absolute left-1 top-3 h-[72px] w-[58px] -rotate-12 rounded-xl bg-honey-tint shadow-sm" /><View className="absolute right-1 top-3 h-[72px] w-[58px] rotate-12 rounded-xl bg-brand-tint shadow-sm" /><View className="relative h-[84px] w-[66px] items-center justify-center rounded-xl bg-brand shadow-lg group-hover:-translate-y-1"><Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d="M12 16V4" /><Path d="m6 10 6-6 6 6" /><Path d="M4 20h16" /></Svg></View></View>
+            <Pressable role="button" onPress={() => pickerRef.current?.open()} className={`group w-full items-center rounded-3xl border-2 border-dashed px-6 pb-7 pt-8 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] ${dragging ? "border-brand bg-brand-tint/40" : "border-brand-dot bg-surface"}`}>
+              <View aria-hidden className="relative mb-5 h-[92px] w-[150px] items-center justify-center"><View className="absolute left-1 top-3 h-[72px] w-[58px] -rotate-12 rounded-xl bg-honey-tint shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]" /><View className="absolute right-1 top-3 h-[72px] w-[58px] rotate-12 rounded-xl bg-brand-tint shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]" /><View className="relative h-[84px] w-[66px] items-center justify-center rounded-xl bg-brand shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] group-hover:-translate-y-1"><Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d="M12 16V4" /><Path d="m6 10 6-6 6 6" /><Path d="M4 20h16" /></Svg></View></View>
               <Text className="text-center font-serif text-[22px] leading-[28px] text-ink">{dragging ? "Drop to start" : "Upload photos & videos"}</Text><Text className="mt-1 text-center font-sans text-xs leading-[18px] text-ink-soft">Drag them here, or tap to browse your library</Text><View className="mt-4 rounded-full bg-surface-sunken px-3 py-1"><Text className="font-sans-medium text-[11px] leading-[14px] text-ink-soft">JPG · PNG · HEIC · MP4 · MOV</Text></View>
             </Pressable>
           </DropZone>
@@ -65,7 +65,7 @@ export default function Home() {
           locations={[0, 0.5, 1]}
           style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, pointerEvents: "none" }}
         />
-        <Pressable role="button" onPress={() => pickerRef.current?.open()} className="h-14 w-full flex-row items-center justify-center gap-1.5 rounded-full bg-brand shadow-xl"><SparklesIcon /><Text className="font-sans-medium text-sm tracking-[0.35px] text-white">Start with your memories</Text></Pressable>
+        <Pressable role="button" onPress={() => pickerRef.current?.open()} className="h-14 w-full flex-row items-center justify-center gap-1.5 rounded-full bg-brand shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)]"><SparklesIcon /><Text className="font-sans-medium text-sm tracking-[0.35px] text-white">Start with your memories</Text></Pressable>
       </View>
     </View>
   );

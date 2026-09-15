@@ -144,7 +144,7 @@ export default function PickMemoryScreen() {
                 )}
 
                 {item.selected ? (
-                  <View className="absolute bottom-1.5 right-1.5 size-5 items-center justify-center rounded-full bg-brand shadow-md">
+                  <View className="absolute bottom-1.5 right-1.5 size-5 items-center justify-center rounded-full bg-brand shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
                     <CheckIcon />
                   </View>
                 ) : (
@@ -157,7 +157,7 @@ export default function PickMemoryScreen() {
       </ScrollView>
 
       <View className="absolute inset-x-0 bottom-8 z-30 px-5">
-        <View className="flex-row items-center justify-between rounded-full border border-line bg-canvas/90 p-[11px] shadow-xl backdrop-blur-md">
+        <View className="flex-row items-center justify-between rounded-full border border-line bg-canvas/90 p-[11px] shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] backdrop-blur-md">
           <View className="min-w-0 flex-1 pl-3 pr-2">
             <Text numberOfLines={1} className="font-sans-semibold text-xs text-ink">
               {status}
@@ -170,7 +170,7 @@ export default function PickMemoryScreen() {
             role="button"
             disabled={!anySelected || uploading}
             onPress={handleNext}
-            className="flex-row items-center gap-1.5 rounded-full bg-brand px-6 py-3 shadow-md disabled:opacity-50"
+            className="flex-row items-center gap-1.5 rounded-full bg-brand px-6 py-3 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] disabled:opacity-50"
           >
             <Text className="font-sans-semibold text-sm text-white">Next</Text>
             <ArrowRightIcon />
