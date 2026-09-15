@@ -2,7 +2,6 @@
   "name": "e2e",
   "private": true,
   "scripts": {
-    "baseline": "playwright test capture-baseline.spec.ts",
     "parity": "playwright test parity.spec.ts",
     "flow": "playwright test flow.spec.ts"
   },
