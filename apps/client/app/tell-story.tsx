@@ -93,7 +93,7 @@ export default function TellStoryScreen() {
           {count === 1 ? "memory" : "memories"}.
         </Text>
 
-        <View className="mt-4 min-h-[280px] justify-between rounded-2xl bg-surface p-6 shadow-md">
+        <View className="mt-4 min-h-[280px] justify-between rounded-2xl bg-surface p-6 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
           <View className="flex-row items-center gap-1.5 pb-3">
             <View className="size-2 rounded-full bg-brand-bright" />
             <Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.275px] text-brand-bright">Intent</Text>
@@ -162,7 +162,7 @@ export default function TellStoryScreen() {
           role="button"
           disabled={!canSubmit || submitting}
           onPress={handleSubmit}
-          className="mt-6 h-14 w-full flex-row items-center justify-center gap-1 rounded-full bg-brand shadow-xl disabled:opacity-50"
+          className="mt-6 h-14 w-full flex-row items-center justify-center gap-1 rounded-full bg-brand shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] disabled:opacity-50"
         >
           <SparklesIcon />
           <Text className="font-sans-medium text-sm tracking-[0.35px] text-white">
