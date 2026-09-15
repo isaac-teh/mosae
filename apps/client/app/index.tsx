@@ -39,8 +39,8 @@ export default function Home() {
         contentContainerClassName="relative overflow-hidden pb-32"
         style={{ overflow: "visible" }}
       >
-        <View pointerEvents="none" className="absolute -right-24 -top-24 size-72 rounded-full bg-brand-tint/60 blur-3xl" style={{ filter: "blur(64px)" }} />
-        <View pointerEvents="none" className="absolute -left-28 top-72 size-64 rounded-full bg-honey-tint blur-3xl" style={{ filter: "blur(64px)" }} />
+        <View className="absolute -right-24 -top-24 size-72 rounded-full bg-brand-tint/60 blur-3xl" style={{ filter: "blur(64px)", pointerEvents: "none" }} />
+        <View className="absolute -left-28 top-72 size-64 rounded-full bg-honey-tint blur-3xl" style={{ filter: "blur(64px)", pointerEvents: "none" }} />
         <View className="relative h-14 flex-row items-center justify-between px-5"><Logo /><View className="rounded-full bg-surface-pill px-3 py-1"><Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-ink-soft">Beta</Text></View></View>
         <View className="relative px-5 pt-6">
           <Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-brand-bright">Your memories, directed</Text>
@@ -61,10 +61,9 @@ export default function Home() {
       </ScrollView>
       <View className="absolute inset-x-0 bottom-0 z-30 px-5 pb-8 pt-6">
         <LinearGradient
-          pointerEvents="none"
           colors={["rgba(252,249,244,0)", "rgba(252,249,244,0.95)", "#fcf9f4"]}
           locations={[0, 0.5, 1]}
-          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, pointerEvents: "none" }}
         />
         <Pressable role="button" onPress={() => pickerRef.current?.open()} className="h-14 w-full flex-row items-center justify-center gap-1.5 rounded-full bg-brand shadow-xl"><SparklesIcon /><Text className="font-sans-medium text-sm tracking-[0.35px] text-white">Start with your memories</Text></Pressable>
       </View>
