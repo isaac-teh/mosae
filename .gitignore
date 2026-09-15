@@ -10,3 +10,4 @@ e2e/playwright-report/
 apps/client/.expo/
 apps/client/dist/
 apps/client/expo-env.d.ts
+.superpowers/
