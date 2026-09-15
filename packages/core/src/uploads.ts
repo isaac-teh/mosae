@@ -30,7 +30,7 @@ export function contentTypeFor(file: File): string {
 }
 
 async function defaultDeps(): Promise<UploadDeps> {
-  const [{ apiPost }, { getStorageClient }] = await Promise.all([import("./apiClient"), import("./firebase/client")]);
+  const [{ apiPost }, { getStorageClient }] = await Promise.all([import("./apiClient"), import("./firebase")]);
   return {
     post: apiPost,
     putFile: (storagePath, file, onBytes) =>
