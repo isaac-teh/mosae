@@ -27,16 +27,33 @@ export async function sharpness(file: string, kind: string) { try { let input: B
 export function parseArgs(args = process.argv.slice(2)) { const set = args.find(x => !x.startsWith('--')); const at = args.indexOf('--model'); return { set, model: at >= 0 ? args[at + 1] : undefined }; }
 export const ai = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 export async function recordCall(dir: string, call: Record<string, unknown>) { await mkdir(dir, { recursive: true }); await appendFile(path.join(dir, 'calls.jsonl'), JSON.stringify(call) + '\n'); }
+const nextRequestAt = new Map<string, number>();
+async function rateLimit(model: string) {
+  if (model !== models.analyzeCompare) return;
+  const waitMs = Math.max(0, (nextRequestAt.get(model) || 0) - Date.now());
+  if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+  // 12 RPM leaves headroom below the key's 15 RPM free-tier ceiling.
+  nextRequestAt.set(model, Date.now() + 5000);
+}
 export async function generate<T>(opts: { dir: string; stage: string; model: string; file?: string; contents: any; schema: any; validate: (value: unknown) => T; thinking?: boolean }) {
   const client = ai(); let last: Error | undefined;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     const started = Date.now();
     try {
+      await rateLimit(opts.model);
       const response: any = await client.models.generateContent({ model: opts.model, contents: opts.contents, config: { responseMimeType: 'application/json', responseJsonSchema: opts.schema, mediaResolution: 'MEDIA_RESOLUTION_LOW', ...(opts.thinking ? { thinkingConfig: { thinkingLevel: 'MINIMAL' } } : {}) } } as any);
       const usage = response.usageMetadata || {}; const promptTokens = usage.promptTokenCount || 0; const candidatesTokens = usage.candidatesTokenCount || 0; const thoughtsTokens = usage.thoughtsTokenCount || 0; const p = prices[opts.model] || { input: 0, output: 0 }; const estimatedUsd = (promptTokens * p.input + (candidatesTokens + thoughtsTokens) * p.output) / 1_000_000;
       await recordCall(opts.dir, { stage: opts.stage, model: opts.model, file: opts.file, promptTokens, candidatesTokens, thoughtsTokens, totalTokens: usage.totalTokenCount || promptTokens + candidatesTokens + thoughtsTokens, latencyMs: Date.now() - started, estimatedUsd, attempt: attempt + 1 });
       return opts.validate(JSON.parse(response.text));
-    } catch (e: any) { last = e; if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 1000)); }
+    } catch (e: any) {
+      last = e;
+      await recordCall(opts.dir, { stage: opts.stage, model: opts.model, file: opts.file, promptTokens: 0, candidatesTokens: 0, thoughtsTokens: 0, totalTokens: 0, latencyMs: Date.now() - started, estimatedUsd: 0, attempt: attempt + 1, error: String(e.message || e) });
+      const retryable = /(?:429|5\d\d|RESOURCE_EXHAUSTED|UNAVAILABLE|INTERNAL)/i.test(String(e.message || e));
+      if (!retryable || attempt === 3) break;
+      const baseMs = /5\d\d|UNAVAILABLE|INTERNAL/i.test(String(e.message || e)) ? 10_000 : 1_000;
+      const delayMs = Math.min(120_000, baseMs * 2 ** attempt + Math.floor(Math.random() * 10_000));
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
   }
   throw last;
 }
