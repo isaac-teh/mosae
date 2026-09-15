@@ -1,0 +1,15 @@
+{
+  "name": "e2e",
+  "private": true,
+  "scripts": {
+    "baseline": "playwright test capture-baseline.spec.ts",
+    "parity": "playwright test parity.spec.ts",
+    "flow": "playwright test flow.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "pixelmatch": "^6.0.0",
+    "pngjs": "^7.0.0",
+    "@types/pngjs": "^6.0.5"
+  }
+}
