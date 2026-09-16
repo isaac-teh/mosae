@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { Href, useLocalSearchParams, useRouter } from "expo-router";
-import { submitStory } from "@mosae/core";
-import { StepProgress } from "@/components/StepProgress";
+import { getStoryRepository } from "@mosae/core";
+import { StepHeader } from "@/components/StepHeader";
+import { PrimaryButton } from "@/components/PrimaryButton";
 import { useDictation } from "@/lib/useDictation";
-import { ArrowLeftIcon, ChipCheckIcon, MicIcon, ShieldIcon, SparklesIcon } from "@/components/icons";
+import { ChipCheckIcon, MicIcon, ShieldIcon, SparklesIcon } from "@/components/icons";
 
 const THEMES = [
   "✨ Having fun",
@@ -48,8 +49,7 @@ export default function TellStoryScreen() {
     setError(null);
     const focus = themes.length ? `\n\nFocus on: ${themes.join(", ")}` : "";
     try {
-      const { planId } = await submitStory(`${storyText.trim()}${focus}`, projectId ? [projectId] : []);
-      // This route arrives with the story-review screens.
+      const { planId } = await getStoryRepository().createPlan(`${storyText.trim()}${focus}`, projectId ? [projectId] : []);
       router.push({ pathname: "/review-moments", params: { planId } } as unknown as Href);
     } catch (e) {
       console.error("submit failed", e);
@@ -65,24 +65,13 @@ export default function TellStoryScreen() {
       keyboardShouldPersistTaps="handled"
       style={{ overflow: "visible" }}
     >
-      <View className="z-30 bg-canvas/85 shadow-[0_1px_8px_rgba(54,49,44,0.04)] backdrop-blur-md">
-        <View className="relative h-14 flex-row items-center justify-center px-5">
-          <Pressable
-            role="button"
-            aria-label="Go back to Step 1"
-            onPress={() => router.back()}
-            className="absolute left-4 size-10 items-center justify-center rounded-full"
-          >
-            <ArrowLeftIcon />
-          </Pressable>
-          <View className="flex-row items-center gap-1 rounded-full bg-surface-pill px-4 py-1 shadow-[0_1px_1px_rgba(0,0,0,0.05)]">
-            <Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-ink-soft">Step 2 of 6</Text>
-            <View className="size-1 rounded-full bg-brand-dot" />
-            <Text className="font-sans-semibold text-[11px] leading-[14px] text-ink-soft">STORY INTENT</Text>
-          </View>
-        </View>
-        <StepProgress value={2 / 7} />
-      </View>
+      <StepHeader
+        step="Step 2 of 6"
+        label="STORY INTENT"
+        progress={2 / 7}
+        onBack={() => router.back()}
+        backLabel="Go back to Step 1"
+      />
 
       <View className="px-5 pb-10 pt-6">
         <Text role="heading" aria-level={2} className="pt-1 font-sans-semibold text-sm leading-[17.5px] tracking-[-0.35px] text-ink">
@@ -158,17 +147,12 @@ export default function TellStoryScreen() {
 
         {error && <Text className="mt-4 text-center font-sans text-xs text-brand">{error}</Text>}
 
-        <Pressable
-          role="button"
-          disabled={!canSubmit || submitting}
+        <PrimaryButton
+          label={submitting ? "Finding the moments..." : "Find the moments"}
           onPress={handleSubmit}
-          className="mt-6 h-14 w-full flex-row items-center justify-center gap-1 rounded-full bg-brand shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] disabled:opacity-50"
-        >
-          <SparklesIcon />
-          <Text className="font-sans-medium text-sm tracking-[0.35px] text-white">
-            {submitting ? "Finding the moments..." : "Find the moments"}
-          </Text>
-        </Pressable>
+          icon={<SparklesIcon />}
+          disabled={!canSubmit || submitting}
+        />
       </View>
     </ScrollView>
   );
