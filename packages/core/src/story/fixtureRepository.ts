@@ -134,8 +134,8 @@ const cadences: Cadence[] = [
 ];
 
 const soundtracks: Soundtrack[] = [
-  { id: "st-piano", name: "Piano & Ambient", description: "Intimate Heirloom • 2:14 min" },
   { id: "st-ukulele", name: "Okinawa Ukulele & String Trio", description: "Acoustic Heirloom • 2:14 min" },
+  { id: "st-piano", name: "Piano & Ambient", description: "Intimate Heirloom • 2:14 min" },
 ];
 
 const durations: DurationChoice[] = [
@@ -146,7 +146,7 @@ const durations: DurationChoice[] = [
   { id: "5m", label: "5m", caption: "Feature", seconds: 300 },
 ];
 
-const note = "Let AI weave emotional pacing, ambient audio & cinematic cuts into an intimate heirloom film.";
+const note = "Make it feel exciting and warm. Start with us arriving in Tokyo, build up to the birthday cake celebration, and finish with our quiet Kyoto stroll.";
 
 const directionOptions: DirectionOptions = {
   note,

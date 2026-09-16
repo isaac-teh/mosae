@@ -37,6 +37,14 @@ describe("fixture story repository", () => {
     expect(await repo.chooseCreateOption("demo", "album")).toEqual({ available: false });
   });
 
+  it("uses the Figma direction defaults", async () => {
+    const options = await createFixtureStoryRepository({ delayMs: 0 }).getDirectionOptions("demo");
+    expect(options.note).toBe("Make it feel exciting and warm. Start with us arriving in Tokyo, build up to the birthday cake celebration, and finish with our quiet Kyoto stroll.");
+    expect(options.cadences[0]).toMatchObject({ name: "Warm & Nostalgic", description: "Soft acoustic guitar • Kodachrome warmth" });
+    expect(options.soundtracks[0]).toMatchObject({ name: "Okinawa Ukulele & String Trio", description: "Acoustic Heirloom • 2:14 min" });
+    expect(options.recommendedDuration).toBe("2m");
+  });
+
   it("directs, revises and saves a film", async () => {
     const repo = createFixtureStoryRepository({ delayMs: 0 });
     const options = await repo.getDirectionOptions("demo");
