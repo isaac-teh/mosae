@@ -10,6 +10,8 @@
     "compose": "tsx 05-compose.ts",
     "preview": "tsx 06-preview.ts",
     "report": "tsx 07-report.ts",
+    "segments": "tsx 09-segments.ts",
+    "explore": "node --env-file=../../.env node_modules/.bin/tsx 10-explorer.ts",
     "all": "tsx all.ts",
     "typecheck": "tsc --noEmit"
   },
