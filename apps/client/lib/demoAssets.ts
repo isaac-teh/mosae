@@ -13,6 +13,10 @@ const assets: Record<string, number> = {
   "save-poster": require("../assets/demo/figma/review-moments/imgMeiClappingAtBirthdayCakeWithParents.png"),
   // TODO(figma): replace when exported
   "archive-print": require("../assets/demo/figma/review-moments/imgMeiClappingAtBirthdayCakeWithParents.png"),
+  "timeline-lantern-stroll": require("../assets/demo/figma/curated-timeline/imgFamilyStrollingDownLanternStreetInTok.png"),
+  "timeline-strawberry": require("../assets/demo/figma/curated-timeline/imgMeiTastingStrawberrySweet.png"),
+  "timeline-birthday": require("../assets/demo/figma/curated-timeline/imgMeiLaughingAtBirthdayCakeWithParents.png"),
+  "timeline-torii": require("../assets/demo/figma/curated-timeline/imgFatherCarryingDaughterOnShouldersInKy.png"),
 };
 
 export function demoImage(key: string): number {

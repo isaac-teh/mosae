@@ -45,3 +45,31 @@ test.describe("review-moments", () => {
     expect(page.url()).toContain("/pick-memory");
   });
 });
+
+test.describe("curated-timeline", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/curated-timeline?planId=demo");
+    await page.getByText("Want to change the moments").waitFor();
+  });
+
+  test("a suggestion fills the update input", async ({ page }) => {
+    await page.getByRole("button", { name: "Show more of the food we tried" }).click();
+    await expect(page.getByRole("textbox")).toHaveValue("Show more of the food we tried");
+  });
+
+  test("update clears the input", async ({ page }) => {
+    await page.getByRole("textbox").fill("More birthday photos");
+    await page.getByRole("button", { name: "Update moments" }).click();
+    await expect(page.getByRole("textbox")).toHaveValue("");
+  });
+
+  test("deselecting lowers the selected count", async ({ page }) => {
+    await page.getByRole("checkbox", { name: "Select Mai's 7th Birthday Song" }).click();
+    await expect(page.getByText("51 moments selected")).toBeVisible();
+  });
+
+  test("Continue navigates to create", async ({ page }) => {
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.waitForURL("**/create?planId=demo");
+  });
+});
