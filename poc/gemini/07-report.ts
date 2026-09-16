@@ -43,7 +43,7 @@ const comparison = (lite: any[], compare: any[]) => {
 };
 await mkdir(out, { recursive: true });
 const mixRows: string[] = [];
-const sets = (await readdir(out, { withFileTypes: true })).filter(x => x.isDirectory()).map(x => x.name).sort();
+const sets = (await readdir(out, { withFileTypes: true })).filter(x => x.isDirectory() && x.name !== 'probe').map(x => x.name).sort();
 let md = '# Gemini Media Understanding PoC report\n\n'; let recordedRunCost = 0;
 for (const set of sets) {
   const setDir = path.join(out, set); const dirs = (await readdir(setDir, { withFileTypes: true })).filter(x => x.isDirectory()).map(x => x.name).sort();
