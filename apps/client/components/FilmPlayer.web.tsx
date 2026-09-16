@@ -9,17 +9,18 @@ type FilmPlayerProps = {
   durationSec: number;
   initialTimeSec?: number;
   aspect: "portrait" | "landscape";
+  compact?: boolean;
 };
 
 const formatTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
 
-export function FilmPlayer({ source, poster, durationSec, initialTimeSec = 74, aspect }: FilmPlayerProps) {
+export function FilmPlayer({ source, poster, durationSec, initialTimeSec = 74, aspect, compact = false }: FilmPlayerProps) {
   const video = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(initialTimeSec);
   const sourceUri = Asset.fromModule(source).uri;
   const posterUri = Asset.fromModule(poster).uri;
-  const ratio = aspect === "portrait" ? "125%" : "56.25%";
+  const ratio = compact ? "75.6%" : aspect === "portrait" ? "125%" : "56.25%";
 
   useEffect(() => () => { video.current?.pause(); }, []);
 
@@ -37,15 +38,15 @@ export function FilmPlayer({ source, poster, durationSec, initialTimeSec = 74, a
 
   return <View className="relative w-full overflow-hidden rounded-[23px] bg-ink" style={{ paddingTop: ratio }}>
     <video ref={video} src={sourceUri} preload="metadata" playsInline onTimeUpdate={(event) => setCurrentTime((event.currentTarget.currentTime / (event.currentTarget.duration || durationSec)) * durationSec)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-    {!playing && <img src={posterUri} alt="Film poster" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "53% 54%", transform: "scale(1.2)" }} />}
+    {!playing && <img src={posterUri} alt="Film poster" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: compact ? "center" : "53% 54%", transform: compact ? undefined : "scale(1.2)" }} />}
     <View className="absolute inset-0 bg-black/20" pointerEvents="none" />
-    <Pressable role="button" aria-label={playing ? "Pause" : "Play"} onPress={() => void toggle()} className="absolute left-1/2 top-1/2 size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white">
+    <Pressable role="button" aria-label={playing ? "Pause" : "Play"} onPress={() => void toggle()} className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white ${compact ? "size-[52px]" : "size-16"}`}>
       {playing ? <Svg width={18} height={22} viewBox="0 0 18 22"><Path d="M2 1h4v20H2V1Zm10 0h4v20h-4V1Z" fill="#B63315" /></Svg> : <Svg width={22} height={24} viewBox="0 0 22 24"><Path d="M21.15 10.5a2 2 0 0 1 0 3L3.4 23.2A2 2 0 0 1 .3 21.5V2.5A2 2 0 0 1 3.4.8l17.75 9.7Z" fill="#B63315" /></Svg>}
     </Pressable>
-    <View className="absolute bottom-0 left-0 right-0 h-[76px] justify-end px-4 pb-3" style={{ backgroundImage: "linear-gradient(transparent, rgba(0,0,0,.63))" } as never}>
+    {!compact && <View className="absolute bottom-0 left-0 right-0 h-[76px] justify-end px-4 pb-3" style={{ backgroundImage: "linear-gradient(transparent, rgba(0,0,0,.63))" } as never}>
       <div role="slider" aria-label="Film progress" onClick={scrub} className="h-[5px] overflow-hidden rounded-full bg-white/40"><View className="h-full rounded-full bg-brand-bright" style={{ width: `${(currentTime / durationSec) * 100}%` }} /></div>
       <View className="mt-1.5 flex-row items-center justify-between"><span className="font-sans text-[11px] leading-4 text-white">{formatTime(currentTime)}</span><View className="flex-row items-center gap-2"><VolumeIcon /><FullscreenIcon /><span className="font-sans text-[11px] leading-4 text-white">{formatTime(durationSec)}</span></View></View>
-    </View>
+    </View>}
   </View>;
 }
 
