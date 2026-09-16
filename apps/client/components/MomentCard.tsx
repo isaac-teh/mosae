@@ -18,10 +18,12 @@ export function MomentCard({
   moment,
   size,
   onToggleSelected,
+  onToggleFavorite,
   trailing,
 }: MomentCardProps) {
   const isHero = size === "hero";
-  const height = isHero ? 247.5 : 193.75;
+  const isDuskCard = moment.id === "moment-4";
+  const height = isDuskCard ? 206.25 : isHero ? 247.5 : 193.75;
   const padding = isHero ? 10 : 8;
   const titleSize = isHero ? "text-[18px]" : "text-[15px]";
   const metaSize = isHero ? "text-[12px]" : "text-[11px]";
@@ -37,11 +39,15 @@ export function MomentCard({
   const titlePx = isHero ? 8 : 6;
   const selected = moment.selected;
 
+  // Heart icon only on the birthday hero card (moment-1), not on Dusk card
+  const showHeart = isHero && moment.id === "moment-1";
+
   return (
     <View
       className={`${isHero ? "w-full" : "flex-1 min-w-0"} bg-white rounded-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.05)]`}
       style={{ padding }}
     >
+      {/* Photo area - grey background with rounded corners */}
       <View className="relative rounded-[16px] bg-[#f0ede9] overflow-hidden">
         <View style={{ height }} className="w-full">
           <View className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -50,7 +56,9 @@ export function MomentCard({
               accessibilityLabel={moment.title}
               className="absolute h-full w-full object-cover"
               style={{
-                ...(moment.kind === "video"
+                ...(isDuskCard
+                  ? { height: "119.38%", top: "-9.69%" }
+                  : moment.kind === "video"
                   ? { width: "167.54%", left: "-33.77%" }
                   : isHero
                     ? { width: "100.52%", left: "-0.26%" }
@@ -80,7 +88,7 @@ export function MomentCard({
 
           {/* Tag chip */}
           <View
-            className="absolute backdrop-blur-[6px] bg-[rgba(255,255,255,0.9)] flex-row items-center rounded-full shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+            className={`absolute flex-row items-center rounded-full bg-[rgba(255,255,255,0.9)] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-[6px] ${isHero ? "gap-[6px]" : "gap-1"}`}
             style={{
               bottom: bottomOffset,
               left: leftOffset,
@@ -103,34 +111,38 @@ export function MomentCard({
             </View>
           )}
         </View>
-
-        {/* Card footer: title + meta + trailing */}
-        <View className="flex-row items-center justify-between" style={{ paddingTop: titlePt, paddingBottom: titlePb, paddingHorizontal: titlePx }}>
-          <View className="flex-1 min-w-0">
-            <Text numberOfLines={isHero ? 1 : 1} className={`${titleSize} font-serif text-[#1c1c19]`}>
-              {moment.title}
-            </Text>
-            <Text numberOfLines={2} className={`font-sans ${metaSize} text-[#59413b]`}>
-              {moment.meta}
-            </Text>
-          </View>
-          {/* Hero cards get a trailing heart icon on the right side of title row */}
-          {isHero && <HeartIcon />}
-          {trailing}
-        </View>
       </View>
 
-      {/* Heirloom badge for hero moments with a badge label (e.g. "Heirloom") */}
-      {moment.badge && isHero && (
-        <View
-          className="absolute bg-[rgba(255,221,184,0.5)] flex-row items-center rounded-full"
-          style={{ bottom: bottomOffset, right: leftOffset + 40, paddingHorizontal: 8, paddingVertical: 2 }}
-        >
-          <Text className="font-sans-semibold text-[11px] text-[#855300] whitespace-nowrap">
-            {moment.badge}
+      {/* Title/meta row - on white card background (not grey) */}
+      <View className="flex-row items-center justify-between" style={{ paddingTop: titlePt, paddingBottom: titlePb, paddingHorizontal: titlePx }}>
+        <View className="flex-1 min-w-0">
+          <Text numberOfLines={1} className={`${titleSize} font-serif text-[#1c1c19] ${isHero ? "leading-[26px]" : "leading-[18.75px]"}`}>
+            {moment.title}
+          </Text>
+          <Text numberOfLines={isHero ? 1 : 2} className={`font-sans ${metaSize} text-[#59413b] ${isHero ? "leading-[18px]" : "leading-[22px]"}`}>
+            {moment.meta}
           </Text>
         </View>
-      )}
+        {showHeart && (
+          <Pressable
+            role="button"
+            aria-label={`Favorite ${moment.title}`}
+            aria-pressed={moment.favorite}
+            onPress={onToggleFavorite}
+            className="ml-2 size-6 items-center justify-center"
+          >
+            <HeartIcon />
+          </Pressable>
+        )}
+        {moment.badge && isHero && (
+          <View className="ml-2 rounded-full bg-[rgba(255,221,184,0.5)] px-2 py-0.5">
+            <Text className="font-sans-semibold text-[11px] leading-[14px] text-[#855300] whitespace-nowrap">
+              {moment.badge}
+            </Text>
+          </View>
+        )}
+        {trailing}
+      </View>
     </View>
   );
 }

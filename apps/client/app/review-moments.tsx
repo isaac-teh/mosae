@@ -65,18 +65,20 @@ export default function ReviewMomentsScreen() {
 
   return (
     <View className="flex-1 bg-canvas">
-      {/* Header overlay - absolute positioned */}
-      <StepHeader
-        step="STEP 3 OF 6"
-        label="CURATED MOMENT"
-        progress={0.4744}
-        onBack={() => router.back()}
-        backLabel="Go back to tell story"
-      />
+      {/* Header overlay - absolute positioned over content */}
+      <View className="absolute inset-x-0 top-0 z-30">
+        <StepHeader
+          step="STEP 3 OF 6"
+          label="CURATED MOMENT"
+          progress={0.4744}
+          onBack={() => router.back()}
+          backLabel="Go back to tell story"
+        />
+      </View>
 
-      {/* Content starts pt-[80px] below header */}
+      {/* Content starts at y=84 (80pt + 4pt heading margin) */}
       <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
-        <View className="px-5 pb-[112px] pt-[80px]">
+        <View className="px-5 pb-[112px] pt-[84px]">
           {/* Intro heading - Plus Jakarta Sans SemiBold 14px leading 17.5px tracking -0.35px */}
           <Text className="font-sans-semibold text-[14px] leading-[17.5px] tracking-[-0.35px] text-ink">
             {plan.intro.headline}
@@ -98,7 +100,7 @@ export default function ReviewMomentsScreen() {
             </Text>
           </View>
 
-          {/* Cards */}
+          {/* Cards - 16px gap between each card section */}
           <View className="mt-4">
             {/* Hero card 1 - Birthday Song (has trailing HeartIcon in MomentCard) */}
             <MomentCard
@@ -109,9 +111,14 @@ export default function ReviewMomentsScreen() {
                 getStoryRepository().setMomentSelected(planId, plan.moments[0].id, next);
                 setPlan(structuredClone({ ...plan, moments: plan.moments.map((m) => m.id === plan.moments[0].id ? { ...m, selected: next } : m) }));
               }}
+              onToggleFavorite={() => {
+                const next = !plan.moments[0].favorite;
+                void getStoryRepository().setMomentFavorite(planId, plan.moments[0].id, next);
+                setPlan(structuredClone({ ...plan, moments: plan.moments.map((m) => m.id === plan.moments[0].id ? { ...m, favorite: next } : m) }));
+              }}
             />
 
-            {/* Two half cards */}
+            {/* Two half cards - 8px gap between them */}
             <View className="mt-4 flex-row gap-2">
               <MomentCard
                 moment={plan.moments[1]}
@@ -133,16 +140,18 @@ export default function ReviewMomentsScreen() {
               />
             </View>
 
-            {/* Hero card 2 - Dusk Along Yanaka Ginza (has Heirloom badge + HeartIcon) */}
-            <MomentCard
-              moment={plan.moments[3]}
-              size="hero"
-              onToggleSelected={() => {
-                const next = !plan.moments[3].selected;
-                getStoryRepository().setMomentSelected(planId, plan.moments[3].id, next);
-                setPlan(structuredClone({ ...plan, moments: plan.moments.map((m) => m.id === plan.moments[3].id ? { ...m, selected: next } : m) }));
-              }}
-            />
+            {/* Hero card 2 - Dusk Along Yanaka Ginza (Heirloom pill only, no heart) */}
+            <View className="mt-4">
+              <MomentCard
+                moment={plan.moments[3]}
+                size="hero"
+                onToggleSelected={() => {
+                  const next = !plan.moments[3].selected;
+                  getStoryRepository().setMomentSelected(planId, plan.moments[3].id, next);
+                  setPlan(structuredClone({ ...plan, moments: plan.moments.map((m) => m.id === plan.moments[3].id ? { ...m, selected: next } : m) }));
+                }}
+              />
+            </View>
 
             {/* Add from other photos card */}
             <Pressable
@@ -191,7 +200,7 @@ export default function ReviewMomentsScreen() {
             </View>
 
             {/* Footnote - 11px, single line, rgba(89,65,59,0.7) */}
-            <Text className="mt-1 font-sans text-xs leading-[22px] text-center" style={{ color: "rgba(89,65,59,0.7)" }}>
+            <Text className="mt-1 whitespace-nowrap font-sans text-xs leading-[22px] text-center" style={{ color: "rgba(89,65,59,0.7)" }}>
               Chapter 3: Director mode enables audio overlay &amp; voice pacing
             </Text>
           </View>
