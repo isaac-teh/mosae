@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "parity": "playwright test parity.spec.ts",
-    "flow": "playwright test flow.spec.ts"
+    "flow": "playwright test flow.spec.ts",
+    "figma-parity": "playwright test figma-parity.spec.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
