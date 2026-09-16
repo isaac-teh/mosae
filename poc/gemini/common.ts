@@ -23,7 +23,33 @@ export async function probe(file: string) { const { stdout } = await shell('ffpr
 export async function exif(file: string) { try { const { stdout } = await shell('exiftool', ['-j', '-n', '-DateTimeOriginal', '-CreateDate', '-GPSLatitude', '-GPSLongitude', '-ImageWidth', '-ImageHeight', file]); return JSON.parse(stdout)[0] || {}; } catch { return {}; } }
 export async function imageHash(file: string) { const pixels = await sharp(file, { failOn: 'none' }).resize(9, 8, { fit: 'fill' }).grayscale().raw().toBuffer(); let hash = ''; for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) hash += pixels[y * 9 + x] > pixels[y * 9 + x + 1] ? '1' : '0'; return hash; }
 export function hashDistance(a?: string, b?: string) { if (!a || !b) return 99; return [...a].filter((x, i) => x !== b[i]).length; }
-export async function sharpness(file: string, kind: string) { try { let input: Buffer; if (kind === 'photo') input = await sharp(file, { failOn: 'none' }).resize(320, 320, { fit: 'inside' }).grayscale().raw().toBuffer(); else input = (await shell('ffmpeg', ['-v', 'error', '-ss', '0.5', '-i', file, '-frames:v', '1', '-vf', 'scale=320:-2,format=gray', '-f', 'rawvideo', 'pipe:1'])).stdout as unknown as Buffer; const width = 320; let n = 0, sum = 0, sum2 = 0; for (let i = width + 1; i < input.length - width - 1; i++) { const lap = 4 * input[i] - input[i - 1] - input[i + 1] - input[i - width] - input[i + width]; n++; sum += lap; sum2 += lap * lap; } return n ? sum2 / n - (sum / n) ** 2 : 0; } catch { return 0; } }
+// Return the 75th-percentile tile score rather than a whole-frame score. This
+// preserves intentionally shallow-focus food and portrait shots when another
+// part of the frame is crisp, while still rejecting a uniformly defocused frame.
+export async function sharpness(file: string, kind: string) {
+  try {
+    let input: Buffer, width: number, height: number;
+    if (kind === 'photo') {
+      const image = sharp(file, { failOn: 'none' }).resize(512, 512, { fit: 'inside', withoutEnlargement: true }).grayscale();
+      const result = await image.raw().toBuffer({ resolveWithObject: true }); input = result.data; width = result.info.width; height = result.info.height;
+    } else {
+      const result = await shell('ffmpeg', ['-v', 'error', '-ss', '0.5', '-i', file, '-frames:v', '1', '-vf', 'scale=512:-2:force_original_aspect_ratio=decrease,format=gray', '-f', 'rawvideo', 'pipe:1']);
+      input = result.stdout as unknown as Buffer;
+      const p = await probe(file); width = 512; height = Math.max(1, Math.floor(p.height * 512 / Math.max(p.width, 1) / 2) * 2);
+    }
+    const tiles: number[] = [];
+    for (let ty = 0; ty < 4; ty++) for (let tx = 0; tx < 4; tx++) {
+      const x0 = Math.floor(tx * width / 4), x1 = Math.floor((tx + 1) * width / 4);
+      const y0 = Math.floor(ty * height / 4), y1 = Math.floor((ty + 1) * height / 4);
+      let n = 0, sum = 0, sum2 = 0;
+      for (let y = Math.max(1, y0); y < Math.min(height - 1, y1); y++) for (let x = Math.max(1, x0); x < Math.min(width - 1, x1); x++) {
+        const i = y * width + x; const lap = 4 * input[i] - input[i - 1] - input[i + 1] - input[i - width] - input[i + width]; n++; sum += lap; sum2 += lap * lap;
+      }
+      if (n) tiles.push(sum2 / n - (sum / n) ** 2);
+    }
+    tiles.sort((a, b) => a - b); return tiles[Math.floor(tiles.length * .75)] || 0;
+  } catch { return 0; }
+}
 export function parseArgs(args = process.argv.slice(2)) { const set = args.find(x => !x.startsWith('--')); const at = args.indexOf('--model'); return { set, model: at >= 0 ? args[at + 1] : undefined }; }
 export const ai = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 export async function recordCall(dir: string, call: Record<string, unknown>) { await mkdir(dir, { recursive: true }); await appendFile(path.join(dir, 'calls.jsonl'), JSON.stringify(call) + '\n'); }

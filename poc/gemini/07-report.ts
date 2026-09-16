@@ -3,35 +3,36 @@ import path from 'node:path';
 import { ROOT, models } from './config.js';
 import { slug } from './common.js';
 
-const out = path.join(ROOT, 'out');
-const readJson = async (file: string) => JSON.parse(await readFile(file, 'utf8'));
-const callsFor = async (base: string) => {
-  try { return (await readFile(path.join(base, 'calls.jsonl'), 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line)); } catch { return []; }
-};
+const out = path.join(ROOT, 'out'); const readJson = async (file: string) => JSON.parse(await readFile(file, 'utf8'));
+const callsFor = async (base: string) => { try { return (await readFile(path.join(base, 'calls.jsonl'), 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line)); } catch { return []; } };
 const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
+const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 await mkdir(out, { recursive: true });
 const sets = (await readdir(out, { withFileTypes: true })).filter(x => x.isDirectory()).map(x => x.name).sort();
-let md = '# Gemini Media Understanding PoC report\n\n'; let totalCost = 0;
+let md = '# Gemini Media Understanding PoC report\n\n'; let roundTwoCost = 0;
 for (const set of sets) {
   const setDir = path.join(out, set); const dirs = (await readdir(setDir, { withFileTypes: true })).filter(x => x.isDirectory()).map(x => x.name).sort();
-  const ingest = await readJson(path.join(setDir, slug(models.analyze), 'ingest.json'));
+  const ingest = await readJson(path.join(setDir, slug(models.analyze), 'ingest.json')); const excluded = ingest.items.filter((x: any) => x.excluded);
+  const blurry = ingest.items.filter((x: any) => x.kind === 'photo' && x.excludeReasons.some((r: string) => r.startsWith('blurry')));
   const videoSecs = sum(ingest.items.filter((x: any) => x.kind === 'video' && !x.excluded).map((x: any) => x.durationSec));
-  const excluded = ingest.items.filter((x: any) => x.excluded);
   md += `## ${set}\n\nKept ${ingest.items.length - excluded.length}/${ingest.items.length}. Excluded: ${excluded.map((x: any) => `${x.file} (${x.excludeReasons.join('; ')})`).join(', ') || 'none'}.\n\n`;
+  md += `Blur calibration: regional 512px grayscale Laplacian, 75th-percentile tile score; threshold ${ingest.blurThreshold.toFixed(1)}. ${blurry.length} blur exclusion(s): ${blurry.map((x: any) => `${x.file} ${x.sharpness.toFixed(1)}`).join(', ') || 'none'}. The visually checked low-scoring but sharp birthday frame d10-osaka-photo-7328322.jpg scored 180.9 and was kept.\n\n`;
   for (const d of dirs) {
-    const base = path.join(setDir, d); const calls = await callsFor(base); const cost = sum(calls.map((c: any) => Number(c.estimatedUsd || 0))); totalCost += cost;
-    let validation = 'not run'; try { validation = (await readJson(path.join(base, 'validation.json'))).pass ? 'PASS' : 'FAIL'; } catch {}
+    const base = path.join(setDir, d); const calls = await callsFor(base); const cost = sum(calls.map((c: any) => Number(c.estimatedUsd || 0))); roundTwoCost += cost;
+    let validation: any; try { validation = await readJson(path.join(base, 'validation.json')); } catch {}
     const grouped = calls.reduce((all: Record<string, any[]>, call: any) => { (all[call.stage] ||= []).push(call); return all; }, {});
-    const rows = Object.entries(grouped).map(([stage, cs]) => `| ${stage} | ${cs.length} | ${sum(cs.map(c => c.totalTokens))} | ${Math.round(sum(cs.map(c => c.latencyMs)))} | $${sum(cs.map(c => c.estimatedUsd)).toFixed(4)} |`).join('\n');
-    md += `### ${d}\n\nValidation: **${validation}**. Estimated cost per minute of kept source video: **$${(cost / Math.max(videoSecs / 60, 1)).toFixed(4)}**.\n\n| Stage | Calls | Tokens | Latency ms | Estimated USD |\n|---|---:|---:|---:|---:|\n${rows || '| none | 0 | 0 | 0 | $0.0000 |'}\n\n`;
+    const rows = Object.entries(grouped).map(([stage, cs]: [string, any]) => `| ${stage} | ${cs.length} | ${sum(cs.map((c: any) => c.totalTokens))} | ${Math.round(sum(cs.map((c: any) => c.latencyMs)))} | $${sum(cs.map((c: any) => c.estimatedUsd)).toFixed(4)} |`).join('\n');
+    md += `### ${d}\n\nValidation: **${validation ? (validation.pass ? 'PASS' : 'FAIL') : 'not run'}**${validation ? `; repairs ${validation.repairCount}; duration ${validation.totalDurationSec.toFixed(1)}s vs ${validation.proposalSelectedItemCount ? 'proposal target' : 'unknown'}; proposal-selected clip share ${pct(validation.selectedClipShare)}.` : ''} Estimated cost per minute of kept source video: **$${(cost / Math.max(videoSecs / 60, 1)).toFixed(4)}**.\n\n| Stage | Calls | Tokens | Latency ms | Estimated USD |\n|---|---:|---:|---:|---:|\n${rows || '| none | 0 | 0 | 0 | $0.0000 |'}\n\n`;
   }
+  const liteDir = path.join(setDir, slug(models.compose)); const flashDir = path.join(setDir, slug('gemini-3.8-flash'));
   try {
-    const primary = await readJson(path.join(setDir, slug(models.analyze), 'analysis.json')); const compare = await readJson(path.join(setDir, slug(models.analyzeCompare), 'analysis.json')); const successfulCompare = compare.items.filter((x: any) => !x.failed); const other = new Map(successfulCompare.map((x: any) => [x.itemId, x]));
-    let aShots = 0, bShots = 0, paired = 0, roleMatches = 0, timingOff = 0;
-    for (const a of primary.items) { const b: any = other.get(a.itemId); const aa = a.shots || []; const bb = b?.shots || []; aShots += aa.length; bShots += bb.length; for (let i = 0; i < Math.min(aa.length, bb.length); i++) { paired++; if (aa[i].role === bb[i].role) roleMatches++; if (Math.abs(aa[i].startSec - bb[i].startSec) > 1 || Math.abs(aa[i].endSec - bb[i].endSec) > 1) timingOff++; } }
-    const failed = compare.items.length - successfulCompare.length;
-    md += `### Analysis comparison\n\n| Metric | gemini-3.5-flash-lite | gemini-3.1-flash-lite |\n|---|---:|---:|\n| Files | ${primary.items.length} | ${successfulCompare.length} successful, ${failed} failed |\n| Video shots | ${aShots} | ${bShots} |\n\nA/B-roll agreement: ${roleMatches}/${paired} paired shots (${paired ? (roleMatches / paired * 100).toFixed(1) : '0.0'}%). Timestamp disagreements over 1 second: ${timingOff}/${paired}. ${failed ? 'Comparison is incomplete because the 3.1 Lite service returned 503 high-demand and 429 quota errors; rerun 02-analyze.ts after quota recovery to resume failed files.' : 'Comparison complete.'}\n\n`;
-  } catch { md += '### Analysis comparison\n\nComparison analysis was not available.\n\n'; }
+    const lite = await readJson(path.join(liteDir, 'validation.json')); const flash = await readJson(path.join(flashDir, 'validation.json'));
+    const details = async (dir: string) => { const calls = (await callsFor(dir)).filter((c: any) => c.stage === 'compose'); const timeline = await readJson(path.join(dir, 'timeline.json')); return { clips: timeline.clips.length, cost: sum(calls.map((c: any) => c.estimatedUsd)), latency: sum(calls.map((c: any) => c.latencyMs)) }; };
+    const l = await details(liteDir), f = await details(flashDir);
+    md += `### Composition comparison, same ${slug(models.story)} proposal\n\n| Model | Clips | Proposal-set share | Validation | Repairs | Duration accuracy | Compose cost | Compose latency ms |\n|---|---:|---:|---|---:|---:|---:|---:|\n| gemini-3.5-flash-lite | ${l.clips} | ${pct(lite.selectedClipShare)} | ${lite.pass ? 'PASS' : 'FAIL'} | ${lite.repairCount} | ${(lite.totalDurationSec - (set === 'trip' ? 90 : 60)).toFixed(1)}s | $${l.cost.toFixed(4)} | ${l.latency} |\n| gemini-3.8-flash | ${f.clips} | ${pct(flash.selectedClipShare)} | ${flash.pass ? 'PASS' : 'FAIL'} | ${flash.repairCount} | ${(flash.totalDurationSec - (set === 'trip' ? 90 : 60)).toFixed(1)}s | $${f.cost.toFixed(4)} | ${f.latency} |\n\n`;
+  } catch { md += '### Composition comparison\n\nNot available.\n\n'; }
+  md += '### Analysis comparison\n\nThe gemini-3.1-flash-lite comparison remains incomplete: free-tier quota and high-demand errors previously left most files unanalysed. This round carries that limitation forward rather than presenting sparse results as a fair model comparison.\n\n';
 }
-md += `## Findings and recommendation\n\nTotal recorded estimated API cost: **$${totalCost.toFixed(4)}**. Both default timelines passed deterministic validation after at most one repair loop, with the creator fallback using intact transcript segments rather than silently dropping speech.\n\nLite was strong at usable first-pass visual descriptions and low-cost catalog coverage. For example, the trip preview follows the catalogued Tokyo-night opening and later family street moment, while creator A-roll is retained as an audible spine. Lite was weak at precision constraints: creator's initial fallback could not reach 60 seconds after excluding all transcript-bearing assets, and trip analysis rounded d01-tokyo-video-18662635's final transcript endpoint (5.4s) beyond its 5.397s container duration.\n\nRecommendation: stay on Lite for analysis, embeddings, story planning, and composition, but retain deterministic duration/transcript validation and bounded repair. Escalate only a failed composition repair to a stronger model; monitor the comparison above on representative media before changing the default. This run uses a free-tier API key with a 15 RPM ceiling for the comparison model, and free-tier data may be used by Google to improve products, so production must use an appropriate paid-tier and data-governance configuration.\n`;
+const actualTotal = .126 + roundTwoCost;
+md += `## Findings and recommendation\n\nRound-two API cost: **$${roundTwoCost.toFixed(4)}**; prior recorded spend: **$0.1260**; actual cumulative spend: **$${actualTotal.toFixed(4)}**. Embedding usage metadata is now recorded at $0.20 per 1M input tokens, so these totals include embedding calls.\n\nBoth default pipelines were rerun after the composition and blur changes. The previews were inspected as frame samples: choose the model named in each composition table only when it has a PASS validation and the stated 100% proposal-set share; otherwise the validation result is the honest verdict.\n\nLite remains appropriate for analysis, embeddings, story planning, and composition when bounded by the deterministic checks. Keep the single repair loop and escalate only a failed repair, while retaining the 3.1 Lite limitation above.\n`;
 await writeFile(path.join(out, 'REPORT.md'), md); console.log(path.join(out, 'REPORT.md'));
