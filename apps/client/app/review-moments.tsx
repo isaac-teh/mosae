@@ -200,9 +200,11 @@ export default function ReviewMomentsScreen() {
             </View>
 
             {/* Footnote - 11px, single line, rgba(89,65,59,0.7) */}
-            <Text className="mt-1 whitespace-nowrap font-sans text-xs leading-[22px] text-center" style={{ color: "rgba(89,65,59,0.7)" }}>
-              Chapter 3: Director mode enables audio overlay &amp; voice pacing
-            </Text>
+            <View className="mt-1 items-center">
+              <Text className="whitespace-nowrap font-sans text-[11px] leading-[22px] text-center" style={{ color: "rgba(89,65,59,0.7)" }}>
+                Chapter 3: Director mode enables audio overlay &amp; voice pacing
+              </Text>
+            </View>
           </View>
         </View>
       </ScrollView>

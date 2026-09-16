@@ -57,7 +57,7 @@ export function MomentCard({
               className="absolute h-full w-full object-cover"
               style={{
                 ...(isDuskCard
-                  ? { height: "119.38%", top: "-9.69%" }
+                  ? { width: "100%", height: "119.38%", top: "-9.69%", left: 0 }
                   : moment.kind === "video"
                   ? { width: "167.54%", left: "-33.77%" }
                   : isHero
