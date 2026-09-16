@@ -3,6 +3,41 @@
 Mosaé turns a messy album of photos and videos into a directed story film.
 You pick your memories, tell the AI what the story is about, review the moments it curated, direct the film, and save it.
 
+## Quick start
+
+```bash
+npm install
+```
+
+Only want to see the story to film screens?
+Start the web app and open a scene; no emulators or API needed:
+
+```bash
+npm run dev:web
+# open http://localhost:8081/tell-story?projectId=p1&count=3
+```
+
+Full app including uploads, in three terminals (details in [Run everything locally](#run-everything-locally)):
+
+```bash
+# Terminal 1: Firebase emulators
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+npx firebase emulators:start --only firestore,auth,storage --project demo-mosae
+
+# Terminal 2: API on http://localhost:8080
+FIREBASE_PROJECT_ID=demo-mosae FIREBASE_CLIENT_EMAIL= FIREBASE_PRIVATE_KEY= \
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 FIREBASE_STORAGE_BUCKET=demo-mosae.appspot.com \
+ALLOWED_ORIGINS=http://localhost:8081 SERVICE_URL=http://localhost:8080 PORT=8080 \
+npm run dev:api
+
+# Terminal 3: web app on http://localhost:8081
+# (first time: create apps/client/.env.development.local, see step 3 below)
+npm run dev:web
+```
+
+Stop each with Ctrl+C.
+
 ## Repository layout
 
 | Path | What it is |
