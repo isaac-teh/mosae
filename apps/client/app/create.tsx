@@ -52,7 +52,7 @@ function CreateOptionCard({ option, selected, onPress }: { option: Option; selec
           <View className={`size-5 items-center justify-center rounded-full ${selected ? "bg-brand" : "bg-surface-pill"}`}>{selected && <CreateCheckIcon />}</View>
         </View>
         <Text className="font-sans text-xs leading-[18px] text-ink-soft">{option.description}</Text>
-        {option.id === "film" && <View className="flex-row items-center gap-1 pt-0.5"><CreateMusicIcon /><Text className="font-sans-semibold text-[11px] leading-[14px] text-brand">Piano &amp; Ambient</Text><CreateTimerIcon /><Text className="font-sans-semibold text-[11px] leading-[14px] text-brand">~3 min</Text></View>}
+        {option.id === "film" && <View className="flex-row items-center gap-3 pt-0.5"><View className="flex-row items-center gap-1"><CreateMusicIcon /><Text className="font-sans-semibold text-[11px] leading-[14px] text-brand">Piano &amp; Ambient</Text></View><View className="flex-row items-center gap-1"><CreateTimerIcon /><Text className="font-sans-semibold text-[11px] leading-[14px] text-brand">~3 min</Text></View></View>}
         {option.id === "album" && <Text className="pt-0.5 font-sans-semibold text-[11px] leading-[14px] text-ink-soft">Hardcover Linen • 8×10″</Text>}
       </View>
     </View>
