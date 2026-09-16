@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import type { Href } from "expo-router";
+import { useStepBack } from "@/lib/useStepBack";
 import { getStoryRepository, type CreateOption, type StoryPlan } from "@mosae/core";
 import { demoImage } from "@/lib/demoAssets";
 import {
@@ -62,6 +64,7 @@ function CreateOptionCard({ option, selected, onPress }: { option: Option; selec
 export default function CreateScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
+  const goBack = useStepBack(`/curated-timeline?planId=${planId}` as Href);
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<CreateOption>("film");
@@ -80,7 +83,7 @@ export default function CreateScreen() {
   };
   return <View className="flex-1 bg-canvas"><ScrollView className="flex-1" contentContainerClassName="min-h-[1000px] px-5 pb-8" keyboardShouldPersistTaps="handled">
     <View className="flex-row items-center justify-between py-2">
-      <Pressable role="button" aria-label="Go back to curated timeline" onPress={() => router.back()} className="size-10 items-center justify-center rounded-full bg-surface-muted shadow-[0px_1px_1px_rgba(0,0,0,0.05)]"><CreateBackIcon /></Pressable>
+      <Pressable role="button" aria-label="Go back to curated timeline" onPress={() => goBack()} className="size-10 items-center justify-center rounded-full bg-surface-muted shadow-[0px_1px_1px_rgba(0,0,0,0.05)]"><CreateBackIcon /></Pressable>
       <View className="flex-row items-center gap-1.5 rounded-full bg-[#ffddb8] px-3 py-1"><View className="size-1.5 rounded-full bg-honey" /><Text className="font-sans-semibold text-[11px] leading-[14px] tracking-[1.1px] text-honey-deep">STEP 4 • NEXT STEP</Text></View>
       <Pressable role="button" aria-label="Help" className="size-10 items-center justify-center"><CreateHelpIcon /></Pressable>
     </View>

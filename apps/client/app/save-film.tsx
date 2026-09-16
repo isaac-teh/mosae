@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import type { Href } from "expo-router";
+import { useStepBack } from "@/lib/useStepBack";
 import { Asset } from "expo-asset";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { getStoryRepository, type Film } from "@mosae/core";
@@ -18,6 +20,7 @@ function GalleryIcon() { return <Svg width={20} height={20} viewBox="0 0 20 20">
 export default function SaveFilmScreen() {
   const router = useRouter();
   const { filmId } = useLocalSearchParams<{ filmId: string }>();
+  const goBack = useStepBack(`/review-film?filmId=${filmId}` as Href);
   const [film, setFilm] = useState<Film | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [comingSoon, setComingSoon] = useState(false);
@@ -31,9 +34,9 @@ export default function SaveFilmScreen() {
     anchor.remove();
   };
   if (error) return <View className="flex-1 items-center justify-center bg-canvas"><Text className="text-brand">{error}</Text></View>;
-  if (!film) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => router.back()} backLabel="Go back to your film" /></View>;
+  if (!film) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => goBack()} backLabel="Go back to your film" /></View>;
   const share = (name: string, icon: React.ReactNode, onPress: () => void) => <Pressable key={name} role="button" aria-label={name} onPress={onPress} className="w-[72px] items-center"><View className="size-12 items-center justify-center rounded-full bg-white shadow-[0_2px_10px_rgba(66,50,40,0.06)]">{icon}</View><Text className="mt-1.5 font-sans-medium text-[11px] text-ink">{name}</Text></Pressable>;
-  return <View className="flex-1 bg-canvas"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => router.back()} backLabel="Go back to your film" />
+  return <View className="flex-1 bg-canvas"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => goBack()} backLabel="Go back to your film" />
     <ScrollView className="flex-1" contentContainerClassName="min-h-[845px] px-5 pb-3" showsVerticalScrollIndicator={false}>
       <View className="pt-[23px]"><Text className="font-sans-semibold text-[15px] leading-5 text-ink">Your memory is ready</Text><Text className="mt-1 font-sans text-sm leading-[22px] text-ink-soft">Crafted with love and safeguarded in your memory{`\n`}gallery.</Text></View>
       <View className="mt-[14px] rounded-[38px] bg-white px-4 pb-[18px] pt-3 shadow-[0_8px_24px_rgba(66,50,40,0.07)]"><View><FilmPlayer source={require("../assets/demo/film.mp4")} poster={demoImage(film.savePosterKey)} durationSec={film.durationSec} aspect="landscape" compact /><View className="absolute bottom-2.5 left-2.5 flex-row items-center rounded-full bg-black/75 px-2 py-1"><Text className="mr-1 text-[10px] text-white">▣</Text><Text className="font-sans-medium text-[11px] text-white">4K Master Audio • 2:10</Text></View></View><Text className="mt-4 font-serif text-[19px] leading-6 text-ink">Mei’s 7th Birthday in Japan</Text><View className="mt-1 flex-row items-center"><PinIcon /><Text className="ml-1 font-sans text-xs text-ink-soft">Tokyo & Kyoto • March 2026</Text></View></View>

@@ -96,3 +96,25 @@ test.describe("review-film", () => {
   test("sending adjustment shows version notice", async ({ page }) => { await page.getByRole("button", { name: "Upbeat music" }).click(); await page.getByRole("button", { name: "Send adjustment" }).click(); await expect(page.getByText("Version 2 ready")).toBeVisible(); });
   test("save navigates to save-film", async ({ page }) => { await page.getByRole("button", { name: "Looks good! Save film" }).click(); await page.waitForURL("**/save-film?filmId=demo-film"); });
 });
+
+// Scenes opened straight from a link have no history; back must still reach the previous step.
+test.describe("back from a directly opened scene", () => {
+  const cases = [
+    { from: "/tell-story?projectId=p1&count=3", to: "**/pick-memory" },
+    { from: "/review-moments?planId=demo", to: "**/tell-story" },
+    { from: "/create?planId=demo", to: "**/curated-timeline?planId=demo" },
+    { from: "/direct-film?planId=demo", to: "**/create?planId=demo" },
+    { from: "/review-film?filmId=demo-film", to: "**/direct-film?planId=demo" },
+    { from: "/save-film?filmId=demo-film", to: "**/review-film?filmId=demo-film" },
+  ];
+  for (const { from, to } of cases) {
+    test(`${from} goes back to the previous step`, async ({ page }) => {
+      const errors: string[] = [];
+      page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+      await page.goto(from);
+      await page.getByRole("button", { name: /^Go back/ }).first().click();
+      await page.waitForURL(to);
+      expect(errors.filter((e) => e.includes("GO_BACK"))).toEqual([]);
+    });
+  }
+});

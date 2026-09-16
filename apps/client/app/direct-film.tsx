@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import type { Href } from "expo-router";
+import { useStepBack } from "@/lib/useStepBack";
 import Svg, { Path } from "react-native-svg";
 import { getStoryRepository, type DirectionOptions } from "@mosae/core";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -31,6 +33,7 @@ function ErrorState({ error, retry }: { error: string; retry: () => void }) {
 export default function DirectFilmScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
+  const goBack = useStepBack(`/create?planId=${planId}` as Href);
   const [options, setOptions] = useState<DirectionOptions | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -50,7 +53,7 @@ export default function DirectFilmScreen() {
   useEffect(load, [planId]);
 
   if (error) return <ErrorState error={error} retry={() => { setError(null); load(); }} />;
-  if (!options) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 4 OF 6" label="DIRECTING" progress={0.67} onBack={() => router.back()} backLabel="Go back to create" /></View>;
+  if (!options) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 4 OF 6" label="DIRECTING" progress={0.67} onBack={() => goBack()} backLabel="Go back to create" /></View>;
 
   const cadence = options.cadences[cadenceIndex];
   const soundtrack = options.soundtracks[soundtrackIndex];
@@ -73,7 +76,7 @@ export default function DirectFilmScreen() {
     }
   };
 
-  return <View className="flex-1 bg-canvas"><StepHeader step="STEP 4 OF 6" label="DIRECTING" progress={0.67} onBack={() => router.back()} backLabel="Go back to create" />
+  return <View className="flex-1 bg-canvas"><StepHeader step="STEP 4 OF 6" label="DIRECTING" progress={0.67} onBack={() => goBack()} backLabel="Go back to create" />
     <ScrollView className="flex-1" contentContainerClassName="min-h-[986px] px-5 pb-3" keyboardShouldPersistTaps="handled">
       <View className="pt-[23px]"><Text className="font-sans-semibold text-[16px] leading-[22px] text-ink">How should we tell your story?</Text><Text className="mt-1 font-sans text-sm leading-[23px] text-ink-soft">Set the emotional tone and rhythm. Mosaé will weave{`\n`}natural pacing, organic transitions, and an heirloom{`\n`}soundtrack.</Text></View>
 

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { useStepBack } from "@/lib/useStepBack";
 import { getStoryRepository } from "@mosae/core";
 import type { StoryPlan } from "@mosae/core";
 import { StepHeader } from "@/components/StepHeader";
@@ -17,6 +18,7 @@ import {
 export default function ReviewMomentsScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
+  const goBack = useStepBack("/tell-story");
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +34,7 @@ export default function ReviewMomentsScreen() {
       <View className="flex-1 items-center justify-center bg-canvas px-5">
         <Text className="text-brand text-sm">{error}</Text>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           className="mt-4 rounded-full bg-brand px-6 py-2"
         >
           <Text className="font-sans-semibold text-sm text-white">Go back</Text>
@@ -47,7 +49,7 @@ export default function ReviewMomentsScreen() {
         step="STEP 3 OF 6"
         label="CURATED MOMENT"
         progress={0.4744}
-        onBack={() => router.back()}
+        onBack={() => goBack()}
         backLabel="Go back to tell story"
       />
     );
@@ -71,7 +73,7 @@ export default function ReviewMomentsScreen() {
           step="STEP 3 OF 6"
           label="CURATED MOMENT"
           progress={0.4744}
-          onBack={() => router.back()}
+          onBack={() => goBack()}
           backLabel="Go back to tell story"
         />
       </View>

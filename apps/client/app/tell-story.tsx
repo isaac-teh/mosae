@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useStepBack } from "@/lib/useStepBack";
 import { getStoryRepository } from "@mosae/core";
 import { StepHeader } from "@/components/StepHeader";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -23,6 +24,7 @@ export default function TellStoryScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const goBack = useStepBack("/pick-memory");
   const params = useLocalSearchParams<{ projectId?: string; count?: string }>();
   const dictation = useDictation((text) => setStoryText((prev) => (prev ? `${prev} ${text}` : text)));
 
@@ -69,7 +71,7 @@ export default function TellStoryScreen() {
         step="Step 2 of 6"
         label="STORY INTENT"
         progress={2 / 7}
-        onBack={() => router.back()}
+        onBack={() => goBack()}
         backLabel="Go back to Step 1"
       />
 
