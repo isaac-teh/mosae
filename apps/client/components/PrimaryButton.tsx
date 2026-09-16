@@ -9,6 +9,7 @@ type PrimaryButtonProps = {
   disabled?: boolean;
   busy?: boolean;
   busyLabel?: string;
+  compact?: boolean;
 };
 
 // Figma: h-14 brand pill CTA (tell-story "Find the moments", review-moments "Continue")
@@ -20,6 +21,7 @@ export function PrimaryButton({
   disabled = false,
   busy = false,
   busyLabel,
+  compact = false,
 }: PrimaryButtonProps) {
   const displayLabel = busy && busyLabel ? busyLabel : label;
   return (
@@ -27,7 +29,7 @@ export function PrimaryButton({
       role="button"
       disabled={disabled || busy}
       onPress={onPress}
-      className="mt-6 h-14 w-full flex-row items-center justify-center gap-1 rounded-full bg-brand shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] disabled:opacity-50"
+      className={`mt-6 w-full flex-row items-center justify-center gap-1 rounded-full bg-brand shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] disabled:opacity-50 ${compact ? "h-12" : "h-14"}`}
     >
       {icon}
       <Text className="font-sans-medium text-sm tracking-[0.35px] text-white">

@@ -88,3 +88,11 @@ test.describe("direct-film", () => {
   test("Rewrite changes the director note", async ({ page }) => { const note = page.getByRole("textbox"); const before = await note.inputValue(); await page.getByRole("button", { name: "Rewrite director note" }).click(); await expect(note).not.toHaveValue(before); });
   test("Direct my film navigates to review-film", async ({ page }) => { await page.getByRole("button", { name: "Direct my film" }).click(); await page.waitForURL("**/review-film?filmId=demo-film"); });
 });
+
+test.describe("review-film", () => {
+  test.beforeEach(async ({ page }) => { await page.goto("/review-film?filmId=demo-film"); await page.getByRole("button", { name: "Play" }).waitFor(); });
+  test("play starts the film", async ({ page }) => { await page.getByRole("button", { name: "Play" }).click(); await expect(page.getByRole("button", { name: "Pause" })).toBeVisible(); await expect(page.locator("video")).toHaveJSProperty("paused", false); });
+  test("shortcut fills adjustment input", async ({ page }) => { await page.getByRole("button", { name: "Upbeat music" }).click(); await expect(page.getByRole("textbox")).toHaveValue("Upbeat music"); });
+  test("sending adjustment shows version notice", async ({ page }) => { await page.getByRole("button", { name: "Upbeat music" }).click(); await page.getByRole("button", { name: "Send adjustment" }).click(); await expect(page.getByText("Version 2 ready")).toBeVisible(); });
+  test("save navigates to save-film", async ({ page }) => { await page.getByRole("button", { name: "Looks good! Save film" }).click(); await page.waitForURL("**/save-film?filmId=demo-film"); });
+});
