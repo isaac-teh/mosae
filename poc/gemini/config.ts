@@ -2,7 +2,7 @@ export const models = {
   analyze: 'gemini-3.1-flash-lite',
   analyzeCompare: 'gemini-3.5-flash-lite',
   story: 'gemini-3.5-flash-lite',
-  compose: 'gemini-3.8-flash',
+  compose: 'gemini-3.1-flash-lite',
   embed: 'gemini-embedding-2',
 } as const;
 

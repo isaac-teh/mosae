@@ -2,7 +2,10 @@ import path from 'node:path';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { json, parseArgs, runDir, sampleDir, shell } from './common.js';
 import { models } from './config.js';
-const { set, model = models.compose } = parseArgs(); if (!set) throw new Error('Usage: 06-preview.ts <set> [--model id]');
-const dir = runDir(set, model), catalog: any = await json(path.join(runDir(set), 'catalog.json')), timeline: any = await json(path.join(dir, 'timeline.json')); const assets = new Map(catalog.items.map((x: any) => [x.id, x])); const temp = path.join(dir, '.preview'); await rm(temp, { recursive: true, force: true }); await mkdir(temp, { recursive: true });
+const { set, model = models.compose } = parseArgs();
+// The catalog belongs to the analysis run; a composition comparison holds it fixed.
+const catalogAt = process.argv.indexOf('--catalog');
+const catalogModel = catalogAt >= 0 ? process.argv[catalogAt + 1] : models.analyze; if (!set) throw new Error('Usage: 06-preview.ts <set> [--model id]');
+const dir = runDir(set, model), catalog: any = await json(path.join(runDir(set, catalogModel), 'catalog.json')), timeline: any = await json(path.join(dir, 'timeline.json')); const assets = new Map(catalog.items.map((x: any) => [x.id, x])); const temp = path.join(dir, '.preview'); await rm(temp, { recursive: true, force: true }); await mkdir(temp, { recursive: true });
 const segments: string[] = []; for (const [i, clip] of [...timeline.clips].sort((a: any, b: any) => a.order - b.order).entries()) { const a: any = assets.get(clip.itemId); if (!a) continue; const output = path.join(temp, `${String(i).padStart(3, '0')}.mp4`); const input = path.join(sampleDir(set), a.file); if (a.kind === 'photo') await shell('ffmpeg', ['-y','-loop','1','-i',input,'-t',String(clip.holdSec),'-vf','scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2','-r','30','-pix_fmt','yuv420p',output]); else await shell('ffmpeg', ['-y','-ss',String(clip.sourceInSec),'-to',String(clip.sourceOutSec),'-i',input,'-vf','scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2','-an','-r','30','-pix_fmt','yuv420p',output]); segments.push(output); }
 await writeFile(path.join(temp, 'concat.txt'), segments.map(x => `file '${x.replace(/'/g, "'\\''")}'`).join('\n')); await shell('ffmpeg', ['-y','-f','concat','-safe','0','-i',path.join(temp,'concat.txt'),'-c','copy',path.join(dir,'preview.mp4')]); console.log(path.join(dir, 'preview.mp4'));
