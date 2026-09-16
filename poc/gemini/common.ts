@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile, appendFile, readdir, stat, rm } from 'node:
 import path from 'node:path';
 import sharp from 'sharp';
 import { z } from 'zod';
-import { models, prices, ROOT } from './config.js';
+import { models, prices, ROOT, thinkingLevelFor } from './config.js';
 
 const exec = promisify(execFile);
 export const photoExt = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic']);
@@ -90,7 +90,7 @@ export async function generate<T>(opts: { dir: string; stage: string; model: str
     const started = Date.now();
     try {
       await rateLimit(opts.model);
-      const response: any = await client.models.generateContent({ model: opts.model, contents: opts.contents, config: { responseMimeType: 'application/json', responseJsonSchema: opts.schema, mediaResolution: 'MEDIA_RESOLUTION_LOW', ...(opts.thinking ? { thinkingConfig: { thinkingLevel: 'MINIMAL' } } : {}) } } as any);
+      const response: any = await client.models.generateContent({ model: opts.model, contents: opts.contents, config: { responseMimeType: 'application/json', responseJsonSchema: opts.schema, mediaResolution: 'MEDIA_RESOLUTION_LOW', ...(opts.thinking ? { thinkingConfig: { thinkingLevel: thinkingLevelFor(opts.model) } } : {}) } } as any);
       const usage = response.usageMetadata || {}; const promptTokens = usage.promptTokenCount || 0; const candidatesTokens = usage.candidatesTokenCount || 0; const thoughtsTokens = usage.thoughtsTokenCount || 0; const p = prices[opts.model] || { input: 0, output: 0 }; const estimatedUsd = (promptTokens * p.input + (candidatesTokens + thoughtsTokens) * p.output) / 1_000_000;
       await recordCall(opts.dir, { stage: opts.stage, model: opts.model, file: opts.file, promptTokens, candidatesTokens, thoughtsTokens, totalTokens: usage.totalTokenCount || promptTokens + candidatesTokens + thoughtsTokens, latencyMs: Date.now() - started, estimatedUsd, attempt: attempt + 1 });
       return opts.validate(JSON.parse(response.text));
