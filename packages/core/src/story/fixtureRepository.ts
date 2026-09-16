@@ -23,9 +23,8 @@ const moments: Moment[] = [
     tag: { emoji: "🎂", label: "Milestone Moment" },
     imageKey: "birthday-song",
     kind: "photo",
-    badge: "Heirloom",
     selected: true,
-    favorite: true,
+    favorite: false,
   },
   {
     id: "moment-2",
@@ -63,7 +62,7 @@ const moments: Moment[] = [
 const chapters: Chapter[] = [
   {
     id: "chapter-1",
-    dayLabel: "Day 1 — Arriving & Tokyo Nights",
+    dayLabel: "Day 1 - Arriving & Tokyo Nights",
     title: "Narita Express to Yanaka",
     subtitle: "8 moments",
     badge: { label: "Chapter 1", tone: "neutral" },
@@ -72,7 +71,7 @@ const chapters: Chapter[] = [
   },
   {
     id: "chapter-2",
-    dayLabel: "Day 2 — Exploring Tokyo & Street Flavours",
+    dayLabel: "Day 2 - Exploring Tokyo & Street Flavours",
     title: "Komorebi Cafe & Street Markets",
     subtitle: "14 moments",
     badge: { label: "Chapter 2", tone: "neutral" },
@@ -81,7 +80,7 @@ const chapters: Chapter[] = [
   },
   {
     id: "chapter-3",
-    dayLabel: "Day 3 — Mei's 7th Birthday Celebration",
+    dayLabel: "Day 3 - Mei's 7th Birthday Celebration",
     title: "Birthday Morning & Cafe Celebration",
     subtitle: "16 moments",
     badge: { label: "Key Milestone", tone: "milestone" },
@@ -90,7 +89,7 @@ const chapters: Chapter[] = [
   },
   {
     id: "chapter-4",
-    dayLabel: "Day 4 — Kyoto & Ancient Shrines",
+    dayLabel: "Day 4 - Kyoto & Ancient Shrines",
     title: "Torii Gates & Traditional Tea Shops",
     subtitle: "14 moments",
     badge: { label: "Chapter 4", tone: "neutral" },
