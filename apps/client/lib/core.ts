@@ -1,4 +1,4 @@
-import { configureCore } from "@mosae/core";
+import { configureCore, setStoryRepository, createFixtureStoryRepository } from "@mosae/core";
 
 const useEmulators = process.env.EXPO_PUBLIC_USE_EMULATORS === "true";
 
@@ -13,3 +13,5 @@ configureCore({
   },
   useEmulators,
 });
+
+setStoryRepository(createFixtureStoryRepository());

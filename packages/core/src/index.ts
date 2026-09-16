@@ -5,3 +5,6 @@ export { submitStory } from "./api";
 export { uploadMedia, contentTypeFor, type UploadDeps, type UploadProgress } from "./uploads";
 export { setPendingMedia, getPendingMedia } from "./pendingMedia";
 export { isMedia, formatDuration, mediaId } from "./media";
+export type * from "./story/types";
+export { getStoryRepository, setStoryRepository, type StoryRepository } from "./story/repository";
+export { createFixtureStoryRepository } from "./story/fixtureRepository";
