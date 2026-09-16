@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { Page } from "@playwright/test";
+import { figmaScenarios } from "./figma-scenarios";
 
 const fixture = (name: string) => path.join(__dirname, "fixtures", name);
 export const FIXTURES = ["photo-1.jpg", "photo-2.jpg", "photo-3.jpg", "clip-1.mp4"].map(fixture);
@@ -54,4 +55,5 @@ export const scenarios: Scenario[] = [
       await settle(page);
     },
   },
+  ...figmaScenarios.map(({ name, run }) => ({ name, run })),
 ];
