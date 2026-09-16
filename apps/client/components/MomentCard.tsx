@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Moment } from "@mosae/core";
 import { demoImage } from "@/lib/demoAssets";
 import { CheckIcon } from "./icons";
+import { HeartIcon } from "./sceneIcons";
 
 type MomentCardProps = {
   moment: Moment;
@@ -17,7 +18,6 @@ export function MomentCard({
   moment,
   size,
   onToggleSelected,
-  onToggleFavorite,
   trailing,
 }: MomentCardProps) {
   const isHero = size === "hero";
@@ -32,17 +32,20 @@ export function MomentCard({
   const bottomOffset = isHero ? 12 : 10;
   const leftOffset = isHero ? 12 : 8;
   const ringSize = isHero ? "size-[32px]" : "size-[28px]";
+  const titlePt = isHero ? 10 : 8;
+  const titlePb = isHero ? 4 : 2;
+  const titlePx = isHero ? 8 : 6;
   const selected = moment.selected;
 
   return (
     <View
       className={`${isHero ? "w-full" : "flex-1 min-w-0"} bg-white rounded-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.05)]`}
-      style={{ paddingHorizontal: padding, paddingVertical: 0 }}
+      style={{ padding }}
     >
       <View className="relative rounded-[16px] bg-[#f0ede9] overflow-hidden">
         <View style={{ height }} className="w-full">
           <View className="absolute inset-0 overflow-hidden pointer-events-none">
-          <Image
+            <Image
               source={demoImage(moment.imageKey)}
               accessibilityLabel={moment.title}
               className="absolute h-full w-full object-cover"
@@ -77,9 +80,7 @@ export function MomentCard({
 
           {/* Tag chip */}
           <View
-            className={`absolute backdrop-blur-[6px] bg-[rgba(255,255,255,0.9)] flex-row items-center rounded-full shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] ${
-              isHero ? "shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]" : ""
-            }`}
+            className="absolute backdrop-blur-[6px] bg-[rgba(255,255,255,0.9)] flex-row items-center rounded-full shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
             style={{
               bottom: bottomOffset,
               left: leftOffset,
@@ -104,7 +105,7 @@ export function MomentCard({
         </View>
 
         {/* Card footer: title + meta + trailing */}
-        <View className="flex-row items-center justify-between" style={{ paddingTop: isHero ? 10 : 8, paddingBottom: isHero ? 4 : 2 }}>
+        <View className="flex-row items-center justify-between" style={{ paddingTop: titlePt, paddingBottom: titlePb, paddingHorizontal: titlePx }}>
           <View className="flex-1 min-w-0">
             <Text numberOfLines={isHero ? 1 : 1} className={`${titleSize} font-serif text-[#1c1c19]`}>
               {moment.title}
@@ -113,14 +114,13 @@ export function MomentCard({
               {moment.meta}
             </Text>
           </View>
+          {/* Hero cards get a trailing heart icon on the right side of title row */}
+          {isHero && <HeartIcon />}
           {trailing}
         </View>
       </View>
 
-      {/* Shadow overlay */}
-      <View className="absolute inset-0 rounded-[24px]" style={{ zIndex: -1 }} />
-
-      {/* Heart/favorite badge for hero moments that are favorites */}
+      {/* Heirloom badge for hero moments with a badge label (e.g. "Heirloom") */}
       {moment.badge && isHero && (
         <View
           className="absolute bg-[rgba(255,221,184,0.5)] flex-row items-center rounded-full"

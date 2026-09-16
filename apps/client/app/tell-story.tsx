@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { Href, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { getStoryRepository } from "@mosae/core";
 import { StepHeader } from "@/components/StepHeader";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -50,7 +50,7 @@ export default function TellStoryScreen() {
     const focus = themes.length ? `\n\nFocus on: ${themes.join(", ")}` : "";
     try {
       const { planId } = await getStoryRepository().createPlan(`${storyText.trim()}${focus}`, projectId ? [projectId] : []);
-      router.push({ pathname: "/review-moments", params: { planId } } as unknown as Href);
+      router.push(`/review-moments?planId=${planId}` as any);
     } catch (e) {
       console.error("submit failed", e);
       setError("Couldn't find the moments. Please try again.");
