@@ -12,7 +12,7 @@ export type FigmaScenario = { name: string; height: number; run: (page: Page) =>
 export const figmaScenarios: FigmaScenario[] = [
   { name: "review-moments", height: 1533, run: async (page) => { await page.goto("/review-moments?planId=demo"); await settle(page); } },
   { name: "curated-timeline", height: 2631, run: async (page) => { await page.goto("/curated-timeline?planId=demo"); await settle(page); } },
-  { name: "create", height: 1000, run: async (page) => { await page.goto("/create?planId=demo"); await settle(page); } },
+  { name: "create", height: 1000, run: async (page) => { await page.goto("/create?planId=demo"); await page.getByRole("radio", { name: "Sync to Apple Photos" }).click(); await settle(page); } },
   { name: "direct-film", height: 1052, run: async (page) => { await page.goto("/direct-film?planId=demo"); await settle(page); } },
   { name: "review-film", height: 905, run: async (page) => { await page.goto("/review-film?filmId=demo-film"); await settle(page); } },
   { name: "save-film", height: 905, run: async (page) => { await page.goto("/save-film?filmId=demo-film"); await settle(page); } },

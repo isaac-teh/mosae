@@ -73,3 +73,10 @@ test.describe("curated-timeline", () => {
     await page.waitForURL("**/create?planId=demo");
   });
 });
+
+test.describe("create", () => {
+  test.beforeEach(async ({ page }) => { await page.goto("/create?planId=demo"); await page.getByRole("radio", { name: "Direct my film" }).waitFor(); });
+  test("film is selected by default", async ({ page }) => { await expect(page.getByRole("radio", { name: "Direct my film" })).toHaveAttribute("aria-checked", "true"); });
+  test("Apple Photos updates CTA and shows coming soon", async ({ page }) => { await page.getByRole("radio", { name: "Sync to Apple Photos" }).click(); await page.getByRole("button", { name: "Continue with Sync to Photos" }).click(); await expect(page.getByText("Coming soon")).toBeVisible(); });
+  test("film CTA navigates to direction", async ({ page }) => { await page.getByRole("button", { name: "Continue with Direct my film" }).click(); await page.waitForURL("**/direct-film?planId=demo"); });
+});
