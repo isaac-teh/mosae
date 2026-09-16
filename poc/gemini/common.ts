@@ -54,16 +54,39 @@ export function parseArgs(args = process.argv.slice(2)) { const set = args.find(
 export const ai = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 export async function recordCall(dir: string, call: Record<string, unknown>) { await mkdir(dir, { recursive: true }); await appendFile(path.join(dir, 'calls.jsonl'), JSON.stringify(call) + '\n'); }
 const nextRequestAt = new Map<string, number>();
+function rawApiError(error: any) {
+  // The SDK puts the server's JSON body in different properties across releases.
+  // Preserve every available representation so a quota or availability blocker
+  // can be independently verified from calls.jsonl and the generated report.
+  const message = String(error?.message || error);
+  let body: any = error?.response?.data ?? error?.error ?? error?.body;
+  if (body == null) {
+    const start = message.indexOf('{');
+    if (start >= 0) try { body = JSON.parse(message.slice(start)); } catch { /* retain message below */ }
+  }
+  const api = body?.error ?? body;
+  return {
+    status: error?.status ?? error?.response?.status ?? api?.code,
+    code: api?.status ?? api?.code ?? error?.code,
+    message: api?.message ?? message,
+    retryInfo: api?.details?.find?.((detail: any) => detail?.['@type']?.includes('RetryInfo')) ?? api?.retryInfo,
+    body: body ?? message,
+  };
+}
 async function rateLimit(model: string) {
   if (model !== models.analyzeCompare) return;
   const waitMs = Math.max(0, (nextRequestAt.get(model) || 0) - Date.now());
   if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
-  // 12 RPM leaves headroom below the key's 15 RPM free-tier ceiling.
+  // A serial 12 RPM limiter provides headroom while preserving the requested
+  // comparison cadence independently of the account's service tier.
   nextRequestAt.set(model, Date.now() + 5000);
 }
 export async function generate<T>(opts: { dir: string; stage: string; model: string; file?: string; contents: any; schema: any; validate: (value: unknown) => T; thinking?: boolean }) {
   const client = ai(); let last: Error | undefined;
-  for (let attempt = 0; attempt < 4; attempt++) {
+  // 503 retries use 10, 20, 40, 80, and 120 seconds, totaling five minutes
+  // per file. Other retryable errors retain the short bounded retry policy.
+  const maxAttempts = 6;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const started = Date.now();
     try {
       await rateLimit(opts.model);
@@ -73,11 +96,12 @@ export async function generate<T>(opts: { dir: string; stage: string; model: str
       return opts.validate(JSON.parse(response.text));
     } catch (e: any) {
       last = e;
-      await recordCall(opts.dir, { stage: opts.stage, model: opts.model, file: opts.file, promptTokens: 0, candidatesTokens: 0, thoughtsTokens: 0, totalTokens: 0, latencyMs: Date.now() - started, estimatedUsd: 0, attempt: attempt + 1, error: String(e.message || e) });
+      const rawError = rawApiError(e);
+      await recordCall(opts.dir, { stage: opts.stage, model: opts.model, file: opts.file, promptTokens: 0, candidatesTokens: 0, thoughtsTokens: 0, totalTokens: 0, latencyMs: Date.now() - started, estimatedUsd: 0, attempt: attempt + 1, error: String(e.message || e), rawError });
       const retryable = /(?:429|5\d\d|RESOURCE_EXHAUSTED|UNAVAILABLE|INTERNAL)/i.test(String(e.message || e));
-      if (!retryable || attempt === 3) break;
+      if (!retryable || attempt === maxAttempts - 1) break;
       const baseMs = /5\d\d|UNAVAILABLE|INTERNAL/i.test(String(e.message || e)) ? 10_000 : 1_000;
-      const delayMs = Math.min(120_000, baseMs * 2 ** attempt + Math.floor(Math.random() * 10_000));
+      const delayMs = Math.min(120_000, baseMs * 2 ** attempt);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
