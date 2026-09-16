@@ -80,3 +80,11 @@ test.describe("create", () => {
   test("Apple Photos updates CTA and shows coming soon", async ({ page }) => { await page.getByRole("radio", { name: "Sync to Apple Photos" }).click(); await page.getByRole("button", { name: "Continue with Sync to Photos" }).click(); await expect(page.getByText("Coming soon")).toBeVisible(); });
   test("film CTA navigates to direction", async ({ page }) => { await page.getByRole("button", { name: "Continue with Direct my film" }).click(); await page.waitForURL("**/direct-film?planId=demo"); });
 });
+
+test.describe("direct-film", () => {
+  test.beforeEach(async ({ page }) => { await page.goto("/direct-film?planId=demo"); await page.getByRole("radio", { name: "2m" }).waitFor(); });
+  test("2m is selected by default", async ({ page }) => { await expect(page.getByRole("radio", { name: "2m" })).toHaveAttribute("aria-checked", "true"); });
+  test("duration can be selected and cleared", async ({ page }) => { const duration = page.getByRole("radio", { name: "3m" }); await duration.click(); await expect(duration).toHaveAttribute("aria-checked", "true"); await duration.click(); await expect(duration).toHaveAttribute("aria-checked", "false"); });
+  test("Rewrite changes the director note", async ({ page }) => { const note = page.getByRole("textbox"); const before = await note.inputValue(); await page.getByRole("button", { name: "Rewrite director note" }).click(); await expect(note).not.toHaveValue(before); });
+  test("Direct my film navigates to review-film", async ({ page }) => { await page.getByRole("button", { name: "Direct my film" }).click(); await page.waitForURL("**/review-film?filmId=demo-film"); });
+});
