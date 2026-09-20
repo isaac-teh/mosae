@@ -71,6 +71,38 @@ describe("TimelineSchema", () => {
     expect(safeParseTimeline({ ...valid, videoClips: [] }).ok).toBe(false);
   });
 
+  it("rejects timed tracks that run past the declared duration with field paths", () => {
+    const cases = [
+      [{ ...valid, videoClips: [{ ...valid.videoClips[0], startSec: 5, durationSec: 2 }] }, "videoClips.0.durationSec"],
+      [{ ...valid, audioClips: [{ ...valid.audioClips[0], startSec: 5, source: { kind: "asset", assetId: "speakerAsset", sourceInSec: 0, sourceOutSec: 2 } }] }, "audioClips.0.source.sourceOutSec"],
+      [{ ...valid, captions: [{ ...valid.captions[0], endSec: 7 }] }, "captions.0.endSec"],
+      [{ ...valid, chapters: [{ ...valid.chapters[0], startSec: 6 }] }, "chapters.0.startSec"],
+    ] as const;
+
+    for (const [timeline, path] of cases) {
+      const result = safeParseTimeline(timeline);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors.join(" ")).toContain(path);
+    }
+  });
+
+  it("accepts tracks ending at the duration boundary and within tolerance", () => {
+    const exactBoundary = {
+      ...valid,
+      videoClips: [{ ...valid.videoClips[0], startSec: 4, durationSec: 2 }],
+      audioClips: [{ ...valid.audioClips[0], startSec: 4, source: { kind: "asset", assetId: "speakerAsset", sourceInSec: 0, sourceOutSec: 2 } }],
+      captions: [{ ...valid.captions[0], endSec: 6 }],
+      chapters: [{ ...valid.chapters[0], startSec: 5.9999995 }],
+    };
+    expect(safeParseTimeline(exactBoundary).ok).toBe(true);
+    expect(safeParseTimeline({ ...exactBoundary, videoClips: [{ ...exactBoundary.videoClips[0], durationSec: 2.0000005 }] }).ok).toBe(true);
+  });
+
+  it("rejects tracks that exceed the duration beyond tolerance", () => {
+    const result = safeParseTimeline({ ...valid, videoClips: [{ ...valid.videoClips[0], startSec: 4, durationSec: 2.01 }] });
+    expect(result.ok).toBe(false);
+  });
+
   it("exposes the schema for composition", () => {
     expect(TimelineSchema.safeParse(valid).success).toBe(true);
   });

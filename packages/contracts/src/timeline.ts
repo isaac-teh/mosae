@@ -86,6 +86,8 @@ export const CaptionSchema = z.strictObject({
   endSec: positiveSeconds,
 });
 
+const TIMELINE_TOLERANCE_SEC = 1e-6;
+
 export const TimelineSchema = z.strictObject({
   schemaVersion: z.literal(1),
   projectId: z.string().min(1),
@@ -97,6 +99,32 @@ export const TimelineSchema = z.strictObject({
   videoClips: z.array(VideoClipSchema).min(1),
   audioClips: z.array(AudioClipSchema),
   captions: z.array(CaptionSchema),
+}).superRefine((timeline, context) => {
+  const exceedsDuration = (endSec: number) => endSec - timeline.durationSec > TIMELINE_TOLERANCE_SEC;
+
+  timeline.videoClips.forEach((clip, index) => {
+    if (exceedsDuration(clip.startSec + clip.durationSec)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["videoClips", index, "durationSec"], message: "clip end exceeds durationSec" });
+    }
+  });
+
+  timeline.audioClips.forEach((clip, index) => {
+    if (exceedsDuration(clip.startSec + clip.source.sourceOutSec - clip.source.sourceInSec)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["audioClips", index, "source", "sourceOutSec"], message: "clip end exceeds durationSec" });
+    }
+  });
+
+  timeline.captions.forEach((caption, index) => {
+    if (exceedsDuration(caption.endSec)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["captions", index, "endSec"], message: "caption end exceeds durationSec" });
+    }
+  });
+
+  timeline.chapters.forEach((chapter, index) => {
+    if (chapter.startSec >= timeline.durationSec) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["chapters", index, "startSec"], message: "chapter start must be before durationSec" });
+    }
+  });
 });
 
 export type Chapter = z.infer<typeof ChapterSchema>;
