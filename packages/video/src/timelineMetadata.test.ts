@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timeline } from "@mosae/contracts";
-import { gainToVolume, timelineMetadata } from "./timelineMetadata.js";
+import { audioTrimFrames, gainToVolume, timelineMetadata } from "./timelineMetadata.js";
 
 const timeline = (overrides: Partial<Timeline> = {}): Timeline => ({
   schemaVersion: 1,
@@ -49,5 +49,19 @@ describe("gainToVolume", () => {
 
   it("clamps to a non-negative volume", () => {
     expect(gainToVolume(-60)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("audioTrimFrames", () => {
+  it("converts audio trim points from seconds to frames", () => {
+    expect(audioTrimFrames({ sourceInSec: 2, sourceOutSec: 4 }, 30).trimBeforeFrames).toBe(60);
+    expect(audioTrimFrames({ sourceInSec: 0, sourceOutSec: 4 }, 30).trimBeforeFrames).toBe(0);
+    expect(audioTrimFrames({ sourceInSec: 1.5, sourceOutSec: 4 }, 30)).toEqual({ trimBeforeFrames: 45, trimAfterFrames: 120 });
+  });
+
+  it("rounds fractional seconds and preserves positive clip ordering", () => {
+    const trim = audioTrimFrames({ sourceInSec: 0.05, sourceOutSec: 1 }, 30);
+    expect(trim.trimBeforeFrames).toBe(2);
+    expect(trim.trimAfterFrames).toBeGreaterThan(trim.trimBeforeFrames);
   });
 });

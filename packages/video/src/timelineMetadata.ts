@@ -25,3 +25,13 @@ export function timelineMetadata({ props }: { props: TimelineProps }) {
 export function gainToVolume(gainDb: number): number {
   return Math.max(0, 10 ** (gainDb / 20));
 }
+
+export function audioTrimFrames(
+  source: { sourceInSec: number; sourceOutSec: number },
+  fps: number,
+): { trimBeforeFrames: number; trimAfterFrames: number } {
+  return {
+    trimBeforeFrames: Math.round(source.sourceInSec * fps),
+    trimAfterFrames: Math.round(source.sourceOutSec * fps),
+  };
+}
