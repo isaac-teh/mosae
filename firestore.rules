@@ -1,6 +1,37 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // The client drives progress, proposals and render status from listeners.
+    // Reads are scoped to the owning user; every write goes through the API so
+    // stage transitions, versions and job state stay server-controlled.
+    match /projects/{projectId} {
+      function owned() {
+        return request.auth != null
+          && resource != null
+          && resource.data.userId == request.auth.uid;
+      }
+      function ownsParent() {
+        let parent = get(/databases/$(database)/documents/projects/$(projectId));
+        return request.auth != null && parent.data.userId == request.auth.uid;
+      }
+
+      allow get, list: if owned();
+      allow write: if false;
+
+      match /assets/{assetId} { allow read: if ownsParent(); allow write: if false; }
+      match /shots/{shotId} { allow read: if ownsParent(); allow write: if false; }
+      match /storyIntents/{intentId} { allow read: if ownsParent(); allow write: if false; }
+      match /storyProposals/{proposalId} { allow read: if ownsParent(); allow write: if false; }
+      match /directionSettings/{settingsId} { allow read: if ownsParent(); allow write: if false; }
+      match /jobs/{jobId} { allow read: if ownsParent(); allow write: if false; }
+      match /generations/{generationId} { allow read: if ownsParent(); allow write: if false; }
+
+      // Server-only: upload manifests and the durable task outbox.
+      match /uploadSessions/{document=**} { allow read, write: if false; }
+      match /taskOutbox/{document=**} { allow read, write: if false; }
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
