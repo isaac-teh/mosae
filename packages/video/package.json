@@ -4,9 +4,11 @@
   "scripts": {
     "studio": "remotion studio src/index.tsx",
     "render": "remotion render src/index.tsx MosaeFilm out/mosae-film.mp4",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mosae/contracts": "*",
     "@remotion/cli": "^4.0.0",
     "@remotion/transitions": "^4.0.0",
     "remotion": "^4.0.0",
@@ -14,6 +16,13 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^2.0.0"
+  },
+  "exports": {
+    ".": "./src/index.tsx",
+    "./fixture": "./src/fixtureTimeline.ts",
+    "./timeline": "./src/Timeline.tsx",
+    "./metadata": "./src/timelineMetadata.ts"
   }
 }
