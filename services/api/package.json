@@ -16,6 +16,7 @@
     "@google-cloud/tasks": "^5.5.0",
     "@google/genai": "^2.23.0",
     "@mosae/contracts": "*",
+    "exiftool-vendored": "^38.0.1",
     "express": "^4.19.0",
     "firebase-admin": "^12.3.0",
     "google-auth-library": "^9.15.1",

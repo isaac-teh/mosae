@@ -5,6 +5,7 @@ import { requireServiceCaller } from "./auth/requireServiceCaller.js";
 import { projectsRouter } from "./routes/projects.js";
 import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
+import { healthRouter } from "./routes/health.js";
 import {
   CloudTasksQueue,
   InMemoryTaskQueue,
@@ -26,6 +27,7 @@ const serviceAuth = requireServiceCaller({
   allowedEmails: config.invokerEmails,
 });
 const app = express();
+app.use("/", healthRouter());
 app.use("/api", apiCors(config));
 app.use("/api", express.json({ limit: "2mb" }));
 app.use(express.json({ limit: "2mb" }));
