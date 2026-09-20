@@ -1,9 +1,10 @@
 import { parseTimeline, type Timeline } from "@mosae/contracts";
+import { resolve } from "node:path";
 
 export type RenderRequest = {
   timeline: Timeline;
   sources: Record<string, string>;
-  outputPath: string;
+  outputFile: string;
 };
 
 export type RenderDeps = {
@@ -14,6 +15,13 @@ export type RenderDeps = {
 };
 
 export const COMPOSITION_ID = "MosaeTimeline";
+
+const OUTPUT_FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}\.mp4$/;
+
+export function resolveOutputPath(dir: string, outputFile: string): string {
+  if (!OUTPUT_FILE_PATTERN.test(outputFile)) throw new Error("render request has an invalid outputFile");
+  return resolve(dir, outputFile);
+}
 
 /**
  * Every shot, asset and soundtrack a Timeline names must resolve, or the render
@@ -32,9 +40,10 @@ function missingSources(timeline: Timeline, sources: Record<string, string>): st
 export function parseRenderRequest(body: unknown): RenderRequest {
   const input = body as Partial<RenderRequest> | null;
   if (!input || typeof input !== "object") throw new Error("render request must be an object");
-  if (typeof input.outputPath !== "string" || input.outputPath.length === 0) {
-    throw new Error("render request requires an outputPath");
+  if (typeof input.outputFile !== "string") {
+    throw new Error("render request requires an outputFile");
   }
+  resolveOutputPath("/unused", input.outputFile);
   const sources = input.sources;
   if (!sources || typeof sources !== "object") throw new Error("render request requires a sources map");
 
@@ -48,13 +57,15 @@ export function parseRenderRequest(body: unknown): RenderRequest {
   const missing = missingSources(timeline, sources as Record<string, string>);
   if (missing.length > 0) throw new Error(`missing source for ${missing.join(", ")}`);
 
-  return { timeline, sources: sources as Record<string, string>, outputPath: input.outputPath };
+  return { timeline, sources: sources as Record<string, string>, outputFile: input.outputFile };
 }
 
 export async function renderTimeline(
   request: RenderRequest,
   deps: RenderDeps,
+  outputDir: string,
 ): Promise<{ outputPath: string; durationInFrames: number }> {
+  const outputPath = resolveOutputPath(outputDir, request.outputFile);
   const entry = new URL("../../../packages/video/src/index.tsx", import.meta.url).pathname;
   const serveUrl = await deps.bundle(entry);
   const inputProps = { timeline: request.timeline, sources: request.sources };
@@ -64,10 +75,10 @@ export async function renderTimeline(
     serveUrl,
     composition,
     codec: "h264",
-    outputLocation: request.outputPath,
+    outputLocation: outputPath,
     inputProps,
     onProgress: ({ progress }: { progress: number }) => deps.onProgress?.(progress),
   });
 
-  return { outputPath: request.outputPath, durationInFrames: composition.durationInFrames };
+  return { outputPath, durationInFrames: composition.durationInFrames };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { parseRenderRequest, renderTimeline } from "./renderTimeline.js";
+import { parseRenderRequest, renderTimeline, resolveOutputPath } from "./renderTimeline.js";
 import { fixtureSources, fixtureTimeline } from "@mosae/video/fixture";
 
 function deps(overrides: Record<string, unknown> = {}) {
@@ -11,20 +11,20 @@ function deps(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const request = { timeline: fixtureTimeline, sources: fixtureSources, outputPath: "/tmp/out.mp4" };
+const request = { timeline: fixtureTimeline, sources: fixtureSources, outputFile: "out.mp4" };
 
 describe("renderTimeline", () => {
   it("selects the MosaeTimeline composition and renders to the requested path", async () => {
     const d = deps();
-    const result = await renderTimeline(request, d as never);
-    expect(result).toMatchObject({ outputPath: "/tmp/out.mp4", durationInFrames: 180 });
+    const result = await renderTimeline(request, d as never, "/tmp/renders");
+    expect(result).toMatchObject({ outputPath: "/tmp/renders/out.mp4", durationInFrames: 180 });
     expect(d.selectComposition).toHaveBeenCalledWith(expect.objectContaining({ id: "MosaeTimeline", serveUrl: "http://bundle" }));
-    expect(d.renderMedia).toHaveBeenCalledWith(expect.objectContaining({ outputLocation: "/tmp/out.mp4", codec: "h264" }));
+    expect(d.renderMedia).toHaveBeenCalledWith(expect.objectContaining({ outputLocation: "/tmp/renders/out.mp4", codec: "h264" }));
   });
 
   it("passes the timeline and sources through as input props, so metadata is derived from them", async () => {
     const d = deps();
-    await renderTimeline(request, d as never);
+    await renderTimeline(request, d as never, "/tmp/renders");
     const selectArgs = d.selectComposition.mock.calls[0][0] as { inputProps: { timeline: unknown; sources: unknown } };
     expect(selectArgs.inputProps.timeline).toEqual(fixtureTimeline);
     expect(selectArgs.inputProps.sources).toEqual(fixtureSources);
@@ -37,30 +37,40 @@ describe("renderTimeline", () => {
         args.onProgress?.({ progress: 0.5 });
       }),
     });
-    await renderTimeline(request, { ...d, onProgress } as never);
+    await renderTimeline(request, { ...d, onProgress } as never, "/tmp/renders");
     expect(onProgress).toHaveBeenCalledWith(0.5);
   });
 
   it("surfaces a bundling failure rather than reporting a successful render", async () => {
     const d = deps({ bundle: vi.fn().mockRejectedValue(new Error("bundle failed")) });
-    await expect(renderTimeline(request, d as never)).rejects.toThrow("bundle failed");
+    await expect(renderTimeline(request, d as never, "/tmp/renders")).rejects.toThrow("bundle failed");
   });
 });
 
 describe("parseRenderRequest", () => {
   it("accepts a well-formed request", () => {
-    expect(parseRenderRequest(request).outputPath).toBe("/tmp/out.mp4");
+    expect(parseRenderRequest(request).outputFile).toBe("out.mp4");
   });
 
   it("rejects a request whose timeline does not match the contract", () => {
     expect(() => parseRenderRequest({ ...request, timeline: { ...fixtureTimeline, fps: 24 } })).toThrow(/timeline/i);
   });
 
-  it("rejects a request with no output path", () => {
-    expect(() => parseRenderRequest({ timeline: fixtureTimeline, sources: fixtureSources })).toThrow(/outputPath/i);
+  it("rejects a request with no output file", () => {
+    expect(() => parseRenderRequest({ timeline: fixtureTimeline, sources: fixtureSources })).toThrow(/outputFile/i);
   });
 
   it("rejects a sources map that does not cover every referenced clip", () => {
     expect(() => parseRenderRequest({ ...request, sources: { film: "film.mp4" } })).toThrow(/mochi|missing source/i);
+  });
+});
+
+describe("resolveOutputPath", () => {
+  it("resolves valid output filenames under the render directory", () => {
+    expect(resolveOutputPath("/tmp/renders", "film_01.mp4")).toBe("/tmp/renders/film_01.mp4");
+  });
+
+  it.each(["../x.mp4", "/abs.mp4", "a/b.mp4", "x.mov", "", `${"a".repeat(129)}.mp4`])("rejects unsafe output filename %j", (outputFile) => {
+    expect(() => resolveOutputPath("/tmp/renders", outputFile)).toThrow(/outputFile/i);
   });
 });

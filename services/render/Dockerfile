@@ -22,6 +22,7 @@ COPY services/render/package.json services/render/
 RUN npm ci --omit=dev --workspace services/render --workspace packages/video --workspace packages/contracts --include-workspace-root
 COPY packages/contracts packages/contracts
 COPY packages/video packages/video
+COPY apps/client/assets/demo apps/client/assets/demo
 COPY services/render/src services/render/src
 # Download the browser once at image build time so the first render does not pay for it.
 RUN npx remotion browser ensure
