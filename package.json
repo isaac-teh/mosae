@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "apps/client",
+    "packages/contracts",
     "packages/core",
     "packages/video",
     "services/api",
@@ -11,8 +12,8 @@
   "scripts": {
     "dev:web": "npm run web -w apps/client",
     "dev:api": "npm run dev -w services/api",
-    "test": "npm run test -w packages/core && npm run test -w services/api",
-    "typecheck": "npm run typecheck -w packages/core && npm run typecheck -w apps/client && npm run typecheck -w services/api",
+    "test": "npm run test -w packages/contracts && npm run test -w packages/core && npm run test -w services/api",
+    "typecheck": "npm run typecheck -w packages/contracts && npm run typecheck -w packages/core && npm run typecheck -w apps/client && npm run typecheck -w services/api",
     "lint": "npm run lint -w apps/client"
   }
 }
