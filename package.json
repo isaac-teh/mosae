@@ -16,5 +16,8 @@
     "test": "npm run test -w packages/contracts && npm run test -w packages/core && npm run test -w services/api && npm run test -w services/render",
     "typecheck": "npm run typecheck -w packages/contracts && npm run typecheck -w packages/core && npm run typecheck -w apps/client && npm run typecheck -w services/api && npm run typecheck -w services/render",
     "lint": "npm run lint -w apps/client"
+  },
+  "devDependencies": {
+    "firebase-tools": "15.30.2"
   }
 }
