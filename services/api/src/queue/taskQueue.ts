@@ -1,9 +1,10 @@
 import { CloudTasksClient } from "@google-cloud/tasks";
+import type { SubjectKind } from "../domain/ids.js";
 
 export type QueuedTask = {
   name: string;
-  path: "/tasks/ingest" | "/tasks/understand";
-  body: { projectId: string; assetId: string; generation: string; workKey: string };
+  path: string;
+  body: { projectId: string; subjectKind: SubjectKind; subjectId: string; generation: string; workKey: string };
 };
 
 export interface TaskQueue {

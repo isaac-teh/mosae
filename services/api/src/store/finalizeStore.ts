@@ -50,7 +50,8 @@ export async function recordFinalize(db: Firestore, expectedBucket: string, inpu
   const assetRef = projectRef.collection("assets").doc(path.assetId);
   const task = newOutboxTask({
     projectId: path.projectId,
-    assetId: path.assetId,
+    subjectKind: "asset",
+    subjectId: path.assetId,
     generation: input.generation,
     stage: "ingest",
     now: input.now,

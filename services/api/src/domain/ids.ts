@@ -1,6 +1,22 @@
 export const PIPELINE_VERSION = 1;
 
-export type Stage = "ingest" | "understand";
+export type Stage = "ingest" | "understand" | "plan" | "compose" | "render";
+
+/**
+ * What a unit of work is about. Asset stages run per uploaded file; job stages
+ * run per planning or composition request; generation stages run per film
+ * version. Including the kind keeps ids from different collections apart when
+ * they happen to collide.
+ */
+export type SubjectKind = "asset" | "job" | "generation";
+
+export const STAGE_PATHS: Record<Stage, string> = {
+  ingest: "/tasks/ingest",
+  understand: "/tasks/understand",
+  plan: "/tasks/plan",
+  compose: "/tasks/compose",
+  render: "/tasks/render",
+};
 
 export type OriginalPath = {
   userId: string;
@@ -42,14 +58,16 @@ export function parseOriginalPath(objectName: string): OriginalPath | null {
 
 export function workKey(k: {
   projectId: string;
-  assetId: string;
+  subjectKind: SubjectKind;
+  subjectId: string;
   generation: string;
   stage: Stage;
   pipelineVersion: number;
 }): string {
   return [
     k.projectId,
-    k.assetId,
+    k.subjectKind,
+    k.subjectId,
     k.generation,
     k.stage,
     k.pipelineVersion,

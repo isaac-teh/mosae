@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { InMemoryTaskQueue } from "./taskQueue.js";
 
-const task = { name: "p_a_1_ingest_1", path: "/tasks/ingest" as const, body: { projectId: "p", assetId: "a", generation: "1", workKey: "p:a:1:ingest:1" } };
+const task = { name: "p_asset_a_1_ingest_1", path: "/tasks/ingest" as const, body: { projectId: "p", subjectKind: "asset" as const, subjectId: "a", generation: "1", workKey: "p:asset:a:1:ingest:1" } };
 
 describe("InMemoryTaskQueue", () => {
   it("deduplicates by task name", async () => {

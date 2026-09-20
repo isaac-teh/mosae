@@ -41,6 +41,7 @@ describe("dispatchDue (emulator)", () => {
     await dispatchDue(adminDb, queue, 100, 1000);
     expect(queue.tasks.filter((t) => t.body.projectId === projectId)).toHaveLength(1);
     expect(queue.tasks.find((t) => t.body.projectId === projectId)?.path).toBe("/tasks/ingest");
+    expect(queue.tasks.find((t) => t.body.projectId === projectId)?.body).toMatchObject({ subjectKind: "asset" });
     expect(await taskState(projectId)).toMatchObject({ state: "delivered" });
 
     await dispatchDue(adminDb, queue, 200, 1000);

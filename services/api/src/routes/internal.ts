@@ -20,9 +20,9 @@ export function internalRouter(deps: {
     }
   });
   router.post("/tasks/ingest", deps.auth, (req, res) => {
-    const { projectId, assetId, generation, workKey } = req.body ?? {};
+    const { projectId, subjectKind, subjectId, generation, workKey } = req.body ?? {};
     if (
-      ![projectId, assetId, generation, workKey].every(
+      ![projectId, subjectKind, subjectId, generation, workKey].every(
         (v) => typeof v === "string",
       )
     ) {

@@ -41,14 +41,15 @@ describe("internal routes", () => {
       .post("/tasks/ingest")
       .send({
         projectId: "p",
-        assetId: "a",
+        subjectKind: "asset",
+        subjectId: "a",
         generation: "1",
-        workKey: "p:a:1:ingest:1",
+        workKey: "p:asset:a:1:ingest:1",
       });
     expect(ok.status).toBe(204);
     const bad = await request(buildApp())
       .post("/tasks/ingest")
-      .send({ projectId: "p" });
+      .send({ projectId: "p", subjectKind: "asset", generation: "1", workKey: "p:asset:a:1:ingest:1" });
     expect(bad.status).toBe(400);
   });
 });

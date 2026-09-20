@@ -1,13 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { claimForDispatch, markDelivered, newOutboxTask, releaseAfterError, DISPATCH_LEASE_MS } from "./outbox.js";
 
-const base = newOutboxTask({ projectId: "p1", assetId: "a1", generation: "9", stage: "ingest", now: 1000 });
+const base = newOutboxTask({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "9", stage: "ingest", now: 1000 });
 
 describe("newOutboxTask", () => {
   it("derives a deterministic id from the work key", () => {
-    expect(base.workKey).toBe("p1:a1:9:ingest:1");
-    expect(base.id).toBe("p1_a1_9_ingest_1");
-    expect(base).toMatchObject({ state: "pending", attempts: 0, leaseUntil: null });
+    expect(base.workKey).toBe("p1:asset:a1:9:ingest:1");
+    expect(base.id).toBe("p1_asset_a1_9_ingest_1");
+    expect(base).toMatchObject({ state: "pending", attempts: 0, leaseUntil: null, subjectKind: "asset", subjectId: "a1" });
+  });
+
+  it("gives a job stage its own document id for the same subject id", () => {
+    const planning = newOutboxTask({ projectId: "p1", subjectKind: "job", subjectId: "a1", generation: "9", stage: "plan", now: 1000 });
+    expect(planning.id).not.toBe(base.id);
   });
 });
 

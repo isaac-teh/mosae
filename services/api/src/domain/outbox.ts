@@ -1,4 +1,4 @@
-import { PIPELINE_VERSION, workKey, type Stage } from "./ids.js";
+import { PIPELINE_VERSION, workKey, type Stage, type SubjectKind } from "./ids.js";
 
 export const DISPATCH_LEASE_MS = 60_000;
 
@@ -7,7 +7,8 @@ export type OutboxState = "pending" | "dispatching" | "delivered";
 export type OutboxTask = {
   id: string;
   projectId: string;
-  assetId: string;
+  subjectKind: SubjectKind;
+  subjectId: string;
   generation: string;
   stage: Stage;
   pipelineVersion: number;
@@ -22,7 +23,8 @@ export type OutboxTask = {
 
 export function newOutboxTask(input: {
   projectId: string;
-  assetId: string;
+  subjectKind: SubjectKind;
+  subjectId: string;
   generation: string;
   stage: Stage;
   now: number;
@@ -31,7 +33,8 @@ export function newOutboxTask(input: {
   return {
     id: key.replaceAll(":", "_"),
     projectId: input.projectId,
-    assetId: input.assetId,
+    subjectKind: input.subjectKind,
+    subjectId: input.subjectId,
     generation: input.generation,
     stage: input.stage,
     pipelineVersion: PIPELINE_VERSION,

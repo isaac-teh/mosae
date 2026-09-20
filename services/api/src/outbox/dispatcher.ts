@@ -1,13 +1,20 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { OutboxTask } from "../domain/outbox.js";
+import { STAGE_PATHS } from "../domain/ids.js";
 import { claimDue, completeDispatch, failDispatch } from "../store/outboxStore.js";
 import type { QueuedTask, TaskQueue } from "../queue/taskQueue.js";
 
 function toQueued(task: OutboxTask): QueuedTask {
   return {
     name: task.id,
-    path: task.stage === "ingest" ? "/tasks/ingest" : "/tasks/understand",
-    body: { projectId: task.projectId, assetId: task.assetId, generation: task.generation, workKey: task.workKey },
+    path: STAGE_PATHS[task.stage],
+    body: {
+      projectId: task.projectId,
+      subjectKind: task.subjectKind,
+      subjectId: task.subjectId,
+      generation: task.generation,
+      workKey: task.workKey,
+    },
   };
 }
 
