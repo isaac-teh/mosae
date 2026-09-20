@@ -4,6 +4,7 @@
   "workspaces": [
     "apps/client",
     "packages/core",
+    "packages/video",
     "services/api",
     "e2e"
   ],

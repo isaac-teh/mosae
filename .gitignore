@@ -13,3 +13,4 @@ apps/client/expo-env.d.ts
 .superpowers/
 poc/gemini/samples/
 poc/gemini/out/
+packages/video/out/
