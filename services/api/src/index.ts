@@ -2,7 +2,6 @@ import express from "express";
 import { adminDb } from "./firebase/admin.js";
 import { loadConfig } from "./config.js";
 import { requireServiceCaller } from "./auth/requireServiceCaller.js";
-import { curateRouter } from "./routes/curate.js";
 import { projectsRouter } from "./routes/projects.js";
 import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
@@ -30,7 +29,6 @@ const app = express();
 app.use("/api", apiCors(config));
 app.use("/api", express.json({ limit: "2mb" }));
 app.use(express.json({ limit: "2mb" }));
-app.use("/api/curate", curateRouter());
 app.use("/api/projects", projectsRouter({ db: adminDb }));
 app.use(
   "/events",
