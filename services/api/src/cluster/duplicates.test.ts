@@ -1,10 +1,31 @@
 import { describe, expect, it } from "vitest";
 import { DUP_MAX_BITS, groupNearDuplicates, type DupCandidate } from "./duplicates.js";
+import { hammingDistance } from "../ingest/quality.js";
+import { hamming64 } from "./duplicates.js";
 
 const same = "00ff00ff00ff00ff";
 const photo = (id: string, localTime: string | null, dHash: string | null = same, sharpness = 50): DupCandidate => ({ id, kind: "photo", dHash, sharpness, localTime });
 
 describe("groupNearDuplicates", () => {
+  it("matches BigInt hamming distance for random hashes", () => {
+    let seed = 123456789;
+    const next = () => (seed = (seed * 1664525 + 1013904223) >>> 0);
+    for (let i = 0; i < 1000; i += 1) {
+      const a = `${next().toString(16).padStart(8, "0")}${next().toString(16).padStart(8, "0")}`;
+      const b = `${next().toString(16).padStart(8, "0")}${next().toString(16).padStart(8, "0")}`;
+      expect(hamming64(Number.parseInt(a.slice(0, 8), 16), Number.parseInt(a.slice(8), 16), Number.parseInt(b.slice(0, 8), 16), Number.parseInt(b.slice(8), 16))).toBe(hammingDistance(a, b));
+    }
+  });
+
+  it("handles a 1,500 photo burst quickly", () => {
+    let seed = 42;
+    const next = () => (seed = (seed * 1664525 + 1013904223) >>> 0);
+    const items = Array.from({ length: 1500 }, (_, i) => photo(`p${i}`, `2026-05-03T09:00:0${i % 10}`, `${next().toString(16).padStart(8, "0")}${next().toString(16).padStart(8, "0")}`));
+    const start = performance.now();
+    const groups = groupNearDuplicates(items);
+    expect(performance.now() - start).toBeLessThan(3000);
+    expect(new Set(groups.flatMap((group) => [group.primaryId, ...group.memberIds])).size).toBe(groups.reduce((n, group) => n + group.memberIds.length + 1, 0));
+  });
   it("groups a burst and makes the sharpest shot the primary", () => {
     const groups = groupNearDuplicates([
       photo("a", "2026-05-03T09:00:00", same, 40),
