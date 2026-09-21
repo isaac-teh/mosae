@@ -112,12 +112,20 @@ describe("ingestAsset", () => {
     expect(deps.removeWorkDir).toHaveBeenCalledWith("/w");
   });
 
-  it("does not fail the task when settling throws after a successful commit", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("fails the task when settling throws after a successful commit", async () => {
     const { deps } = setup(baseAsset, { settle: vi.fn().mockRejectedValue(new Error("firestore down")) });
-    expect(await ingestAsset(deps, task)).toBe("ingested");
-    expect(error).toHaveBeenCalled();
-    error.mockRestore();
+    await expect(ingestAsset(deps, task)).rejects.toThrow("firestore down");
+  });
+
+  it("settles again on redelivery after an ingested commit", async () => {
+    const { deps } = setup({ ...baseAsset, status: "ingested" });
+    expect(await ingestAsset(deps, task)).toBe("skipped");
+    expect(deps.settle).toHaveBeenCalledWith("p1");
+  });
+
+  it("fails redelivery when settling an already ingested asset throws", async () => {
+    const { deps } = setup({ ...baseAsset, status: "ingested" }, { settle: vi.fn().mockRejectedValue(new Error("firestore down")) });
+    await expect(ingestAsset(deps, task)).rejects.toThrow("firestore down");
   });
 
   it("does not settle when the commit lost a race and was skipped", async () => {

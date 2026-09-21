@@ -24,7 +24,7 @@ const fakeAuth: express.RequestHandler = (_req, res, next) => {
   res.locals.userId = "user-1";
   next();
 };
-function buildApp(options: { settle?: (projectId: string) => Promise<void>; closeFails?: boolean } = {}) {
+function buildApp(options: { settle?: (projectId: string) => Promise<void>; sleep?: (ms: number) => Promise<void>; closeFails?: boolean } = {}) {
   if (options.closeFails) {
     vi.mocked(store.closeSession).mockRejectedValue(new store.StoreError("not_found"));
   }
@@ -32,7 +32,7 @@ function buildApp(options: { settle?: (projectId: string) => Promise<void>; clos
   app.use(express.json());
   app.use(
     "/api/projects",
-    projectsRouter({ db, now: () => 42, auth: fakeAuth, settle: options.settle }),
+    projectsRouter({ db, now: () => 42, auth: fakeAuth, settle: options.settle, sleep: options.sleep }),
   );
   return app;
 }
@@ -181,6 +181,20 @@ describe("projects routes", () => {
     expect(res.status).toBe(200);
     await new Promise((resolve) => setImmediate(resolve));
     expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("retries settling after the response, then records exhaustion after three failures", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const settle = vi.fn().mockRejectedValueOnce(new Error("one")).mockRejectedValueOnce(new Error("two")).mockResolvedValue(undefined);
+    const res = await request(buildApp({ settle, sleep })).post("/api/projects/p1/upload-sessions/s1/close");
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(settle).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledWith(100);
+    expect(sleep).toHaveBeenCalledWith(300);
     error.mockRestore();
   });
 

@@ -8,7 +8,7 @@ import type { ObjectStore } from "./objectStore.js";
 import type { PhotoDerivatives, VideoDerivatives } from "./proxies.js";
 import type { ShotRange } from "./shots.js";
 
-export type IngestTask = { projectId: string; assetId: string; generation: string };
+export type IngestTask = { projectId: string; assetId: string; generation: string; attempt?: number };
 export type IngestResult = "ingested" | "failed" | "skipped";
 
 export type IngestDeps = {
@@ -33,19 +33,6 @@ export function extensionFor(contentType: string): string {
   if (contentType === "image/heic") return ".heic";
   if (contentType === "image/heif") return ".heif";
   return "";
-}
-
-/**
- * Settling is best effort: the asset result is already committed, and a retried
- * task re-enters through the already-ingested branch and settles again, so a
- * failure here must not fail the task or the retry would find nothing to do.
- */
-async function settleQuietly(deps: IngestDeps, projectId: string): Promise<void> {
-  try {
-    await deps.settle(projectId);
-  } catch (error) {
-    console.error("settle after ingest failed", projectId, error);
-  }
 }
 
 async function ingestOriginal(deps: IngestDeps, asset: Asset, workDir: string): Promise<IngestResult> {
@@ -87,7 +74,7 @@ async function ingestOriginal(deps: IngestDeps, asset: Asset, workDir: string): 
     media, quality, derivatives, ranges, now: deps.now(),
   });
   if (outcome === "ingested") {
-    await settleQuietly(deps, asset.projectId);
+    await deps.settle(asset.projectId);
     return "ingested";
   }
   return "skipped";
@@ -97,7 +84,7 @@ export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<I
   const asset = await deps.loadAsset(task.projectId, task.assetId);
   if (!asset || asset.generation !== task.generation) return "skipped";
   if (asset.status !== "uploaded") {
-    await settleQuietly(deps, task.projectId);
+    await deps.settle(task.projectId);
     return "skipped";
   }
 
@@ -110,7 +97,7 @@ export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<I
       projectId: asset.projectId, assetId: asset.id, generation: asset.generation, reason: error.reason, now: deps.now(),
     });
     if (committed !== "failed") return "skipped";
-    await settleQuietly(deps, asset.projectId);
+    await deps.settle(asset.projectId);
     return "failed";
   } finally {
     await deps.removeWorkDir(workDir);

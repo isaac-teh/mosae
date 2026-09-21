@@ -69,13 +69,29 @@ export function projectsRouter(deps: {
   now?: () => number;
   auth?: RequestHandler;
   settle?: (projectId: string) => Promise<void>;
+  sleep?: (ms: number) => Promise<void>;
 }): Router {
   const { db } = deps;
   const now = deps.now ?? Date.now;
   /** Runs after the response so a slow or failing settle never fails the request. */
   const settleAfter = (projectId: string) => {
     if (!deps.settle) return;
-    deps.settle(projectId).catch((error) => console.error("settle after upload change failed", projectId, error));
+    void (async () => {
+      const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await deps.settle!(projectId);
+          return;
+        } catch (error) {
+          console.error("settle after upload change failed", projectId, error);
+          if (attempt === 2) {
+            console.error("settle after upload change exhausted retries", projectId, error);
+            return;
+          }
+          await sleep(attempt === 0 ? 100 : 300);
+        }
+      }
+    })();
   };
   const router = Router();
   router.use(deps.auth ?? requireUser());
