@@ -117,10 +117,10 @@ After an upload finalizes, Mosaé creates an asset and queues `/tasks/ingest` fo
 | Stage | Result |
 | --- | --- |
 | Finalize | Accepts the original upload, records an `uploaded` asset, and queues `/tasks/ingest`. |
-| Ingest | Records media facts and quality, creates a thumbnail plus a photo render copy or video proxy, and creates video shots. |
+| Ingest | Records media facts and quality, creates a thumbnail plus a photo render copy or video proxy, and creates shots. |
 | Settle and cluster | Waits for all uploads to finish, then queues `/tasks/cluster` to create events and link near-duplicate photos. |
 
-Derivatives live under `proxies/{userId}/{projectId}/{assetId}/{generation}/`. Photos get `thumb.jpg` and `render.jpg`; videos get a poster `thumb.jpg`, a 360p `proxy.mp4`, and shot records. Every asset also gets media facts and quality facts, including `quality.dHash` for near-duplicate detection.
+Derivatives live under `proxies/{userId}/{projectId}/{assetId}/{generation}/`. Photos get `thumb.jpg` and `render.jpg`; videos get a poster `thumb.jpg` and a 360p `proxy.mp4`. Every asset also gets media facts and quality facts, including `quality.dHash` for near-duplicate detection. Every photo gets exactly one shot with no source interval: `sourceStartSec` and `sourceEndSec` are `null`. Every video gets one shot per detected scene, with `sourceStartSec` and `sourceEndSec` in the original video's timebase. Shot IDs are deterministic: `{assetId}_{index padded to 4 digits}`.
 
 | Project status | Trigger |
 | --- | --- |
