@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  buildDerivativePath,
   buildOriginalPath,
   isValidId,
   parseOriginalPath,
@@ -72,5 +73,38 @@ describe("STAGE_PATHS", () => {
     expect(new Set(paths).size).toBe(paths.length);
     expect(STAGE_PATHS.ingest).toBe("/tasks/ingest");
     expect(STAGE_PATHS.render).toBe("/tasks/render");
+  });
+});
+
+describe("cluster stage", () => {
+  it("routes the cluster stage to its own task path", () => {
+    expect(STAGE_PATHS.cluster).toBe("/tasks/cluster");
+  });
+
+  it("keys a project-level task apart from an asset task with the same id", () => {
+    const common = { projectId: "p1", subjectId: "x1", generation: "3", pipelineVersion: PIPELINE_VERSION };
+    const project = workKey({ ...common, subjectKind: "project", stage: "cluster" });
+    const asset = workKey({ ...common, subjectKind: "asset", stage: "ingest" });
+    expect(project).toBe("p1:project:x1:3:cluster:1");
+    expect(project).not.toBe(asset);
+  });
+});
+
+describe("buildDerivativePath", () => {
+  const owner = { userId: "u1", projectId: "p1", assetId: "a1", generation: "1789" };
+
+  it("builds a path under proxies, never under uploads", () => {
+    expect(buildDerivativePath(owner, "thumb.jpg")).toBe("proxies/u1/p1/a1/1789/thumb.jpg");
+    expect(buildDerivativePath(owner, "render.jpg")).toBe("proxies/u1/p1/a1/1789/render.jpg");
+    expect(buildDerivativePath(owner, "proxy.mp4")).toBe("proxies/u1/p1/a1/1789/proxy.mp4");
+  });
+
+  it("is never parsed as an original upload, so it cannot trigger ingest", () => {
+    expect(parseOriginalPath(buildDerivativePath(owner, "thumb.jpg"))).toBeNull();
+  });
+
+  it("rejects ids with unsafe characters", () => {
+    expect(() => buildDerivativePath({ ...owner, assetId: "a/../b" }, "thumb.jpg")).toThrow("invalid id");
+    expect(() => buildDerivativePath({ ...owner, generation: "" }, "thumb.jpg")).toThrow("invalid id");
   });
 });
