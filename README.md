@@ -113,6 +113,7 @@ If you change an env file, restart with `npm run web -w apps/client -- --clear` 
 ## Ingest pipeline
 
 After an upload finalizes, Mosaé creates an asset and queues `/tasks/ingest` for that asset. Ingest reads the original, then writes its results before marking the asset ingested. Once every closed upload session has no pending entries and every asset has either ingested or failed, the project settles and queues `/tasks/cluster` to build events and find near-duplicates.
+The project pass is guarded by a 5 minute lease and publishes the project status last.
 
 | Stage | Result |
 | --- | --- |

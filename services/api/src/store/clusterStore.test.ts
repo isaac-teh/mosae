@@ -97,6 +97,21 @@ describe("runProjectPass (emulator)", () => {
     expect(await events(projectId)).toEqual([]);
   });
 
+  it("does not touch a project with an unexpired cluster lease", async () => {
+    const { projectId } = await seedProject([{ localTime: "2026-05-03T09:00:00" }]);
+    await adminDb.doc(`projects/${projectId}`).update({ clusterLease: { ownerId: "other", expiresAt: 501 } });
+    expect(await runProjectPass(adminDb, projectId, 500)).toEqual({ status: "skipped" });
+    expect(await events(projectId)).toEqual([]);
+    expect(await projectDoc(projectId)).toMatchObject({ status: "processing", clusterLease: { ownerId: "other" } });
+  });
+
+  it("takes an expired lease and clears its lease after publishing", async () => {
+    const { projectId } = await seedProject([{ localTime: "2026-05-03T09:00:00" }]);
+    await adminDb.doc(`projects/${projectId}`).update({ clusterLease: { ownerId: "other", expiresAt: 499 } });
+    await runProjectPass(adminDb, projectId, 500);
+    expect((await projectDoc(projectId)).clusterLease).toBeUndefined();
+  });
+
   it("is idempotent: running twice leaves the same events, not doubled ones", async () => {
     const { projectId } = await seedProject([{ localTime: "2026-05-03T09:00:00" }, { localTime: "2026-05-03T20:00:00" }]);
     await runProjectPass(adminDb, projectId, 500);
