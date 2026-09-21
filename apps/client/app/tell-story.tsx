@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
+import { useProjectProgress } from "@/lib/useProjectProgress";
 import { getStoryRepository } from "@mosae/core";
 import { StepHeader } from "@/components/StepHeader";
+import { ProcessingBanner } from "@/components/ProcessingBanner";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useDictation } from "@/lib/useDictation";
 import { ChipCheckIcon, MicIcon, ShieldIcon, SparklesIcon } from "@/components/icons";
@@ -25,11 +27,12 @@ export default function TellStoryScreen() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const goBack = useStepBack("/pick-memory");
-  const params = useLocalSearchParams<{ projectId?: string; count?: string }>();
+  const params = useLocalSearchParams<{ projectId?: string; count?: string; live?: string }>();
   const dictation = useDictation((text) => setStoryText((prev) => (prev ? `${prev} ${text}` : text)));
 
   const projectId = params.projectId ?? null;
   const count = Number(params.count ?? 0);
+  const progress = useProjectProgress(projectId, count, params.live === "1");
   const canSubmit = storyText.trim().length > 0 || themes.length > 0;
 
   function toggleTheme(theme: string) {
@@ -83,6 +86,7 @@ export default function TellStoryScreen() {
           Mosaé will listen to your intent and curate the most meaningful moments from your {count || "selected"}{" "}
           {count === 1 ? "memory" : "memories"}.
         </Text>
+        <ProcessingBanner progress={progress} />
 
         <View className="mt-4 min-h-[280px] justify-between rounded-2xl bg-surface p-6 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
           <View className="flex-row items-center gap-1.5 pb-3">

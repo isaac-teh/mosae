@@ -1,9 +1,11 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { getCoreConfig } from "./config";
 
 let authConnected = false;
+let firestoreConnected = false;
 let storageConnected = false;
 
 function firebaseApp(): FirebaseApp {
@@ -26,4 +28,13 @@ export function getStorageClient() {
     storageConnected = true;
   }
   return storage;
+}
+
+export function getFirestoreClient() {
+  const db = getFirestore(firebaseApp());
+  if (getCoreConfig().useEmulators && !firestoreConnected) {
+    connectFirestoreEmulator(db, "127.0.0.1", 8085);
+    firestoreConnected = true;
+  }
+  return db;
 }
