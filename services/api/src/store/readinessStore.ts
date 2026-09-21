@@ -1,0 +1,76 @@
+import type { Firestore } from "firebase-admin/firestore";
+import { newOutboxTask } from "../domain/outbox.js";
+import { READY_STATUS, readinessOf, type ProjectFacts, type ProjectOutcome } from "../domain/readiness.js";
+
+const ALREADY_EXISTS = 6;
+
+/**
+ * Progress and readiness come from server-side count aggregations rather than
+ * counters on the project document. A counter would be one hot document written
+ * by every concurrent ingest task; counts cost a couple of reads and have no
+ * contention.
+ */
+export async function gatherFacts(db: Firestore, projectId: string): Promise<ProjectFacts> {
+  const project = db.collection("projects").doc(projectId);
+  const sessions = await project.collection("uploadSessions").get();
+
+  let openSessions = 0;
+  let pendingEntries = 0;
+  for (const session of sessions.docs) {
+    if (!session.get("closed")) openSessions += 1;
+    const pending = await session.ref.collection("entries").where("outcome", "==", "pending").count().get();
+    pendingEntries += pending.data().count;
+  }
+
+  const assets = project.collection("assets");
+  const [all, ready, failed] = await Promise.all([
+    assets.count().get(),
+    assets.where("status", "==", READY_STATUS).count().get(),
+    assets.where("status", "==", "failed").count().get(),
+  ]);
+
+  return {
+    sessions: sessions.size,
+    openSessions,
+    pendingEntries,
+    assets: all.data().count,
+    ingested: ready.data().count,
+    failed: failed.data().count,
+  };
+}
+
+/**
+ * Called after anything that can complete a project: an ingest finishing, a
+ * session closing, an upload being cancelled. Whichever caller first sees the
+ * settled state creates the cluster task; the deterministic document id makes
+ * every other caller's create fail harmlessly, so the task exists exactly once
+ * per asset count. New uploads change the count and therefore the key.
+ */
+export async function settleProject(
+  db: Firestore,
+  projectId: string,
+  now: number,
+): Promise<{ settled: boolean; enqueued: boolean; outcome: ProjectOutcome | null; facts: ProjectFacts }> {
+  const facts = await gatherFacts(db, projectId);
+  const readiness = readinessOf(facts);
+  if (!readiness.settled) return { settled: false, enqueued: false, outcome: null, facts };
+
+  const task = newOutboxTask({
+    projectId,
+    subjectKind: "project",
+    subjectId: projectId,
+    generation: String(facts.assets),
+    stage: "cluster",
+    now,
+  });
+  const ref = db.collection("projects").doc(projectId).collection("taskOutbox").doc(task.id);
+  try {
+    await ref.create(task);
+    return { settled: true, enqueued: true, outcome: readiness.outcome, facts };
+  } catch (error) {
+    if ((error as { code?: number }).code === ALREADY_EXISTS) {
+      return { settled: true, enqueued: false, outcome: readiness.outcome, facts };
+    }
+    throw error;
+  }
+}
