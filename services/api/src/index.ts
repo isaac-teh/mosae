@@ -15,6 +15,7 @@ import { dispatchDue } from "./outbox/dispatcher.js";
 import { apiCors } from "./http/cors.js";
 import { settleProject } from "./store/readinessStore.js";
 import { createIngest } from "./ingest/wire.js";
+import { runProjectPass } from "./store/clusterStore.js";
 
 const config = loadConfig();
 const queue: TaskQueue = config.tasks
@@ -59,6 +60,7 @@ app.use(
     queue,
     auth: serviceAuth,
     ingest: createIngest({ db: adminDb, bucketName: config.storageBucket, settle }),
+    cluster: (projectId) => runProjectPass(adminDb, projectId, Date.now()),
   }),
 );
 

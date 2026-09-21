@@ -13,8 +13,10 @@ const db = {} as Firestore;
 const pass: express.RequestHandler = (_req, _res, next) => next();
 function buildApp({
   ingest = vi.fn().mockResolvedValue("ingested"),
+  cluster = vi.fn().mockResolvedValue({ status: "ready" }),
 }: {
   ingest?: (task: { projectId: string; assetId: string; generation: string }) => Promise<unknown>;
+  cluster?: (projectId: string) => Promise<unknown>;
 } = {}) {
   const app = express();
   app.use(express.json());
@@ -26,6 +28,7 @@ function buildApp({
       now: () => 9,
       auth: pass,
       ingest,
+      cluster,
     }),
   );
   return app;
@@ -66,6 +69,29 @@ describe("internal routes", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const ingest = vi.fn().mockRejectedValue(new Error("network reset"));
     const res = await request(buildApp({ ingest })).post("/tasks/ingest").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(500);
+    error.mockRestore();
+  });
+
+  it("runs the project pass for a well-formed project task", async () => {
+    const cluster = vi.fn().mockResolvedValue({ status: "ready" });
+    const res = await request(buildApp({ cluster })).post("/tasks/cluster").send({ projectId: "p1", subjectKind: "project", subjectId: "p1", generation: "3", workKey: "k" });
+    expect(res.status).toBe(204);
+    expect(cluster).toHaveBeenCalledWith("p1");
+  });
+
+  it("rejects a malformed cluster task and a non-project subject", async () => {
+    const cluster = vi.fn();
+    const app = buildApp({ cluster });
+    expect((await request(app).post("/tasks/cluster").send({ projectId: "p1", subjectKind: "project", generation: "3", workKey: "k" })).status).toBe(400);
+    expect((await request(app).post("/tasks/cluster").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "3", workKey: "k" })).status).toBe(400);
+    expect(cluster).not.toHaveBeenCalled();
+  });
+
+  it("answers 500 when the pass throws so the queue retries", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const cluster = vi.fn().mockRejectedValue(new Error("firestore unavailable"));
+    const res = await request(buildApp({ cluster })).post("/tasks/cluster").send({ projectId: "p1", subjectKind: "project", subjectId: "p1", generation: "3", workKey: "k" });
     expect(res.status).toBe(500);
     error.mockRestore();
   });

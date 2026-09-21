@@ -10,6 +10,7 @@ export function internalRouter(deps: {
   now?: () => number;
   auth: RequestHandler;
   ingest: (task: IngestTask) => Promise<unknown>;
+  cluster: (projectId: string) => Promise<unknown>;
 }): Router {
   const now = deps.now ?? Date.now;
   const router = Router();
@@ -34,6 +35,21 @@ export function internalRouter(deps: {
     } catch (error) {
       console.error("ingest task failed", workKey, error);
       res.status(500).json({ error: "ingest_failed" });
+    }
+  });
+  router.post("/tasks/cluster", deps.auth, async (req, res) => {
+    const { projectId, subjectKind, subjectId, generation, workKey } = req.body ?? {};
+    if (![projectId, subjectKind, subjectId, generation, workKey].every((v) => typeof v === "string") || subjectKind !== "project") {
+      res.status(400).json({ error: "invalid_task" });
+      return;
+    }
+    try {
+      const result = await deps.cluster(projectId);
+      console.log("cluster", workKey, result);
+      res.sendStatus(204);
+    } catch (error) {
+      console.error("cluster task failed", workKey, error);
+      res.status(500).json({ error: "cluster_failed" });
     }
   });
   return router;
