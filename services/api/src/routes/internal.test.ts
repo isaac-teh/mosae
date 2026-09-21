@@ -51,10 +51,20 @@ describe("internal routes", () => {
     expect(ingest).toHaveBeenCalledWith({ projectId: "p1", assetId: "a1", generation: "7", attempt: 0 });
   });
 
-  it("passes a non-negative Cloud Tasks retry count to ingest", async () => {
+  it.each([
+    ["3", 3],
+    [" 4 ", 4],
+    ["5junk", 0],
+    ["-1", 0],
+    ["1.5", 0],
+    ["", 0],
+    [undefined, 0],
+  ])("parses Cloud Tasks retry count %j as %i", async (header, attempt) => {
     const ingest = vi.fn().mockResolvedValue("ingested");
-    await request(buildApp({ ingest })).post("/tasks/ingest").set("x-cloudtasks-taskretrycount", "3").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
-    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({ attempt: 3 }));
+    let requestBuilder = request(buildApp({ ingest })).post("/tasks/ingest");
+    if (header !== undefined) requestBuilder = requestBuilder.set("x-cloudtasks-taskretrycount", header);
+    await requestBuilder.send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    expect(ingest).toHaveBeenCalledWith({ projectId: "p1", assetId: "a1", generation: "7", attempt });
   });
 
   it("acknowledges a skipped task so the queue does not retry it", async () => {

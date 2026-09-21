@@ -29,8 +29,8 @@ export function internalRouter(deps: {
       return;
     }
     try {
-      const parsedAttempt = Number.parseInt(req.header("x-cloudtasks-taskretrycount") ?? "0", 10);
-      const attempt = Number.isFinite(parsedAttempt) && parsedAttempt >= 0 ? parsedAttempt : 0;
+      const raw = req.header("x-cloudtasks-taskretrycount")?.trim();
+      const attempt = raw !== undefined && /^\d+$/.test(raw) ? Number(raw) : 0;
       const result = await deps.ingest({ projectId, assetId: subjectId, generation, attempt });
       console.log("ingest", workKey, result);
       res.sendStatus(204);

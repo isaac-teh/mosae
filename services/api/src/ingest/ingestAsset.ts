@@ -69,15 +69,10 @@ async function ingestOriginal(deps: IngestDeps, asset: Asset, workDir: string): 
   // Derivatives first, commit last: a reader that sees "ingested" can always fetch the files.
   for (const upload of uploads) await deps.objects.upload(upload);
 
-  const outcome = await deps.commitIngested({
+  return await deps.commitIngested({
     projectId: asset.projectId, assetId: asset.id, generation: asset.generation,
     media, quality, derivatives, ranges, now: deps.now(),
   });
-  if (outcome === "ingested") {
-    await deps.settle(asset.projectId);
-    return "ingested";
-  }
-  return "skipped";
 }
 
 export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<IngestResult> {
@@ -89,8 +84,9 @@ export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<I
   }
 
   const workDir = await deps.makeWorkDir();
+  let result: IngestResult;
   try {
-    return await ingestOriginal(deps, asset, workDir);
+    result = await ingestOriginal(deps, asset, workDir);
   } catch (error) {
     let permanent: PermanentIngestError;
     if (error instanceof PermanentIngestError) {
@@ -103,10 +99,10 @@ export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<I
     const committed = await deps.commitFailed({
       projectId: asset.projectId, assetId: asset.id, generation: asset.generation, reason: permanent.reason, now: deps.now(),
     });
-    if (committed !== "failed") return "skipped";
-    await deps.settle(asset.projectId);
-    return "failed";
+    result = committed;
   } finally {
     await deps.removeWorkDir(workDir);
   }
+  if (result === "ingested" || result === "failed") await deps.settle(asset.projectId);
+  return result;
 }

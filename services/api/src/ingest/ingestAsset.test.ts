@@ -113,21 +113,51 @@ describe("ingestAsset", () => {
   });
 
   it("fails an otherwise transient error after the fifth attempt", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const { deps } = setup(baseAsset, { objects: { download: vi.fn().mockRejectedValue(new Error("network reset")), upload: vi.fn() } });
-    await expect(ingestAsset(deps, { ...task, attempt: 4 })).resolves.toBe("failed");
-    expect(deps.commitFailed).toHaveBeenCalledWith(expect.objectContaining({ reason: "retries_exhausted" }));
-    expect(deps.settle).toHaveBeenCalledWith("p1");
+    try {
+      await expect(ingestAsset(deps, { ...task, attempt: 4 })).resolves.toBe("failed");
+      expect(deps.commitFailed).toHaveBeenCalledWith(expect.objectContaining({ reason: "retries_exhausted" }));
+      expect(deps.settle).toHaveBeenCalledWith("p1");
+      expect(error).toHaveBeenCalledWith("ingest retries exhausted", "p1", "a1", expect.any(Error));
+    } finally {
+      error.mockRestore();
+    }
   });
 
-  it("fails the task when settling throws after a successful commit", async () => {
+  it("rejects a settle failure after a successful commit on attempt zero", async () => {
     const { deps } = setup(baseAsset, { settle: vi.fn().mockRejectedValue(new Error("firestore down")) });
     await expect(ingestAsset(deps, task)).rejects.toThrow("firestore down");
   });
 
-  it("settles again on redelivery after an ingested commit", async () => {
-    const { deps } = setup({ ...baseAsset, status: "ingested" });
+  it("rejects a settle failure after a successful commit on the terminal delivery", async () => {
+    const { deps } = setup(baseAsset, { settle: vi.fn().mockRejectedValue(new Error("firestore down")) });
+    await expect(ingestAsset(deps, { ...task, attempt: 4 })).rejects.toThrow("firestore down");
+    expect(deps.commitFailed).not.toHaveBeenCalled();
+  });
+
+  it("rejects a settle failure after committing a permanent failure", async () => {
+    const { deps } = setup(baseAsset, {
+      probe: vi.fn().mockRejectedValue(new PermanentIngestError("unreadable_media")),
+      settle: vi.fn().mockRejectedValue(new Error("firestore down")),
+    });
+    await expect(ingestAsset(deps, task)).rejects.toThrow("firestore down");
+    expect(deps.commitFailed).toHaveBeenCalledWith(expect.objectContaining({ reason: "unreadable_media" }));
+  });
+
+  it("settles again on redelivery after a successful commit whose settle failed", async () => {
+    const { deps } = setup(baseAsset, {
+      loadAsset: vi.fn()
+        .mockResolvedValueOnce(baseAsset)
+        .mockResolvedValueOnce({ ...baseAsset, status: "ingested" }),
+      settle: vi.fn()
+        .mockRejectedValueOnce(new Error("firestore down"))
+        .mockResolvedValueOnce(undefined),
+    });
+    await expect(ingestAsset(deps, { ...task, attempt: 4 })).rejects.toThrow("firestore down");
     expect(await ingestAsset(deps, task)).toBe("skipped");
-    expect(deps.settle).toHaveBeenCalledWith("p1");
+    expect(deps.settle).toHaveBeenCalledTimes(2);
+    expect(deps.settle).toHaveBeenLastCalledWith("p1");
   });
 
   it("fails redelivery when settling an already ingested asset throws", async () => {
