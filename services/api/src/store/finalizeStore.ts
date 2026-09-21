@@ -3,6 +3,7 @@ import { parseOriginalPath, PIPELINE_VERSION } from "../domain/ids.js";
 import { applyEntryEvent, type ManifestEntry } from "../domain/uploadSession.js";
 import { canTransition, type AssetStatus } from "../domain/assetStatus.js";
 import { newOutboxTask } from "../domain/outbox.js";
+import type { Derivatives, MediaFacts, QualityFacts } from "../domain/media.js";
 
 export type FinalizeInput = {
   bucket: string;
@@ -37,6 +38,13 @@ export type Asset = {
   failureReason: string | null;
   createdAt: number;
   updatedAt: number;
+  media?: MediaFacts;
+  quality?: QualityFacts;
+  derivatives?: Derivatives;
+  ingestedAt?: number;
+  /** Set by the project pass. */
+  eventId?: string | null;
+  dupOf?: string | null;
 };
 
 export async function recordFinalize(db: Firestore, expectedBucket: string, input: FinalizeInput): Promise<FinalizeResult> {
@@ -102,6 +110,7 @@ export async function recordFinalize(db: Firestore, expectedBucket: string, inpu
     };
     tx.set(entryRef, finalized.entry);
     tx.set(assetRef, asset);
+    if (project.get("status") === "collecting") tx.update(projectRef, { status: "processing" });
     if (!taskSnap.exists) tx.create(taskRef, task);
     return { kind: "accepted", assetId: path.assetId, taskId: task.id };
   });

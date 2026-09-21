@@ -35,6 +35,39 @@ describe("recordFinalize (emulator)", () => {
     expect(tasks.docs[0].data()).toMatchObject({ stage: "ingest", state: "pending", generation: "1001" });
   });
 
+  it("moves a collecting project to processing when its first asset is accepted", async () => {
+    const userId = `u-${crypto.randomUUID()}`;
+    const project = await createProject(adminDb, { userId, mode: "memory", now: 1 });
+    expect((await adminDb.doc(`projects/${project.id}`).get()).get("status")).toBe("collecting");
+
+    const { session, entries } = await openSession(adminDb, {
+      userId,
+      projectId: project.id,
+      entries: [{ fileName: "a.jpg", contentType: "image/jpeg", sizeBytes: 10 }],
+      now: 1,
+    });
+    const objectName = buildOriginalPath({ userId, projectId: project.id, sessionId: session.id, assetId: entries[0].assetId });
+    const result = await recordFinalize(adminDb, BUCKET, { bucket: BUCKET, objectName, generation: "5", sizeBytes: 10, contentType: "image/jpeg", now: 2 });
+
+    expect(result.kind).toBe("accepted");
+    expect((await adminDb.doc(`projects/${project.id}`).get()).get("status")).toBe("processing");
+  });
+
+  it("leaves a project that already moved past collecting alone", async () => {
+    const userId = `u-${crypto.randomUUID()}`;
+    const project = await createProject(adminDb, { userId, mode: "memory", now: 1 });
+    await adminDb.doc(`projects/${project.id}`).update({ status: "ready" });
+    const { session, entries } = await openSession(adminDb, {
+      userId,
+      projectId: project.id,
+      entries: [{ fileName: "b.jpg", contentType: "image/jpeg", sizeBytes: 10 }],
+      now: 1,
+    });
+    const objectName = buildOriginalPath({ userId, projectId: project.id, sessionId: session.id, assetId: entries[0].assetId });
+    await recordFinalize(adminDb, BUCKET, { bucket: BUCKET, objectName, generation: "6", sizeBytes: 10, contentType: "image/jpeg", now: 2 });
+    expect((await adminDb.doc(`projects/${project.id}`).get()).get("status")).toBe("ready");
+  });
+
   it("is idempotent for duplicate finalize events", async () => {
     const { project, event } = await setup();
     await recordFinalize(adminDb, BUCKET, event);

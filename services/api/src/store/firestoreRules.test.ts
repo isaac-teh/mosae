@@ -19,6 +19,7 @@ beforeAll(async () => {
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await setDoc(doc(db, "projects/p-alice"), { userId: "alice", status: "ready" });
+    await setDoc(doc(db, "projects/p-alice/events/e001"), { label: "Day 1, morning" });
     await setDoc(doc(db, "projects/p-alice/assets/a1"), { status: "understood" });
     await setDoc(doc(db, "projects/p-alice/shots/s1"), { assetId: "a1" });
     await setDoc(doc(db, "projects/p-alice/storyProposals/pr1"), { state: "draft" });
@@ -64,6 +65,12 @@ describe("firestore.rules (emulator)", () => {
     const db = env.authenticatedContext("alice").firestore();
     await assertFails(getDoc(doc(db, "projects/p-alice/uploadSessions/u1")));
     await assertFails(getDoc(doc(db, "projects/p-alice/taskOutbox/t1")));
+  });
+
+  it("lets an owner read their events and denies everyone else", async () => {
+    await assertSucceeds(getDoc(doc(env.authenticatedContext("alice").firestore(), "projects/p-alice/events/e001")));
+    await assertFails(getDoc(doc(env.authenticatedContext("bob").firestore(), "projects/p-alice/events/e001")));
+    await assertFails(setDoc(doc(env.authenticatedContext("alice").firestore(), "projects/p-alice/events/e002"), { label: "x" }));
   });
 
   it("denies every client write, including the owner's", async () => {

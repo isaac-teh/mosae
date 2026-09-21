@@ -11,7 +11,13 @@ const { internalRouter } = await import("./internal.js");
 const { InMemoryTaskQueue } = await import("../queue/taskQueue.js");
 const db = {} as Firestore;
 const pass: express.RequestHandler = (_req, _res, next) => next();
-function buildApp() {
+function buildApp({
+  ingest = vi.fn().mockResolvedValue("ingested"),
+  cluster = vi.fn().mockResolvedValue({ status: "ready" }),
+}: {
+  ingest?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
+  cluster?: (projectId: string) => Promise<unknown>;
+} = {}) {
   const app = express();
   app.use(express.json());
   app.use(
@@ -21,6 +27,8 @@ function buildApp() {
       queue: new InMemoryTaskQueue(),
       now: () => 9,
       auth: pass,
+      ingest,
+      cluster,
     }),
   );
   return app;
@@ -36,20 +44,71 @@ describe("internal routes", () => {
       9,
     );
   });
-  it("acknowledges well-formed ingest tasks and rejects malformed ones", async () => {
-    const ok = await request(buildApp())
-      .post("/tasks/ingest")
-      .send({
-        projectId: "p",
-        subjectKind: "asset",
-        subjectId: "a",
-        generation: "1",
-        workKey: "p:asset:a:1:ingest:1",
-      });
-    expect(ok.status).toBe(204);
-    const bad = await request(buildApp())
-      .post("/tasks/ingest")
-      .send({ projectId: "p", subjectKind: "asset", generation: "1", workKey: "p:asset:a:1:ingest:1" });
-    expect(bad.status).toBe(400);
+  it("runs ingest for a well-formed asset task and acknowledges it", async () => {
+    const ingest = vi.fn().mockResolvedValue("ingested");
+    const res = await request(buildApp({ ingest })).post("/tasks/ingest").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(204);
+    expect(ingest).toHaveBeenCalledWith({ projectId: "p1", assetId: "a1", generation: "7", attempt: 0 });
+  });
+
+  it.each([
+    ["3", 3],
+    [" 4 ", 4],
+    ["5junk", 0],
+    ["-1", 0],
+    ["1.5", 0],
+    ["", 0],
+    [undefined, 0],
+  ])("parses Cloud Tasks retry count %j as %i", async (header, attempt) => {
+    const ingest = vi.fn().mockResolvedValue("ingested");
+    let requestBuilder = request(buildApp({ ingest })).post("/tasks/ingest");
+    if (header !== undefined) requestBuilder = requestBuilder.set("x-cloudtasks-taskretrycount", header);
+    await requestBuilder.send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    expect(ingest).toHaveBeenCalledWith({ projectId: "p1", assetId: "a1", generation: "7", attempt });
+  });
+
+  it("acknowledges a skipped task so the queue does not retry it", async () => {
+    const ingest = vi.fn().mockResolvedValue("skipped");
+    const res = await request(buildApp({ ingest })).post("/tasks/ingest").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(204);
+  });
+
+  it("rejects a malformed task and a non-asset subject without running ingest", async () => {
+    const ingest = vi.fn();
+    const app = buildApp({ ingest });
+    expect((await request(app).post("/tasks/ingest").send({ projectId: "p1", subjectKind: "asset", generation: "7", workKey: "k" })).status).toBe(400);
+    expect((await request(app).post("/tasks/ingest").send({ projectId: "p1", subjectKind: "job", subjectId: "j1", generation: "7", workKey: "k" })).status).toBe(400);
+    expect(ingest).not.toHaveBeenCalled();
+  });
+
+  it("answers 500 when ingest throws, so Cloud Tasks retries with backoff", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ingest = vi.fn().mockRejectedValue(new Error("network reset"));
+    const res = await request(buildApp({ ingest })).post("/tasks/ingest").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(500);
+    error.mockRestore();
+  });
+
+  it("runs the project pass for a well-formed project task", async () => {
+    const cluster = vi.fn().mockResolvedValue({ status: "ready" });
+    const res = await request(buildApp({ cluster })).post("/tasks/cluster").send({ projectId: "p1", subjectKind: "project", subjectId: "p1", generation: "3", workKey: "k" });
+    expect(res.status).toBe(204);
+    expect(cluster).toHaveBeenCalledWith("p1");
+  });
+
+  it("rejects a malformed cluster task and a non-project subject", async () => {
+    const cluster = vi.fn();
+    const app = buildApp({ cluster });
+    expect((await request(app).post("/tasks/cluster").send({ projectId: "p1", subjectKind: "project", generation: "3", workKey: "k" })).status).toBe(400);
+    expect((await request(app).post("/tasks/cluster").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "3", workKey: "k" })).status).toBe(400);
+    expect(cluster).not.toHaveBeenCalled();
+  });
+
+  it("answers 500 when the pass throws so the queue retries", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const cluster = vi.fn().mockRejectedValue(new Error("firestore unavailable"));
+    const res = await request(buildApp({ cluster })).post("/tasks/cluster").send({ projectId: "p1", subjectKind: "project", subjectId: "p1", generation: "3", workKey: "k" });
+    expect(res.status).toBe(500);
+    error.mockRestore();
   });
 });

@@ -13,11 +13,18 @@ import {
 } from "./queue/taskQueue.js";
 import { dispatchDue } from "./outbox/dispatcher.js";
 import { apiCors } from "./http/cors.js";
+import { settleProject } from "./store/readinessStore.js";
+import { createIngest } from "./ingest/wire.js";
+import { runProjectPass } from "./store/clusterStore.js";
 
 const config = loadConfig();
 const queue: TaskQueue = config.tasks
   ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.serviceUrl })
   : new InMemoryTaskQueue();
+const settle = async (projectId: string): Promise<void> => {
+  const result = await settleProject(adminDb, projectId, Date.now());
+  if (result.enqueued) await dispatchDue(adminDb, queue, Date.now());
+};
 if (!config.tasks)
   console.warn(
     "Cloud Tasks not configured; using in-memory task queue (local development only)",
@@ -31,7 +38,10 @@ app.use("/", healthRouter());
 app.use("/api", apiCors(config));
 app.use("/api", express.json({ limit: "2mb" }));
 app.use(express.json({ limit: "2mb" }));
-app.use("/api/projects", projectsRouter({ db: adminDb }));
+app.use(
+  "/api/projects",
+  projectsRouter({ db: adminDb, settle }),
+);
 app.use(
   "/events",
   storageEventsRouter({
@@ -43,7 +53,16 @@ app.use(
     },
   }),
 );
-app.use("/", internalRouter({ db: adminDb, queue, auth: serviceAuth }));
+app.use(
+  "/",
+  internalRouter({
+    db: adminDb,
+    queue,
+    auth: serviceAuth,
+    ingest: createIngest({ db: adminDb, bucketName: config.storageBucket, settle }),
+    cluster: (projectId) => runProjectPass(adminDb, projectId, Date.now()),
+  }),
+);
 
 app.listen(config.port, () => {
   console.log(`Mosaé API listening on port ${config.port}`);

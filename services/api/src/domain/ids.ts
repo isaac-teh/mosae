@@ -1,6 +1,6 @@
 export const PIPELINE_VERSION = 1;
 
-export type Stage = "ingest" | "understand" | "plan" | "compose" | "render";
+export type Stage = "ingest" | "understand" | "plan" | "compose" | "render" | "cluster";
 
 /**
  * What a unit of work is about. Asset stages run per uploaded file; job stages
@@ -8,7 +8,7 @@ export type Stage = "ingest" | "understand" | "plan" | "compose" | "render";
  * version. Including the kind keeps ids from different collections apart when
  * they happen to collide.
  */
-export type SubjectKind = "asset" | "job" | "generation";
+export type SubjectKind = "asset" | "job" | "generation" | "project";
 
 export const STAGE_PATHS: Record<Stage, string> = {
   ingest: "/tasks/ingest",
@@ -16,6 +16,7 @@ export const STAGE_PATHS: Record<Stage, string> = {
   plan: "/tasks/plan",
   compose: "/tasks/compose",
   render: "/tasks/render",
+  cluster: "/tasks/cluster",
 };
 
 export type OriginalPath = {
@@ -72,4 +73,28 @@ export function workKey(k: {
     k.stage,
     k.pipelineVersion,
   ].join(":");
+}
+
+export type DerivativeName = "thumb.jpg" | "render.jpg" | "proxy.mp4";
+
+export type DerivativeOwner = {
+  userId: string;
+  projectId: string;
+  assetId: string;
+  generation: string;
+};
+
+/**
+ * Derivatives live under proxies/, never under uploads/, so a derivative can
+ * never match parseOriginalPath and re-trigger ingest.
+ */
+export function buildDerivativePath(owner: DerivativeOwner, name: DerivativeName): string {
+  return [
+    "proxies",
+    assertId(owner.userId),
+    assertId(owner.projectId),
+    assertId(owner.assetId),
+    assertId(owner.generation),
+    name,
+  ].join("/");
 }
