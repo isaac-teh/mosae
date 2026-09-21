@@ -112,6 +112,13 @@ describe("ingestAsset", () => {
     expect(deps.removeWorkDir).toHaveBeenCalledWith("/w");
   });
 
+  it("fails an otherwise transient error after the fifth attempt", async () => {
+    const { deps } = setup(baseAsset, { objects: { download: vi.fn().mockRejectedValue(new Error("network reset")), upload: vi.fn() } });
+    await expect(ingestAsset(deps, { ...task, attempt: 4 })).resolves.toBe("failed");
+    expect(deps.commitFailed).toHaveBeenCalledWith(expect.objectContaining({ reason: "retries_exhausted" }));
+    expect(deps.settle).toHaveBeenCalledWith("p1");
+  });
+
   it("fails the task when settling throws after a successful commit", async () => {
     const { deps } = setup(baseAsset, { settle: vi.fn().mockRejectedValue(new Error("firestore down")) });
     await expect(ingestAsset(deps, task)).rejects.toThrow("firestore down");

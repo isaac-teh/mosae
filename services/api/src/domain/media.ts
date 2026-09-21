@@ -45,6 +45,7 @@ export const BLUR_THRESHOLD = 20;
  * ingest with a clear reason until a streaming path exists.
  */
 export const MAX_INGEST_BYTES = 2 * 1024 ** 3;
+export const MAX_INGEST_ATTEMPTS = 5;
 
 /** A Firestore transaction allows 500 writes; one is the asset itself. */
 export const MAX_SHOTS_PER_ASSET = 400;

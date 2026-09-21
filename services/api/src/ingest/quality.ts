@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { BLUR_THRESHOLD, type QualityFacts } from "../domain/media.js";
 import { PermanentIngestError } from "./errors.js";
+import { isDecodeFailure } from "./errorClass.js";
 
 /**
  * The 75th-percentile tile score, not a whole-frame score. That keeps
@@ -73,6 +74,7 @@ export async function analyzeImage(file: string): Promise<QualityFacts> {
 
     return { sharpness, exposure, blurry: sharpness < BLUR_THRESHOLD, dHash: await differenceHash(file) };
   } catch (error) {
+    if (!isDecodeFailure(error)) throw error;
     throw new PermanentIngestError("unsupported_image", error instanceof Error ? error.message : String(error));
   }
 }

@@ -83,7 +83,7 @@ describe("makePhotoDerivatives", () => {
   it("fails permanently when neither sharp nor heif-convert can decode the image", async () => {
     const bad = path.join(dir, "bad.heic");
     await writeFile(bad, Buffer.from("garbage"));
-    const run = vi.fn().mockRejectedValue(new Error("heif-convert: cannot read"));
+    const run = vi.fn().mockRejectedValue(Object.assign(new Error("heif-convert: cannot read"), { code: 1 }));
     const out = await tempDir();
     await expect(makePhotoDerivatives(bad, out.dir, run)).rejects.toMatchObject({ name: "PermanentIngestError", reason: "unsupported_image" });
     await out.cleanup();

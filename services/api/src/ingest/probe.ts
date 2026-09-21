@@ -2,6 +2,7 @@ import { exiftool } from "exiftool-vendored";
 import tzlookup from "tz-lookup";
 import type { GeoPoint, MediaFacts, MediaKind } from "../domain/media.js";
 import { PermanentIngestError } from "./errors.js";
+import { isDecodeFailure, isEnvironmental, isToolRejection } from "./errorClass.js";
 import { defaultRun, isTimeout, type Runner } from "./run.js";
 
 export function formatLocal(date: Date, timeZone: string): string {
@@ -63,6 +64,7 @@ async function probePhoto(file: string): Promise<MediaFacts> {
   try {
     tags = await exiftool.read(file);
   } catch (error) {
+    if (!isDecodeFailure(error)) throw error;
     throw new PermanentIngestError("unreadable_media", error instanceof Error ? error.message : String(error));
   }
   const width = Number(tags.ImageWidth ?? 0);
@@ -89,7 +91,8 @@ async function probeVideo(file: string, run: Runner): Promise<MediaFacts> {
   try {
     ({ stdout } = await run("ffprobe", ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", file], { timeoutMs: 60_000 }));
   } catch (error) {
-    if (isTimeout(error)) throw error;
+    if (isTimeout(error) || isEnvironmental(error)) throw error;
+    if (!(isToolRejection(error) || isDecodeFailure(error))) throw error;
     throw new PermanentIngestError("unreadable_media", `ffprobe failed: ${error instanceof Error ? error.message : String(error)}`);
   }
   const info = JSON.parse(stdout) as FfprobeOutput;

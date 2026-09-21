@@ -1,6 +1,6 @@
 import path from "node:path";
 import { buildDerivativePath } from "../domain/ids.js";
-import type { Derivatives, MediaFacts, MediaKind, QualityFacts } from "../domain/media.js";
+import { MAX_INGEST_ATTEMPTS, type Derivatives, type MediaFacts, type MediaKind, type QualityFacts } from "../domain/media.js";
 import type { Asset } from "../store/finalizeStore.js";
 import type { IngestCommit } from "../store/ingestStore.js";
 import { PermanentIngestError } from "./errors.js";
@@ -92,9 +92,16 @@ export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<I
   try {
     return await ingestOriginal(deps, asset, workDir);
   } catch (error) {
-    if (!(error instanceof PermanentIngestError)) throw error;
+    let permanent: PermanentIngestError;
+    if (error instanceof PermanentIngestError) {
+      permanent = error;
+    } else {
+      if ((task.attempt ?? 0) + 1 < MAX_INGEST_ATTEMPTS) throw error;
+      console.error("ingest retries exhausted", task.projectId, task.assetId, error);
+      permanent = new PermanentIngestError("retries_exhausted");
+    }
     const committed = await deps.commitFailed({
-      projectId: asset.projectId, assetId: asset.id, generation: asset.generation, reason: error.reason, now: deps.now(),
+      projectId: asset.projectId, assetId: asset.id, generation: asset.generation, reason: permanent.reason, now: deps.now(),
     });
     if (committed !== "failed") return "skipped";
     await deps.settle(asset.projectId);

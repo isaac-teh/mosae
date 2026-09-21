@@ -15,7 +15,7 @@ function buildApp({
   ingest = vi.fn().mockResolvedValue("ingested"),
   cluster = vi.fn().mockResolvedValue({ status: "ready" }),
 }: {
-  ingest?: (task: { projectId: string; assetId: string; generation: string }) => Promise<unknown>;
+  ingest?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
   cluster?: (projectId: string) => Promise<unknown>;
 } = {}) {
   const app = express();
@@ -48,7 +48,13 @@ describe("internal routes", () => {
     const ingest = vi.fn().mockResolvedValue("ingested");
     const res = await request(buildApp({ ingest })).post("/tasks/ingest").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
     expect(res.status).toBe(204);
-    expect(ingest).toHaveBeenCalledWith({ projectId: "p1", assetId: "a1", generation: "7" });
+    expect(ingest).toHaveBeenCalledWith({ projectId: "p1", assetId: "a1", generation: "7", attempt: 0 });
+  });
+
+  it("passes a non-negative Cloud Tasks retry count to ingest", async () => {
+    const ingest = vi.fn().mockResolvedValue("ingested");
+    await request(buildApp({ ingest })).post("/tasks/ingest").set("x-cloudtasks-taskretrycount", "3").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({ attempt: 3 }));
   });
 
   it("acknowledges a skipped task so the queue does not retry it", async () => {

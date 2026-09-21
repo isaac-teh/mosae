@@ -141,6 +141,8 @@ Ingest requires `ffmpeg` and `ffprobe` on `PATH`; the container also needs `heif
 ### Operational limits
 
 - Originals up to 2 GiB are ingested. Larger uploads are accepted, but their asset fails with `too_large_for_ingest` because Cloud Run temporary storage is memory-backed and each original is downloaded whole. A streaming path is the fix.
+- An asset whose processing keeps failing for environmental reasons is failed with reason `retries_exhausted` after 5 attempts.
+- The Cloud Tasks queue must allow at least 6 attempts (`maxAttempts`) so that conversion can happen before the queue gives up.
 - Ingest is CPU and memory heavy. Deploy the API service with at least 4 GiB and set the Cloud Tasks queue's `maxConcurrentDispatches` low, starting at 4, so a 1,500-file upload does not exhaust a single instance.
 - HEIC needs `heif-convert` from `libheif-examples`, which is installed in the container. On a machine without it, a HEVC HEIC asset fails with `unsupported_image`.
 - Reverse geocoding of places is not implemented, so `places` on the project stays empty.

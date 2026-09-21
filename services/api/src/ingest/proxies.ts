@@ -1,6 +1,7 @@
 import path from "node:path";
 import sharp from "sharp";
 import { PermanentIngestError } from "./errors.js";
+import { isDecodeFailure, isEnvironmental, isToolRejection } from "./errorClass.js";
 import { defaultRun, isTimeout, type Runner } from "./run.js";
 
 export const THUMB_MAX = 512;
@@ -36,13 +37,13 @@ export async function makePhotoDerivatives(input: string, outDir: string, run: R
     return await encode(input, outDir);
   } catch (first) {
     const message = first instanceof Error ? first.message : String(first);
-    if (!NEEDS_HEIF.test(message)) throw new PermanentIngestError("unsupported_image", message);
+    if (!isDecodeFailure(first) && !NEEDS_HEIF.test(message)) throw first;
     const converted = path.join(outDir, "converted.jpg");
     try {
       await run("heif-convert", [input, converted], { timeoutMs: 120_000 });
       return await encode(converted, outDir);
     } catch (error) {
-      if (isTimeout(error)) throw error;
+      if (isTimeout(error) || isEnvironmental(error) || !isToolRejection(error)) throw error;
       throw new PermanentIngestError("unsupported_image", message);
     }
   }
@@ -81,7 +82,7 @@ export async function makeVideoDerivatives(
       thumb,
     ]);
   } catch (error) {
-    if (isTimeout(error)) throw error;
+    if (isTimeout(error) || isEnvironmental(error) || !(isToolRejection(error) || isDecodeFailure(error))) throw error;
     throw new PermanentIngestError("unreadable_media", error instanceof Error ? error.message : String(error));
   }
   return { proxy, thumb };
