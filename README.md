@@ -131,10 +131,14 @@ Derivatives live under `proxies/{userId}/{projectId}/{assetId}/{generation}/`. P
 | `ready_with_errors` | The project has settled with at least one ingested asset and at least one failed asset. |
 | `failed` | The project has settled but no asset ingested. |
 
-Inspect a local project document through the Firestore emulator REST endpoint:
+Inspect a local project through the Firestore emulator REST endpoint.
+The security rules deny unauthenticated reads, so send the emulator's admin header (`Authorization: Bearer owner`), or the call returns `PERMISSION_DENIED`:
 
 ```bash
-curl -s "http://127.0.0.1:8085/v1/projects/demo-mosae/databases/(default)/documents/projects/<projectId>"
+BASE="http://127.0.0.1:8085/v1/projects/demo-mosae/databases/(default)/documents/projects"
+curl -s -H "Authorization: Bearer owner" "$BASE/<projectId>"          # status, eventCount, dateRange
+curl -s -H "Authorization: Bearer owner" "$BASE/<projectId>/assets"   # per-asset status, media, quality, derivatives
+curl -s -H "Authorization: Bearer owner" "$BASE/<projectId>/events"   # day and event clusters
 ```
 
 Ingest requires `ffmpeg` and `ffprobe` on `PATH`; the container also needs `heif-convert` on `PATH` for HEIC conversion. `GET /health` reports the availability of `ffmpeg`, `ffprobe`, and `exiftool`.
