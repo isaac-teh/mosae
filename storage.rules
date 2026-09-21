@@ -11,6 +11,10 @@ service firebase.storage {
         && request.resource.contentType.matches('(image|video)/.+');
       allow update, delete: if false;
     }
+    match /proxies/{userId}/{projectId}/{assetId}/{generation}/{file} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
     match /{allPaths=**} {
       allow read, write: if false;
     }

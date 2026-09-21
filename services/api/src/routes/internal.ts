@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import type { Firestore } from "firebase-admin/firestore";
+import type { IngestTask } from "../ingest/ingestAsset.js";
 import { dispatchDue } from "../outbox/dispatcher.js";
 import type { TaskQueue } from "../queue/taskQueue.js";
 
@@ -8,6 +9,7 @@ export function internalRouter(deps: {
   queue: TaskQueue;
   now?: () => number;
   auth: RequestHandler;
+  ingest: (task: IngestTask) => Promise<unknown>;
 }): Router {
   const now = deps.now ?? Date.now;
   const router = Router();
@@ -19,18 +21,20 @@ export function internalRouter(deps: {
       res.status(500).json({ error: "internal" });
     }
   });
-  router.post("/tasks/ingest", deps.auth, (req, res) => {
+  router.post("/tasks/ingest", deps.auth, async (req, res) => {
     const { projectId, subjectKind, subjectId, generation, workKey } = req.body ?? {};
-    if (
-      ![projectId, subjectKind, subjectId, generation, workKey].every(
-        (v) => typeof v === "string",
-      )
-    ) {
+    if (![projectId, subjectKind, subjectId, generation, workKey].every((v) => typeof v === "string") || subjectKind !== "asset") {
       res.status(400).json({ error: "invalid_task" });
       return;
     }
-    console.log("ingest task received", workKey);
-    res.sendStatus(204);
+    try {
+      const result = await deps.ingest({ projectId, assetId: subjectId, generation });
+      console.log("ingest", workKey, result);
+      res.sendStatus(204);
+    } catch (error) {
+      console.error("ingest task failed", workKey, error);
+      res.status(500).json({ error: "ingest_failed" });
+    }
   });
   return router;
 }
