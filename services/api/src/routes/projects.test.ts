@@ -24,12 +24,15 @@ const fakeAuth: express.RequestHandler = (_req, res, next) => {
   res.locals.userId = "user-1";
   next();
 };
-function buildApp() {
+function buildApp(options: { settle?: (projectId: string) => Promise<void>; closeFails?: boolean } = {}) {
+  if (options.closeFails) {
+    vi.mocked(store.closeSession).mockRejectedValue(new store.StoreError("not_found"));
+  }
   const app = express();
   app.use(express.json());
   app.use(
     "/api/projects",
-    projectsRouter({ db, now: () => 42, auth: fakeAuth }),
+    projectsRouter({ db, now: () => 42, auth: fakeAuth, settle: options.settle }),
   );
   return app;
 }
@@ -44,7 +47,7 @@ const entry = {
 };
 
 describe("projects routes", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => vi.resetAllMocks());
   it("creates a project for the signed-in user", async () => {
     vi.mocked(store.createProject).mockResolvedValue({
       id: "p1",
@@ -151,5 +154,41 @@ describe("projects routes", () => {
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "invalid_outcome" });
     expect(store.recordClientOutcome).not.toHaveBeenCalled();
+  });
+  it("settles the project after a session is closed", async () => {
+    const settle = vi.fn().mockResolvedValue(undefined);
+    const app = buildApp({ settle });
+    const res = await request(app).post("/api/projects/p1/upload-sessions/s1/close");
+    expect(res.status).toBe(200);
+    expect(settle).toHaveBeenCalledWith("p1");
+  });
+
+  it("settles the project after a client cancels an upload", async () => {
+    const settle = vi.fn().mockResolvedValue(undefined);
+    const app = buildApp({ settle });
+    const res = await request(app)
+      .post("/api/projects/p1/upload-sessions/s1/entries/a1/outcome")
+      .send({ kind: "cancelled" });
+    expect(res.status).toBe(200);
+    expect(settle).toHaveBeenCalledWith("p1");
+  });
+
+  it("still answers when settling throws, because the upload state already changed", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const settle = vi.fn().mockRejectedValue(new Error("firestore unavailable"));
+    const app = buildApp({ settle });
+    const res = await request(app).post("/api/projects/p1/upload-sessions/s1/close");
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("does not settle when the close is rejected", async () => {
+    const settle = vi.fn();
+    const app = buildApp({ settle, closeFails: true });
+    const res = await request(app).post("/api/projects/p1/upload-sessions/missing/close");
+    expect(res.status).toBe(404);
+    expect(settle).not.toHaveBeenCalled();
   });
 });

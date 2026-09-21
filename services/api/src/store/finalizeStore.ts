@@ -102,6 +102,7 @@ export async function recordFinalize(db: Firestore, expectedBucket: string, inpu
     };
     tx.set(entryRef, finalized.entry);
     tx.set(assetRef, asset);
+    if (project.get("status") === "collecting") tx.update(projectRef, { status: "processing" });
     if (!taskSnap.exists) tx.create(taskRef, task);
     return { kind: "accepted", assetId: path.assetId, taskId: task.id };
   });

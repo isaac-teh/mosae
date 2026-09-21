@@ -13,6 +13,7 @@ import {
 } from "./queue/taskQueue.js";
 import { dispatchDue } from "./outbox/dispatcher.js";
 import { apiCors } from "./http/cors.js";
+import { settleProject } from "./store/readinessStore.js";
 
 const config = loadConfig();
 const queue: TaskQueue = config.tasks
@@ -31,7 +32,16 @@ app.use("/", healthRouter());
 app.use("/api", apiCors(config));
 app.use("/api", express.json({ limit: "2mb" }));
 app.use(express.json({ limit: "2mb" }));
-app.use("/api/projects", projectsRouter({ db: adminDb }));
+app.use(
+  "/api/projects",
+  projectsRouter({
+    db: adminDb,
+    settle: async (projectId) => {
+      const result = await settleProject(adminDb, projectId, Date.now());
+      if (result.enqueued) await dispatchDue(adminDb, queue, Date.now());
+    },
+  }),
+);
 app.use(
   "/events",
   storageEventsRouter({

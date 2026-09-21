@@ -14,7 +14,7 @@ export type Project = {
   userId: string;
   mode: "memory" | "creator";
   title: string | null;
-  status: "collecting";
+  status: "collecting" | "processing" | "ready" | "ready_with_errors" | "failed";
   createdAt: number;
 };
 
