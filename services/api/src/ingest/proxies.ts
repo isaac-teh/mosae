@@ -41,7 +41,8 @@ export async function makePhotoDerivatives(input: string, outDir: string, run: R
     try {
       await run("heif-convert", [input, converted], { timeoutMs: 120_000 });
       return await encode(converted, outDir);
-    } catch {
+    } catch (error) {
+      if (isTimeout(error)) throw error;
       throw new PermanentIngestError("unsupported_image", message);
     }
   }

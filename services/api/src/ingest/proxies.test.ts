@@ -69,6 +69,17 @@ describe("makePhotoDerivatives", () => {
     await out.cleanup();
   });
 
+  it("rethrows a heif-convert timeout so the task is retried", async () => {
+    const heic = path.join(dir, "photo.heic");
+    await writeFile(heic, Buffer.from("garbage"));
+    const run = vi.fn().mockRejectedValue(Object.assign(new Error("heif-convert timed out"), { killed: true }));
+    const out = await tempDir();
+    const error = await makePhotoDerivatives(heic, out.dir, run).catch((error) => error);
+    expect(error).not.toBeInstanceOf(PermanentIngestError);
+    expect(error.message).toBe("heif-convert timed out");
+    await out.cleanup();
+  });
+
   it("fails permanently when neither sharp nor heif-convert can decode the image", async () => {
     const bad = path.join(dir, "bad.heic");
     await writeFile(bad, Buffer.from("garbage"));
