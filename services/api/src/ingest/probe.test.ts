@@ -105,6 +105,14 @@ describe("probeMedia video", () => {
     await expect(probeMedia(file, "video")).rejects.toBeInstanceOf(PermanentIngestError);
   });
 
+  it("keeps ffprobe timeouts retryable", async () => {
+    const timeout = Object.assign(new Error("ffprobe timed out"), { killed: true });
+    const runner = async () => Promise.reject(timeout);
+    const result = probeMedia("ignored.mp4", "video", runner);
+    await expect(result).rejects.not.toBeInstanceOf(PermanentIngestError);
+    await expect(result).rejects.toMatchObject({ message: "ffprobe timed out" });
+  });
+
   it("rejects a video with no positive duration as a permanent failure", async () => {
     const fake = async () => ({
       stdout: JSON.stringify({ format: { duration: "0.000000" }, streams: [{ codec_type: "video", width: 320, height: 240 }] }),

@@ -2,7 +2,7 @@ import { exiftool } from "exiftool-vendored";
 import tzlookup from "tz-lookup";
 import type { GeoPoint, MediaFacts, MediaKind } from "../domain/media.js";
 import { PermanentIngestError } from "./errors.js";
-import { defaultRun, type Runner } from "./run.js";
+import { defaultRun, isTimeout, type Runner } from "./run.js";
 
 export function formatLocal(date: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -89,6 +89,7 @@ async function probeVideo(file: string, run: Runner): Promise<MediaFacts> {
   try {
     ({ stdout } = await run("ffprobe", ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", file], { timeoutMs: 60_000 }));
   } catch (error) {
+    if (isTimeout(error)) throw error;
     throw new PermanentIngestError("unreadable_media", `ffprobe failed: ${error instanceof Error ? error.message : String(error)}`);
   }
   const info = JSON.parse(stdout) as FfprobeOutput;
