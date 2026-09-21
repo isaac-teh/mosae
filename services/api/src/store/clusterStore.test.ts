@@ -119,4 +119,28 @@ describe("runProjectPass (emulator)", () => {
     expect(await events(projectId)).toHaveLength(2);
     expect(await projectDoc(projectId)).toMatchObject({ readyAt: 600 });
   });
+
+  it("removes stale events while retaining the rebuilt event set and published project state", async () => {
+    const { projectId } = await seedProject([
+      { localTime: "2026-05-03T09:00:00" },
+      { localTime: "2026-05-04T19:00:00" },
+    ]);
+    await adminDb.doc(`projects/${projectId}/events/e999`).set({ id: "e999", label: "stale", assetCount: 99 });
+    await expect(runProjectPass(adminDb, projectId, 500)).resolves.toEqual({ status: "ready", events: 2, duplicates: 0 });
+    expect((await adminDb.doc(`projects/${projectId}/events/e999`).get()).exists).toBe(false);
+    expect((await events(projectId)).map((event) => [event.id, event.assetCount])).toEqual(expect.arrayContaining([["e001", 1], ["e002", 1]]));
+    expect(await projectDoc(projectId)).toMatchObject({ status: "ready", eventCount: 2, readyAt: 500 });
+  });
+
+  it("leaves an exact, lease-free event set when two passes start together", async () => {
+    const { projectId } = await seedProject([
+      { localTime: "2026-05-03T09:00:00" },
+      { localTime: "2026-05-04T19:00:00" },
+    ]);
+    const results = await Promise.all([runProjectPass(adminDb, projectId, 500), runProjectPass(adminDb, projectId, 500)]);
+    expect(results.some((result) => result.status !== "skipped")).toBe(true);
+    expect((await events(projectId)).map((event) => event.id).sort()).toEqual(["e001", "e002"]);
+    expect(await projectDoc(projectId)).toMatchObject({ status: "ready", eventCount: 2 });
+    expect((await projectDoc(projectId)).clusterLease).toBeUndefined();
+  });
 });

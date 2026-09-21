@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { exiftool } from "exiftool-vendored";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { closeProbe, formatLocal, parseIso6709, probeMedia, swapsAxes } from "./probe.js";
 import { PermanentIngestError } from "./errors.js";
 import { makeJpeg, makeVideo, tempDir } from "./testMedia.js";
@@ -15,6 +16,10 @@ beforeAll(async () => {
 afterAll(async () => {
   await closeProbe();
   await cleanup();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("formatLocal", () => {
@@ -77,6 +82,18 @@ describe("probeMedia photo", () => {
     await writeFile(file, Buffer.from("this is not an image"));
     await expect(probeMedia(file, "photo")).rejects.toMatchObject({ name: "PermanentIngestError", reason: "unreadable_media" });
   });
+
+  it("keeps an unknown exiftool failure retryable", async () => {
+    vi.spyOn(exiftool, "read").mockRejectedValueOnce(new Error("boom"));
+    const error = await probeMedia("ignored.jpg", "photo").catch((caught) => caught);
+    expect(error).not.toBeInstanceOf(PermanentIngestError);
+    expect(error).toMatchObject({ message: "boom" });
+  });
+
+  it("keeps known unreadable photo input permanent", async () => {
+    vi.spyOn(exiftool, "read").mockRejectedValueOnce(new Error("File format error"));
+    await expect(probeMedia("ignored.jpg", "photo")).rejects.toMatchObject({ reason: "unreadable_media" });
+  });
 });
 
 describe("probeMedia video", () => {
@@ -111,6 +128,22 @@ describe("probeMedia video", () => {
     const result = probeMedia("ignored.mp4", "video", runner);
     await expect(result).rejects.not.toBeInstanceOf(PermanentIngestError);
     await expect(result).rejects.toMatchObject({ message: "ffprobe timed out" });
+  });
+
+  it.each([
+    [Object.assign(new Error("spawn ENOMEM"), { code: "ENOMEM" })],
+    [Object.assign(new Error("terminated"), { signal: "SIGKILL" })],
+    [new Error("boom")],
+  ])("keeps environmental and unknown ffprobe errors retryable", async (error) => {
+    const runner = async () => Promise.reject(error);
+    const caught = await probeMedia("ignored.mp4", "video", runner).catch((failure) => failure);
+    expect(caught).not.toBeInstanceOf(PermanentIngestError);
+    expect(caught).toMatchObject({ message: error.message });
+  });
+
+  it("keeps a rejected ffprobe input permanent", async () => {
+    const runner = async () => Promise.reject(Object.assign(new Error("command failed"), { code: 1 }));
+    await expect(probeMedia("ignored.mp4", "video", runner)).rejects.toMatchObject({ reason: "unreadable_media" });
   });
 
   it("rejects a video with no positive duration as a permanent failure", async () => {

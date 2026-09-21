@@ -108,4 +108,46 @@ describe("ingest flow (emulators)", () => {
 
     await media.cleanup();
   });
+
+  it("recovers when the first settle fails after the asset commit", { timeout: 180_000 }, async () => {
+    const media = await tempDir();
+    const bucket = getStorage(getAdminApp()).bucket(BUCKET);
+    const file = await makeJpeg(media.dir, "single.jpg", { dateTimeOriginal: "2026:05:03 09:00:00" });
+    const sizeBytes = (await stat(file)).size;
+    const userId = `u-${crypto.randomUUID()}`;
+    const project = await createProject(adminDb, { userId, mode: "memory", now: 1 });
+    const { session, entries } = await openSession(adminDb, {
+      userId,
+      projectId: project.id,
+      entries: [{ fileName: "single.jpg", contentType: "image/jpeg", sizeBytes }],
+      now: 1,
+    });
+    const assetId = entries[0].assetId;
+    const objectName = buildOriginalPath({ userId, projectId: project.id, sessionId: session.id, assetId });
+    await bucket.upload(file, { destination: objectName, metadata: { contentType: "image/jpeg" } });
+    const [metadata] = await bucket.file(objectName).getMetadata();
+    const generation = String(metadata.generation);
+    expect(await recordFinalize(adminDb, BUCKET, { bucket: BUCKET, objectName, generation, sizeBytes, contentType: "image/jpeg", now: 2 })).toMatchObject({ kind: "accepted" });
+    await closeSession(adminDb, { userId, projectId: project.id, sessionId: session.id });
+
+    let calls = 0;
+    const settle = async (pid: string) => {
+      calls += 1;
+      if (calls === 1) throw new Error("firestore unavailable");
+      await settleProject(adminDb, pid, Date.now());
+    };
+    const ingest = createIngest({ db: adminDb, bucketName: BUCKET, settle });
+    const task = { projectId: project.id, assetId, generation };
+
+    await expect(ingest(task)).rejects.toThrow("firestore unavailable");
+    expect((await adminDb.doc(`projects/${project.id}/assets/${assetId}`).get()).get("status")).toBe("ingested");
+    expect((await adminDb.collection(`projects/${project.id}/taskOutbox`).where("stage", "==", "cluster").get()).size).toBe(0);
+    expect((await adminDb.doc(`projects/${project.id}`).get()).get("status")).toBe("processing");
+
+    await expect(ingest(task)).resolves.toBe("skipped");
+    expect(calls).toBe(2);
+    expect((await adminDb.collection(`projects/${project.id}/taskOutbox`).where("stage", "==", "cluster").get()).size).toBe(1);
+    await expect(runProjectPass(adminDb, project.id, Date.now())).resolves.toEqual({ status: "ready", events: 1, duplicates: 0 });
+    await media.cleanup();
+  });
 });

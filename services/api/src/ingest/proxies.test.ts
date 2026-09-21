@@ -88,6 +88,30 @@ describe("makePhotoDerivatives", () => {
     await expect(makePhotoDerivatives(bad, out.dir, run)).rejects.toMatchObject({ name: "PermanentIngestError", reason: "unsupported_image" });
     await out.cleanup();
   });
+
+  it.each([
+    [Object.assign(new Error("spawn ENOMEM"), { code: "ENOMEM" })],
+    [Object.assign(new Error("terminated"), { signal: "SIGKILL" })],
+    [new Error("boom")],
+  ])("keeps environmental and unknown HEIC conversion failures retryable", async (error) => {
+    const heic = path.join(dir, "retry.heic");
+    await writeFile(heic, Buffer.from("garbage"));
+    const out = await tempDir();
+    const run = vi.fn().mockRejectedValue(error);
+    const caught = await makePhotoDerivatives(heic, out.dir, run).catch((failure) => failure);
+    expect(caught).not.toBeInstanceOf(PermanentIngestError);
+    expect(caught).toMatchObject({ message: error.message });
+    await out.cleanup();
+  });
+
+  it("keeps a rejected HEIC conversion input permanent", async () => {
+    const heic = path.join(dir, "permanent.heic");
+    await writeFile(heic, Buffer.from("garbage"));
+    const out = await tempDir();
+    const run = vi.fn().mockRejectedValue(Object.assign(new Error("command failed"), { code: 1 }));
+    await expect(makePhotoDerivatives(heic, out.dir, run)).rejects.toMatchObject({ reason: "unsupported_image" });
+    await out.cleanup();
+  });
 });
 
 describe("makeVideoDerivatives", () => {
@@ -125,6 +149,26 @@ describe("makeVideoDerivatives", () => {
     const error = await makeVideoDerivatives("in.mp4", out.dir, 1, run).catch((e) => e);
     expect(error).not.toBeInstanceOf(PermanentIngestError);
     expect(error.message).toBe("timed out");
+    await out.cleanup();
+  });
+
+  it.each([
+    [Object.assign(new Error("spawn ENOMEM"), { code: "ENOMEM" })],
+    [Object.assign(new Error("terminated"), { signal: "SIGKILL" })],
+    [new Error("boom")],
+  ])("keeps environmental and unknown ffmpeg errors retryable", async (error) => {
+    const out = await tempDir();
+    const run = vi.fn().mockRejectedValue(error);
+    const caught = await makeVideoDerivatives("in.mp4", out.dir, 1, run).catch((failure) => failure);
+    expect(caught).not.toBeInstanceOf(PermanentIngestError);
+    expect(caught).toMatchObject({ message: error.message });
+    await out.cleanup();
+  });
+
+  it("keeps a rejected ffmpeg input permanent", async () => {
+    const out = await tempDir();
+    const run = vi.fn().mockRejectedValue(Object.assign(new Error("command failed"), { code: 1 }));
+    await expect(makeVideoDerivatives("in.mp4", out.dir, 1, run)).rejects.toMatchObject({ reason: "unreadable_media" });
     await out.cleanup();
   });
 });
