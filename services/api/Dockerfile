@@ -14,7 +14,7 @@ FROM node:22-slim AS runtime
 # exiftool-vendored does not provide a Linux executable on PATH, so use Debian's
 # Perl package for the command-line probe and ingest tool.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg libimage-exiftool-perl \
+  && apt-get install -y --no-install-recommends ffmpeg libheif-examples libimage-exiftool-perl \
   && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 WORKDIR /app
