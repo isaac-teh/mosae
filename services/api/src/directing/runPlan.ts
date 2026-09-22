@@ -14,6 +14,12 @@ import { buildWorkingSet, type WorkingShot } from "./workingSet.js";
 export type PlanningProgress = "searching" | "inspecting" | "organizing";
 export type PlanningTools = ReturnType<typeof createPlanningTools>;
 export type PlanningToolName = keyof PlanningTools;
+export type DeadlineOperation = "progress" | "model" | "tool";
+
+export type DeadlineScheduler = {
+  set(callback: () => void, delayMs: number, operation: DeadlineOperation): unknown;
+  clear(handle: unknown): void;
+};
 
 export type PlanJob = {
   id: string;
@@ -62,6 +68,7 @@ export type RunPlanDeps = {
   updateProgress?: (jobId: string, progress: PlanningProgress) => void | Promise<void>;
   budgetLimits?: Partial<PlanBudgetLimits>;
   now?: () => number;
+  deadlineScheduler?: DeadlineScheduler;
 };
 
 export type PlanResult =
@@ -129,9 +136,40 @@ function budgetReason(kind: PlanBudgetKind): string {
   return `Planning used its available ${resource}. Please try again.`;
 }
 
+const defaultDeadlineScheduler: DeadlineScheduler = {
+  set: (callback, delayMs) => setTimeout(callback, delayMs),
+  clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+
+async function withinDeadline<T>(
+  budget: Budget,
+  scheduler: DeadlineScheduler,
+  operation: DeadlineOperation,
+  run: () => Promise<T> | T,
+): Promise<T> {
+  budget.assertWithinLimits();
+  const pending = Promise.resolve().then(run);
+  let handle: unknown;
+  const expired = new Promise<never>((_resolve, reject) => {
+    handle = scheduler.set(
+      () => reject(new BudgetExhausted("elapsed_time", budget.limits.elapsedMs)),
+      budget.remainingElapsedMs(),
+      operation,
+    );
+  });
+  try {
+    const result = await Promise.race([pending, expired]);
+    budget.assertWithinLimits();
+    return result;
+  } finally {
+    scheduler.clear(handle);
+  }
+}
+
 /** Run a bounded planning conversation without granting repair a second allowance. */
 export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResult> {
   const budget = new Budget(deps.budgetLimits, deps.now);
+  const deadlineScheduler = deps.deadlineScheduler ?? defaultDeadlineScheduler;
   const mustIncludeShotIds = constraintShotIds(job);
   const workingSet = buildWorkingSet(job.shots, {
     cap: job.workingSetCap,
@@ -143,16 +181,45 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
   let diagnostics: string[] = [];
 
   const progress = async (value: PlanningProgress): Promise<void> => {
-    await deps.updateProgress?.(job.id, value);
+    if (!deps.updateProgress) {
+      budget.assertWithinLimits();
+      return;
+    }
+    await withinDeadline(budget, deadlineScheduler, "progress", () => deps.updateProgress!(job.id, value));
+  };
+
+  const repairOrFailure = (output: PlanModelOutput, nextDiagnostics: string[]): PlanResult | undefined => {
+    diagnostics = nextDiagnostics;
     budget.assertWithinLimits();
+    if (repairCount === 1) {
+      return {
+        ok: false,
+        code: "validation_failed",
+        retryable: false,
+        reason: "We couldn't build a valid story plan after one repair. Please try again.",
+        diagnostics,
+        usage: budget.snapshot(),
+      };
+    }
+    repairCount += 1;
+    messages.push({ role: "assistant", content: serialized(output) });
+    messages.push({
+      role: "user",
+      content: `Your proposal failed validation. Repair every issue and submit again:\n${diagnostics.join("\n")}`,
+    });
+    return undefined;
   };
 
   try {
     await progress("searching");
     while (true) {
       budget.spendModelTurn();
-      const output = await deps.model.runTurn({ messages: [...messages], toolDeclarations: planningToolDeclarations });
-      budget.assertWithinLimits();
+      const output = await withinDeadline(
+        budget,
+        deadlineScheduler,
+        "model",
+        () => deps.model.runTurn({ messages: [...messages], toolDeclarations: planningToolDeclarations }),
+      );
 
       if (output.type === "tool_calls") {
         messages.push({ role: "assistant", content: serialized(output) });
@@ -161,8 +228,12 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
           await progress(call.name === "searchShots" ? "searching" : "inspecting");
           const toolCallId = call.id ?? `turn-${budget.snapshot().modelTurns}-tool-${index + 1}`;
           try {
-            const result = await executeTool(deps.tools, call);
-            budget.assertWithinLimits();
+            const result = await withinDeadline(
+              budget,
+              deadlineScheduler,
+              "tool",
+              () => executeTool(deps.tools, call),
+            );
             messages.push({ role: "tool", toolCallId, content: serialized(result) });
           } catch (error) {
             if (error instanceof BudgetExhausted) throw error;
@@ -184,38 +255,31 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
         mustIncludeShotIds,
       });
       if (!validation.ok) {
-        diagnostics = validation.diagnostics;
-        if (repairCount === 1) {
-          return {
-            ok: false,
-            code: "validation_failed",
-            retryable: false,
-            reason: "We couldn't build a valid story plan after one repair. Please try again.",
-            diagnostics,
-            usage: budget.snapshot(),
-          };
-        }
-        repairCount += 1;
-        messages.push({
-          role: "assistant",
-          content: serialized(output),
-        });
-        messages.push({
-          role: "user",
-          content: `Your proposal failed validation. Repair every issue and submit again:\n${diagnostics.join("\n")}`,
-        });
+        const failure = repairOrFailure(output, validation.diagnostics);
+        if (failure) return failure;
         continue;
       }
 
-      const proposal = assembleProposal(output.submission, {
-        proposalId: job.proposalId,
-        projectId: job.projectId,
-        storyIntentId: job.storyIntentId,
-        version: job.version,
-        parentProposalId: job.parentProposalId,
-        constraints: job.constraints,
-        parentProposal: job.parentProposal,
-      });
+      let proposal: StoryProposal;
+      try {
+        proposal = assembleProposal(output.submission, {
+          proposalId: job.proposalId,
+          projectId: job.projectId,
+          storyIntentId: job.storyIntentId,
+          version: job.version,
+          parentProposalId: job.parentProposalId,
+          constraints: job.constraints,
+          parentProposal: job.parentProposal,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const failure = repairOrFailure(output, [
+          `schema_submission: ${message}. Correct the submission so every required field and reference satisfies the proposal schema.`,
+        ]);
+        if (failure) return failure;
+        continue;
+      }
+      budget.assertWithinLimits();
       return { ok: true, proposal, usage: budget.snapshot() };
     }
   } catch (error) {

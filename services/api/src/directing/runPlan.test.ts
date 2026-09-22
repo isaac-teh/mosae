@@ -6,6 +6,8 @@ import {
   type PlanJob,
   type PlanModelInput,
   type PlanModelOutput,
+  type DeadlineOperation,
+  type DeadlineScheduler,
   type PlanningProgress,
   type PlanningTools,
 } from "./runPlan.js";
@@ -103,6 +105,36 @@ function progressRecorder() {
     progress,
     updateProgress: async (_jobId: string, value: PlanningProgress) => { progress.push(value); },
   };
+}
+
+class ManualDeadlineScheduler implements DeadlineScheduler {
+  private nextId = 1;
+  private pending = new Map<number, { operation: DeadlineOperation; callback: () => void }>();
+
+  set(callback: () => void, _delayMs: number, operation: DeadlineOperation): unknown {
+    const id = this.nextId++;
+    this.pending.set(id, { operation, callback });
+    return id;
+  }
+
+  clear(handle: unknown): void {
+    this.pending.delete(handle as number);
+  }
+
+  has(operation: DeadlineOperation): boolean {
+    return [...this.pending.values()].some((item) => item.operation === operation);
+  }
+
+  expire(operation: DeadlineOperation): void {
+    const entry = [...this.pending.entries()].find(([, item]) => item.operation === operation);
+    if (!entry) throw new Error(`no pending ${operation} deadline`);
+    this.pending.delete(entry[0]);
+    entry[1].callback();
+  }
+}
+
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 10; index += 1) await Promise.resolve();
 }
 
 describe("runPlan", () => {
@@ -262,6 +294,92 @@ describe("runPlan", () => {
 
     expect(result).toMatchObject({ ok: false, code: "budget_exhausted", budget: "model_turns" });
     expect(script.inputs).toHaveLength(1);
+  });
+
+  it("actively ends a stalled model turn at the shared elapsed-time deadline", async () => {
+    const deadlines = new ManualDeadlineScheduler();
+    const resultPromise = runPlan(job, {
+      model: { runTurn: async () => new Promise<PlanModelOutput>(() => {}) },
+      tools: tools(),
+      deadlineScheduler: deadlines,
+    });
+
+    await flushMicrotasks();
+    expect(deadlines.has("model")).toBe(true);
+    deadlines.expire("model");
+
+    await expect(resultPromise).resolves.toMatchObject({
+      ok: false,
+      code: "budget_exhausted",
+      budget: "elapsed_time",
+      retryable: true,
+    });
+  });
+
+  it("actively ends a stalled tool call at the shared elapsed-time deadline", async () => {
+    const deadlines = new ManualDeadlineScheduler();
+    let toolStarted = false;
+    const script = scripted([{
+      type: "tool_calls",
+      calls: [{ name: "searchShots", input: { query: "family" } }],
+    }]);
+    const resultPromise = runPlan(job, {
+      model: script.model,
+      tools: tools({
+        searchShots: async () => {
+          toolStarted = true;
+          return new Promise<string[]>(() => {});
+        },
+      }),
+      deadlineScheduler: deadlines,
+    });
+
+    await flushMicrotasks();
+    expect(toolStarted).toBe(true);
+    expect(deadlines.has("tool")).toBe(true);
+    deadlines.expire("tool");
+
+    await expect(resultPromise).resolves.toMatchObject({
+      ok: false,
+      code: "budget_exhausted",
+      budget: "elapsed_time",
+      retryable: true,
+    });
+  });
+
+  it("feeds an assembly schema diagnostic into the one repair and accepts the corrected submission", async () => {
+    const emptyTitle = { ...validSubmission, title: "" };
+    const script = scripted([
+      { type: "submit", submission: emptyTitle },
+      { type: "submit", submission: validSubmission },
+    ]);
+
+    const result = await runPlan(job, { model: script.model, tools: tools() });
+
+    expect(result.ok).toBe(true);
+    expect(script.inputs[1]?.messages.at(-1)?.content).toMatch(/schema_submission.*invalid assembled proposal.*correct/i);
+    if (result.ok) expect(result.usage.modelTurns).toBe(2);
+  });
+
+  it("returns a user-visible failure when the repaired submission still fails assembly schema validation", async () => {
+    const emptyTitle = { ...validSubmission, title: "" };
+    const script = scripted([
+      { type: "submit", submission: emptyTitle },
+      { type: "submit", submission: emptyTitle },
+    ]);
+
+    const result = await runPlan(job, { model: script.model, tools: tools() });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "validation_failed",
+      retryable: false,
+    });
+    if (!result.ok) {
+      expect(result.reason).toMatch(/couldn't build a valid story plan.*try again/i);
+      expect(result.diagnostics.join("\n")).toMatch(/schema_submission.*invalid assembled proposal/i);
+      expect(result.usage.modelTurns).toBe(2);
+    }
   });
 });
 

@@ -77,6 +77,10 @@ export class Budget {
     return { modelTurns: this.modelTurns, toolCalls: this.toolCalls, elapsedMs: this.elapsed() };
   }
 
+  remainingElapsedMs(): number {
+    return Math.max(0, this.limits.elapsedMs - this.elapsed());
+  }
+
   private elapsed(): number {
     return Math.max(0, this.now() - this.startedAt);
   }
