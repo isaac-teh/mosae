@@ -1,6 +1,8 @@
 import React from "react";
 import { Composition, registerRoot, staticFile } from "remotion";
 import { PhotoTable } from "./PhotoTable";
+import { Film, filmMetadata, type FilmProps } from "./Film";
+import film from "../out/film.json";
 
 /**
  * THROWAWAY SPIKE ENTRY (2026-09-22). Kept out of index.tsx so the real
@@ -22,6 +24,16 @@ const CELLS = [
 
 const Root = () => (
   <>
+    <Composition
+      id="Film"
+      component={Film}
+      defaultProps={film as unknown as FilmProps}
+      calculateMetadata={filmMetadata as never}
+      durationInFrames={Math.round(film.durationSec * film.fps)}
+      fps={film.fps}
+      width={film.width}
+      height={film.height}
+    />
     <Composition
       id="PhotoTable"
       component={PhotoTable}

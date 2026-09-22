@@ -1,8 +1,8 @@
 # Collage spike (throwaway)
 
-A Remotion sketch of one collage form: photos as physical prints scattered on a
-table. It answered three questions and is kept only as evidence for them; the
-findings that outlive the code are in `docs/ARCHITECTURE.md`.
+A Remotion sketch of one collage form — photos as physical prints scattered on a
+table — plus an end-to-end film that splices collages into a real `poc/gemini`
+composition. Kept as evidence for the findings in `docs/ARCHITECTURE.md`.
 
 Nothing here is wired into the app. It sits deliberately outside the npm
 workspaces, so the repository's `npm run typecheck` and `npm test` ignore it.
@@ -33,6 +33,25 @@ npx remotion render src/root.tsx PhotoTable4 out/four.mp4 \
 `--public-dir` is required: a `remotion.config.ts` in this folder is not picked
 up, because the CLI resolves its config against the entry point rather than the
 working directory. `--props` accepts `seed`, `cardWidth` and `landingFrames`.
+
+## The end-to-end film
+
+`buildFilm.mjs` reads a `poc/gemini` run's `timeline.json` and `catalog.json`,
+lays the clips out in time, and splices in one collage per place built from
+photos that edit never used. `src/Film.tsx` renders the result: video with its
+source trim and audio, stills with a slow push, collages, and the cuts,
+crossfades and dips the composer chose.
+
+```sh
+node buildFilm.mjs --run gemini-3-5-flash-lite --set trip
+npx remotion render src/root.tsx Film out/trip-film.mp4 --public-dir="$MEDIA"
+```
+
+The composer never specified transition lengths, so `buildFilm.mjs` picks them
+once (0.6s crossfade, 0.8s dip) rather than leaving each clip to invent one.
+
+This is not the `Timeline` contract. It is the POC's own clip shape, reshaped
+just enough to watch; the real renderer is `packages/video/src/Timeline.tsx`.
 
 ## Checking the envelope
 
@@ -66,4 +85,6 @@ This found a real bug on the four-cell layout that looking at the pictures did n
 | File | What it is |
 |---|---|
 | `src/PhotoTable.tsx` | The form: card, shadows, seeded scatter, landing, drift |
-| `src/root.tsx` | Registers the 6-cell and 4-cell compositions |
+| `src/root.tsx` | Registers the film and the 6-cell and 4-cell collage compositions |
+| `src/Film.tsx` | End-to-end film: clips, transitions, audio, collages |
+| `buildFilm.mjs` | Turns a `poc/gemini` run into film props, splicing collages in |

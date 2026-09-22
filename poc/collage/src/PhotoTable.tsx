@@ -26,6 +26,12 @@ export type PhotoTableProps = {
   seed?: string;
   /** Card width as a fraction of canvas width. Bigger overlaps more and leaves less table. */
   cardWidth?: number;
+  /**
+   * How many frames this table is on screen. Inside a <Sequence> the video
+   * config still reports the whole composition, so a clip must say how long it
+   * runs or the drift is computed against the wrong span and barely moves.
+   */
+  spanFrames?: number;
   /** Frames the landing animation takes per card, staggered. */
   landingFrames?: number;
   /** Set false to see the settled arrangement with no entrance. */
@@ -200,11 +206,13 @@ export const PhotoTable: React.FC<PhotoTableProps> = ({
   cells,
   seed = "",
   cardWidth,
+  spanFrames,
   landingFrames = 26,
   animate = true,
 }) => {
   const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
+  const config = useVideoConfig();
+  const durationInFrames = spanFrames ?? config.durationInFrames;
   const layout = layoutFor(cells.length);
   const cardW = cardWidth ?? layout.cardWidth;
 
