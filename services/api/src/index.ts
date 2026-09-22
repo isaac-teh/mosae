@@ -3,6 +3,7 @@ import { adminDb } from "./firebase/admin.js";
 import { loadConfig } from "./config.js";
 import { requireServiceCaller } from "./auth/requireServiceCaller.js";
 import { projectsRouter } from "./routes/projects.js";
+import { createPlanJob, directingRouter, type QueuePlan } from "./routes/directing.js";
 import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
@@ -46,6 +47,11 @@ const understand = createUnderstand({ db: adminDb, bucketName: config.storageBuc
 const geminiClient = createGenAI(config.geminiApiKey);
 const embedQuery = (text: string) => embedText(embedContentVia(geminiClient), text);
 const cluster = (projectId: string): Promise<unknown> => runProjectPass(adminDb, projectId, Date.now());
+const queuePlan: QueuePlan = async (input) => {
+  const job = await createPlanJob(adminDb, input);
+  await dispatchDue(adminDb, queue, Date.now());
+  return job;
+};
 
 const queue: TaskQueue = config.tasks
   ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.serviceUrl })
@@ -73,6 +79,10 @@ app.use(express.json({ limit: "2mb" }));
 app.use(
   "/api/projects",
   projectsRouter({ db: adminDb, settle, embedQuery }),
+);
+app.use(
+  "/api/projects",
+  directingRouter({ db: adminDb, queuePlan }),
 );
 app.use(
   "/events",
