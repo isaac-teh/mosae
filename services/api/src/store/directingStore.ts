@@ -76,7 +76,11 @@ export async function saveProposal(
   const destination = proposalRef(db, proposal.projectId, proposal.id);
 
   return db.runTransaction(async (transaction) => {
-    const [projectSnap, jobSnap] = await Promise.all([transaction.get(project), transaction.get(job)]);
+    const [projectSnap, jobSnap, destinationSnap] = await Promise.all([
+      transaction.get(project),
+      transaction.get(job),
+      transaction.get(destination),
+    ]);
     if (!projectSnap.exists) throw new DirectingStoreError("not_found");
     if (
       !jobSnap.exists
@@ -84,6 +88,18 @@ export async function saveProposal(
       || jobSnap.get("version") !== proposal.version
     ) {
       throw new DirectingStoreError("invalid_job");
+    }
+    if (destinationSnap.exists) {
+      const stored = parseStoredProposal(destinationSnap.data());
+      if (
+        !stored
+        || stored.projectId !== proposal.projectId
+        || stored.id !== proposal.id
+        || stored.version !== proposal.version
+        || destinationSnap.get("jobId") !== input.jobId
+      ) {
+        throw new DirectingStoreError("invalid_proposal");
+      }
     }
 
     const currentProposalId = projectSnap.get("currentProposalId") as string | null | undefined;
@@ -95,7 +111,9 @@ export async function saveProposal(
       publish = (jobSnap.get("version") as number) > current.version;
     }
 
-    transaction.set(destination, { ...proposal, jobId: input.jobId, createdAt: input.createdAt });
+    if (!destinationSnap.exists) {
+      transaction.set(destination, { ...proposal, jobId: input.jobId, createdAt: input.createdAt });
+    }
     if (publish) {
       transaction.update(project, {
         currentProposalId: proposal.id,

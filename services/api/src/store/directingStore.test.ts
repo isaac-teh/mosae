@@ -117,6 +117,44 @@ describe("directing store (emulator)", () => {
     expect((await adminDb.doc(`projects/${projectId}`).get()).get("currentProposalId")).toBe(draft.id);
   });
 
+  it("does not demote an accepted proposal when its plan task retries", async () => {
+    const { projectId, userId } = await seedProject();
+    const draft = proposal(projectId, uniqueId("proposal"), 1);
+    await seedJob(projectId, "job-1", draft.id, 1);
+
+    await saveProposal(adminDb, { jobId: "job-1", proposal: draft, createdAt: 30 });
+    await acceptProposal(adminDb, { userId, projectId, proposalId: draft.id });
+    await expect(saveProposal(adminDb, { jobId: "job-1", proposal: draft, createdAt: 31 })).resolves.toBe("published");
+
+    await expect(readProposal(adminDb, { userId, projectId, proposalId: draft.id })).resolves.toMatchObject({ state: "accepted" });
+    const stored = await adminDb.doc(`projects/${projectId}/storyProposals/${draft.id}`).get();
+    expect(stored.get("state")).toBe("accepted");
+    expect(stored.get("createdAt")).toBe(30);
+    const project = await adminDb.doc(`projects/${projectId}`).get();
+    expect(project.get("currentProposalId")).toBe(draft.id);
+    expect(project.get("acceptedProposalId")).toBe(draft.id);
+  });
+
+  it("does not mutate an accepted parent when its stale plan task retries", async () => {
+    const { projectId, userId } = await seedProject();
+    const parent = proposal(projectId, uniqueId("proposal-parent"), 1);
+    const current = proposal(projectId, uniqueId("proposal-current"), 2, parent.id);
+    await seedJob(projectId, "job-parent", parent.id, 1);
+    await seedJob(projectId, "job-current", current.id, 2);
+
+    await saveProposal(adminDb, { jobId: "job-parent", proposal: parent, createdAt: 30 });
+    await acceptProposal(adminDb, { userId, projectId, proposalId: parent.id });
+    await saveProposal(adminDb, { jobId: "job-current", proposal: current, createdAt: 40 });
+    await expect(saveProposal(adminDb, { jobId: "job-parent", proposal: parent, createdAt: 50 })).resolves.toBe("stale");
+
+    const storedParent = await adminDb.doc(`projects/${projectId}/storyProposals/${parent.id}`).get();
+    expect(storedParent.get("state")).toBe("accepted");
+    expect(storedParent.get("createdAt")).toBe(30);
+    const project = await adminDb.doc(`projects/${projectId}`).get();
+    expect(project.get("currentProposalId")).toBe(current.id);
+    expect(project.get("acceptedProposalId")).toBe(parent.id);
+  });
+
   it("rejects a proposal whose id or version does not match its job", async () => {
     const { projectId } = await seedProject();
     const draft = proposal(projectId, uniqueId("proposal"), 2);
