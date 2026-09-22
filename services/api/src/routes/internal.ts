@@ -1,6 +1,7 @@
 import { Router, type RequestHandler } from "express";
 import type { Firestore } from "firebase-admin/firestore";
 import type { IngestTask } from "../ingest/ingestAsset.js";
+import type { UnderstandTask } from "../understand/understandAsset.js";
 import { dispatchDue } from "../outbox/dispatcher.js";
 import type { TaskQueue } from "../queue/taskQueue.js";
 
@@ -10,6 +11,7 @@ export function internalRouter(deps: {
   now?: () => number;
   auth: RequestHandler;
   ingest: (task: IngestTask) => Promise<unknown>;
+  understand: (task: UnderstandTask) => Promise<unknown>;
   cluster: (projectId: string) => Promise<unknown>;
 }): Router {
   const now = deps.now ?? Date.now;
@@ -37,6 +39,23 @@ export function internalRouter(deps: {
     } catch (error) {
       console.error("ingest task failed", workKey, error);
       res.status(500).json({ error: "ingest_failed" });
+    }
+  });
+  router.post("/tasks/understand", deps.auth, async (req, res) => {
+    const { projectId, subjectKind, subjectId, generation, workKey } = req.body ?? {};
+    if (![projectId, subjectKind, subjectId, generation, workKey].every((v) => typeof v === "string") || subjectKind !== "asset") {
+      res.status(400).json({ error: "invalid_task" });
+      return;
+    }
+    try {
+      const raw = req.header("x-cloudtasks-taskretrycount")?.trim();
+      const attempt = raw !== undefined && /^\d+$/.test(raw) ? Number(raw) : 0;
+      const result = await deps.understand({ projectId, assetId: subjectId, generation, attempt });
+      console.log("understand", workKey, result);
+      res.sendStatus(204);
+    } catch (error) {
+      console.error("understand task failed", workKey, error);
+      res.status(500).json({ error: "understand_failed" });
     }
   });
   router.post("/tasks/cluster", deps.auth, async (req, res) => {

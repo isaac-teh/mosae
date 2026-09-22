@@ -14,17 +14,21 @@ vi.mock("../store/projectStore.js", async () => {
     addEntries: vi.fn(),
     closeSession: vi.fn(),
     recordClientOutcome: vi.fn(),
+    getOwnedProject: vi.fn(),
   };
 });
 
+vi.mock("../store/understandStore.js", () => ({ loadSearchableShots: vi.fn() }));
+
 const store = await import("../store/projectStore.js");
+const understandStore = await import("../store/understandStore.js");
 const { projectsRouter } = await import("./projects.js");
 const db = {} as Firestore;
 const fakeAuth: express.RequestHandler = (_req, res, next) => {
   res.locals.userId = "user-1";
   next();
 };
-function buildApp(options: { settle?: (projectId: string) => Promise<void>; sleep?: (ms: number) => Promise<void>; closeFails?: boolean } = {}) {
+function buildApp(options: { settle?: (projectId: string) => Promise<void>; sleep?: (ms: number) => Promise<void>; closeFails?: boolean; embedQuery?: (text: string) => Promise<number[]> } = {}) {
   if (options.closeFails) {
     vi.mocked(store.closeSession).mockRejectedValue(new store.StoreError("not_found"));
   }
@@ -32,7 +36,7 @@ function buildApp(options: { settle?: (projectId: string) => Promise<void>; slee
   app.use(express.json());
   app.use(
     "/api/projects",
-    projectsRouter({ db, now: () => 42, auth: fakeAuth, settle: options.settle, sleep: options.sleep }),
+    projectsRouter({ db, now: () => 42, auth: fakeAuth, settle: options.settle, sleep: options.sleep, embedQuery: options.embedQuery }),
   );
   return app;
 }
@@ -204,5 +208,25 @@ describe("projects routes", () => {
     const res = await request(app).post("/api/projects/p1/upload-sessions/missing/close");
     expect(res.status).toBe(404);
     expect(settle).not.toHaveBeenCalled();
+  });
+
+  it("returns search results only for an owned project", async () => {
+    vi.mocked(store.getOwnedProject).mockResolvedValue({ id: "p1", userId: "user-1", mode: "memory", title: null, status: "ready", createdAt: 1 });
+    vi.mocked(understandStore.loadSearchableShots).mockResolvedValue([{ id: "s1", assetId: "a1", embedding: [1, 0] }, { id: "s2", assetId: "a2", embedding: [0, 1] }]);
+    const embedQuery = vi.fn().mockResolvedValue([1, 0]);
+    const res = await request(buildApp({ embedQuery })).get("/api/projects/p1/shots/search?q=beach");
+    expect(res.status).toBe(200);
+    expect(res.body.results[0]).toMatchObject({ id: "s1", assetId: "a1" });
+  });
+
+  it("rejects an empty query before ownership lookup", async () => {
+    const res = await request(buildApp({ embedQuery: async () => [1, 0] })).get("/api/projects/p1/shots/search?q=");
+    expect(res.status).toBe(400);
+    expect(store.getOwnedProject).not.toHaveBeenCalled();
+  });
+
+  it("does not expose search when no embedding dependency is configured", async () => {
+    const res = await request(buildApp()).get("/api/projects/p1/shots/search?q=beach");
+    expect(res.status).toBe(503);
   });
 });

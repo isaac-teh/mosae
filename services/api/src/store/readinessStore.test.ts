@@ -19,7 +19,7 @@ const asset = (projectId: string, assetId: string) => adminDb.collection(`projec
 const entry = (projectId: string, sessionId: string, assetId: string) =>
   adminDb.doc(`projects/${projectId}/uploadSessions/${sessionId}/entries/${assetId}`);
 
-async function finalizeAndIngest(s: Awaited<ReturnType<typeof seed>>, assetId: string, status: "ingested" | "failed" | "uploaded") {
+async function finalizeAndIngest(s: Awaited<ReturnType<typeof seed>>, assetId: string, status: "understood" | "failed" | "uploaded") {
   await entry(s.projectId, s.sessionId, assetId).update({ outcome: "finalized", generation: "1" });
   await asset(s.projectId, assetId).set({ id: assetId, status });
 }
@@ -27,7 +27,7 @@ async function finalizeAndIngest(s: Awaited<ReturnType<typeof seed>>, assetId: s
 describe("gatherFacts (emulator)", () => {
   it("counts sessions, pending entries and asset states", async () => {
     const s = await seed(3);
-    await finalizeAndIngest(s, s.assetIds[0], "ingested");
+    await finalizeAndIngest(s, s.assetIds[0], "understood");
     await finalizeAndIngest(s, s.assetIds[1], "failed");
     const facts = await gatherFacts(adminDb, s.projectId);
     expect(facts).toEqual({ sessions: 1, openSessions: 1, pendingEntries: 1, assets: 2, ingested: 1, failed: 1 });
@@ -37,15 +37,15 @@ describe("gatherFacts (emulator)", () => {
 describe("settleProject (emulator)", () => {
   it("does not settle while the session is open", async () => {
     const s = await seed(2);
-    await finalizeAndIngest(s, s.assetIds[0], "ingested");
-    await finalizeAndIngest(s, s.assetIds[1], "ingested");
+    await finalizeAndIngest(s, s.assetIds[0], "understood");
+    await finalizeAndIngest(s, s.assetIds[1], "understood");
     const result = await settleProject(adminDb, s.projectId, 5);
     expect(result).toMatchObject({ settled: false, enqueued: false, outcome: null });
   });
 
   it("does not settle while an asset is still uploaded but not ingested", async () => {
     const s = await seed(2);
-    await finalizeAndIngest(s, s.assetIds[0], "ingested");
+    await finalizeAndIngest(s, s.assetIds[0], "understood");
     await finalizeAndIngest(s, s.assetIds[1], "uploaded");
     await closeSession(adminDb, { userId: s.userId, projectId: s.projectId, sessionId: s.sessionId });
     expect((await settleProject(adminDb, s.projectId, 5)).settled).toBe(false);
@@ -53,8 +53,8 @@ describe("settleProject (emulator)", () => {
 
   it("settles a closed session whose assets all ingested, and enqueues one cluster task", async () => {
     const s = await seed(2);
-    await finalizeAndIngest(s, s.assetIds[0], "ingested");
-    await finalizeAndIngest(s, s.assetIds[1], "ingested");
+    await finalizeAndIngest(s, s.assetIds[0], "understood");
+    await finalizeAndIngest(s, s.assetIds[1], "understood");
     await closeSession(adminDb, { userId: s.userId, projectId: s.projectId, sessionId: s.sessionId });
 
     const result = await settleProject(adminDb, s.projectId, 5);
@@ -67,7 +67,7 @@ describe("settleProject (emulator)", () => {
 
   it("is idempotent: a second settle reports settled but enqueues nothing", async () => {
     const s = await seed(1);
-    await finalizeAndIngest(s, s.assetIds[0], "ingested");
+    await finalizeAndIngest(s, s.assetIds[0], "understood");
     await closeSession(adminDb, { userId: s.userId, projectId: s.projectId, sessionId: s.sessionId });
     expect((await settleProject(adminDb, s.projectId, 5)).enqueued).toBe(true);
     const again = await settleProject(adminDb, s.projectId, 6);
@@ -77,7 +77,7 @@ describe("settleProject (emulator)", () => {
 
   it("reports ready_with_errors when one asset failed", async () => {
     const s = await seed(2);
-    await finalizeAndIngest(s, s.assetIds[0], "ingested");
+    await finalizeAndIngest(s, s.assetIds[0], "understood");
     await finalizeAndIngest(s, s.assetIds[1], "failed");
     await closeSession(adminDb, { userId: s.userId, projectId: s.projectId, sessionId: s.sessionId });
     expect(await settleProject(adminDb, s.projectId, 5)).toMatchObject({ settled: true, outcome: "ready_with_errors" });

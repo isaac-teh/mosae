@@ -22,6 +22,7 @@ export function createIngest(config: {
   db: Firestore;
   bucketName: string;
   settle: (projectId: string) => Promise<void>;
+  dispatchDue: () => Promise<void>;
 }): (task: IngestTask) => Promise<IngestResult> {
   return (task) => {
     const deps: IngestDeps = {
@@ -35,6 +36,7 @@ export function createIngest(config: {
       commitIngested: (commit) => commitIngested(config.db, commit),
       commitFailed: (input) => commitFailed(config.db, input),
       settle: config.settle,
+      dispatchDue: config.dispatchDue,
       makeWorkDir: () => mkdtemp(path.join(tmpdir(), "mosae-ingest-")),
       removeWorkDir: (dir) => rm(dir, { recursive: true, force: true }),
       maxBytes: MAX_INGEST_BYTES,

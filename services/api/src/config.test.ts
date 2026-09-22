@@ -6,7 +6,11 @@ const tasks = { GCP_PROJECT_ID: "p", TASKS_LOCATION: "l", TASKS_QUEUE: "q", TASK
 
 describe("loadConfig", () => {
   it("allows local development without Cloud Tasks", () => {
-    expect(loadConfig(base)).toMatchObject({ production: false, tasks: null, invokerEmails: [], port: 8080 });
+    expect(loadConfig(base)).toMatchObject({ production: false, tasks: null, invokerEmails: [], port: 8080, geminiApiKey: "" });
+  });
+
+  it("passes through GEMINI_API_KEY without requiring it", () => {
+    expect(loadConfig({ ...base, GEMINI_API_KEY: "test-key" }).geminiApiKey).toBe("test-key");
   });
 
   it("requires bucket and service URL everywhere", () => {

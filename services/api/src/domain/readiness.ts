@@ -1,10 +1,9 @@
 import type { AssetStatus } from "./assetStatus.js";
 
 /**
- * The asset status that counts as finished for the current pipeline. Phase 1
- * ends at ingest; phase 2 adds understanding and changes this to "understood".
+ * A project settles once every asset reaches this status or fails.
  */
-export const READY_STATUS: AssetStatus = "ingested";
+export const READY_STATUS: AssetStatus = "understood";
 
 /** What Firestore says about a project right now, gathered by readinessStore. */
 export type ProjectFacts = {

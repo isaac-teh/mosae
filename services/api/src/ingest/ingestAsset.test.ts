@@ -20,6 +20,7 @@ function setup(asset: Asset | null = baseAsset, overrides: Partial<IngestDeps> =
     loadAsset: vi.fn().mockResolvedValue(asset),
     objects: {
       download: vi.fn(async () => { calls.push("download"); }),
+      downloadCurrent: vi.fn(),
       upload: vi.fn(async ({ path }: { path: string }) => { calls.push(`upload:${path}`); }),
     },
     probe: vi.fn().mockResolvedValue(photoFacts),
@@ -30,6 +31,7 @@ function setup(asset: Asset | null = baseAsset, overrides: Partial<IngestDeps> =
     commitIngested: vi.fn(async () => { calls.push("commit"); return "ingested" as const; }),
     commitFailed: vi.fn().mockResolvedValue("failed"),
     settle: vi.fn().mockResolvedValue(undefined),
+    dispatchDue: vi.fn().mockResolvedValue(undefined),
     makeWorkDir: vi.fn().mockResolvedValue("/w"),
     removeWorkDir: vi.fn().mockResolvedValue(undefined),
     maxBytes: 1000,
@@ -104,7 +106,7 @@ describe("ingestAsset", () => {
 
   it("rethrows a transient error so the queue retries, and still cleans up", async () => {
     const { deps } = setup(baseAsset, {
-      objects: { download: vi.fn().mockRejectedValue(new Error("network reset")), upload: vi.fn() },
+      objects: { download: vi.fn().mockRejectedValue(new Error("network reset")), downloadCurrent: vi.fn(), upload: vi.fn() },
     });
     await expect(ingestAsset(deps, task)).rejects.toThrow("network reset");
     expect(deps.commitFailed).not.toHaveBeenCalled();
@@ -114,7 +116,7 @@ describe("ingestAsset", () => {
 
   it("fails an otherwise transient error after the fifth attempt", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const { deps } = setup(baseAsset, { objects: { download: vi.fn().mockRejectedValue(new Error("network reset")), upload: vi.fn() } });
+    const { deps } = setup(baseAsset, { objects: { download: vi.fn().mockRejectedValue(new Error("network reset")), downloadCurrent: vi.fn(), upload: vi.fn() } });
     try {
       await expect(ingestAsset(deps, { ...task, attempt: 4 })).resolves.toBe("failed");
       expect(deps.commitFailed).toHaveBeenCalledWith(expect.objectContaining({ reason: "retries_exhausted" }));

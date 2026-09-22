@@ -13,9 +13,11 @@ const db = {} as Firestore;
 const pass: express.RequestHandler = (_req, _res, next) => next();
 function buildApp({
   ingest = vi.fn().mockResolvedValue("ingested"),
+  understand = vi.fn().mockResolvedValue("understood"),
   cluster = vi.fn().mockResolvedValue({ status: "ready" }),
 }: {
   ingest?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
+  understand?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
   cluster?: (projectId: string) => Promise<unknown>;
 } = {}) {
   const app = express();
@@ -28,6 +30,7 @@ function buildApp({
       now: () => 9,
       auth: pass,
       ingest,
+      understand,
       cluster,
     }),
   );
@@ -49,6 +52,27 @@ describe("internal routes", () => {
     const res = await request(buildApp({ ingest })).post("/tasks/ingest").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
     expect(res.status).toBe(204);
     expect(ingest).toHaveBeenCalledWith({ projectId: "p1", assetId: "a1", generation: "7", attempt: 0 });
+  });
+
+  it("runs understand for a well-formed asset task and acknowledges it", async () => {
+    const understand = vi.fn().mockResolvedValue("understood");
+    const res = await request(buildApp({ understand })).post("/tasks/understand").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(204);
+    expect(understand).toHaveBeenCalledWith({ projectId: "p1", assetId: "a1", generation: "7", attempt: 0 });
+  });
+
+  it("rejects malformed understand tasks without invoking the worker", async () => {
+    const understand = vi.fn();
+    const res = await request(buildApp({ understand })).post("/tasks/understand").send({ projectId: "p1", subjectKind: "project", subjectId: "p1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(400);
+    expect(understand).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 from understand so Cloud Tasks retries transient failures", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await request(buildApp({ understand: vi.fn().mockRejectedValue(new Error("network reset")) })).post("/tasks/understand").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(500);
+    error.mockRestore();
   });
 
   it.each([

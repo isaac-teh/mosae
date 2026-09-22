@@ -68,7 +68,7 @@ describe("ingest flow (emulators)", () => {
     const settle = async (projectId: string) => {
       await settleProject(adminDb, projectId, Date.now());
     };
-    const ingest = createIngest({ db: adminDb, bucketName: BUCKET, settle });
+    const ingest = createIngest({ db: adminDb, bucketName: BUCKET, settle, dispatchDue: async () => undefined });
     const results: Record<string, string> = {};
     for (const item of registered) {
       results[item.name] = await ingest({ projectId: project.id, assetId: item.assetId, generation: item.generation });
@@ -91,20 +91,14 @@ describe("ingest flow (emulators)", () => {
     const clipShots = shots.docs.filter((d) => d.get("assetId") === registered.find((r) => r.name === "clip.mp4")!.assetId);
     expect(clipShots).toHaveLength(3);
 
-    const tasks = await adminDb.collection(`projects/${project.id}/taskOutbox`).where("stage", "==", "cluster").get();
-    expect(tasks.size).toBe(1);
+    const tasks = await adminDb.collection(`projects/${project.id}/taskOutbox`).where("stage", "==", "understand").get();
+    expect(tasks.size).toBe(4);
 
     const again = await ingest({ projectId: project.id, assetId: registered[0].assetId, generation: registered[0].generation });
     expect(again).toBe("skipped");
     expect((await adminDb.collection(`projects/${project.id}/shots`).get()).size).toBe(6);
 
-    expect(await runProjectPass(adminDb, project.id, Date.now())).toEqual({ status: "ready_with_errors", events: 3, duplicates: 1 });
-    expect((await adminDb.doc(`projects/${project.id}`).get()).data()).toMatchObject({
-      status: "ready_with_errors", eventCount: 3, dateRange: { start: "2026-05-03", end: "2026-05-04" },
-    });
-    const linked = (await adminDb.collection(`projects/${project.id}/assets`).get()).docs.filter((d) => d.get("dupOf"));
-    expect(linked).toHaveLength(1);
-    expect((await asset("clip.mp4")).eventId).toBe("undated");
+    expect(await runProjectPass(adminDb, project.id, Date.now())).toEqual({ status: "skipped" });
 
     await media.cleanup();
   });
@@ -136,7 +130,7 @@ describe("ingest flow (emulators)", () => {
       if (calls === 1) throw new Error("firestore unavailable");
       await settleProject(adminDb, pid, Date.now());
     };
-    const ingest = createIngest({ db: adminDb, bucketName: BUCKET, settle });
+    const ingest = createIngest({ db: adminDb, bucketName: BUCKET, settle, dispatchDue: async () => undefined });
     const task = { projectId: project.id, assetId, generation };
 
     await expect(ingest(task)).rejects.toThrow("firestore unavailable");
@@ -146,8 +140,8 @@ describe("ingest flow (emulators)", () => {
 
     await expect(ingest(task)).resolves.toBe("skipped");
     expect(calls).toBe(2);
-    expect((await adminDb.collection(`projects/${project.id}/taskOutbox`).where("stage", "==", "cluster").get()).size).toBe(1);
-    await expect(runProjectPass(adminDb, project.id, Date.now())).resolves.toEqual({ status: "ready", events: 1, duplicates: 0 });
+    expect((await adminDb.collection(`projects/${project.id}/taskOutbox`).where("stage", "==", "understand").get()).size).toBe(1);
+    await expect(runProjectPass(adminDb, project.id, Date.now())).resolves.toEqual({ status: "skipped" });
     await media.cleanup();
   });
 });

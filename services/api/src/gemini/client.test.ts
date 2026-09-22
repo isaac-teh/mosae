@@ -43,6 +43,14 @@ describe("generateStructured", () => {
     expect(usage[0].error).toContain("schema");
   });
 
+  it("keeps file data in an array prompt during schema repair", async () => {
+    const call = vi.fn().mockResolvedValueOnce(reply('{"ok":"yes"}')).mockResolvedValueOnce(reply('{"ok":true}'));
+    const { deps: d } = deps(call);
+    const contents = [{ text: "describe" }, { fileData: { fileUri: "gs://video", mimeType: "video/mp4" } }];
+    await generateStructured({ ...base, contents }, d);
+    expect(call.mock.calls[1][0].contents).toEqual(expect.arrayContaining([{ fileData: { fileUri: "gs://video", mimeType: "video/mp4" } }]));
+  });
+
   it("gives up after one repair rather than looping on a model that cannot comply", async () => {
     const call = vi.fn().mockResolvedValue(reply('{"ok":"yes"}'));
     const { deps: d } = deps(call);

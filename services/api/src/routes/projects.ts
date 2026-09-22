@@ -9,9 +9,12 @@ import {
   createProject,
   openSession,
   recordClientOutcome,
+  getOwnedProject,
   StoreError,
   type NewEntryInput,
 } from "../store/projectStore.js";
+import { loadSearchableShots } from "../store/understandStore.js";
+import { rankShots } from "../understand/search.js";
 
 const STATUS: Record<StoreError["code"], number> = {
   not_found: 404,
@@ -70,6 +73,7 @@ export function projectsRouter(deps: {
   auth?: RequestHandler;
   settle?: (projectId: string) => Promise<void>;
   sleep?: (ms: number) => Promise<void>;
+  embedQuery?: (text: string) => Promise<number[]>;
 }): Router {
   const { db } = deps;
   const now = deps.now ?? Date.now;
@@ -104,6 +108,30 @@ export function projectsRouter(deps: {
       next();
     });
   }
+
+  router.get("/:projectId/shots/search", async (req, res) => {
+    if (!deps.embedQuery) {
+      res.status(503).json({ error: "search_unavailable" });
+      return;
+    }
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (!q) {
+      res.status(400).json({ error: "invalid_query" });
+      return;
+    }
+    try {
+      const owned = await getOwnedProject(db, res.locals.userId, req.params.projectId);
+      if (!owned) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      const [embedding, shots] = await Promise.all([deps.embedQuery(q), loadSearchableShots(db, req.params.projectId)]);
+      res.json({ results: rankShots(embedding, shots, 20) });
+    } catch (error) {
+      console.error("shot search failed", req.params.projectId, error);
+      res.status(500).json({ error: "internal" });
+    }
+  });
 
   router.post("/", async (req, res) => {
     const mode = req.body?.mode;

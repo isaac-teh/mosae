@@ -5,6 +5,7 @@ type Bucket = ReturnType<ReturnType<typeof getStorage>["bucket"]>;
 
 export interface ObjectStore {
   download(input: { path: string; generation: string; destination: string }): Promise<void>;
+  downloadCurrent(input: { path: string; destination: string }): Promise<void>;
   upload(input: { source: string; path: string; contentType: string }): Promise<void>;
 }
 
@@ -18,6 +19,14 @@ export function firebaseObjectStore(bucket: Bucket): ObjectStore {
     async download({ path, generation, destination }) {
       try {
         await bucket.file(path, { generation }).download({ destination });
+      } catch (error) {
+        if ((error as { code?: number }).code === 404) throw new PermanentIngestError("source_missing");
+        throw error;
+      }
+    },
+    async downloadCurrent({ path, destination }) {
+      try {
+        await bucket.file(path).download({ destination });
       } catch (error) {
         if ((error as { code?: number }).code === 404) throw new PermanentIngestError("source_missing");
         throw error;

@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { canTransition } from "../domain/assetStatus.js";
 import { PIPELINE_VERSION } from "../domain/ids.js";
+import { newOutboxTask } from "../domain/outbox.js";
 import type { Derivatives, MediaFacts, MediaKind, QualityFacts } from "../domain/media.js";
 import type { ShotRange } from "../ingest/shots.js";
 import type { Asset } from "./finalizeStore.js";
@@ -62,9 +63,11 @@ export async function commitIngested(db: Firestore, commit: IngestCommit): Promi
   const ref = assetRef(db, commit.projectId, commit.assetId);
   const shotsCollection = db.collection("projects").doc(commit.projectId).collection("shots");
   const records = shotRecords({ assetId: commit.assetId, generation: commit.generation, media: commit.media, ranges: commit.ranges });
+  const task = newOutboxTask({ projectId: commit.projectId, subjectKind: "asset", subjectId: commit.assetId, generation: commit.generation, stage: "understand", now: commit.now });
+  const taskRef = db.collection("projects").doc(commit.projectId).collection("taskOutbox").doc(task.id);
 
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
+    const [snap, taskSnap] = await Promise.all([tx.get(ref), tx.get(taskRef)]);
     if (!snap.exists) return "skipped";
     const asset = snap.data() as Asset;
     if (asset.generation !== commit.generation || !canTransition(asset.status, "ingested")) return "skipped";
@@ -80,6 +83,7 @@ export async function commitIngested(db: Firestore, commit: IngestCommit): Promi
       failureReason: null,
     });
     for (const record of records) tx.set(shotsCollection.doc(record.id), record);
+    if (!taskSnap.exists) tx.create(taskRef, task);
     return "ingested";
   });
 }

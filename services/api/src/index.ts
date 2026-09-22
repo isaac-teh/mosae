@@ -11,23 +11,55 @@ import {
   InMemoryTaskQueue,
   type TaskQueue,
 } from "./queue/taskQueue.js";
+import { DevTaskQueue } from "./queue/devTaskQueue.js";
 import { dispatchDue } from "./outbox/dispatcher.js";
 import { apiCors } from "./http/cors.js";
 import { settleProject } from "./store/readinessStore.js";
+import { startStoragePoller } from "./store/storagePoller.js";
 import { createIngest } from "./ingest/wire.js";
+import { createUnderstand } from "./understand/wire.js";
 import { runProjectPass } from "./store/clusterStore.js";
+import { createGenAI, embedContentVia } from "./gemini/wire.js";
+import { embedText } from "./understand/embed.js";
+import { getStorage } from "firebase-admin/storage";
+import { getAdminApp } from "./firebase/admin.js";
 
 const config = loadConfig();
-const queue: TaskQueue = config.tasks
-  ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.serviceUrl })
-  : new InMemoryTaskQueue();
+
+// The dev task runner and storage poller stand in for Cloud Tasks and the
+// Storage emulator's missing finalize events. Both signals must agree this
+// is a local emulator run: no Cloud Tasks configured, not production, and
+// both emulator hosts set (so a local API run against a real project never
+// starts polling a real bucket).
+const useDevRunner =
+  !config.production &&
+  !config.tasks &&
+  !!process.env.FIRESTORE_EMULATOR_HOST &&
+  !!process.env.FIREBASE_STORAGE_EMULATOR_HOST;
+
 const settle = async (projectId: string): Promise<void> => {
   const result = await settleProject(adminDb, projectId, Date.now());
   if (result.enqueued) await dispatchDue(adminDb, queue, Date.now());
 };
-if (!config.tasks)
+const ingest = createIngest({ db: adminDb, bucketName: config.storageBucket, settle, dispatchDue: () => dispatchDue(adminDb, queue, Date.now()).then(() => undefined) });
+const understand = createUnderstand({ db: adminDb, bucketName: config.storageBucket, geminiApiKey: config.geminiApiKey, settle });
+const geminiClient = createGenAI(config.geminiApiKey);
+const embedQuery = (text: string) => embedText(embedContentVia(geminiClient), text);
+const cluster = (projectId: string): Promise<unknown> => runProjectPass(adminDb, projectId, Date.now());
+
+const queue: TaskQueue = config.tasks
+  ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.serviceUrl })
+  : useDevRunner
+    ? new DevTaskQueue({ ingest, understand, cluster })
+    : new InMemoryTaskQueue();
+
+if (!config.tasks && !useDevRunner)
   console.warn(
     "Cloud Tasks not configured; using in-memory task queue (local development only)",
+  );
+if (useDevRunner)
+  console.warn(
+    "Cloud Tasks not configured; running tasks in-process and polling the Storage emulator (local development only)",
   );
 const serviceAuth = requireServiceCaller({
   audience: config.serviceUrl,
@@ -40,7 +72,7 @@ app.use("/api", express.json({ limit: "2mb" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(
   "/api/projects",
-  projectsRouter({ db: adminDb, settle }),
+  projectsRouter({ db: adminDb, settle, embedQuery }),
 );
 app.use(
   "/events",
@@ -59,10 +91,30 @@ app.use(
     db: adminDb,
     queue,
     auth: serviceAuth,
-    ingest: createIngest({ db: adminDb, bucketName: config.storageBucket, settle }),
-    cluster: (projectId) => runProjectPass(adminDb, projectId, Date.now()),
+    ingest,
+    understand,
+    cluster,
   }),
 );
+
+if (useDevRunner) {
+  startStoragePoller({
+    db: adminDb,
+    bucketName: config.storageBucket,
+    listUploads: async () => {
+      const [files] = await getStorage(getAdminApp()).bucket(config.storageBucket).getFiles({ prefix: "uploads/" });
+      return files.map((file) => ({
+        name: file.name,
+        generation: String(file.metadata.generation),
+        sizeBytes: Number(file.metadata.size),
+        contentType: file.metadata.contentType ?? "application/octet-stream",
+      }));
+    },
+    onAccepted: async () => {
+      await dispatchDue(adminDb, queue, Date.now());
+    },
+  });
+}
 
 app.listen(config.port, () => {
   console.log(`Mosaé API listening on port ${config.port}`);

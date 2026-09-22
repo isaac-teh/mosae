@@ -36,7 +36,7 @@ describe("readinessOf", () => {
     expect(readinessOf({ sessions: 0, openSessions: 0, pendingEntries: 0, assets: 0, ingested: 0, failed: 0 })).toEqual({ settled: false });
   });
 
-  it("names ingested as the ready status for this phase", () => {
-    expect(READY_STATUS).toBe("ingested");
+  it("names understood as the ready status for this phase", () => {
+    expect(READY_STATUS).toBe("understood");
   });
 });

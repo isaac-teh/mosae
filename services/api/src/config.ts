@@ -5,6 +5,7 @@ export type Config = {
   serviceUrl: string;
   invokerEmails: string[];
   allowedOrigins: string[];
+  geminiApiKey: string;
   tasks: { project: string; location: string; queue: string; invokerServiceAccount: string } | null;
 };
 
@@ -28,6 +29,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: Number(env.PORT || 8080),
     production,
     storageBucket: required(env, "FIREBASE_STORAGE_BUCKET"),
+    geminiApiKey: env.GEMINI_API_KEY ?? "",
     serviceUrl: required(env, "SERVICE_URL"),
     invokerEmails: invokers.split(",").map((s) => s.trim()).filter(Boolean),
     allowedOrigins,

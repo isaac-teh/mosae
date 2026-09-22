@@ -7,7 +7,7 @@ import { closeSession, createProject, openSession } from "./projectStore.js";
 const media = (localTime: string | null): MediaFacts => ({ kind: "photo", width: 4, height: 3, durationSec: null, localTime, timeSource: localTime ? "exif" : "none", gps: null, camera: null });
 const quality = (sharpness: number, dHash: string): QualityFacts => ({ sharpness, exposure: 120, blurry: false, dHash });
 
-type Spec = { localTime: string | null; status?: "ingested" | "failed"; sharpness?: number; dHash?: string };
+type Spec = { localTime: string | null; status?: "understood" | "failed"; sharpness?: number; dHash?: string };
 
 async function seedProject(specs: Spec[], options: { closeSession?: boolean } = {}) {
   const userId = `u-${crypto.randomUUID()}`;
@@ -23,7 +23,7 @@ async function seedProject(specs: Spec[], options: { closeSession?: boolean } = 
     const assetId = entries[i].assetId;
     await adminDb.doc(`projects/${project.id}/uploadSessions/${session.id}/entries/${assetId}`).update({ outcome: "finalized", generation: "1" });
     await adminDb.doc(`projects/${project.id}/assets/${assetId}`).set({
-      id: assetId, projectId: project.id, userId, status: spec.status ?? "ingested", generation: "1", createdAt: 100 + i,
+      id: assetId, projectId: project.id, userId, status: spec.status ?? "understood", generation: "1", createdAt: 100 + i,
       ...(spec.status === "failed" ? {} : { media: media(spec.localTime), quality: quality(spec.sharpness ?? 50, spec.dHash ?? "0000000000000000") }),
     });
   }

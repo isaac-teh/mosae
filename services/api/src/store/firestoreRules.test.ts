@@ -65,6 +65,7 @@ describe("firestore.rules (emulator)", () => {
     const db = env.authenticatedContext("alice").firestore();
     await assertFails(getDoc(doc(db, "projects/p-alice/uploadSessions/u1")));
     await assertFails(getDoc(doc(db, "projects/p-alice/taskOutbox/t1")));
+    await assertFails(getDoc(doc(db, "geminiUsage/u1")));
   });
 
   it("lets an owner read their events and denies everyone else", async () => {

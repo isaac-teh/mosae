@@ -4,6 +4,7 @@ import { applyEntryEvent, type ManifestEntry } from "../domain/uploadSession.js"
 import { canTransition, type AssetStatus } from "../domain/assetStatus.js";
 import { newOutboxTask } from "../domain/outbox.js";
 import type { Derivatives, MediaFacts, QualityFacts } from "../domain/media.js";
+import type { TranscriptLine } from "../domain/understanding.js";
 
 export type FinalizeInput = {
   bucket: string;
@@ -42,6 +43,8 @@ export type Asset = {
   quality?: QualityFacts;
   derivatives?: Derivatives;
   ingestedAt?: number;
+  transcript?: TranscriptLine[] | null;
+  understoodAt?: number;
   /** Set by the project pass. */
   eventId?: string | null;
   dupOf?: string | null;

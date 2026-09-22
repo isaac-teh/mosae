@@ -22,6 +22,7 @@ export type IngestDeps = {
   commitIngested(commit: IngestCommit): Promise<"ingested" | "skipped">;
   commitFailed(input: { projectId: string; assetId: string; generation: string; reason: string; now: number }): Promise<"failed" | "skipped">;
   settle(projectId: string): Promise<void>;
+  dispatchDue(): Promise<void>;
   makeWorkDir(): Promise<string>;
   removeWorkDir(dir: string): Promise<void>;
   maxBytes: number;
@@ -80,6 +81,7 @@ export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<I
   if (!asset || asset.generation !== task.generation) return "skipped";
   if (asset.status !== "uploaded") {
     await deps.settle(task.projectId);
+    await deps.dispatchDue();
     return "skipped";
   }
 
@@ -104,5 +106,6 @@ export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<I
     await deps.removeWorkDir(workDir);
   }
   if (result === "ingested" || result === "failed") await deps.settle(asset.projectId);
+  if (result === "ingested") await deps.dispatchDue();
   return result;
 }

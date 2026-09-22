@@ -81,8 +81,11 @@ export async function generateStructured<T>(options: GenerateOptions<T>, deps: G
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     const started = Date.now();
     let schemaFailure = false;
+    const repair = `Your previous response did not match the required schema: ${diagnostics}. Return only JSON matching the schema.`;
     const contents = diagnostics
-      ? `${String(options.contents)}\n\nYour previous response did not match the required schema: ${diagnostics}. Return only JSON matching the schema.`
+      ? Array.isArray(options.contents)
+        ? [...options.contents, { text: repair }]
+        : `${String(options.contents)}\n\n${repair}`
       : options.contents;
 
     try {
