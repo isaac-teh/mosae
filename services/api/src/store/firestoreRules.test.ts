@@ -22,6 +22,7 @@ beforeAll(async () => {
     await setDoc(doc(db, "projects/p-alice/events/e001"), { label: "Day 1, morning" });
     await setDoc(doc(db, "projects/p-alice/assets/a1"), { status: "understood" });
     await setDoc(doc(db, "projects/p-alice/shots/s1"), { assetId: "a1" });
+    await setDoc(doc(db, "projects/p-alice/storyIntents/i1"), { text: "A family story" });
     await setDoc(doc(db, "projects/p-alice/storyProposals/pr1"), { state: "draft" });
     await setDoc(doc(db, "projects/p-alice/generations/g1"), { status: "rendering" });
     await setDoc(doc(db, "projects/p-alice/jobs/j1"), { type: "plan", status: "running" });
@@ -40,6 +41,7 @@ describe("firestore.rules (emulator)", () => {
     await assertSucceeds(getDoc(doc(db, "projects/p-alice")));
     await assertSucceeds(getDoc(doc(db, "projects/p-alice/assets/a1")));
     await assertSucceeds(getDoc(doc(db, "projects/p-alice/shots/s1")));
+    await assertSucceeds(getDoc(doc(db, "projects/p-alice/storyIntents/i1")));
     await assertSucceeds(getDoc(doc(db, "projects/p-alice/storyProposals/pr1")));
     await assertSucceeds(getDoc(doc(db, "projects/p-alice/generations/g1")));
     await assertSucceeds(getDoc(doc(db, "projects/p-alice/jobs/j1")));
@@ -50,6 +52,7 @@ describe("firestore.rules (emulator)", () => {
     await assertFails(getDoc(doc(db, "projects/p-alice")));
     await assertFails(getDoc(doc(db, "projects/p-alice/assets/a1")));
     await assertFails(getDoc(doc(db, "projects/p-alice/shots/s1")));
+    await assertFails(getDoc(doc(db, "projects/p-alice/storyIntents/i1")));
     await assertFails(getDoc(doc(db, "projects/p-alice/storyProposals/pr1")));
     await assertFails(getDoc(doc(db, "projects/p-alice/generations/g1")));
     await assertFails(getDoc(doc(db, "projects/p-alice/jobs/j1")));
@@ -77,7 +80,9 @@ describe("firestore.rules (emulator)", () => {
   it("denies every client write, including the owner's", async () => {
     const db = env.authenticatedContext("alice").firestore();
     await assertFails(setDoc(doc(db, "projects/p-alice"), { userId: "alice", status: "ready" }));
+    await assertFails(setDoc(doc(db, "projects/p-alice/storyIntents/i2"), { text: "Changed by client" }));
     await assertFails(setDoc(doc(db, "projects/p-alice/storyProposals/pr1"), { state: "accepted" }));
+    await assertFails(setDoc(doc(db, "projects/p-alice/jobs/j2"), { type: "plan", status: "queued" }));
     await assertFails(setDoc(doc(db, "projects/p-bob"), { userId: "bob" }));
   });
 });

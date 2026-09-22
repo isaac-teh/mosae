@@ -22,10 +22,14 @@ service cloud.firestore {
       match /assets/{assetId} { allow read: if ownsParent(); allow write: if false; }
       match /events/{eventId} { allow read: if ownsParent(); allow write: if false; }
       match /shots/{shotId} { allow read: if ownsParent(); allow write: if false; }
+
+      // Directing records are listener-readable by the project owner, but every
+      // version and state transition is committed by the API.
       match /storyIntents/{intentId} { allow read: if ownsParent(); allow write: if false; }
       match /storyProposals/{proposalId} { allow read: if ownsParent(); allow write: if false; }
-      match /directionSettings/{settingsId} { allow read: if ownsParent(); allow write: if false; }
       match /jobs/{jobId} { allow read: if ownsParent(); allow write: if false; }
+
+      match /directionSettings/{settingsId} { allow read: if ownsParent(); allow write: if false; }
       match /generations/{generationId} { allow read: if ownsParent(); allow write: if false; }
 
       // Server-only: upload manifests and the durable task outbox.
