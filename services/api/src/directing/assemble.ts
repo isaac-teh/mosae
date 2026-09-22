@@ -25,6 +25,8 @@ export type ProposalAssemblyContext = {
   version: number;
   parentProposalId: string | null;
   constraints: ProposalConstraints;
+  /** Persisted parent moments used to translate carried constraint ids. */
+  parentProposal?: Pick<StoryProposal, "moments"> | null;
 };
 
 function momentId(proposalId: string, index: number): string {
@@ -75,14 +77,23 @@ export function assembleProposal(body: ProposalSubmission, context: ProposalAsse
   // Constraint inputs may arrive as catalog shot references on a first run;
   // persisted revisions already use minted moment ids. Accept both forms while
   // ensuring the contract only receives moment ids.
-  const constraintMomentId = (reference: string): string => {
+  const currentMomentIds = new Set(moments.map((moment) => moment.id));
+  const parentShotByMomentId = new Map(
+    (context.parentProposal?.moments ?? []).map((moment) => [moment.id, moment.shotId]),
+  );
+  const constraintMomentId = (reference: string): string | undefined => {
     const index = byShotId.get(reference);
-    return index === undefined ? reference : momentId(context.proposalId, index);
+    if (index !== undefined) return momentId(context.proposalId, index);
+    if (currentMomentIds.has(reference)) return reference;
+    const parentShotId = parentShotByMomentId.get(reference);
+    if (parentShotId === undefined) return undefined;
+    const currentIndex = byShotId.get(parentShotId);
+    return currentIndex === undefined ? undefined : momentId(context.proposalId, currentIndex);
   };
   const constraints = {
     ...context.constraints,
-    deselectedMomentIds: context.constraints.deselectedMomentIds.map(constraintMomentId),
-    mustIncludeMomentIds: context.constraints.mustIncludeMomentIds.map(constraintMomentId),
+    deselectedMomentIds: context.constraints.deselectedMomentIds.map(constraintMomentId).filter((id): id is string => id !== undefined),
+    mustIncludeMomentIds: context.constraints.mustIncludeMomentIds.map(constraintMomentId).filter((id): id is string => id !== undefined),
   };
 
   const candidate = {
