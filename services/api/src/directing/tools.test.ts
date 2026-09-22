@@ -108,6 +108,16 @@ describe("createPlanningTools", () => {
     await expect(tools.getShotDetails({ shotIds: ["local", "foreign"] })).rejects.toThrow(/foreign.*project-a/i);
   });
 
+  it("validates project scope before clamping detail results to 10", async () => {
+    const local = Array.from({ length: 10 }, (_, index) => shot(`local-${index}`));
+    const foreign = shot("foreign-eleventh", { projectId: "project-b" });
+    const { tools } = setup({ shots: [...local, foreign] });
+
+    await expect(tools.getShotDetails({
+      shotIds: [...local.map((item) => item.id), foreign.id],
+    })).rejects.toThrow(/foreign-eleventh.*project-a/i);
+  });
+
   it("clamps detail ids to 10 and never returns an excluded shot", async () => {
     const shots = Array.from({ length: 12 }, (_, index) => shot(`s${index}`));
     const { tools } = setup({ shots, excludedShotIds: ["s2"] });

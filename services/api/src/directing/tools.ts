@@ -100,14 +100,14 @@ export function createPlanningTools(deps: PlanningToolsDeps) {
     },
 
     async getShotDetails(input: { shotIds: string[] }): Promise<ShotDetails[]> {
-      const requested = input.shotIds.slice(0, DETAIL_MAX);
       const loaded = await deps.loadShots(deps.projectId);
       const local = new Map(loaded.filter((shot) => shot.projectId === deps.projectId).map((shot) => [shot.id, shot]));
       const foreign = new Set(loaded.filter((shot) => shot.projectId !== deps.projectId).map((shot) => shot.id));
-      const offences = requested.filter((id) => !local.has(id) || foreign.has(id));
+      const offences = input.shotIds.filter((id) => !local.has(id) || foreign.has(id));
       if (offences.length > 0) throw outsideProjectError("shot", offences, deps.projectId);
 
-      return requested
+      return input.shotIds
+        .slice(0, DETAIL_MAX)
         .filter((id) => !excluded.has(id))
         .map((id) => local.get(id)!)
         .filter((shot) => isEligible(shot, deps.projectId, excluded))
