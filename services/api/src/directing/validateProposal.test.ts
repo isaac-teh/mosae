@@ -3,25 +3,41 @@ import type { ProposalSubmission } from "./assemble.js";
 import type { WorkingSet, WorkingShot } from "./workingSet.js";
 import { validateProposal } from "./validateProposal.js";
 
-type ValidationShot = WorkingShot & {
-  sourceStartSec?: number | null;
-  sourceEndSec?: number | null;
-};
-
-const photo = (id: string): ValidationShot => ({
+const photo = (id: string): WorkingShot => ({
   id,
   assetStatus: "understood",
   durationSec: null,
-  analysis: null,
+  analysis: {
+    kind: "photo",
+    caption: id,
+    subjects: [],
+    setting: "park",
+    activities: [],
+    mood: "warm",
+    shotType: "wide",
+    aesthetics: 4,
+    keyMomentScore: 4,
+    tags: [],
+  },
 });
 
-const video = (id: string, sourceStartSec = 10, sourceEndSec = 20): ValidationShot => ({
+const video = (id: string, sourceStartSec = 10, sourceEndSec = 20): WorkingShot => ({
   id,
   assetStatus: "understood",
   durationSec: sourceEndSec - sourceStartSec,
   sourceStartSec,
   sourceEndSec,
-  analysis: null,
+  analysis: {
+    kind: "video",
+    description: id,
+    camera: "handheld",
+    role: "B_ROLL",
+    subjects: [],
+    emotion: "happy",
+    quality: 4,
+    usable: true,
+    reason: "clear",
+  },
 });
 
 const workingSet: WorkingSet = {
@@ -69,6 +85,20 @@ describe("validateProposal", () => {
 
     expect(diagnostics(validateProposal(proposal, workingSet, options))).toEqual(expect.arrayContaining([
       expect.stringMatching(/working_set_membership.*invented.*use only.*working set/i),
+    ]));
+  });
+
+  it("working_set_membership rejects an invented id referenced only by a chapter", () => {
+    const proposal: ProposalSubmission = {
+      ...validProposal,
+      chapters: [
+        { ...validProposal.chapters[0], momentIds: ["p1", "p2", "invented-in-chapter"] },
+        validProposal.chapters[1],
+      ],
+    };
+
+    expect(diagnostics(validateProposal(proposal, workingSet, options))).toEqual(expect.arrayContaining([
+      expect.stringMatching(/working_set_membership.*invented-in-chapter.*use only.*working set/i),
     ]));
   });
 
@@ -139,5 +169,35 @@ describe("validateProposal", () => {
     expect(diagnostics(validateProposal(proposal, workingSet, options))).toEqual(expect.arrayContaining([
       expect.stringMatching(/video_preview_bounds.*v1.*9.*18.*10.*20.*inside/i),
     ]));
+  });
+
+  it("uses catalog kind for capacity and requires a legal preview when a video is claimed as a photo", () => {
+    const oneSecondVideoSet: WorkingSet = {
+      ...workingSet,
+      shots: workingSet.shots.map((shot) => shot.id === "v1" ? video("v1", 10, 11) : shot),
+    };
+    const proposal: ProposalSubmission = {
+      ...validProposal,
+      moments: validProposal.moments.map((moment) => moment.shotId === "v1"
+        ? { shotId: "v1", kind: "photo" as const, title: "Five", description: "", rationale: "" }
+        : moment),
+    };
+
+    const result = diagnostics(validateProposal(proposal, oneSecondVideoSet, { ...options, targetSec: 25 }));
+    expect(result).toEqual(expect.arrayContaining([
+      expect.stringMatching(/catalog_media_kind.*v1.*video.*photo.*set kind/i),
+      expect.stringMatching(/video_preview_bounds.*v1.*undefined.*10.*11.*inside/i),
+      expect.stringMatching(/duration_coverage.*4\.2 photo-equivalents.*at least 5/i),
+    ]));
+  });
+
+  it("accepts a legal video preview inside a public nonzero-start shot interval", () => {
+    const catalogVideo: WorkingShot = video("v1", 10, 20);
+    const intervalWorkingSet: WorkingSet = {
+      ...workingSet,
+      shots: workingSet.shots.map((shot) => shot.id === "v1" ? catalogVideo : shot),
+    };
+
+    expect(validateProposal(validProposal, intervalWorkingSet, options)).toEqual({ ok: true });
   });
 });

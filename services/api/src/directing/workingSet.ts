@@ -12,6 +12,9 @@ export type WorkingShot = {
   day?: string | null;
   place?: string | null;
   durationSec?: number | null;
+  /** Original-media interval for a video shot; photos carry null bounds. */
+  sourceStartSec?: number | null;
+  sourceEndSec?: number | null;
   dupOf?: string | null;
   analysis: ShotAnalysis | null;
   /** A moment id is normally the shot id, but assembly may provide an explicit mapping. */

@@ -11,14 +11,9 @@ export type ProposalValidationResult =
   | { ok: true }
   | { ok: false; diagnostics: string[] };
 
-type ValidationShot = WorkingShot & {
-  sourceStartSec?: number | null;
-  sourceEndSec?: number | null;
-};
-
 type RuleContext = {
   proposal: ProposalSubmission;
-  shotsById: Map<string, ValidationShot>;
+  shotsById: Map<string, WorkingShot>;
   options: ProposalValidationOptions;
 };
 
@@ -36,10 +31,23 @@ function chapterShotIds(proposal: ProposalSubmission): Set<string> {
   return new Set(proposal.chapters.flatMap((chapter) => chapter.momentIds));
 }
 
+function referencedShotIds(proposal: ProposalSubmission): Set<string> {
+  return new Set([...selectedShotIds(proposal), ...chapterShotIds(proposal)]);
+}
+
 function validateWorkingSetMembership({ proposal, shotsById }: RuleContext): string[] {
-  const unknown = [...selectedShotIds(proposal)].filter((shotId) => !shotsById.has(shotId));
+  const unknown = [...referencedShotIds(proposal)].filter((shotId) => !shotsById.has(shotId));
   if (unknown.length === 0) return [];
   return [`working_set_membership: shot ids ${listed(unknown)} are outside the working set; use only shot ids present in the working set.`];
+}
+
+function validateCatalogMediaKind({ proposal, shotsById }: RuleContext): string[] {
+  return proposal.moments.flatMap((moment) => {
+    const catalogKind = shotsById.get(moment.shotId)?.analysis?.kind;
+    if (catalogKind === undefined || catalogKind === moment.kind) return [];
+    const videoAction = catalogKind === "video" ? " and provide a legal preview range" : "";
+    return [`catalog_media_kind: shot ${moment.shotId} is ${catalogKind} in the working set but the proposal says ${moment.kind}; set kind to ${catalogKind}${videoAction}.`];
+  });
 }
 
 function validateExcludedShots({ proposal, options }: RuleContext): string[] {
@@ -71,13 +79,6 @@ function validateProposalMinimumDistinct({ proposal }: RuleContext): string[] {
   return [`proposal_minimum_distinct: chapter selections ${listed(distinct) || "none"} provide ${distinct.size} distinct moments; use at least ${required} distinct moments across ${proposal.chapters.length} chapters.`];
 }
 
-function shotDurationSec(shot: ValidationShot): number {
-  if (shot.sourceStartSec != null && shot.sourceEndSec != null) {
-    return Math.max(0, shot.sourceEndSec - shot.sourceStartSec);
-  }
-  return Math.max(0, shot.durationSec ?? 0);
-}
-
 function validateDurationCoverage({ proposal, shotsById, options }: RuleContext): string[] {
   let equivalents = 0;
   const selected = chapterShotIds(proposal);
@@ -85,7 +86,12 @@ function validateDurationCoverage({ proposal, shotsById, options }: RuleContext)
   for (const shotId of selected) {
     const moment = momentsByShotId.get(shotId);
     if (!moment) continue;
-    equivalents += moment.kind === "photo" ? 1 : shotDurationSec(shotsById.get(shotId) ?? { id: shotId, analysis: null }) / 5;
+    const shot = shotsById.get(shotId);
+    if (shot?.analysis?.kind === "photo") equivalents += 1;
+    if (shot?.analysis?.kind === "video") {
+      const interval = shotInterval(shot);
+      if (interval) equivalents += (interval[1] - interval[0]) / 5;
+    }
   }
 
   const required = options.targetSec / 5;
@@ -93,20 +99,21 @@ function validateDurationCoverage({ proposal, shotsById, options }: RuleContext)
   return [`duration_coverage: selected moments provide ${equivalents} photo-equivalents from shot ids ${listed(selected) || "none"}, but need at least ${required} for a ${options.targetSec} seconds target; add photos or usable video duration.`];
 }
 
-function shotInterval(shot: ValidationShot): readonly [number, number] | null {
-  if (shot.sourceStartSec != null && shot.sourceEndSec != null) {
-    return [shot.sourceStartSec, shot.sourceEndSec];
-  }
-  if (shot.durationSec != null) return [0, shot.durationSec];
-  return null;
+function shotInterval(shot: WorkingShot): readonly [number, number] | null {
+  const start = shot.sourceStartSec;
+  const end = shot.sourceEndSec;
+  if (start == null || end == null) return null;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
+  return [start, end];
 }
 
 function validateVideoPreviewBounds({ proposal, shotsById }: RuleContext): string[] {
   return proposal.moments.flatMap((moment) => {
-    if (moment.kind !== "video") return [];
-    const interval = shotsById.get(moment.shotId) ? shotInterval(shotsById.get(moment.shotId)!) : null;
-    const previewIn = moment.previewInSec;
-    const previewOut = moment.previewOutSec;
+    const shot = shotsById.get(moment.shotId);
+    if (shot?.analysis?.kind !== "video") return [];
+    const interval = shotInterval(shot);
+    const previewIn = moment.kind === "video" ? moment.previewInSec : undefined;
+    const previewOut = moment.kind === "video" ? moment.previewOutSec : undefined;
     if (interval
       && previewIn !== undefined
       && previewOut !== undefined
@@ -116,13 +123,16 @@ function validateVideoPreviewBounds({ proposal, shotsById }: RuleContext): strin
       && previewOut <= interval[1]
       && previewIn < previewOut) return [];
 
-    const allowed = interval ? `${interval[0]}-${interval[1]}` : "the shot's available interval";
-    return [`video_preview_bounds: shot ${moment.shotId} has preview ${String(previewIn)}-${String(previewOut)} outside its own interval ${allowed}; set previewInSec and previewOutSec inside that interval with previewInSec < previewOutSec.`];
+    if (!interval) {
+      return [`video_preview_bounds: working-set video shot ${moment.shotId} has no legal source interval; choose a catalog video with finite sourceStartSec/sourceEndSec and set a preview inside it.`];
+    }
+    return [`video_preview_bounds: shot ${moment.shotId} has preview ${String(previewIn)}-${String(previewOut)} outside its own interval ${interval[0]}-${interval[1]}; set previewInSec and previewOutSec inside that interval with previewInSec < previewOutSec.`];
   });
 }
 
 const RULES: ValidationRule[] = [
   validateWorkingSetMembership,
+  validateCatalogMediaKind,
   validateExcludedShots,
   validateMustIncludeShots,
   validateChapterMinimumDistinct,
