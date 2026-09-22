@@ -15,7 +15,7 @@ const valid = {
     { id: "m2", shotId: "shot2", kind: "photo", title: "Strawberry mochi", description: "A market sweet.", rationale: "Food, which the user named." },
   ],
   chapters: [{ id: "c1", title: "Day 4, Kyoto", summary: "The birthday.", momentIds: ["m1", "m2"] }],
-  constraints: { excludedShotIds: [], mustIncludeMomentIds: ["m1"], feedback: [] },
+  constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: ["m1"], feedback: [] },
   openQuestions: ["Who is the adult carrying Mei?"],
 };
 
@@ -41,6 +41,27 @@ describe("StoryProposalSchema", () => {
   it("rejects a must-include moment id that does not exist", () => {
     const dangling = { ...valid, constraints: { ...valid.constraints, mustIncludeMomentIds: ["ghost"] } };
     expect(safeParseStoryProposal(dangling).ok).toBe(false);
+  });
+
+  it("accepts a proposal with a deselected moment", () => {
+    const deselected = { ...valid, constraints: { ...valid.constraints, deselectedMomentIds: ["m2"] } };
+    const result = safeParseStoryProposal(deselected);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.proposal.constraints.deselectedMomentIds).toEqual(["m2"]);
+  });
+
+  it("rejects a deselected moment id that does not exist", () => {
+    const dangling = { ...valid, constraints: { ...valid.constraints, deselectedMomentIds: ["ghost"] } };
+    const result = safeParseStoryProposal(dangling);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(" ")).toContain("ghost");
+  });
+
+  it("rejects a moment that is both deselected and must-include", () => {
+    const contradictory = { ...valid, constraints: { ...valid.constraints, deselectedMomentIds: ["m1"] } };
+    const result = safeParseStoryProposal(contradictory);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(" ")).toContain("both deselected and must-include");
   });
 
   it("rejects duplicate moment ids", () => {
