@@ -41,6 +41,21 @@ describe("buildWorkingSet", () => {
     expect(buildWorkingSet(input, { cap: 2 }).shots.map((item) => item.id)).toEqual(["e1-best", "e2-only"]);
   });
 
+  it("keeps event spread stable when shots arrive in a different order", () => {
+    const input = [
+      shot("later-best", "e2", photoAnalysis(5), { day: "2026-05-04" }),
+      shot("earlier-best", "e1", photoAnalysis(1), { day: "2026-05-03" }),
+    ];
+    const permuted = [...input].reverse();
+    expect(buildWorkingSet(input, { cap: 1 }).shots.map((item) => item.id)).toEqual(["earlier-best"]);
+    expect(buildWorkingSet(permuted, { cap: 1 }).shots.map((item) => item.id)).toEqual(["earlier-best"]);
+  });
+
+  it("uses the default cap of exactly 180 eligible shots", () => {
+    const input = Array.from({ length: 181 }, (_, index) => shot(`s${index}`, "e1", photoAnalysis(1)));
+    expect(buildWorkingSet(input).shots).toHaveLength(180);
+  });
+
   it("forces a must-include shot below the cap", () => {
     const input = Array.from({ length: 3 }, (_, index) => shot(`s${index}`, "e1", photoAnalysis(5 - index)));
     expect(buildWorkingSet(input, { cap: 1, mustIncludeMomentIds: ["s2"] }).shots.map((item) => item.id)).toEqual(["s0", "s2"]);

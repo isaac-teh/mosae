@@ -77,9 +77,24 @@ export function buildWorkingSet(shots: WorkingShot[], options: WorkingSetOptions
     group.sort((a, b) => scoreOf(b) - scoreOf(a));
   }
 
+  /**
+   * Event order is independent of shot arrival order: use the earliest
+   * chronological day carried by an event, then eventId as a stable tie-break.
+   * Events without day metadata sort by eventId alone.
+   */
+  const queues = [...ranked.entries()]
+    .sort(([eventA, shotsA], [eventB, shotsB]) => {
+      const dayA = shotsA.map((shot) => shot.day).filter((day): day is string => Boolean(day)).sort()[0];
+      const dayB = shotsB.map((shot) => shot.day).filter((day): day is string => Boolean(day)).sort()[0];
+      if (dayA && dayB && dayA !== dayB) return dayA.localeCompare(dayB);
+      if (dayA && !dayB) return -1;
+      if (!dayA && dayB) return 1;
+      return eventA.localeCompare(eventB);
+    })
+    .map(([, queue]) => queue);
+
   const cap = Math.max(0, options.cap ?? DEFAULT_CAP);
   const selected: WorkingShot[] = [];
-  const queues = [...ranked.values()];
   for (let index = 0; selected.length < cap; index++) {
     let added = false;
     for (const queue of queues) {
