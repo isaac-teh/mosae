@@ -68,6 +68,7 @@ const chapters: Chapter[] = [
     badge: { label: "Chapter 1", tone: "neutral" },
     dotColor: "#a83212",
     momentIds: ["moment-4"],
+    momentPresentation: { "moment-4": { imageKey: "timeline-lantern-stroll", meta: "First evening walk under retro shop lanterns", tag: { emoji: "🏮", label: "Dusk Along Yanaka Ginza" } } },
   },
   {
     id: "chapter-2",
@@ -76,7 +77,11 @@ const chapters: Chapter[] = [
     subtitle: "14 moments",
     badge: { label: "Chapter 2", tone: "neutral" },
     dotColor: "#855300",
-    momentIds: ["moment-2", "moment-3"],
+    momentIds: ["moment-2", "moment-4"],
+    momentPresentation: {
+      "moment-2": { imageKey: "timeline-strawberry", title: "Market Sweet Discovery", meta: "11:30 AM • Yanaka Alley", tag: { emoji: "🍓", label: "Street Food Taste" } },
+      "moment-4": { imageKey: "timeline-lantern-stroll", title: "Giggling Down the Arcade", meta: "3:45 PM • Live Capture", kind: "video", badge: undefined, tag: { emoji: "🎬", label: "Burst 0:18" } },
+    },
   },
   {
     id: "chapter-3",
@@ -86,6 +91,7 @@ const chapters: Chapter[] = [
     badge: { label: "Key Milestone", tone: "milestone" },
     dotColor: "#a83212",
     momentIds: ["moment-1"],
+    momentPresentation: { "moment-1": { imageKey: "timeline-birthday", meta: "Komorebi Coffee & Bakes • 4:12 PM • 4k Archival Video", tag: { emoji: "🎂", label: "Candle & Birthday Song" } } },
   },
   {
     id: "chapter-4",
@@ -94,7 +100,11 @@ const chapters: Chapter[] = [
     subtitle: "14 moments",
     badge: { label: "Chapter 4", tone: "neutral" },
     dotColor: "#006579",
-    momentIds: ["moment-3"],
+    momentIds: ["moment-3", "moment-2"],
+    momentPresentation: {
+      "moment-3": { imageKey: "timeline-torii", title: "Shoulders at High Torii", meta: "Fushimi Inari • 10:15 AM", tag: { emoji: "⛩️", label: "Torii Path" } },
+      "moment-2": { imageKey: "timeline-strawberry", title: "Sweet Shop Keepsake", meta: "Gion Teahouse • 2:40 PM", tag: { emoji: "🍵", label: "Kyoto Mochi" } },
+    },
   },
 ];
 
@@ -125,6 +135,8 @@ const basePlan: StoryPlan = {
     "Include more family photos from Kyoto",
   ],
   estimatedFilmLabel: "~2 min 15 sec film",
+  totalMomentCount: 52,
+  timelineOtherPhotoCount: 164,
 };
 
 const cadences: Cadence[] = [

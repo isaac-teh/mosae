@@ -1,9 +1,10 @@
 import { Image, Pressable, View } from "react-native";
+import type { ImageSourcePropType } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 type FilmPlayerProps = {
   source: number;
-  poster: number;
+  poster: ImageSourcePropType;
   durationSec: number;
   initialTimeSec?: number;
   aspect: "portrait" | "landscape";

@@ -13,7 +13,7 @@
   "scripts": {
     "dev:web": "npm run web -w apps/client",
     "dev:api": "npm run dev -w services/api",
-    "test": "npm run test -w packages/contracts && npm run test -w packages/core && npm run test -w @mosae/video && npm run test -w services/api && npm run test -w services/render",
+    "test": "npm run test -w packages/contracts && npm run test -w packages/core && npm run test -w apps/client && npm run test -w @mosae/video && npm run test -w services/api && npm run test -w services/render",
     "typecheck": "npm run typecheck -w packages/contracts && npm run typecheck -w packages/core && npm run typecheck -w @mosae/video && npm run typecheck -w apps/client && npm run typecheck -w services/api && npm run typecheck -w services/render",
     "lint": "npm run lint -w apps/client"
   },
