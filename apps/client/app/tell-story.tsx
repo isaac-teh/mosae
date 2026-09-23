@@ -68,7 +68,6 @@ export default function TellStoryScreen() {
       className="flex-1 bg-canvas"
       stickyHeaderIndices={[0]}
       keyboardShouldPersistTaps="handled"
-      style={{ overflow: "visible" }}
     >
       <StepHeader
         step="Step 2 of 6"

@@ -77,7 +77,7 @@ export default function PickMemoryScreen() {
   return (
     <View className="flex-1 bg-canvas">
       <MediaPicker ref={pickerRef} onFiles={addFiles} />
-      <ScrollView className="flex-1" contentContainerClassName="pb-28" stickyHeaderIndices={[0]} style={{ overflow: "visible" }}>
+      <ScrollView className="flex-1" contentContainerClassName="pb-28" stickyHeaderIndices={[0]}>
         <View className="z-30 bg-canvas/85 shadow-[0_1px_8px_rgba(54,49,44,0.04)] backdrop-blur-md">
           <View className="h-14 flex-row items-center justify-between pl-5 pr-4">
             <Pressable role="button" onPress={() => router.push("/")}>
