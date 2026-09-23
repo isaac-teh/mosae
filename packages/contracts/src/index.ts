@@ -29,6 +29,12 @@ export {
 } from "./proposal.js";
 
 export {
+  StoryIntentSchema,
+  safeParseStoryIntent,
+  type StoryIntent,
+} from "./intent.js";
+
+export {
   DirectionSettingsSchema,
   safeParseDirectionSettings,
   CADENCES,

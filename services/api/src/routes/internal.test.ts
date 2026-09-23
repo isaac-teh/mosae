@@ -15,10 +15,12 @@ function buildApp({
   ingest = vi.fn().mockResolvedValue("ingested"),
   understand = vi.fn().mockResolvedValue("understood"),
   cluster = vi.fn().mockResolvedValue({ status: "ready" }),
+  plan = vi.fn().mockResolvedValue("published"),
 }: {
   ingest?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
   understand?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
   cluster?: (projectId: string) => Promise<unknown>;
+  plan?: (task: { projectId: string; jobId: string; generation: string }) => Promise<unknown>;
 } = {}) {
   const app = express();
   app.use(express.json());
@@ -32,11 +34,31 @@ function buildApp({
       ingest,
       understand,
       cluster,
+      plan,
     }),
   );
   return app;
 }
 describe("internal routes", () => {
+  it("delivers job identity to planning and retries deferred work", async () => {
+    const plan = vi.fn().mockResolvedValue("published");
+    const body = { projectId: "p1", subjectKind: "job", subjectId: "j1", generation: "2", workKey: "k" };
+    expect((await request(buildApp({ plan })).post("/tasks/plan").send(body)).status).toBe(204);
+    expect(plan).toHaveBeenCalledWith({ projectId: "p1", jobId: "j1", generation: "2" });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    plan.mockRejectedValue(new Error("waiting_for_ready"));
+    expect((await request(buildApp({ plan })).post("/tasks/plan").send(body)).status).toBe(500);
+    error.mockRestore();
+  });
+
+  it.each([
+    { subjectKind: "asset" }, { subjectId: "" }, { projectId: "../p" }, { generation: "" }, { workKey: null },
+  ])("rejects invalid plan identity %j", async (invalid) => {
+    const plan = vi.fn();
+    const body = { projectId: "p1", subjectKind: "job", subjectId: "j1", generation: "1", workKey: "k", ...invalid };
+    expect((await request(buildApp({ plan })).post("/tasks/plan").send(body)).status).toBe(400);
+    expect(plan).not.toHaveBeenCalled();
+  });
   it("runs the outbox dispatcher", async () => {
     const res = await request(buildApp()).post("/internal/dispatch-outbox");
     expect(res.status).toBe(200);

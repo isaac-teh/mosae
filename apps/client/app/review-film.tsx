@@ -1,15 +1,16 @@
 // Figma: "Review the Film" (1:1052)
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
 import Svg, { Path } from "react-native-svg";
-import { getStoryRepository, type Film } from "@mosae/core";
+import { useStoryFlow, useStoryScreenGuard } from "@/lib/storyFlow";
+import { type Film, type StoryRepository } from "@mosae/core";
 import { FilmPlayer } from "@/components/FilmPlayer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { StepHeader } from "@/components/StepHeader";
-import { demoImage } from "@/lib/demoAssets";
+import { storyImage } from "@/lib/storyImage";
 
 function SparklesIcon() { return <Svg width={15} height={15} viewBox="0 0 15 15"><Path d="m7.5 0 .8 3.2 3.2.8-3.2.8-.8 3.2-.8-3.2-3.2-.8 3.2-.8L7.5 0Zm4.4 8.8.4 1.4 1.4.4-1.4.4-.4 1.4-.4-1.4-1.4-.4 1.4-.4.4-1.4ZM2.7 9.6l.3 1 .9.3-.9.3-.3 1-.3-1-.9-.3.9-.3.3-1Z" fill="#B63315" /></Svg>; }
 function SendIcon() { return <Svg width={17} height={17} viewBox="0 0 17 17"><Path d="M2 8.5h12m-4-4 4 4-4 4" fill="none" stroke="white" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" /></Svg>; }
@@ -20,24 +21,36 @@ function MusicNoteIcon() { return <Svg width={12} height={12} viewBox="0 0 12 12
 function ErrorState({ error, retry }: { error: string; retry: () => void }) { return <View className="flex-1 items-center justify-center bg-canvas"><Text className="text-brand">{error}</Text><Pressable role="button" aria-label="Retry" onPress={retry} className="mt-4 rounded-full bg-brand px-5 py-3"><Text className="font-sans-semibold text-white">Retry</Text></Pressable></View>; }
 
 export default function ReviewFilmScreen() {
-  const router = useRouter();
   const { filmId } = useLocalSearchParams<{ filmId: string }>();
+  const story = useStoryFlow();
+  return <ReviewFilmScreenContent key={`${story.identityKey}:film:${filmId}`} filmId={filmId} repository={story.repository} route={story.route} />;
+}
+
+function ReviewFilmScreenContent({ filmId, repository, route }: {
+  filmId: string;
+  repository: StoryRepository;
+  route: (path: string, id?: { planId?: string; filmId?: string }) => string;
+}) {
+  const router = useRouter();
+  const isCurrent = useStoryScreenGuard();
   const [film, setFilm] = useState<Film | null>(null);
-  const goBack = useStepBack((film ? `/direct-film?planId=${film.planId}` : "/") as Href);
+  const goBack = useStepBack((film ? route("/direct-film", { planId: film.planId }) : "/") as Href);
   const [error, setError] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
   const [adjustment, setAdjustment] = useState("");
   const [revising, setRevising] = useState(false);
   const [versionReady, setVersionReady] = useState(false);
-  const load = () => { void getStoryRepository().getFilm(filmId).then(setFilm).catch((cause: Error) => setError(cause.message)); };
-  useEffect(load, [filmId]);
+  const load = useCallback(() => { void repository.getFilm(filmId)
+    .then((value) => { if (isCurrent()) setFilm(value); })
+    .catch((cause: Error) => { if (isCurrent()) setError(cause.message); }); }, [filmId, isCurrent, repository]);
+  useEffect(load, [load]);
   if (error) return <ErrorState error={error} retry={() => { setError(null); load(); }} />;
   if (!film) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 5 OF 6" label="YOUR STORY" progress={0.83} onBack={() => goBack()} backLabel="Go back to directing" /></View>;
-  const revise = async () => { if (!adjustment || revising) return; setRevising(true); setVersionReady(false); try { await getStoryRepository().reviseFilm(film.filmId, adjustment); setVersionReady(true); setAdjustment(""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to revise your film"); } finally { setRevising(false); } };
-  const save = async () => { try { await getStoryRepository().saveFilm(film.filmId); router.navigate(`/save-film?filmId=${film.filmId}` as never); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save your film"); } };
+  const revise = async () => { if (!adjustment || revising) return; setRevising(true); setVersionReady(false); try { await repository.reviseFilm(film.filmId, adjustment); if (!isCurrent()) return; setVersionReady(true); setAdjustment(""); } catch (cause) { if (isCurrent()) setError(cause instanceof Error ? cause.message : "Unable to revise your film"); } finally { if (isCurrent()) setRevising(false); } };
+  const save = async () => { try { await repository.saveFilm(film.filmId); if (!isCurrent()) return; router.navigate(route("/save-film", { filmId: film.filmId }) as never); } catch (cause) { if (isCurrent()) setError(cause instanceof Error ? cause.message : "Unable to save your film"); } };
   return <View className="flex-1 bg-canvas"><StepHeader step="STEP 5 OF 6" label="YOUR STORY" progress={0.83} onBack={() => goBack()} backLabel="Go back to directing" />
     <ScrollView className="flex-1" contentContainerClassName="min-h-[841px] px-5 pb-2" keyboardShouldPersistTaps="handled"><View className="pt-[22px]"><Text className="font-sans-semibold text-[15px] leading-5 text-ink">Review Your Film</Text><Text className="mt-1 font-sans text-sm leading-5 text-ink-soft">Curated from 52 captured moments</Text></View>
-      <View className="mt-[27px]"><FilmPlayer source={require("../assets/demo/film.mp4")} poster={demoImage(film.posterKey)} durationSec={film.durationSec} initialTimeSec={74} aspect="portrait" />{revising && <View className="absolute inset-0 items-center justify-center rounded-[23px] bg-black/55"><Text className="font-sans-semibold text-sm text-white">Revising your film...</Text></View>}</View>
+      <View className="mt-[27px]"><FilmPlayer source={require("../assets/demo/film.mp4")} poster={storyImage(film.posterKey)} durationSec={film.durationSec} initialTimeSec={74} aspect="portrait" />{revising && <View className="absolute inset-0 items-center justify-center rounded-[23px] bg-black/55"><Text className="font-sans-semibold text-sm text-white">Revising your film...</Text></View>}</View>
       <View className="mt-[17px] rounded-[21px] border border-[#eee5df] bg-[#fbf9f6] p-2.5 shadow-[0_1px_4px_rgba(65,43,35,0.06)]"><View className="h-[33px] flex-row rounded-full bg-surface-sunken p-0.5"><Pressable role="button" aria-label="AI Director" onPress={() => setManual(false)} className={`flex-1 flex-row items-center justify-center gap-1 rounded-full ${!manual ? "bg-white shadow-[0_1px_2px_rgba(0,0,0,0.1)]" : ""}`}><SparklesIcon /><Text className={`font-sans-medium text-xs ${!manual ? "text-brand" : "text-ink-soft"}`}>AI Director</Text></Pressable><Pressable role="button" aria-label="Manual Editor" onPress={() => setManual(true)} className="flex-1 items-center justify-center"><Text className="font-sans-medium text-xs text-ink-soft">☷ &nbsp;Manual Editor</Text></Pressable></View>
         {manual ? <Text className="h-[117px] px-1 pt-5 font-sans text-sm text-ink-soft">Coming soon</Text> : <><View className="mt-3 flex-row items-center justify-between px-0.5"><Text className="font-sans text-xs leading-4 text-ink-soft">{versionReady ? "Version 2 ready" : "Describe any adjustment or tap a shortcut:"}</Text><Text className="font-sans-medium text-[11px] text-honey">Instant AI</Text></View><View className="mt-1.5 h-[83px] flex-row items-center rounded-[15px] border border-[#eee7e1] bg-white px-3"><TextInput value={adjustment} onChangeText={setAdjustment} placeholder="e.g., More upbeat music, longer birthday scene..." placeholderTextColor="#b9aaa4" className="flex-1 self-stretch p-0 font-serif-italic text-[13px] leading-[18px] text-ink" multiline /><Pressable role="button" aria-label="Send adjustment" onPress={() => void revise()} className="ml-2 size-8 items-center justify-center rounded-full bg-brand"><SendIcon /></Pressable></View><ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2"><View className="flex-row gap-1.5">{film.shortcuts.map((shortcut) => <Pressable key={shortcut.label} role="button" aria-label={shortcut.label} onPress={() => setAdjustment(shortcut.label)} className="h-6 flex-row items-center rounded-full border border-[#eee7e1] bg-white px-2"><View className="mr-0.5">{shortcut.label === "Shorter cut" ? <TimerIcon /> : shortcut.label === "Upbeat music" ? <MusicNoteIcon /> : <Text className="text-[11px]">🎂</Text>}</View><Text className="font-sans text-[11px] text-ink">{shortcut.label}</Text></Pressable>)}</View></ScrollView></>}</View>
       <View className="mt-1"><PrimaryButton compact label="Looks good! Save film" onPress={() => void save()} icon={<CheckCircleIcon />} /></View>

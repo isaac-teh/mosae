@@ -13,10 +13,20 @@ const original = (uid: string) => `uploads/${uid}/p1/s1/a1/original`;
 const derivative = (uid: string) => `proxies/${uid}/p1/a1/7/thumb.jpg`;
 const jpeg = new Uint8Array([0xff, 0xd8, 0xff]);
 
+/**
+ * An emulator started on an alternate port sets this variable; without reading
+ * it these tests talk to whatever happens to hold the default port, which may
+ * be another run's emulator.
+ */
+function emulatorHost(value: string | undefined, fallback: string): { host: string; port: number } {
+  const [host, port] = (value ?? fallback).split(":");
+  return { host, port: Number(port) };
+}
+
 beforeAll(async () => {
   env = await initializeTestEnvironment({
     projectId: "demo-mosae",
-    storage: { rules: readFileSync(resolve(process.cwd(), "../../storage.rules"), "utf8"), host: "127.0.0.1", port: 9199 },
+    storage: { rules: readFileSync(resolve(process.cwd(), "../../storage.rules"), "utf8"), ...emulatorHost(process.env.FIREBASE_STORAGE_EMULATOR_HOST, "127.0.0.1:9199") },
   });
 });
 

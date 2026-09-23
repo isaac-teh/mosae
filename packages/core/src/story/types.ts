@@ -20,6 +20,8 @@ export type Chapter = {
   badge: { label: string; tone: "neutral" | "milestone" };
   dotColor: string;
   momentIds: string[];
+  /** Optional alternate captions/crops for the same moment in this chapter. */
+  momentPresentation?: Record<string, Partial<Pick<Moment, "title" | "meta" | "imageKey" | "tag" | "kind" | "badge">>>;
 };
 
 export type StoryPlan = {
@@ -37,6 +39,9 @@ export type StoryPlan = {
   albumName: string;
   suggestions: string[];
   estimatedFilmLabel: string;
+  /** Fixture summaries can represent more captures than their sample cards. */
+  totalMomentCount?: number;
+  timelineOtherPhotoCount?: number;
 };
 
 export type CreateOption = "film" | "album" | "share" | "apple-photos";

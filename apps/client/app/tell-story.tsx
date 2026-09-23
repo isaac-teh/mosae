@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
 import { useProjectProgress } from "@/lib/useProjectProgress";
-import { getStoryRepository } from "@mosae/core";
+import { startStoryPlan, watchStoryPlan, type StoryPlanJob } from "@mosae/core";
+import { getFixtureRepository, storyRoute } from "@/lib/storyFlow";
 import { StepHeader } from "@/components/StepHeader";
 import { ProcessingBanner } from "@/components/ProcessingBanner";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -19,21 +20,81 @@ const THEMES = [
   "😂 Goofy moments",
 ];
 
+const FAILED_PROJECT = "Planning is unavailable because none of your memories could be read. Please upload them again.";
+const COLLECTING_PROJECT = "Finish adding your memories before planning a story.";
+
 // Figma: "Tell AI the Story" (1:292)
 export default function TellStoryScreen() {
+  const params = useLocalSearchParams<{ projectId?: string; count?: string; live?: string; repository?: string }>();
+  const apiEnabled = process.env.EXPO_PUBLIC_USE_API_STORY_REPOSITORY === "true";
+  const live = params.repository !== "fixture" && (params.live === "1" || params.repository === "api" || apiEnabled);
+  const projectId = params.projectId ?? (apiEnabled ? process.env.EXPO_PUBLIC_STORY_PROJECT_ID : null) ?? null;
+  // Changing flow/project disposes all pending requests, listeners and UI state.
+  return <TellStoryProject key={JSON.stringify([live, projectId])} live={live} projectId={projectId} count={Number(params.count ?? 0)} />;
+}
+
+function TellStoryProject({ live, projectId, count }: { live: boolean; projectId: string | null; count: number }) {
   const [storyText, setStoryText] = useState("");
   const [themes, setThemes] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  const [job, setJob] = useState<StoryPlanJob | null>(null);
+  const [reconnect, setReconnect] = useState(0);
+  const inFlight = useRef(false);
+  const mounted = useRef(true);
+  const requestId = useRef(0);
+  const { push } = useRouter();
   const goBack = useStepBack("/pick-memory");
-  const params = useLocalSearchParams<{ projectId?: string; count?: string; live?: string }>();
   const dictation = useDictation((text) => setStoryText((prev) => (prev ? `${prev} ${text}` : text)));
 
-  const projectId = params.projectId ?? null;
-  const count = Number(params.count ?? 0);
-  const progress = useProjectProgress(projectId, count, params.live === "1");
+  const progress = useProjectProgress(projectId, count, live);
   const canSubmit = storyText.trim().length > 0 || themes.length > 0;
+  const unavailable = !live ? null : !projectId
+    ? "Choose your memories before planning a story."
+    : progress?.status === "failed"
+      ? FAILED_PROJECT
+      : progress?.status === "collecting" ? COLLECTING_PROJECT : null;
+  const jobId = job?.id ?? null;
+  const reconnecting = Boolean(error && job && job.status !== "failed" && job.status !== "succeeded");
+  const planningLabel = job?.status === "waiting_for_ready" ? "Waiting for your memories to be ready"
+    : job?.status === "queued" ? "Waiting to plan your story"
+      : job?.status === "publishing" || job?.progress === "organizing" ? "Organizing your story"
+        : job?.progress === "inspecting" ? "Inspecting the moments" : "Searching your memories";
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; requestId.current++; };
+  }, []);
+
+  useEffect(() => {
+    if (!projectId || !jobId) return;
+    let active = true;
+    const request = requestId.current;
+    let stop = () => {};
+    stop = watchStoryPlan(projectId, jobId, {
+      onChange(next) {
+        if (!active || request !== requestId.current || next.id !== jobId) return;
+        setJob(next);
+        setError(null);
+        if (next.status === "failed" || next.status === "succeeded") {
+          active = false;
+          stop();
+          setSubmitting(false);
+          if (next.status === "failed") {
+            setError(next.reason || "Couldn't find the moments. Please try again.");
+          } else {
+            push(storyRoute("/review-moments", { planId: next.proposalId }, { repository: "api", projectId }) as any);
+          }
+        }
+      },
+      onError(reason) {
+        if (!active || request !== requestId.current) return;
+        setError(reason instanceof Error ? reason.message : "Couldn't read planning progress. Please reconnect.");
+      },
+    });
+    if (!active) stop();
+    return () => { active = false; stop(); };
+  }, [projectId, jobId, reconnect, push]);
 
   function toggleTheme(theme: string) {
     setThemes((prev) => (prev.includes(theme) ? prev.filter((t) => t !== theme) : [...prev, theme]));
@@ -49,17 +110,35 @@ export default function TellStoryScreen() {
   }
 
   async function handleSubmit() {
-    if (!canSubmit) return;
+    if (!canSubmit || unavailable || inFlight.current) return;
+    if (reconnecting) {
+      setError(null);
+      setReconnect(value => value + 1);
+      return;
+    }
+    if (submitting) return;
+    inFlight.current = true;
+    const request = ++requestId.current;
+    const current = () => mounted.current && request === requestId.current;
     setSubmitting(true);
     setError(null);
+    setJob(null);
     const focus = themes.length ? `\n\nFocus on: ${themes.join(", ")}` : "";
     try {
-      const { planId } = await getStoryRepository().createPlan(`${storyText.trim()}${focus}`, projectId ? [projectId] : []);
-      router.push(`/review-moments?planId=${planId}` as any);
+      if (live && projectId) {
+        const next = await startStoryPlan(projectId, storyText.trim() || themes.join(", "), themes);
+        if (current()) setJob(next);
+        return;
+      }
+      const { planId } = await getFixtureRepository().createPlan(`${storyText.trim()}${focus}`, projectId ? [projectId] : []);
+      if (current()) push(storyRoute("/review-moments", { planId }, { repository: "fixture" }) as any);
     } catch (e) {
-      console.error("submit failed", e);
-      setError("Couldn't find the moments. Please try again.");
+      if (!current()) return;
+      const message = e instanceof Error ? e.message : "Couldn't find the moments. Please try again.";
+      setError(message === "project_failed" ? FAILED_PROJECT : message === "project_collecting" ? COLLECTING_PROJECT : message);
       setSubmitting(false);
+    } finally {
+      if (current()) inFlight.current = false;
     }
   }
 
@@ -150,13 +229,19 @@ export default function TellStoryScreen() {
           <Text className="font-sans text-xs leading-[18px] text-ink-soft/80">Mosaé curates your memories privately and securely.</Text>
         </View>
 
-        {error && <Text className="mt-4 text-center font-sans text-xs text-brand">{error}</Text>}
+        {unavailable && <Text role="alert" className="mt-4 text-center font-sans text-xs text-brand">{unavailable}</Text>}
+        {job && submitting && !error && !unavailable && (
+          <View role="status" aria-live="polite" className="mt-4 rounded-2xl bg-surface-sunken px-4 py-3">
+            <Text className="font-sans text-xs leading-[18px] text-ink-soft">{planningLabel}</Text>
+          </View>
+        )}
+        {error && <Text role="alert" className="mt-4 text-center font-sans text-xs text-brand">{error}</Text>}
 
         <PrimaryButton
-          label={submitting ? "Finding the moments..." : "Find the moments"}
+          label={reconnecting ? "Reconnect" : submitting ? "Finding the moments..." : error ? "Try again" : "Find the moments"}
           onPress={handleSubmit}
           icon={<SparklesIcon />}
-          disabled={!canSubmit || submitting}
+          disabled={!canSubmit || Boolean(unavailable) || (submitting && !reconnecting)}
         />
       </View>
     </ScrollView>

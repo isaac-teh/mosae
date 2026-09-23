@@ -39,6 +39,7 @@ export const ProposalChapterSchema = z.strictObject({
 
 export const ProposalConstraintsSchema = z.strictObject({
   excludedShotIds: z.array(z.string().min(1)),
+  deselectedMomentIds: z.array(z.string().min(1)),
   mustIncludeMomentIds: z.array(z.string().min(1)),
   feedback: z.array(z.string().min(1)),
 });
@@ -80,6 +81,15 @@ export const StoryProposalSchema = BaseProposalSchema.superRefine((proposal, ctx
   proposal.constraints.mustIncludeMomentIds.forEach((momentId, index) => {
     if (!ids.has(momentId)) {
       ctx.addIssue({ code: "custom", path: ["constraints", "mustIncludeMomentIds", index], message: `unknown moment id ${momentId}` });
+    }
+  });
+  const mustIncludeIds = new Set(proposal.constraints.mustIncludeMomentIds);
+  proposal.constraints.deselectedMomentIds.forEach((momentId, index) => {
+    if (!ids.has(momentId)) {
+      ctx.addIssue({ code: "custom", path: ["constraints", "deselectedMomentIds", index], message: `unknown moment id ${momentId}` });
+    }
+    if (mustIncludeIds.has(momentId)) {
+      ctx.addIssue({ code: "custom", path: ["constraints", "deselectedMomentIds", index], message: `moment ${momentId} cannot be both deselected and must-include` });
     }
   });
 });

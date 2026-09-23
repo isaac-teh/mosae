@@ -3,6 +3,9 @@ import { adminDb } from "./firebase/admin.js";
 import { loadConfig } from "./config.js";
 import { requireServiceCaller } from "./auth/requireServiceCaller.js";
 import { projectsRouter } from "./routes/projects.js";
+import { thumbnailsRouter } from "./routes/thumbnails.js";
+import { firebaseThumbnailUrlStore } from "./ingest/objectStore.js";
+import { createPlanJob, createQueuePlan, directingRouter, type QueuePlan } from "./routes/directing.js";
 import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
@@ -18,6 +21,7 @@ import { settleProject } from "./store/readinessStore.js";
 import { startStoragePoller } from "./store/storagePoller.js";
 import { createIngest } from "./ingest/wire.js";
 import { createUnderstand } from "./understand/wire.js";
+import { createPlan } from "./directing/wire.js";
 import { runProjectPass } from "./store/clusterStore.js";
 import { createGenAI, embedContentVia } from "./gemini/wire.js";
 import { embedText } from "./understand/embed.js";
@@ -45,12 +49,29 @@ const ingest = createIngest({ db: adminDb, bucketName: config.storageBucket, set
 const understand = createUnderstand({ db: adminDb, bucketName: config.storageBucket, geminiApiKey: config.geminiApiKey, settle });
 const geminiClient = createGenAI(config.geminiApiKey);
 const embedQuery = (text: string) => embedText(embedContentVia(geminiClient), text);
-const cluster = (projectId: string): Promise<unknown> => runProjectPass(adminDb, projectId, Date.now());
+const cluster = async (projectId: string): Promise<unknown> => {
+  const result = await runProjectPass(adminDb, projectId, Date.now());
+  // Local plan deliveries remain pending while media is processing. Drain them
+  // when clustering settles readiness, even if no more uploads arrive.
+  if (useDevRunner && result.status !== "skipped") {
+    setImmediate(() => {
+      void dispatchDue(adminDb, queue, Date.now()).catch((error) => console.error("plan readiness dispatch failed", error));
+    });
+  }
+  return result;
+};
+const plan = createPlan({ db: adminDb, geminiApiKey: config.geminiApiKey });
+const queuePlan: QueuePlan = createQueuePlan({
+  createJob: (input) => createPlanJob(adminDb, input),
+  dispatch: () => dispatchDue(adminDb, queue, Date.now()),
+  // The dev runner plans in-process; see createQueuePlan.
+  defer: useDevRunner ? (run) => { setImmediate(run); } : null,
+});
 
 const queue: TaskQueue = config.tasks
   ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.serviceUrl })
   : useDevRunner
-    ? new DevTaskQueue({ ingest, understand, cluster })
+    ? new DevTaskQueue({ ingest, understand, cluster, plan })
     : new InMemoryTaskQueue();
 
 if (!config.tasks && !useDevRunner)
@@ -75,6 +96,16 @@ app.use(
   projectsRouter({ db: adminDb, settle, embedQuery }),
 );
 app.use(
+  "/api/projects",
+  directingRouter({ db: adminDb, queuePlan }),
+);
+app.use(
+  "/api/projects",
+  thumbnailsRouter({ db: adminDb, thumbnails: {
+    signedReadUrl: (path, expiresAt) => firebaseThumbnailUrlStore(getStorage(getAdminApp()).bucket(config.storageBucket)).signedReadUrl(path, expiresAt),
+  } }),
+);
+app.use(
   "/events",
   storageEventsRouter({
     db: adminDb,
@@ -94,6 +125,7 @@ app.use(
     ingest,
     understand,
     cluster,
+    plan,
   }),
 );
 

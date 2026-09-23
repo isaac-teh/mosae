@@ -3,6 +3,20 @@ import { PermanentIngestError } from "./errors.js";
 
 type Bucket = ReturnType<ReturnType<typeof getStorage>["bucket"]>;
 
+export interface ThumbnailUrlStore {
+  signedReadUrl(path: string, expiresAt: number): Promise<string>;
+}
+
+/** GCS uploads have no Firebase download token; sign reads on the server. */
+export function firebaseThumbnailUrlStore(bucket: Bucket): ThumbnailUrlStore {
+  return {
+    async signedReadUrl(path, expiresAt) {
+      const [url] = await bucket.file(path).getSignedUrl({ version: "v4", action: "read", expires: expiresAt });
+      return url;
+    },
+  };
+}
+
 export interface ObjectStore {
   download(input: { path: string; generation: string; destination: string }): Promise<void>;
   downloadCurrent(input: { path: string; destination: string }): Promise<void>;

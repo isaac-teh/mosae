@@ -7,5 +7,8 @@ export { isMedia, formatDuration, mediaId } from "./media";
 export type * from "./story/types";
 export { getStoryRepository, setStoryRepository, type StoryRepository } from "./story/repository";
 export { createFixtureStoryRepository } from "./story/fixtureRepository";
+export { createApiStoryRepository, type ApiStoryRepositoryOptions } from "./story/apiRepository";
+export { projectProposal } from "./story/projectProposal";
+export { startStoryPlan, watchStoryPlan, type StoryPlanJob } from "./story/planning";
 export { computeProgress, describeProgress, type ProjectProgress, type ProjectStatus, type RawProgress } from "./progress/progress";
 export { watchProjectProgress, type ProgressDeps } from "./progress/watchProgress";

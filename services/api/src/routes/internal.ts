@@ -4,6 +4,8 @@ import type { IngestTask } from "../ingest/ingestAsset.js";
 import type { UnderstandTask } from "../understand/understandAsset.js";
 import { dispatchDue } from "../outbox/dispatcher.js";
 import type { TaskQueue } from "../queue/taskQueue.js";
+import type { PlanTask } from "../directing/wire.js";
+import { isValidId } from "../domain/ids.js";
 
 export function internalRouter(deps: {
   db: Firestore;
@@ -13,9 +15,27 @@ export function internalRouter(deps: {
   ingest: (task: IngestTask) => Promise<unknown>;
   understand: (task: UnderstandTask) => Promise<unknown>;
   cluster: (projectId: string) => Promise<unknown>;
+  plan?: (task: PlanTask) => Promise<unknown>;
 }): Router {
   const now = deps.now ?? Date.now;
   const router = Router();
+  router.post("/tasks/plan", deps.auth, async (req, res) => {
+    const { projectId, subjectKind, subjectId, generation, workKey } = req.body ?? {};
+    if (![projectId, subjectId, generation, workKey].every((value) => typeof value === "string" && value.length > 0)
+      || subjectKind !== "job" || !isValidId(projectId) || !isValidId(subjectId)) {
+      res.status(400).json({ error: "invalid_task" });
+      return;
+    }
+    try {
+      if (!deps.plan) throw new Error("planning_not_configured");
+      const result = await deps.plan({ projectId, jobId: subjectId, generation });
+      console.log("plan", workKey, result);
+      res.sendStatus(204);
+    } catch (error) {
+      console.error("plan task failed", workKey, error);
+      res.status(500).json({ error: "plan_failed" });
+    }
+  });
   router.post("/internal/dispatch-outbox", deps.auth, async (_req, res) => {
     try {
       res.json(await dispatchDue(deps.db, deps.queue, now()));

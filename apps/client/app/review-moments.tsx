@@ -1,10 +1,11 @@
 // Figma: "Review Selected Moments" (1:384)
-import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
-import { getStoryRepository } from "@mosae/core";
-import type { StoryPlan } from "@mosae/core";
+import { useStoryFlow } from "@/lib/storyFlow";
+import { momentRows } from "@/lib/momentRows";
+import { useStoryPlan } from "@/lib/useStoryPlan";
 import { StepHeader } from "@/components/StepHeader";
 import { MomentCard } from "@/components/MomentCard";
 import { BottomTabBar } from "@/components/BottomTabBar";
@@ -18,16 +19,9 @@ import {
 export default function ReviewMomentsScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
-  const goBack = useStepBack("/tell-story");
-  const [plan, setPlan] = useState<StoryPlan | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    getStoryRepository()
-      .getPlan(planId)
-      .then((p) => setPlan(p))
-      .catch((e) => setError(e.message));
-  }, [planId]);
+  const { repository, route } = useStoryFlow();
+  const goBack = useStepBack(route("/tell-story") as Href);
+  const { plan, error, mutationError, updating, mutate } = useStoryPlan(planId, repository);
 
   if (error) {
     return (
@@ -62,7 +56,7 @@ export default function ReviewMomentsScreen() {
   }
 
   function navigateToCuratedTimeline() {
-    void router.navigate(`/curated-timeline?planId=${planId}` as any);
+    void router.navigate(route("/curated-timeline", { planId: plan!.planId }) as any);
   }
 
   return (
@@ -104,56 +98,20 @@ export default function ReviewMomentsScreen() {
 
           {/* Cards - 16px gap between each card section */}
           <View className="mt-4">
-            {/* Hero card 1 - Birthday Song (has trailing HeartIcon in MomentCard) */}
-            <MomentCard
-              moment={plan.moments[0]}
-              size="hero"
-              onToggleSelected={() => {
-                const next = !plan.moments[0].selected;
-                getStoryRepository().setMomentSelected(planId, plan.moments[0].id, next);
-                setPlan(structuredClone({ ...plan, moments: plan.moments.map((m) => m.id === plan.moments[0].id ? { ...m, selected: next } : m) }));
-              }}
-              onToggleFavorite={() => {
-                const next = !plan.moments[0].favorite;
-                void getStoryRepository().setMomentFavorite(planId, plan.moments[0].id, next);
-                setPlan(structuredClone({ ...plan, moments: plan.moments.map((m) => m.id === plan.moments[0].id ? { ...m, favorite: next } : m) }));
-              }}
-            />
-
-            {/* Two half cards - 8px gap between them */}
-            <View className="mt-4 flex-row gap-2">
-              <MomentCard
-                moment={plan.moments[1]}
-                size="half"
-                onToggleSelected={() => {
-                  const next = !plan.moments[1].selected;
-                  getStoryRepository().setMomentSelected(planId, plan.moments[1].id, next);
-                  setPlan(structuredClone({ ...plan, moments: plan.moments.map((m) => m.id === plan.moments[1].id ? { ...m, selected: next } : m) }));
-                }}
-              />
-              <MomentCard
-                moment={plan.moments[2]}
-                size="half"
-                onToggleSelected={() => {
-                  const next = !plan.moments[2].selected;
-                  getStoryRepository().setMomentSelected(planId, plan.moments[2].id, next);
-                  setPlan(structuredClone({ ...plan, moments: plan.moments.map((m) => m.id === plan.moments[2].id ? { ...m, selected: next } : m) }));
-                }}
-              />
-            </View>
-
-            {/* Hero card 2 - Dusk Along Yanaka Ginza (Heirloom pill only, no heart) */}
-            <View className="mt-4">
-              <MomentCard
-                moment={plan.moments[3]}
-                size="hero"
-                onToggleSelected={() => {
-                  const next = !plan.moments[3].selected;
-                  getStoryRepository().setMomentSelected(planId, plan.moments[3].id, next);
-                  setPlan(structuredClone({ ...plan, moments: plan.moments.map((m) => m.id === plan.moments[3].id ? { ...m, selected: next } : m) }));
-                }}
-              />
-            </View>
+            {mutationError && <Text role="alert" className="mb-3 text-sm text-brand">{mutationError}</Text>}
+            {momentRows(plan.moments).map((row, index) => (
+              <View key={row.moments[0].id} className={`${index ? "mt-4" : ""} ${row.size === "half" ? "flex-row gap-2" : ""}`}>
+                {row.moments.map((moment) => (
+                  <MomentCard
+                    key={moment.id}
+                    moment={moment}
+                    size={row.size}
+                    onToggleSelected={() => { void mutate((id) => repository.setMomentSelected(id, moment.id, !moment.selected)); }}
+                    onToggleFavorite={() => { void mutate((id) => repository.setMomentFavorite(id, moment.id, !moment.favorite)); }}
+                  />
+                ))}
+              </View>
+            ))}
 
             {/* Add from other photos card */}
             <Pressable
@@ -188,6 +146,7 @@ export default function ReviewMomentsScreen() {
                   </Text>
                 </Pressable>
                 <Pressable
+                  disabled={updating}
                   onPress={navigateToCuratedTimeline}
                   role="button"
                   aria-label="Continue to curated timeline"

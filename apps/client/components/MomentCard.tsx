@@ -1,7 +1,7 @@
 import { Pressable, Text, View, Image } from "react-native";
 import type { ReactNode } from "react";
 import type { Moment } from "@mosae/core";
-import { demoImage } from "@/lib/demoAssets";
+import { storyImage } from "@/lib/storyImage";
 import { CheckIcon } from "./icons";
 import { HeartIcon } from "./sceneIcons";
 
@@ -22,7 +22,7 @@ export function MomentCard({
   trailing,
 }: MomentCardProps) {
   const isHero = size === "hero";
-  const isDuskCard = moment.id === "moment-4";
+  const isDuskCard = isHero && moment.badge === "Heirloom";
   const height = isDuskCard ? 206.25 : isHero ? 247.5 : 193.75;
   const padding = isHero ? 10 : 8;
   const titleSize = isHero ? "text-[18px]" : "text-[15px]";
@@ -39,8 +39,8 @@ export function MomentCard({
   const titlePx = isHero ? 8 : 6;
   const selected = moment.selected;
 
-  // Heart icon only on the birthday hero card (moment-1), not on Dusk card
-  const showHeart = isHero && moment.id === "moment-1";
+  // Hero moments without a badge have room for the favorite action.
+  const showHeart = isHero && !moment.badge && !!onToggleFavorite;
 
   return (
     <View
@@ -52,7 +52,7 @@ export function MomentCard({
         <View style={{ height }} className="w-full">
           <View className="absolute inset-0 overflow-hidden pointer-events-none">
             <Image
-              source={demoImage(moment.imageKey)}
+              source={storyImage(moment.imageKey)}
               accessibilityLabel={moment.title}
               className="absolute h-full w-full object-cover"
               style={{
