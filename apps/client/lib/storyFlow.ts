@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocalSearchParams } from "expo-router";
 import { createApiStoryRepository, createFixtureStoryRepository, type StoryRepository } from "@mosae/core";
 
@@ -22,5 +22,13 @@ export function useStoryFlow() {
   const projectId = params.projectId ?? process.env.EXPO_PUBLIC_STORY_PROJECT_ID ?? "";
   const flow = useMemo<StoryFlow>(() => api ? { repository: "api", projectId } : { repository: "fixture" }, [api, projectId]);
   const repository = useMemo(() => api ? createApiStoryRepository({ projectId }) : getFixtureRepository(), [api, projectId]);
-  return { flow, repository, route: (path: string, id: { planId?: string; filmId?: string } = {}) => storyRoute(path, id, flow) };
+  const identityKey = api ? `api:${projectId}` : "fixture";
+  return { flow, identityKey, repository, route: (path: string, id: { planId?: string; filmId?: string } = {}) => storyRoute(path, id, flow) };
+}
+
+/** Guards async continuations owned by one keyed screen identity. */
+export function useStoryScreenGuard() {
+  const active = useRef(true);
+  useEffect(() => () => { active.current = false; }, []);
+  return useCallback(() => active.current, []);
 }

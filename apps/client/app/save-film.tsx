@@ -5,8 +5,8 @@ import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
 import { Asset } from "expo-asset";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
-import { useStoryFlow } from "@/lib/storyFlow";
-import { type Film } from "@mosae/core";
+import { useStoryFlow, useStoryScreenGuard } from "@/lib/storyFlow";
+import { type Film, type StoryRepository } from "@mosae/core";
 import { FilmPlayer } from "@/components/FilmPlayer";
 import { StepHeader } from "@/components/StepHeader";
 import { demoImage } from "@/lib/demoAssets";
@@ -20,14 +20,25 @@ function FacebookIcon() { return <Svg width={22} height={22} viewBox="0 0 22 22"
 function GalleryIcon() { return <Svg width={20} height={20} viewBox="0 0 20 20"><Rect x={2.5} y={3} width={12.5} height={12.5} rx={1.2} fill="none" stroke="#1C1C19" strokeWidth={1.5} /><Path d="m4.5 13 3.1-3.1 2.25 2.25 1.7-1.7 2.45 2.55M10.5 3V1.8h6.8v12.6h-2.3" fill="none" stroke="#1C1C19" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></Svg>; }
 
 export default function SaveFilmScreen() {
-  const router = useRouter();
   const { filmId } = useLocalSearchParams<{ filmId: string }>();
-  const { repository, route } = useStoryFlow();
+  const story = useStoryFlow();
+  return <SaveFilmScreenContent key={`${story.identityKey}:film:${filmId}`} filmId={filmId} repository={story.repository} route={story.route} />;
+}
+
+function SaveFilmScreenContent({ filmId, repository, route }: {
+  filmId: string;
+  repository: StoryRepository;
+  route: (path: string, id?: { planId?: string; filmId?: string }) => string;
+}) {
+  const router = useRouter();
+  const isCurrent = useStoryScreenGuard();
   const goBack = useStepBack(route("/review-film", { filmId: filmId }) as Href);
   const [film, setFilm] = useState<Film | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [comingSoon, setComingSoon] = useState(false);
-  useEffect(() => { void repository.getFilm(filmId).then(setFilm).catch((cause: Error) => setError(cause.message)); }, [filmId, repository]);
+  useEffect(() => { void repository.getFilm(filmId)
+    .then((value) => { if (isCurrent()) setFilm(value); })
+    .catch((cause: Error) => { if (isCurrent()) setError(cause.message); }); }, [filmId, isCurrent, repository]);
   const download = () => {
     const anchor = document.createElement("a");
     anchor.href = Asset.fromModule(require("../assets/demo/film.mp4")).uri;

@@ -2,15 +2,16 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFixtureStoryRepository } from "../../../packages/core/src/story/fixtureRepository";
-import type { StoryPlan } from "@mosae/core";
+import type { DirectionOptions, Film, StoryPlan } from "@mosae/core";
 
-const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, params: {} as any, navigate: vi.fn() }));
+const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, apiRepositories: new Map<string, any>(), params: {} as any, navigate: vi.fn() }));
 vi.mock("@mosae/core", () => ({
   getStoryRepository: () => boundary.repository,
   createFixtureStoryRepository: () => new Proxy({}, { get: (_, key) => boundary.repository[key] }),
   createApiStoryRepository: ({ projectId }: { projectId: string }) => {
-    if (projectId !== "live-project") throw new Error("Wrong project");
-    return boundary.apiRepository;
+    const repository = boundary.apiRepositories.get(projectId);
+    if (!repository) throw new Error(`Wrong project ${projectId}`);
+    return repository;
   },
 }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ navigate: boundary.navigate }) }));
@@ -19,18 +20,32 @@ vi.mock("@/lib/demoAssets", () => ({ demoImage: (key: string) => {
   if (key.includes(":")) throw new Error("URI used as demo key");
   return 1;
 } }));
-vi.mock("@/components/sceneIcons", () => ({ ArchivalSparkleIcon: () => null, AddPhotoIcon: () => null, AddMoreIcon: () => null, ContinueArrowIcon: () => null, HeartIcon: () => null }));
+vi.mock("@/components/sceneIcons", () => ({
+  ArchivalSparkleIcon: () => null, AddPhotoIcon: () => null, AddMoreIcon: () => null, ContinueArrowIcon: () => null, HeartIcon: () => null,
+  CreateAlbumIcon: () => null, CreateArrowIcon: () => null, CreateBackIcon: () => null, CreateCakeIcon: () => null, CreateCheckIcon: () => null,
+  CreateFilmIcon: () => null, CreateHelpIcon: () => null, CreateMusicIcon: () => null, CreatePhotosIcon: () => null, CreateShareIcon: () => null,
+  CreateTimerIcon: () => null, CreateVaultIcon: () => null,
+}));
 vi.mock("@/components/icons", () => ({ CheckIcon: () => null }));
 vi.mock("@/components/StepHeader", () => ({ StepHeader: () => null }));
 vi.mock("@/components/BottomTabBar", () => ({ BottomTabBar: () => null }));
+vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: ({ poster }: { poster: { uri?: string } | string }) => React.createElement("div", { "data-testid": "film-player", "data-poster": typeof poster === "string" ? poster : poster.uri }) }));
+vi.mock("@/components/PrimaryButton", () => ({ PrimaryButton: ({ label, onPress }: { label: string; onPress: () => void }) => React.createElement("button", { "aria-label": label, onClick: onPress }, label) }));
+vi.mock("@/lib/storyImage", () => ({ storyImage: (key: string) => ({ uri: key }) }));
+vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "film.mp4" }) } }));
+vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circle: () => null, Rect: () => null }));
 vi.mock("react-native", () => {
-  const element = (tag: string) => ({ children, onPress, onChangeText, numberOfLines, accessibilityLabel, source, resizeMode, keyboardShouldPersistTaps, placeholderTextColor, ...props }: any) =>
+  const element = (tag: string) => ({ children, onPress, onChangeText, numberOfLines, accessibilityLabel, source, resizeMode, keyboardShouldPersistTaps, placeholderTextColor, contentContainerClassName, multiline, textAlignVertical, horizontal, showsHorizontalScrollIndicator, showsVerticalScrollIndicator, ...props }: any) =>
     React.createElement(tag, { ...props, onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined, ...(tag === "img" ? { src: source?.uri, alt: accessibilityLabel } : {}) }, children);
   return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), Image: element("img"), TextInput: element("input") };
 });
 
 import ReviewMomentsScreen from "../app/review-moments";
 import CuratedTimelineScreen from "../app/curated-timeline";
+import CreateScreen from "../app/create";
+import DirectFilmScreen from "../app/direct-film";
+import ReviewFilmScreen from "../app/review-film";
+import SaveFilmScreen from "../app/save-film";
 
 let root: Root;
 let host: HTMLDivElement;
@@ -51,6 +66,7 @@ beforeEach(async () => {
   boundary.navigate.mockReset();
   boundary.params = { planId: "initial", repository: "fixture" };
   boundary.apiRepository = { getPlan: vi.fn(async () => ({ ...structuredClone(plan), intro: { ...plan.intro, headline: "Live project story" } })) };
+  boundary.apiRepositories = new Map([["live-project", boundary.apiRepository]]);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 async function render(Component: React.ComponentType) { await act(async () => root.render(<Component />)); }
@@ -59,6 +75,21 @@ async function click(label: string) {
   expect(button).not.toBeNull();
   await act(async () => button.click());
 }
+
+const directionOptions = (note: string): DirectionOptions => ({
+  note,
+  rewrites: [],
+  cadences: [{ id: "gentle", name: "Gentle", description: "Warm" }],
+  soundtracks: [{ id: "piano", name: "Piano", description: "Soft" }],
+  durations: [{ id: "1m", label: "1 min", caption: "Brief", seconds: 60 }],
+  recommendedDuration: "1m",
+});
+
+const film = (filmId: string, planId: string, posterKey: string): Film => ({
+  filmId, planId, posterKey, savePosterKey: `${posterKey}-save`, version: 1,
+  title: filmId, subtitle: "A story", place: "Singapore", dateLabel: "Sep 2026",
+  durationSec: 60, videoKey: "film", momentCount: 2, audioLabel: "Piano", shortcuts: [], status: "ready",
+});
 
 describe("review screens", () => {
   it("restores the live repository from the URL on a fresh mount and carries identity forward", async () => {
@@ -180,5 +211,132 @@ describe("review screens", () => {
     expect(boundary.repository.setMomentSelected).toHaveBeenCalledWith("revised", "real-0", false);
     await click("Continue");
     expect(boundary.navigate).toHaveBeenCalledWith("/create?planId=selected-revision&repository=fixture");
+  });
+});
+
+describe("downstream story screens", () => {
+  it("does not let a delayed create load replace the current project plan", async () => {
+    let resolveA!: (value: StoryPlan) => void;
+    const repoA = { getPlan: vi.fn(() => new Promise<StoryPlan>(done => { resolveA = done; })), chooseCreateOption: vi.fn() };
+    const repoB = { getPlan: vi.fn(async () => ({ ...structuredClone(plan), planId: "plan-b" })), chooseCreateOption: vi.fn(async () => ({ available: false })) };
+    boundary.apiRepositories = new Map([["project-a", repoA], ["project-b", repoB]]);
+    boundary.params = { planId: "plan-a", repository: "api", projectId: "project-a" };
+    await render(CreateScreen);
+
+    boundary.params = { planId: "plan-b", repository: "api", projectId: "project-b" };
+    await render(CreateScreen);
+    await act(async () => resolveA({ ...structuredClone(plan), planId: "plan-a" }));
+    await click("Continue with Direct my film");
+
+    expect(repoB.chooseCreateOption).toHaveBeenCalledWith("plan-b", "film");
+    expect(repoA.chooseCreateOption).not.toHaveBeenCalled();
+  });
+
+  it("does not navigate when a create action from the previous project finishes", async () => {
+    let resolveChoice!: (value: { available: boolean }) => void;
+    const repoA = {
+      getPlan: vi.fn(async () => ({ ...structuredClone(plan), planId: "plan-a" })),
+      chooseCreateOption: vi.fn(() => new Promise<{ available: boolean }>(done => { resolveChoice = done; })),
+    };
+    const repoB = { getPlan: vi.fn(async () => ({ ...structuredClone(plan), planId: "plan-b" })) };
+    boundary.apiRepositories = new Map([["project-a", repoA], ["project-b", repoB]]);
+    boundary.params = { planId: "plan-a", repository: "api", projectId: "project-a" };
+    await render(CreateScreen);
+    await click("Continue with Direct my film");
+
+    boundary.params = { planId: "plan-b", repository: "api", projectId: "project-b" };
+    await render(CreateScreen);
+    await act(async () => resolveChoice({ available: true }));
+
+    expect(boundary.navigate).not.toHaveBeenCalled();
+  });
+
+  it("does not let delayed directing options overwrite the current project", async () => {
+    let resolveA!: (value: DirectionOptions) => void;
+    const repoA = { getDirectionOptions: vi.fn(() => new Promise<DirectionOptions>(done => { resolveA = done; })), directFilm: vi.fn() };
+    const repoB = {
+      getDirectionOptions: vi.fn(async () => directionOptions("Project B note")),
+      directFilm: vi.fn(async () => ({ filmId: "film-b" })),
+    };
+    boundary.apiRepositories = new Map([["project-a", repoA], ["project-b", repoB]]);
+    boundary.params = { planId: "plan-a", repository: "api", projectId: "project-a" };
+    await render(DirectFilmScreen);
+
+    boundary.params = { planId: "plan-b", repository: "api", projectId: "project-b" };
+    await render(DirectFilmScreen);
+    await act(async () => resolveA(directionOptions("Stale project A note")));
+    await click("Direct my film");
+
+    expect(repoB.directFilm).toHaveBeenCalledWith("plan-b", expect.objectContaining({ note: "Project B note" }));
+  });
+
+  it("does not navigate when directing the previous project finishes", async () => {
+    let resolveDirect!: (value: { filmId: string }) => void;
+    const repoA = {
+      getDirectionOptions: vi.fn(async () => directionOptions("Project A note")),
+      directFilm: vi.fn(() => new Promise<{ filmId: string }>(done => { resolveDirect = done; })),
+    };
+    const repoB = { getDirectionOptions: vi.fn(async () => directionOptions("Project B note")) };
+    boundary.apiRepositories = new Map([["project-a", repoA], ["project-b", repoB]]);
+    boundary.params = { planId: "plan-a", repository: "api", projectId: "project-a" };
+    await render(DirectFilmScreen);
+    await click("Direct my film");
+
+    boundary.params = { planId: "plan-b", repository: "api", projectId: "project-b" };
+    await render(DirectFilmScreen);
+    await act(async () => resolveDirect({ filmId: "film-a" }));
+
+    expect(boundary.navigate).not.toHaveBeenCalled();
+  });
+
+  it("does not let a delayed film load change which current-project film is saved", async () => {
+    let resolveA!: (value: Film) => void;
+    const repoA = { getFilm: vi.fn(() => new Promise<Film>(done => { resolveA = done; })), saveFilm: vi.fn() };
+    const repoB = { getFilm: vi.fn(async () => film("film-b", "plan-b", "poster-b")), saveFilm: vi.fn(async () => undefined) };
+    boundary.apiRepositories = new Map([["project-a", repoA], ["project-b", repoB]]);
+    boundary.params = { filmId: "film-a", repository: "api", projectId: "project-a" };
+    await render(ReviewFilmScreen);
+
+    boundary.params = { filmId: "film-b", repository: "api", projectId: "project-b" };
+    await render(ReviewFilmScreen);
+    await act(async () => resolveA(film("film-a", "plan-a", "poster-a")));
+    await click("Looks good! Save film");
+
+    expect(repoB.saveFilm).toHaveBeenCalledWith("film-b");
+    expect(repoA.saveFilm).not.toHaveBeenCalled();
+  });
+
+  it("does not navigate when saving the previous project's film finishes", async () => {
+    let resolveSave!: () => void;
+    const repoA = {
+      getFilm: vi.fn(async () => film("film-a", "plan-a", "poster-a")),
+      saveFilm: vi.fn(() => new Promise<void>(done => { resolveSave = done; })),
+    };
+    const repoB = { getFilm: vi.fn(async () => film("film-b", "plan-b", "poster-b")) };
+    boundary.apiRepositories = new Map([["project-a", repoA], ["project-b", repoB]]);
+    boundary.params = { filmId: "film-a", repository: "api", projectId: "project-a" };
+    await render(ReviewFilmScreen);
+    await click("Looks good! Save film");
+
+    boundary.params = { filmId: "film-b", repository: "api", projectId: "project-b" };
+    await render(ReviewFilmScreen);
+    await act(async () => resolveSave());
+
+    expect(boundary.navigate).not.toHaveBeenCalled();
+  });
+
+  it("does not let a delayed completed-film load overwrite the current project", async () => {
+    let resolveA!: (value: Film) => void;
+    const repoA = { getFilm: vi.fn(() => new Promise<Film>(done => { resolveA = done; })) };
+    const repoB = { getFilm: vi.fn(async () => film("film-b", "plan-b", "poster-b")) };
+    boundary.apiRepositories = new Map([["project-a", repoA], ["project-b", repoB]]);
+    boundary.params = { filmId: "film-a", repository: "api", projectId: "project-a" };
+    await render(SaveFilmScreen);
+
+    boundary.params = { filmId: "film-b", repository: "api", projectId: "project-b" };
+    await render(SaveFilmScreen);
+    await act(async () => resolveA(film("film-a", "plan-a", "poster-a")));
+
+    expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-poster")).toBe("poster-b-save");
   });
 });

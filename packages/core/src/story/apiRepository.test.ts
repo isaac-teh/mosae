@@ -207,6 +207,18 @@ describe("createApiStoryRepository", () => {
     expect(deps.request).not.toHaveBeenCalled();
   });
 
+  it("keeps a proposal favorite when another screen creates its own API repository", async () => {
+    const deps = dependencies();
+    const reviewRepository = createApiStoryRepository({ projectId: "project-1" }, deps);
+
+    await reviewRepository.setMomentFavorite("proposal-1", "moment-2", true);
+    const timelineRepository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    const reread = await timelineRepository.getPlan("proposal-1");
+
+    expect(reread.moments.find(({ id }) => id === "moment-2")?.favorite).toBe(true);
+    expect(deps.request).not.toHaveBeenCalled();
+  });
+
   it("accepts the exact proposal when the user chooses to create a film", async () => {
     const deps = dependencies();
     vi.mocked(deps.request).mockResolvedValue({ proposal: { ...proposal, state: "accepted" } });

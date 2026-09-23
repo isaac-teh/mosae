@@ -28,6 +28,21 @@ type ProjectionSources = {
   shots: ShotProjectionSource[];
 };
 
+// Favorites are presentation-only. Keep them for the lifetime of the client
+// session so repositories created by separate screens agree, while a full app
+// reload intentionally starts a fresh presentation state.
+const favoriteMomentIdsByProposal = new Map<string, Set<string>>();
+
+function favoriteMomentIds(projectId: string, proposalId: string) {
+  const key = `${projectId}\0${proposalId}`;
+  let favorites = favoriteMomentIdsByProposal.get(key);
+  if (!favorites) {
+    favorites = new Set();
+    favoriteMomentIdsByProposal.set(key, favorites);
+  }
+  return favorites;
+}
+
 const firebaseDeps: ApiStoryRepositoryDeps = {
   async listenDocument(path, waitForExists = false) {
     await ensureSignedIn();
@@ -179,10 +194,10 @@ export function createApiStoryRepository(
 ): StoryRepository {
   if (!options.projectId) throw new Error("project_id_required");
   const projectId = options.projectId;
-  const favoriteMomentIds = new Set<string>();
   const render = (source: ProjectionSources) => {
     const plan = projectProposal(source.proposal, source.project, source.shots);
-    return { ...plan, moments: plan.moments.map((moment) => ({ ...moment, favorite: favoriteMomentIds.has(moment.id) })) };
+    const favorites = favoriteMomentIds(projectId, source.proposal.id);
+    return { ...plan, moments: plan.moments.map((moment) => ({ ...moment, favorite: favorites.has(moment.id) })) };
   };
 
   return {
@@ -219,8 +234,9 @@ export function createApiStoryRepository(
     setMomentFavorite: async (planId, momentId, favorite) => {
       const source = await loadSources(deps, projectId, planId);
       if (!source.proposal.moments.some((moment) => moment.id === momentId)) throw new Error(`Unknown moment ${momentId}`);
-      if (favorite) favoriteMomentIds.add(momentId);
-      else favoriteMomentIds.delete(momentId);
+      const favorites = favoriteMomentIds(projectId, source.proposal.id);
+      if (favorite) favorites.add(momentId);
+      else favorites.delete(momentId);
       return render(source);
     },
     reviseMoments: async (planId, request) => {

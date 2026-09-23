@@ -1,11 +1,11 @@
 // Figma: "What would you like to create?" (8:864)
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
-import { useStoryFlow } from "@/lib/storyFlow";
-import { type CreateOption, type StoryPlan } from "@mosae/core";
+import { useStoryFlow, useStoryScreenGuard } from "@/lib/storyFlow";
+import { type CreateOption, type StoryPlan, type StoryRepository } from "@mosae/core";
 import { storyImage } from "@/lib/storyImage";
 import {
   CreateAlbumIcon,
@@ -63,25 +63,41 @@ function CreateOptionCard({ option, selected, onPress }: { option: Option; selec
 }
 
 export default function CreateScreen() {
-  const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
-  const { repository, route } = useStoryFlow();
+  const story = useStoryFlow();
+  return <CreateScreenContent key={`${story.identityKey}:plan:${planId}`} planId={planId} repository={story.repository} route={story.route} />;
+}
+
+function CreateScreenContent({ planId, repository, route }: {
+  planId: string;
+  repository: StoryRepository;
+  route: (path: string, id?: { planId?: string; filmId?: string }) => string;
+}) {
+  const router = useRouter();
+  const isCurrent = useStoryScreenGuard();
   const goBack = useStepBack(route("/curated-timeline", { planId: planId }) as Href);
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<CreateOption>("film");
   const [comingSoon, setComingSoon] = useState(false);
 
-  const load = () => repository.getPlan(planId).then(setPlan).catch((cause: Error) => setError(cause.message));
-  useEffect(() => { void repository.getPlan(planId).then(setPlan).catch((cause: Error) => setError(cause.message)); }, [planId, repository]);
+  const load = useCallback(() => repository.getPlan(planId)
+    .then((value) => { if (isCurrent()) setPlan(value); })
+    .catch((cause: Error) => { if (isCurrent()) setError(cause.message); }), [isCurrent, planId, repository]);
+  useEffect(() => { void load(); }, [load]);
   if (!plan && !error) return <View className="flex-1 bg-canvas" />;
   if (error) return <View className="flex-1 items-center justify-center bg-canvas"><Text className="text-brand">{error}</Text><Pressable role="button" aria-label="Retry" onPress={() => { setError(null); void load(); }} className="mt-4 rounded-full bg-brand px-5 py-3"><Text className="font-sans-semibold text-white">Retry</Text></Pressable></View>;
   if (!plan) return null;
   const current = options.find((option) => option.id === selected)!;
   const continueWithOption = async () => {
-    const result = await repository.chooseCreateOption(plan.planId, selected);
-    if (result.available) router.navigate(route("/direct-film", { planId: plan.planId }) as never);
-    else setComingSoon(true);
+    try {
+      const result = await repository.chooseCreateOption(plan.planId, selected);
+      if (!isCurrent()) return;
+      if (result.available) router.navigate(route("/direct-film", { planId: plan.planId }) as never);
+      else setComingSoon(true);
+    } catch (cause) {
+      if (isCurrent()) setError(cause instanceof Error ? cause.message : "Unable to continue");
+    }
   };
   return <View className="flex-1 bg-canvas"><ScrollView className="flex-1" contentContainerClassName="min-h-[1000px] px-5 pb-8" keyboardShouldPersistTaps="handled">
     <View className="flex-row items-center justify-between py-2">
