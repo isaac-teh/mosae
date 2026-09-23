@@ -38,6 +38,7 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
   const documents: Record<string, unknown> = {
     "projects/project-1": { id: "project-1", title: "Family weekend", place: "Singapore", dateRange: "22–23 Sep 2026" },
     "projects/project-1/storyProposals/proposal-1": proposal,
+    "projects/project-1/jobs/job-next": { id: "job-next", status: "succeeded", proposalId: "proposal-next" },
   };
   const collections: Record<string, unknown[]> = {
     "projects/project-1/shots": [
@@ -52,6 +53,11 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
   };
   return {
     listenDocument: vi.fn(async (path) => documents[path] ?? null),
+    listenUntil: vi.fn(async (path, accept) => {
+      const value = documents[path] ?? null;
+      if (!accept(value)) throw new Error(`listenUntil would hang on ${path}`);
+      return value;
+    }),
     listenCollection: vi.fn(async (path) => collections[path] ?? []),
     getThumbnailUrl: vi.fn(async (projectId, assetId) => `https://storage.test/${projectId}/${assetId}?signed=true`),
     request: vi.fn(async () => ({})),
@@ -174,14 +180,14 @@ describe("createApiStoryRepository", () => {
     expect(updated.moments.find(({ id }) => id === "moment-1")?.selected).toBe(false);
   });
 
-  it("posts feedback and waits for the queued proposal through the read listener", async () => {
+  it("posts feedback and waits for the plan job before reading the queued proposal", async () => {
     const deps = dependencies();
     const originalListenDocument = deps.listenDocument;
     deps.listenDocument = vi.fn(async (path, waitForExists) => {
       if (path.endsWith("/storyProposals/proposal-next")) return { ...proposal, id: "proposal-next", parentProposalId: "proposal-1", version: 2 };
       return originalListenDocument(path, waitForExists);
     });
-    vi.mocked(deps.request).mockResolvedValue({ job: { proposalId: "proposal-next" } });
+    vi.mocked(deps.request).mockResolvedValue({ job: { id: "job-next", proposalId: "proposal-next" } });
     const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
 
     const updated = await repository.reviseMoments("proposal-1", "Show more of dinner.");
@@ -192,7 +198,29 @@ describe("createApiStoryRepository", () => {
       { feedback: "Show more of dinner." },
     );
     expect(updated.planId).toBe("proposal-next");
+    expect(deps.listenUntil).toHaveBeenCalledWith("projects/project-1/jobs/job-next", expect.any(Function));
     expect(deps.listenDocument).toHaveBeenCalledWith("projects/project-1/storyProposals/proposal-next", true);
+  });
+
+  it("surfaces a failed plan job's reason instead of waiting for a proposal it will never write", async () => {
+    const deps = dependencies();
+    // A failed job writes no proposal, so waiting on the document never resolves.
+    deps.listenDocument = vi.fn(async (path, waitForExists) => {
+      if (path.endsWith("/storyProposals/proposal-next")) return new Promise(() => {});
+      return dependencies().listenDocument(path, waitForExists);
+    });
+    deps.listenUntil = vi.fn(async (_path, accept) => {
+      const job = { id: "job-next", status: "failed", proposalId: "proposal-next", reason: "We couldn't build a valid story plan. Please try again." };
+      expect(accept(job)).toBe(true);
+      expect(accept({ ...job, status: "running" })).toBe(false);
+      return job;
+    });
+    vi.mocked(deps.request).mockResolvedValue({ job: { id: "job-next", proposalId: "proposal-next" } });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+
+    await expect(repository.reviseMoments("proposal-1", "Show more of dinner."))
+      .rejects.toThrow("We couldn't build a valid story plan. Please try again.");
+    expect(deps.listenDocument).not.toHaveBeenCalledWith("projects/project-1/storyProposals/proposal-next", true);
   });
 
   it("keeps presentation-only favorites local without issuing an application write", async () => {

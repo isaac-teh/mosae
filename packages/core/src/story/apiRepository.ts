@@ -15,6 +15,12 @@ type RecordData = Record<string, unknown>;
 
 export type ApiStoryRepositoryDeps = {
   listenDocument(path: string, waitForExists?: boolean): Promise<unknown | null>;
+  /**
+   * Resolves with the first existing snapshot the predicate accepts. A document
+   * that never satisfies it never resolves, so callers pass a terminal-state
+   * predicate rather than waiting on a document that may never be written.
+   */
+  listenUntil(path: string, accept: (value: unknown) => boolean): Promise<unknown>;
   listenCollection(path: string): Promise<unknown[]>;
   getThumbnailUrl(projectId: string, assetId: string): Promise<string>;
   request(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<unknown>;
@@ -58,6 +64,23 @@ const firebaseDeps: ApiStoryRepositoryDeps = {
         }
         stop();
         resolve(snapshot.data());
+      }, (error) => {
+        stop();
+        reject(error);
+      });
+    });
+  },
+  async listenUntil(path, accept) {
+    await ensureSignedIn();
+    return new Promise((resolve, reject) => {
+      let unsubscribe: (() => void) | undefined;
+      const stop = () => queueMicrotask(() => unsubscribe?.());
+      unsubscribe = onSnapshot(doc(getFirestoreClient(), path), (snapshot) => {
+        if (!snapshot.exists()) return;
+        const value = snapshot.data();
+        if (!accept(value)) return;
+        stop();
+        resolve(value);
       }, (error) => {
         stop();
         reject(error);
@@ -184,6 +207,27 @@ async function loadSources(deps: ApiStoryRepositoryDeps, projectId: string, prop
   };
 }
 
+const PLAN_FAILED = "Couldn't update your moments. Please try again.";
+
+/**
+ * Waits on the plan job, not on the proposal it would write. A failed job never
+ * writes one, so waiting for the document left the review screen showing
+ * "Updating…" forever with every control disabled. This mirrors how Tell AI the
+ * Story watches the job and surfaces its reason.
+ */
+async function awaitPlanJob(deps: ApiStoryRepositoryDeps, projectId: string, jobId: string): Promise<void> {
+  const value = await deps.listenUntil(
+    `projects/${projectId}/jobs/${jobId}`,
+    (snapshot) => {
+      const status = (snapshot as RecordData | null)?.status;
+      return status === "succeeded" || status === "failed";
+    },
+  );
+  const job = record(value, "plan job");
+  if (job.status !== "failed") return;
+  throw new Error(typeof job.reason === "string" && job.reason ? job.reason : PLAN_FAILED);
+}
+
 function unavailable(operation: string): Promise<never> {
   return Promise.reject(new Error(`${operation}_not_available`));
 }
@@ -247,6 +291,7 @@ export function createApiStoryRepository(
       ), "feedback response");
       const job = record(response.job, "plan job");
       const nextProposalId = stringField(job.proposalId, "proposal id");
+      await awaitPlanJob(deps, projectId, stringField(job.id, "plan job id"));
       const source = await loadSources(deps, projectId, nextProposalId);
       return render(source);
     },
