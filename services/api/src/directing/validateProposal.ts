@@ -79,6 +79,21 @@ function validateProposalMinimumDistinct({ proposal }: RuleContext): string[] {
   return [`proposal_minimum_distinct: chapter selections ${listed(distinct) || "none"} provide ${distinct.size} distinct moments; use at least ${required} distinct moments across ${proposal.chapters.length} chapters.`];
 }
 
+/**
+ * A video contributes only the seconds its preview range actually plays, which
+ * is what the client estimate in `projectProposal` shows the user and what
+ * composition will cut from. Counting the whole source interval let a proposal
+ * pass this guard while promising the user a much shorter film.
+ */
+function previewSeconds(moment: ProposalSubmission["moments"][number]): number {
+  if (moment.kind !== "video") return 0;
+  const start = moment.previewInSec;
+  const end = moment.previewOutSec;
+  if (start === undefined || end === undefined) return 0;
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  return Math.max(0, end - start);
+}
+
 function validateDurationCoverage({ proposal, shotsById, options }: RuleContext): string[] {
   let equivalents = 0;
   const selected = chapterShotIds(proposal);
@@ -88,10 +103,7 @@ function validateDurationCoverage({ proposal, shotsById, options }: RuleContext)
     if (!moment) continue;
     const shot = shotsById.get(shotId);
     if (shot?.analysis?.kind === "photo") equivalents += 1;
-    if (shot?.analysis?.kind === "video") {
-      const interval = shotInterval(shot);
-      if (interval) equivalents += (interval[1] - interval[0]) / 5;
-    }
+    if (shot?.analysis?.kind === "video") equivalents += previewSeconds(moment) / 5;
   }
 
   const required = options.targetSec / 5;

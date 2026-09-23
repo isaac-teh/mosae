@@ -52,7 +52,7 @@ const validProposal: ProposalSubmission = {
     { shotId: "p2", kind: "photo", title: "Two", description: "", rationale: "" },
     { shotId: "p3", kind: "photo", title: "Three", description: "", rationale: "" },
     { shotId: "p4", kind: "photo", title: "Four", description: "", rationale: "" },
-    { shotId: "v1", kind: "video", title: "Five", description: "", rationale: "", previewInSec: 12, previewOutSec: 18 },
+    { shotId: "v1", kind: "video", title: "Five", description: "", rationale: "", previewInSec: 10, previewOutSec: 20 },
   ],
   chapters: [
     { title: "Arrival", summary: "", momentIds: ["p1", "p2", "v1"] },
@@ -187,7 +187,7 @@ describe("validateProposal", () => {
     expect(result).toEqual(expect.arrayContaining([
       expect.stringMatching(/catalog_media_kind.*v1.*video.*photo.*set kind/i),
       expect.stringMatching(/video_preview_bounds.*v1.*undefined.*10.*11.*inside/i),
-      expect.stringMatching(/duration_coverage.*4\.2 photo-equivalents.*at least 5/i),
+      expect.stringMatching(/duration_coverage.*4 photo-equivalents.*at least 5/i),
     ]));
   });
 
@@ -199,5 +199,19 @@ describe("validateProposal", () => {
     };
 
     expect(validateProposal(validProposal, intervalWorkingSet, options)).toEqual({ ok: true });
+  });
+  it("counts only the preview range a video actually plays, matching the client estimate", async () => {
+    // v1's source interval is 10 seconds, but the proposal previews 2 of them.
+    const shortPreview: ProposalSubmission = {
+      ...validProposal,
+      moments: validProposal.moments.map((moment) => moment.shotId === "v1"
+        ? { ...moment, previewInSec: 10, previewOutSec: 12 }
+        : moment),
+    };
+
+    const diagnostic = diagnostics(validateProposal(shortPreview, workingSet, options))
+      .find((item) => item.startsWith("duration_coverage:"));
+
+    expect(diagnostic).toMatch(/4\.4 photo-equivalents.*at least 6.*30 seconds/i);
   });
 });
