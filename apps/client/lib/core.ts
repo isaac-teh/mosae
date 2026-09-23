@@ -1,6 +1,8 @@
-import { configureCore, setStoryRepository, createFixtureStoryRepository } from "@mosae/core";
+import { configureCore, setStoryRepository, createApiStoryRepository, createFixtureStoryRepository } from "@mosae/core";
 
 const useEmulators = process.env.EXPO_PUBLIC_USE_EMULATORS === "true";
+const useApiStoryRepository = process.env.EXPO_PUBLIC_USE_API_STORY_REPOSITORY === "true";
+const storyProjectId = process.env.EXPO_PUBLIC_STORY_PROJECT_ID;
 
 configureCore({
   apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? "",
@@ -14,4 +16,12 @@ configureCore({
   useEmulators,
 });
 
-setStoryRepository(createFixtureStoryRepository());
+if (useApiStoryRepository && !storyProjectId) {
+  throw new Error("EXPO_PUBLIC_STORY_PROJECT_ID is required when EXPO_PUBLIC_USE_API_STORY_REPOSITORY=true");
+}
+
+setStoryRepository(
+  useApiStoryRepository
+    ? createApiStoryRepository({ projectId: storyProjectId as string })
+    : createFixtureStoryRepository(),
+);

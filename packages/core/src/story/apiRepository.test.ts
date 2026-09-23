@@ -1,0 +1,219 @@
+import { describe, expect, it, vi } from "vitest";
+
+const firebaseMocks = vi.hoisted(() => ({
+  ensureSignedIn: vi.fn(async () => ({ getIdToken: async () => "owner-token" })),
+  onSnapshot: vi.fn(),
+  getDownloadURL: vi.fn(async (path: string) => `https://firebase.test/${encodeURIComponent(path)}`),
+}));
+
+vi.mock("../auth", () => ({ ensureSignedIn: firebaseMocks.ensureSignedIn }));
+vi.mock("../config", () => ({ getCoreConfig: () => ({ apiBaseUrl: "https://api.test" }) }));
+vi.mock("../firebase", () => ({ getFirestoreClient: () => "firestore", getStorageClient: () => "storage" }));
+vi.mock("firebase/firestore", () => ({
+  doc: (_db: unknown, ...segments: string[]) => segments.join("/"),
+  collection: (_db: unknown, ...segments: string[]) => segments.join("/"),
+  onSnapshot: firebaseMocks.onSnapshot,
+}));
+vi.mock("firebase/storage", () => ({
+  ref: (_storage: unknown, path: string) => path,
+  getDownloadURL: firebaseMocks.getDownloadURL,
+}));
+
+import { createApiStoryRepository, type ApiStoryRepositoryDeps } from "./apiRepository";
+
+const proposal = {
+  schemaVersion: 1,
+  id: "proposal-1",
+  projectId: "project-1",
+  storyIntentId: "intent-1",
+  parentProposalId: null,
+  state: "draft",
+  version: 1,
+  title: "Family weekend",
+  moments: [
+    { id: "moment-1", shotId: "shot-1", kind: "photo", title: "Arrival", description: "At the station", rationale: "Opening" },
+    { id: "moment-2", shotId: "shot-2", kind: "photo", title: "Dinner", description: "Around the table", rationale: "Togetherness" },
+  ],
+  chapters: [{ id: "chapter-1", title: "Together", summary: "The first evening", momentIds: ["moment-1", "moment-2"] }],
+  constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+  openQuestions: [],
+};
+
+function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStoryRepositoryDeps {
+  const documents: Record<string, unknown> = {
+    "projects/project-1": { id: "project-1", title: "Family weekend", place: "Singapore", dateRange: "22–23 Sep 2026" },
+    "projects/project-1/storyProposals/proposal-1": proposal,
+  };
+  const collections: Record<string, unknown[]> = {
+    "projects/project-1/shots": [
+      { id: "shot-1", assetId: "asset-1", mediaType: "photo" },
+      { id: "shot-2", assetId: "asset-2", mediaType: "photo" },
+    ],
+    "projects/project-1/assets": [
+      { id: "asset-1", eventId: "event-1", derivatives: { thumbPath: "proxies/user/project-1/asset-1/1/thumb.jpg" } },
+      { id: "asset-2", eventId: "event-1", derivatives: { thumbPath: "proxies/user/project-1/asset-2/1/thumb.jpg" } },
+    ],
+    "projects/project-1/events": [{ id: "event-1", label: "Day 1, evening" }],
+  };
+  return {
+    listenDocument: vi.fn(async (path) => documents[path] ?? null),
+    listenCollection: vi.fn(async (path) => collections[path] ?? []),
+    getDownloadUrl: vi.fn(async (path) => `https://storage.test/${encodeURIComponent(path)}`),
+    request: vi.fn(async () => ({})),
+    ...overrides,
+  };
+}
+
+describe("createApiStoryRepository", () => {
+  it("uses Firestore snapshots and Firebase Storage download URLs in its default read adapter", async () => {
+    const documents: Record<string, unknown> = {
+      "projects/project-1": { id: "project-1", title: "Family weekend", place: "Singapore", dateRange: "22–23 Sep 2026" },
+      "projects/project-1/storyProposals/proposal-1": proposal,
+    };
+    const collections: Record<string, unknown[]> = {
+      "projects/project-1/shots": [{ id: "shot-1", assetId: "asset-1", mediaType: "photo" }, { id: "shot-2", assetId: "asset-2", mediaType: "photo" }],
+      "projects/project-1/assets": [
+        { id: "asset-1", eventId: "event-1", derivatives: { thumbPath: "proxies/owner/project-1/asset-1/1/thumb.jpg" } },
+        { id: "asset-2", eventId: "event-1", derivatives: { thumbPath: "proxies/owner/project-1/asset-2/1/thumb.jpg" } },
+      ],
+      "projects/project-1/events": [{ id: "event-1", label: "Day 1, evening" }],
+    };
+    firebaseMocks.onSnapshot.mockImplementation((path: string, onValue: (snapshot: unknown) => void) => {
+      queueMicrotask(() => {
+        if (path in documents) onValue({ exists: () => true, data: () => documents[path] });
+        else onValue({ docs: (collections[path] ?? []).map((value) => ({ data: () => value })) });
+      });
+      return vi.fn();
+    });
+
+    const plan = await createApiStoryRepository({ projectId: "project-1" }).getPlan("proposal-1");
+
+    expect(plan.moments[0].imageKey).toBe("https://firebase.test/proxies%2Fowner%2Fproject-1%2Fasset-1%2F1%2Fthumb.jpg");
+    expect(firebaseMocks.onSnapshot).toHaveBeenCalledTimes(5);
+    expect(firebaseMocks.getDownloadURL).toHaveBeenCalledWith("proxies/owner/project-1/asset-1/1/thumb.jpg");
+  });
+
+  it("authenticates default API writes", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ job: { proposalId: "proposal-next" } }), { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createApiStoryRepository({ projectId: "project-1" }).createPlan("Our story", [])).resolves.toEqual({ planId: "proposal-next" });
+
+    expect(fetchMock).toHaveBeenCalledWith("https://api.test/api/projects/project-1/story-intents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer owner-token" },
+      body: JSON.stringify({ text: "Our story", focus: [] }),
+    });
+  });
+
+  it("reads Firestore-shaped records and resolves owner-authorized thumbnail download URLs", async () => {
+    const deps = dependencies();
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+
+    const plan = await repository.getPlan("proposal-1");
+
+    expect(plan.moments.map(({ imageKey }) => imageKey)).toEqual([
+      "https://storage.test/proxies%2Fuser%2Fproject-1%2Fasset-1%2F1%2Fthumb.jpg",
+      "https://storage.test/proxies%2Fuser%2Fproject-1%2Fasset-2%2F1%2Fthumb.jpg",
+    ]);
+    expect(plan.chapters[0].dayLabel).toBe("Day 1, evening");
+    expect(deps.getDownloadUrl).toHaveBeenCalledWith("proxies/user/project-1/asset-1/1/thumb.jpg");
+  });
+
+  it("formats the persisted project date range for the review plan", async () => {
+    const deps = dependencies();
+    const originalListenDocument = deps.listenDocument;
+    deps.listenDocument = vi.fn(async (path, waitForExists) => {
+      if (path === "projects/project-1") {
+        return { id: "project-1", title: "Family weekend", place: "Singapore", dateRange: { start: "2026-09-22", end: "2026-09-23" } };
+      }
+      return originalListenDocument(path, waitForExists);
+    });
+
+    const plan = await createApiStoryRepository({ projectId: "project-1" }, deps).getPlan("proposal-1");
+
+    expect(plan.dateRange).toBe("Sep 22–23, 2026");
+  });
+
+  it("creates a plan for its explicit project id instead of inferring identity from media refs", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockResolvedValue({ job: { proposalId: "proposal-next" } });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+
+    await expect(repository.createPlan("Keep the family scenes warm.", ["wrong-project"])).resolves.toEqual({ planId: "proposal-next" });
+    expect(deps.request).toHaveBeenCalledWith(
+      "POST",
+      "/api/projects/project-1/story-intents",
+      { text: "Keep the family scenes warm.", focus: [] },
+    );
+  });
+
+  it("writes moment selection through the constraint revision route", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockResolvedValue({
+      proposal: {
+        ...proposal,
+        id: "proposal-2",
+        parentProposalId: "proposal-1",
+        version: 2,
+        constraints: { ...proposal.constraints, deselectedMomentIds: ["moment-1"] },
+      },
+    });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+
+    const updated = await repository.setMomentSelected("proposal-1", "moment-1", false);
+
+    expect(deps.request).toHaveBeenCalledWith(
+      "PATCH",
+      "/api/projects/project-1/proposals/proposal-1/constraints",
+      { deselectedMomentIds: ["moment-1"], mustIncludeMomentIds: [] },
+    );
+    expect(updated.planId).toBe("proposal-2");
+    expect(updated.moments.find(({ id }) => id === "moment-1")?.selected).toBe(false);
+  });
+
+  it("posts feedback and waits for the queued proposal through the read listener", async () => {
+    const deps = dependencies();
+    const originalListenDocument = deps.listenDocument;
+    deps.listenDocument = vi.fn(async (path, waitForExists) => {
+      if (path.endsWith("/storyProposals/proposal-next")) return { ...proposal, id: "proposal-next", parentProposalId: "proposal-1", version: 2 };
+      return originalListenDocument(path, waitForExists);
+    });
+    vi.mocked(deps.request).mockResolvedValue({ job: { proposalId: "proposal-next" } });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+
+    const updated = await repository.reviseMoments("proposal-1", "Show more of dinner.");
+
+    expect(deps.request).toHaveBeenCalledWith(
+      "POST",
+      "/api/projects/project-1/proposals/proposal-1/feedback",
+      { feedback: "Show more of dinner." },
+    );
+    expect(updated.planId).toBe("proposal-next");
+    expect(deps.listenDocument).toHaveBeenCalledWith("projects/project-1/storyProposals/proposal-next", true);
+  });
+
+  it("keeps presentation-only favorites local without issuing an application write", async () => {
+    const deps = dependencies();
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+
+    const updated = await repository.setMomentFavorite("proposal-1", "moment-1", true);
+    const reread = await repository.getPlan("proposal-1");
+
+    expect(updated.moments.find(({ id }) => id === "moment-1")?.favorite).toBe(true);
+    expect(reread.moments.find(({ id }) => id === "moment-1")?.favorite).toBe(true);
+    expect(deps.request).not.toHaveBeenCalled();
+  });
+
+  it("accepts the exact proposal when the user chooses to create a film", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockResolvedValue({ proposal: { ...proposal, state: "accepted" } });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+
+    await expect(repository.chooseCreateOption("proposal-1", "film")).resolves.toEqual({ available: true });
+    expect(deps.request).toHaveBeenCalledWith(
+      "POST",
+      "/api/projects/project-1/proposals/proposal-1/accept",
+    );
+  });
+});
