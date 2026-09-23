@@ -143,6 +143,27 @@ curl -s -H "Authorization: Bearer owner" "$BASE/<projectId>/events"   # day and 
 
 Ingest requires `ffmpeg` and `ffprobe` on `PATH`; the container also needs `heif-convert` on `PATH` for HEIC conversion. `GET /health` reports the availability of `ffmpeg`, `ffprobe`, and `exiftool`.
 
+## Directing pipeline
+
+When a project is `ready` or `ready_with_errors`, Tell AI the Story creates a versioned story intent and queues a bounded planning job. The planner can search eligible, understood shots, inspect their details, and read video transcripts. It returns a draft `StoryProposal` made from literal project shot IDs; it cannot accept a proposal or start composition.
+
+| Stage | Result |
+| --- | --- |
+| Story intent | `storyIntents` records the user's text and focus. A `jobs` record is queued for planning; a project still processing waits until it is ready. |
+| Plan | The planner searches and inspects project media, then writes a versioned draft to `storyProposals`. The job records progress (`searching`, `inspecting`, or `organizing`), bounded usage, and any diagnostics. |
+| Review | Selecting or deselecting moments clones a new draft with updated constraints and no model call. Written feedback queues a new plan job. |
+| Accept | Accepting the current proposal changes its state to `accepted` and records `acceptedProposalId` on the project. Composition and film generation are Phase 4 work. |
+
+The relevant collections live below `projects/{projectId}`: `storyIntents`, `storyProposals`, and `jobs`; `shots`, `assets`, and `events` remain the read-only media context for a proposal. Inspect a local proposal with the Firestore emulator REST endpoint using the admin header:
+
+```bash
+BASE="http://127.0.0.1:8085/v1/projects/demo-mosae/databases/(default)/documents/projects/<projectId>"
+curl -s -H "Authorization: Bearer owner" "$BASE/storyIntents"                 # story text and focus
+curl -s -H "Authorization: Bearer owner" "$BASE/jobs"                         # plan status, progress, usage and diagnostics
+curl -s -H "Authorization: Bearer owner" "$BASE/storyProposals"               # draft or accepted proposal versions
+curl -s -H "Authorization: Bearer owner" "$BASE/storyProposals/<proposalId>"  # one proposal's moments and chapters
+```
+
 ### Operational limits
 
 - Originals up to 2 GiB are ingested. Larger uploads are accepted, but their asset fails with `too_large_for_ingest` because Cloud Run temporary storage is memory-backed and each original is downloaded whole. A streaming path is the fix.
@@ -183,3 +204,7 @@ Firestore and Storage store tests run inside the emulators with `npm run test:em
 ## Gemini proof of concept
 
 `poc/gemini` is a standalone package with its own setup and commands; see `poc/gemini/README.md` and `poc/gemini/POC_SPEC.md`.
+
+### Directing live-run record
+
+The Phase 3 manual `trip`-sample Gemini run was not made on 2026-09-23: `GEMINI_API_KEY` was unavailable in both the process environment and the repository-root `.env`. No API request, proposal, or charge was created. When a key is available, the production planner records estimated per-turn cost in the project's `geminiUsage` collection; the PoC writes equivalent call records to `poc/gemini/out/<set>/<model>/calls.jsonl`.
