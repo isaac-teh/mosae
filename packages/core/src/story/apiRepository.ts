@@ -192,7 +192,15 @@ async function loadSources(deps: ApiStoryRepositoryDeps, projectId: string, prop
     const event = eventId ? events.get(eventId) : undefined;
     const eventLabel = event && typeof event.label === "string" ? event.label : "Undated";
     const kind = shot.mediaType === "video" ? "video" as const : "photo" as const;
-    return [deps.getThumbnailUrl(projectId, stringField(asset.id, "asset id")).then((thumbnailUrl) => ({ id, kind, thumbnailUrl, eventLabel }))];
+    // A thumbnail that will not sign degrades one card; it must not turn the
+    // whole review screen into an error page. Signing on Cloud Run needs
+    // roles/iam.serviceAccountTokenCreator — see the README's operational limits.
+    return [deps.getThumbnailUrl(projectId, stringField(asset.id, "asset id"))
+      .catch((cause: unknown) => {
+        console.warn(`Thumbnail unavailable for asset ${String(asset.id)}`, cause);
+        return "";
+      })
+      .then((thumbnailUrl) => ({ id, kind, thumbnailUrl, eventLabel }))];
   }));
 
   return {

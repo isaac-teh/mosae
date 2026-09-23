@@ -223,6 +223,20 @@ describe("createApiStoryRepository", () => {
     expect(deps.listenDocument).not.toHaveBeenCalledWith("projects/project-1/storyProposals/proposal-next", true);
   });
 
+  it("degrades a card whose thumbnail will not sign instead of failing the whole screen", async () => {
+    const deps = dependencies();
+    deps.getThumbnailUrl = vi.fn(async (projectId, assetId) => {
+      if (assetId === "asset-2") throw new Error("Permission 'iam.serviceAccounts.signBlob' denied");
+      return `https://storage.test/${projectId}/${assetId}?signed=true`;
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const plan = await createApiStoryRepository({ projectId: "project-1" }, deps).getPlan("proposal-1");
+
+    expect(plan.moments.map(({ imageKey }) => imageKey)).toEqual(["https://storage.test/project-1/asset-1?signed=true", ""]);
+    warn.mockRestore();
+  });
+
   it("keeps presentation-only favorites local without issuing an application write", async () => {
     const deps = dependencies();
     const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
