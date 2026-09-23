@@ -420,6 +420,23 @@ describe("runPlan", () => {
     expect(result).toMatchObject({ ok: false, code: "validation_failed" });
     if (!result.ok) expect(result.diagnostics.join("\n")).toMatch(/working_set_membership.*invented/);
   });
+
+  it("fails readably before any model turn when the constraints contradict each other", async () => {
+    const conflicted: PlanJob = {
+      ...job,
+      constraints: { ...constraints, excludedShotIds: ["p5"], mustIncludeMomentIds: ["p5"] },
+    };
+    const model = { runTurn: async () => { throw new Error("the model must not be called"); } };
+
+    const result = await runPlan(conflicted, { model, tools: tools() });
+
+    expect(result).toMatchObject({ ok: false, code: "constraints_conflict", retryable: false });
+    if (!result.ok) {
+      expect(result.reason).toMatch(/keep p5.*leave the same moment out/i);
+      expect(result.diagnostics.join("\n")).toMatch(/must_include_conflict.*p5/);
+      expect(result.usage.modelTurns).toBe(0);
+    }
+  });
 });
 
 describe("Budget", () => {
@@ -437,5 +454,4 @@ describe("Budget", () => {
     }
     expect(thrown).toBeInstanceOf(BudgetExhausted);
     expect(thrown).toMatchObject({ budget: "elapsed_time", limit: 120_000 });
-  });
-});
+  });});

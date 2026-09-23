@@ -61,6 +61,34 @@ describe("buildWorkingSet", () => {
     expect(buildWorkingSet(input, { cap: 1, mustIncludeMomentIds: ["s2"] }).shots.map((item) => item.id)).toEqual(["s0", "s2"]);
   });
 
+  it("keeps a must-include shot that eligibility ranking would drop", () => {
+    const input = [
+      shot("ranked", "e1", photoAnalysis(5)),
+      shot("duplicate", "e1", photoAnalysis(4), { dupOf: "ranked" }),
+      shot("unusable", "e1", videoAnalysis(4, false)),
+      shot("not-understood", "e1", photoAnalysis(4), { assetStatus: "ingested" }),
+    ];
+
+    const built = buildWorkingSet(input, { mustIncludeShotIds: ["duplicate", "unusable", "not-understood"] });
+
+    expect(built.shots.map((item) => item.id)).toEqual(["ranked", "duplicate", "unusable", "not-understood"]);
+    expect(built.lines).toHaveLength(4);
+  });
+
+  it("rejects a shot that is required and excluded at once", () => {
+    const input = [shot("kept", "e1", photoAnalysis(5)), shot("both", "e1", photoAnalysis(4))];
+
+    expect(() => buildWorkingSet(input, { excludedShotIds: ["both"], mustIncludeShotIds: ["both"] }))
+      .toThrow(/keep both.*leave the same moment out/i);
+  });
+
+  it("rejects a must-include shot that has no analysis to describe", () => {
+    const input = [shot("kept", "e1", photoAnalysis(5)), shot("raw", "e1", null, { assetStatus: "ingested" })];
+
+    expect(() => buildWorkingSet(input, { mustIncludeMomentIds: ["raw"] }))
+      .toThrow(/raw is still being processed/i);
+  });
+
   it("supports all-photo projects and an empty eligible set", () => {
     expect(buildWorkingSet([shot("photo", "e1", photoAnalysis(3))]).shots[0].id).toBe("photo");
     expect(buildWorkingSet([shot("bad", "e1", null)]).shots).toEqual([]);

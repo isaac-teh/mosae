@@ -9,7 +9,7 @@ import {
 } from "./budget.js";
 import { createPlanningTools, planningToolDeclarations } from "./tools.js";
 import { validateProposal } from "./validateProposal.js";
-import { buildWorkingSet, type WorkingSet, type WorkingShot } from "./workingSet.js";
+import { buildWorkingSet, MustIncludeConflict, type WorkingSet, type WorkingShot } from "./workingSet.js";
 
 export type PlanningProgress = "searching" | "inspecting" | "organizing";
 export type PlanningTools = ReturnType<typeof createPlanningTools>;
@@ -76,6 +76,14 @@ export type PlanResult =
   | {
     ok: false;
     code: "validation_failed";
+    retryable: false;
+    reason: string;
+    diagnostics: string[];
+    usage: PlanBudgetUsage;
+  }
+  | {
+    ok: false;
+    code: "constraints_conflict";
     retryable: false;
     reason: string;
     diagnostics: string[];
@@ -186,11 +194,26 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
   const budget = new Budget(deps.budgetLimits, deps.now);
   const deadlineScheduler = deps.deadlineScheduler ?? defaultDeadlineScheduler;
   const mustIncludeShotIds = constraintShotIds(job);
-  const workingSet = buildWorkingSet(job.shots, {
-    cap: job.workingSetCap,
-    excludedShotIds: job.constraints.excludedShotIds,
-    mustIncludeShotIds,
-  });
+  let workingSet: WorkingSet;
+  try {
+    workingSet = buildWorkingSet(job.shots, {
+      cap: job.workingSetCap,
+      excludedShotIds: job.constraints.excludedShotIds,
+      mustIncludeShotIds,
+    });
+  } catch (error) {
+    // The constraints contradict each other, so no model turn can help. Fail
+    // before spending one, with a reason the user can act on.
+    if (!(error instanceof MustIncludeConflict)) throw error;
+    return {
+      ok: false,
+      code: "constraints_conflict",
+      retryable: false,
+      reason: error.message,
+      diagnostics: error.diagnostics,
+      usage: budget.snapshot(),
+    };
+  }
   const messages: PlanMessage[] = [{ role: "user", content: initialPrompt(job, workingSet.lines) }];
   let repairCount = 0;
   let diagnostics: string[] = [];

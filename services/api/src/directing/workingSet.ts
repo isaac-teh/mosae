@@ -36,6 +36,20 @@ export type WorkingSet = {
 
 const DEFAULT_CAP = 180;
 
+/**
+ * A must-include the catalog cannot honour. The user named the shot
+ * explicitly, so it is never silently dropped: either the choice wins over
+ * eligibility ranking, or planning stops here with something the user can act
+ * on. Reaching validation instead would fail the proposal non-retryably with
+ * no escape but a new story.
+ */
+export class MustIncludeConflict extends Error {
+  constructor(message: string, readonly shotIds: string[], readonly diagnostics: string[]) {
+    super(message);
+    this.name = "MustIncludeConflict";
+  }
+}
+
 function statusOf(shot: WorkingShot): AssetStatus | undefined {
   return shot.assetStatus ?? shot.status ?? shot.asset?.status;
 }
@@ -112,10 +126,35 @@ export function buildWorkingSet(shots: WorkingShot[], options: WorkingSetOptions
   }
 
   const mustInclude = new Set([...(options.mustIncludeMomentIds ?? []), ...(options.mustIncludeShotIds ?? [])]);
-  for (const { shot } of candidates) {
-    if (mustInclude.has(shot.id) || (shot.momentId && mustInclude.has(shot.momentId))) {
-      if (!selected.includes(shot)) selected.push(shot);
+  if (mustInclude.size > 0) {
+    // Match against every shot, not only the eligible candidates: an explicit
+    // choice outranks our eligibility ranking.
+    const required = shots.filter((shot) => mustInclude.has(shot.id) || (shot.momentId && mustInclude.has(shot.momentId)));
+
+    // Kept and left out at once is a contradiction only the user can settle.
+    const contradicted = required.filter((shot) => excluded.has(shot.id)).map((shot) => shot.id);
+    if (contradicted.length > 0) {
+      throw new MustIncludeConflict(
+        `You asked to keep ${contradicted.join(", ")} and to leave the same ${contradicted.length === 1 ? "moment" : "moments"} out. Choose one and try again.`,
+        contradicted,
+        [`must_include_conflict: shot ids ${contradicted.join(", ")} are required and excluded at the same time.`],
+      );
     }
+
+    // Without analysis there is nothing to describe to the planner, so the
+    // shot cannot enter the catalog however explicitly it was asked for.
+    const undescribed = required.filter((shot) => !shot.analysis).map((shot) => shot.id);
+    if (undescribed.length > 0) {
+      throw new MustIncludeConflict(
+        `${undescribed.join(", ")} ${undescribed.length === 1 ? "is" : "are"} still being processed, so we can't keep ${undescribed.length === 1 ? "it" : "them"} yet. Try again once your memories are ready.`,
+        undescribed,
+        [`must_include_unavailable: shot ids ${undescribed.join(", ")} have no analysis and cannot be described to the planner.`],
+      );
+    }
+
+    // A duplicate, an unusable video or a shot whose asset is not yet marked
+    // understood loses to ranking, but not to the user naming it.
+    for (const shot of required) if (!selected.includes(shot)) selected.push(shot);
   }
 
   return { shots: selected, lines: selected.map(compactShotLine) };
