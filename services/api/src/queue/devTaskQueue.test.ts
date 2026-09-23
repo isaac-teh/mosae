@@ -103,6 +103,7 @@ describe("DevTaskQueue", () => {
     const first = q.enqueue(task);
     const repeated = q.enqueue(task);
     const failed = Promise.all([expect(first).rejects.toThrow("interrupted"), expect(repeated).rejects.toThrow("interrupted")]);
+    await Promise.resolve();
     reject(new Error("interrupted"));
     await failed;
     expect(plan).toHaveBeenCalledTimes(1);

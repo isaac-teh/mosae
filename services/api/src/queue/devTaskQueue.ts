@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { IngestTask } from "../ingest/ingestAsset.js";
 import type { UnderstandTask } from "../understand/understandAsset.js";
 import type { QueuedTask, TaskQueue } from "./taskQueue.js";
@@ -18,7 +19,8 @@ export type DevTaskDeps = {
  */
 export class DevTaskQueue implements TaskQueue {
   private readonly seen = new Set<string>();
-  private readonly running = new Map<string, Promise<void>>();
+  private readonly running = new Map<string, { token: symbol; execution: Promise<void> }>();
+  private readonly executionContext = new AsyncLocalStorage<ReadonlySet<symbol>>();
 
   constructor(private readonly deps: DevTaskDeps) {}
 
@@ -26,13 +28,21 @@ export class DevTaskQueue implements TaskQueue {
     if (this.seen.has(task.name)) return "already_exists";
     const pending = this.running.get(task.name);
     if (pending) {
+      // Ingest can await another outbox drain after its dispatch lease expired.
+      // That drain must retry this record, not wait on an ancestor on its own
+      // stack or acknowledge the still-running work as delivered.
+      if (this.executionContext.getStore()?.has(pending.token)) throw new Error("task_reentrant_delivery");
       // A run can outlive the outbox dispatch lease. A duplicate must await
       // its outcome before the second dispatcher may mark it delivered.
-      await pending;
+      await pending.execution;
       return "already_exists";
     }
-    const execution = this.run(task);
-    this.running.set(task.name, execution);
+    const token = Symbol(task.name);
+    const ancestors = new Set(this.executionContext.getStore()).add(token);
+    // Register the run before invoking user callbacks, including synchronous
+    // reentry; tokens distinguish a new attempt from an old async context.
+    const execution = Promise.resolve().then(() => this.executionContext.run(ancestors, () => this.run(task)));
+    this.running.set(task.name, { token, execution });
     try {
       await execution;
       this.seen.add(task.name);

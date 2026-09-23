@@ -7,6 +7,7 @@ import { recordFinalize } from "./finalizeStore.js";
 import { claimDue } from "./outboxStore.js";
 import { dispatchDue } from "../outbox/dispatcher.js";
 import { InMemoryTaskQueue } from "../queue/taskQueue.js";
+import { DevTaskQueue } from "../queue/devTaskQueue.js";
 
 const BUCKET = "demo-mosae.appspot.com";
 
@@ -35,6 +36,35 @@ async function taskId(projectId: string) {
 }
 
 describe("dispatchDue (emulator)", () => {
+  it("finishes an ingest that recursively dispatches its own expired lease", async () => {
+    const projectId = await acceptedUpload(1);
+    let runs = 0;
+    let nested: { delivered: number; failed: number } | undefined;
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const queue = new DevTaskQueue({
+      ingest: async (task) => {
+        if (task.projectId !== projectId) return;
+        runs += 1;
+        // Model the asynchronous post-commit dispatch performed by ingest.
+        await Promise.resolve();
+        nested = await dispatchDue(adminDb, queue, 100 + DISPATCH_LEASE_MS + 1, 1000);
+      },
+      understand: async () => {}, cluster: async () => {}, plan: async () => {},
+    });
+    try {
+      await dispatchDue(adminDb, queue, 100, 1000);
+      expect(runs).toBe(1);
+      expect(nested?.failed).toBeGreaterThanOrEqual(1);
+      // Reentrant delivery cannot acknowledge work still on its own stack.
+      expect(await taskState(projectId)).toMatchObject({ state: "pending", attempts: 2 });
+      await dispatchDue(adminDb, queue, 100 + DISPATCH_LEASE_MS + 2, 1000);
+      expect(await taskState(projectId)).toMatchObject({ state: "delivered", attempts: 3 });
+      expect(runs).toBe(1);
+    } finally {
+      errors.mockRestore();
+    }
+  }, 3000);
+
   it("enqueues pending tasks once and marks them delivered", async () => {
     const projectId = await acceptedUpload(1);
     const queue = new InMemoryTaskQueue();
