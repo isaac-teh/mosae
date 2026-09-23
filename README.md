@@ -173,6 +173,14 @@ curl -s -H "Authorization: Bearer owner" "$BASE/storyProposals/<proposalId>"  # 
 - HEIC needs `heif-convert` from `libheif-examples`, which is installed in the container. On a machine without it, a HEVC HEIC asset fails with `unsupported_image`.
 - Reverse geocoding of places is not implemented, so `places` on the project stays empty.
 - Progress polling costs two count aggregations and one read every two seconds per open Tell AI the Story screen.
+- Thumbnail URLs are V4-signed by the API (`firebaseThumbnailUrlStore` in `services/api/src/ingest/objectStore.ts`). On Cloud Run the runtime service account has application default credentials with no embedded private key, so signing calls the IAM `signBlob` API and the runtime service account needs `roles/iam.serviceAccountTokenCreator` **on itself**. Without it every thumbnail request fails with `iam.serviceAccounts.signBlob` denied. There is no Terraform or deploy script in this repository yet, so this must be granted by hand:
+
+  ```bash
+  gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
+    --member="serviceAccount:$RUNTIME_SA" --role="roles/iam.serviceAccountTokenCreator"
+  ```
+
+  Review moments degrades one card per unsignable thumbnail rather than failing the screen, so a missing binding shows up as blank images, not an error page.
 
 ### The story flow
 
