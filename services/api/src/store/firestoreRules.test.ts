@@ -11,10 +11,20 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 
 let env: RulesTestEnvironment;
 
+/**
+ * An emulator started on an alternate port sets this variable; without reading
+ * it these tests talk to whatever happens to hold the default port, which may
+ * be another run's emulator.
+ */
+function emulatorHost(value: string | undefined, fallback: string): { host: string; port: number } {
+  const [host, port] = (value ?? fallback).split(":");
+  return { host, port: Number(port) };
+}
+
 beforeAll(async () => {
   env = await initializeTestEnvironment({
     projectId: "demo-mosae",
-    firestore: { rules: readFileSync(resolve(process.cwd(), "../../firestore.rules"), "utf8"), host: "127.0.0.1", port: 8085 },
+    firestore: { rules: readFileSync(resolve(process.cwd(), "../../firestore.rules"), "utf8"), ...emulatorHost(process.env.FIRESTORE_EMULATOR_HOST, "127.0.0.1:8085") },
   });
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
