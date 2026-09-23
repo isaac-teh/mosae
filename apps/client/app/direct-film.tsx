@@ -5,7 +5,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
 import Svg, { Path } from "react-native-svg";
-import { getStoryRepository, type DirectionOptions } from "@mosae/core";
+import { useStoryFlow } from "@/lib/storyFlow";
+import { type DirectionOptions } from "@mosae/core";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { StepHeader } from "@/components/StepHeader";
 import { ArchivalSparkleIcon, CreateMusicIcon, CreateTimerIcon } from "@/components/sceneIcons";
@@ -33,7 +34,8 @@ function ErrorState({ error, retry }: { error: string; retry: () => void }) {
 export default function DirectFilmScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
-  const goBack = useStepBack(`/create?planId=${planId}` as Href);
+  const { repository, route } = useStoryFlow();
+  const goBack = useStepBack(route("/create", { planId: planId }) as Href);
   const [options, setOptions] = useState<DirectionOptions | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -44,13 +46,13 @@ export default function DirectFilmScreen() {
   const [directing, setDirecting] = useState(false);
 
   const load = () => {
-    void getStoryRepository().getDirectionOptions(planId).then((value) => {
+    void repository.getDirectionOptions(planId).then((value) => {
       setOptions(value);
       setNote(value.note);
       setDurationId(value.recommendedDuration);
     }).catch((cause: Error) => setError(cause.message));
   };
-  useEffect(load, [planId]);
+  useEffect(load, [planId, repository]);
 
   if (error) return <ErrorState error={error} retry={() => { setError(null); load(); }} />;
   if (!options) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 4 OF 6" label="DIRECTING" progress={0.67} onBack={() => goBack()} backLabel="Go back to create" /></View>;
@@ -68,8 +70,8 @@ export default function DirectFilmScreen() {
     if (directing) return;
     setDirecting(true);
     try {
-      const { filmId } = await getStoryRepository().directFilm(planId, { note, cadenceId: cadence.id, soundtrackId: soundtrack?.id ?? null, durationId });
-      router.navigate(`/review-film?filmId=${filmId}` as never);
+      const { filmId } = await repository.directFilm(planId, { note, cadenceId: cadence.id, soundtrackId: soundtrack?.id ?? null, durationId });
+      router.navigate(route("/review-film", { filmId: filmId }) as never);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to direct your film");
       setDirecting(false);

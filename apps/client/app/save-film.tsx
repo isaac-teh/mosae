@@ -5,7 +5,8 @@ import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
 import { Asset } from "expo-asset";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
-import { getStoryRepository, type Film } from "@mosae/core";
+import { useStoryFlow } from "@/lib/storyFlow";
+import { type Film } from "@mosae/core";
 import { FilmPlayer } from "@/components/FilmPlayer";
 import { StepHeader } from "@/components/StepHeader";
 import { demoImage } from "@/lib/demoAssets";
@@ -21,11 +22,12 @@ function GalleryIcon() { return <Svg width={20} height={20} viewBox="0 0 20 20">
 export default function SaveFilmScreen() {
   const router = useRouter();
   const { filmId } = useLocalSearchParams<{ filmId: string }>();
-  const goBack = useStepBack(`/review-film?filmId=${filmId}` as Href);
+  const { repository, route } = useStoryFlow();
+  const goBack = useStepBack(route("/review-film", { filmId: filmId }) as Href);
   const [film, setFilm] = useState<Film | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [comingSoon, setComingSoon] = useState(false);
-  useEffect(() => { void getStoryRepository().getFilm(filmId).then(setFilm).catch((cause: Error) => setError(cause.message)); }, [filmId]);
+  useEffect(() => { void repository.getFilm(filmId).then(setFilm).catch((cause: Error) => setError(cause.message)); }, [filmId, repository]);
   const download = () => {
     const anchor = document.createElement("a");
     anchor.href = Asset.fromModule(require("../assets/demo/film.mp4")).uri;

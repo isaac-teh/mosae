@@ -4,7 +4,8 @@ import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
-import { getStoryRepository, type CreateOption, type StoryPlan } from "@mosae/core";
+import { useStoryFlow } from "@/lib/storyFlow";
+import { type CreateOption, type StoryPlan } from "@mosae/core";
 import { storyImage } from "@/lib/storyImage";
 import {
   CreateAlbumIcon,
@@ -64,21 +65,22 @@ function CreateOptionCard({ option, selected, onPress }: { option: Option; selec
 export default function CreateScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
-  const goBack = useStepBack(`/curated-timeline?planId=${planId}` as Href);
+  const { repository, route } = useStoryFlow();
+  const goBack = useStepBack(route("/curated-timeline", { planId: planId }) as Href);
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<CreateOption>("film");
   const [comingSoon, setComingSoon] = useState(false);
 
-  const load = () => getStoryRepository().getPlan(planId).then(setPlan).catch((cause: Error) => setError(cause.message));
-  useEffect(() => { void getStoryRepository().getPlan(planId).then(setPlan).catch((cause: Error) => setError(cause.message)); }, [planId]);
+  const load = () => repository.getPlan(planId).then(setPlan).catch((cause: Error) => setError(cause.message));
+  useEffect(() => { void repository.getPlan(planId).then(setPlan).catch((cause: Error) => setError(cause.message)); }, [planId, repository]);
   if (!plan && !error) return <View className="flex-1 bg-canvas" />;
   if (error) return <View className="flex-1 items-center justify-center bg-canvas"><Text className="text-brand">{error}</Text><Pressable role="button" aria-label="Retry" onPress={() => { setError(null); void load(); }} className="mt-4 rounded-full bg-brand px-5 py-3"><Text className="font-sans-semibold text-white">Retry</Text></Pressable></View>;
   if (!plan) return null;
   const current = options.find((option) => option.id === selected)!;
   const continueWithOption = async () => {
-    const result = await getStoryRepository().chooseCreateOption(plan.planId, selected);
-    if (result.available) router.navigate(`/direct-film?planId=${plan.planId}` as never);
+    const result = await repository.chooseCreateOption(plan.planId, selected);
+    if (result.available) router.navigate(route("/direct-film", { planId: plan.planId }) as never);
     else setComingSoon(true);
   };
   return <View className="flex-1 bg-canvas"><ScrollView className="flex-1" contentContainerClassName="min-h-[1000px] px-5 pb-8" keyboardShouldPersistTaps="handled">

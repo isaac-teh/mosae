@@ -3,7 +3,8 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
 import { useProjectProgress } from "@/lib/useProjectProgress";
-import { createApiStoryRepository, getStoryRepository, setStoryRepository, startStoryPlan, watchStoryPlan, type StoryPlanJob } from "@mosae/core";
+import { startStoryPlan, watchStoryPlan, type StoryPlanJob } from "@mosae/core";
+import { getFixtureRepository, storyRoute } from "@/lib/storyFlow";
 import { StepHeader } from "@/components/StepHeader";
 import { ProcessingBanner } from "@/components/ProcessingBanner";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -24,6 +25,15 @@ const COLLECTING_PROJECT = "Finish adding your memories before planning a story.
 
 // Figma: "Tell AI the Story" (1:292)
 export default function TellStoryScreen() {
+  const params = useLocalSearchParams<{ projectId?: string; count?: string; live?: string; repository?: string }>();
+  const apiEnabled = process.env.EXPO_PUBLIC_USE_API_STORY_REPOSITORY === "true";
+  const live = params.repository !== "fixture" && (params.live === "1" || params.repository === "api" || apiEnabled);
+  const projectId = params.projectId ?? (apiEnabled ? process.env.EXPO_PUBLIC_STORY_PROJECT_ID : null) ?? null;
+  // Changing flow/project disposes all pending requests, listeners and UI state.
+  return <TellStoryProject key={JSON.stringify([live, projectId])} live={live} projectId={projectId} count={Number(params.count ?? 0)} />;
+}
+
+function TellStoryProject({ live, projectId, count }: { live: boolean; projectId: string | null; count: number }) {
   const [storyText, setStoryText] = useState("");
   const [themes, setThemes] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -32,15 +42,11 @@ export default function TellStoryScreen() {
   const [reconnect, setReconnect] = useState(0);
   const inFlight = useRef(false);
   const mounted = useRef(true);
+  const requestId = useRef(0);
   const { push } = useRouter();
   const goBack = useStepBack("/pick-memory");
-  const params = useLocalSearchParams<{ projectId?: string; count?: string; live?: string }>();
   const dictation = useDictation((text) => setStoryText((prev) => (prev ? `${prev} ${text}` : text)));
 
-  const apiEnabled = process.env.EXPO_PUBLIC_USE_API_STORY_REPOSITORY === "true";
-  const live = params.live === "1" || apiEnabled;
-  const projectId = params.projectId ?? (apiEnabled ? process.env.EXPO_PUBLIC_STORY_PROJECT_ID : null) ?? null;
-  const count = Number(params.count ?? 0);
   const progress = useProjectProgress(projectId, count, live);
   const canSubmit = storyText.trim().length > 0 || themes.length > 0;
   const unavailable = !live ? null : !projectId
@@ -57,15 +63,17 @@ export default function TellStoryScreen() {
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => { mounted.current = false; requestId.current++; };
   }, []);
 
   useEffect(() => {
     if (!projectId || !jobId) return;
     let active = true;
-    const stop = watchStoryPlan(projectId, jobId, {
+    const request = requestId.current;
+    let stop = () => {};
+    stop = watchStoryPlan(projectId, jobId, {
       onChange(next) {
-        if (!active) return;
+        if (!active || request !== requestId.current || next.id !== jobId) return;
         setJob(next);
         setError(null);
         if (next.status === "failed" || next.status === "succeeded") {
@@ -75,16 +83,16 @@ export default function TellStoryScreen() {
           if (next.status === "failed") {
             setError(next.reason || "Couldn't find the moments. Please try again.");
           } else {
-            setStoryRepository(createApiStoryRepository({ projectId }));
-            push(`/review-moments?planId=${encodeURIComponent(next.proposalId)}` as any);
+            push(storyRoute("/review-moments", { planId: next.proposalId }, { repository: "api", projectId }) as any);
           }
         }
       },
       onError(reason) {
-        if (!active) return;
+        if (!active || request !== requestId.current) return;
         setError(reason instanceof Error ? reason.message : "Couldn't read planning progress. Please reconnect.");
       },
     });
+    if (!active) stop();
     return () => { active = false; stop(); };
   }, [projectId, jobId, reconnect, push]);
 
@@ -110,6 +118,8 @@ export default function TellStoryScreen() {
     }
     if (submitting) return;
     inFlight.current = true;
+    const request = ++requestId.current;
+    const current = () => mounted.current && request === requestId.current;
     setSubmitting(true);
     setError(null);
     setJob(null);
@@ -117,18 +127,18 @@ export default function TellStoryScreen() {
     try {
       if (live && projectId) {
         const next = await startStoryPlan(projectId, storyText.trim() || themes.join(", "), themes);
-        if (mounted.current) setJob(next);
+        if (current()) setJob(next);
         return;
       }
-      const { planId } = await getStoryRepository().createPlan(`${storyText.trim()}${focus}`, projectId ? [projectId] : []);
-      if (mounted.current) push(`/review-moments?planId=${planId}` as any);
+      const { planId } = await getFixtureRepository().createPlan(`${storyText.trim()}${focus}`, projectId ? [projectId] : []);
+      if (current()) push(storyRoute("/review-moments", { planId }, { repository: "fixture" }) as any);
     } catch (e) {
-      if (!mounted.current) return;
+      if (!current()) return;
       const message = e instanceof Error ? e.message : "Couldn't find the moments. Please try again.";
       setError(message === "project_failed" ? FAILED_PROJECT : message === "project_collecting" ? COLLECTING_PROJECT : message);
       setSubmitting(false);
     } finally {
-      inFlight.current = false;
+      if (current()) inFlight.current = false;
     }
   }
 

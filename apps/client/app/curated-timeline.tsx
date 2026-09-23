@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { getStoryRepository } from "@mosae/core";
+import { useStoryFlow } from "@/lib/storyFlow";
 import type { Moment } from "@mosae/core";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { ContinueArrowIcon, HeartIcon } from "@/components/sceneIcons";
@@ -55,16 +55,17 @@ function ChapterHeader({ day, subtitle, badge, color, milestone }: { day: string
 export default function CuratedTimelineScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
-  const { plan, error, mutationError, updating, mutate, load } = useStoryPlan(planId);
+  const { repository, route } = useStoryFlow();
+  const { plan, error, mutationError, updating, mutate, load } = useStoryPlan(planId, repository);
   const [request, setRequest] = useState("");
   if (error) return <View className="flex-1 items-center justify-center bg-canvas"><Text className="text-brand">{error}</Text><Pressable role="button" aria-label="Retry" onPress={() => void load()} className="mt-4 rounded-full bg-brand px-5 py-3"><Text className="font-sans-semibold text-white">Retry</Text></Pressable></View>;
   if (!plan) return <View className="flex-1 bg-canvas" />;
   const selectedCount = (plan.totalMomentCount ?? plan.moments.length) - plan.moments.filter((moment) => !moment.selected).length;
-  const updateMoment = (moment: Moment) => { void mutate((id) => getStoryRepository().setMomentSelected(id, moment.id, !moment.selected)); };
-  const updateFavorite = (moment: Moment) => { void mutate((id) => getStoryRepository().setMomentFavorite(id, moment.id, !moment.favorite)); };
+  const updateMoment = (moment: Moment) => { void mutate((id) => repository.setMomentSelected(id, moment.id, !moment.selected)); };
+  const updateFavorite = (moment: Moment) => { void mutate((id) => repository.setMomentFavorite(id, moment.id, !moment.favorite)); };
   const submit = async () => {
     if (!request.trim()) return;
-    if (await mutate((id) => getStoryRepository().reviseMoments(id, request.trim()))) setRequest("");
+    if (await mutate((id) => repository.reviseMoments(id, request.trim()))) setRequest("");
   };
   const momentsById = new Map(plan.moments.map((moment) => [moment.id, moment]));
   return <View className="flex-1 bg-canvas"><ScrollView className="flex-1" keyboardShouldPersistTaps="handled"><View className="min-h-[2631px] px-5 pb-28 pt-16">
@@ -87,6 +88,6 @@ export default function CuratedTimelineScreen() {
     {mutationError && <Text role="alert" className="mt-3 text-sm text-brand">{mutationError}</Text>}
     <Pressable role="button" aria-label={`Add photos from ${plan.albumName} album`} onPress={() => router.navigate("/pick-memory")} className="mt-6 flex-row items-center justify-center gap-2 rounded-[16px] border border-dashed border-brand-dot bg-surface-muted px-[17px] py-[15px]"><Text className="text-lg text-brand">+</Text><Text className="font-sans-medium text-xs leading-4 text-ink">+ Add photos from {plan.albumName} album ({plan.timelineOtherPhotoCount ?? plan.otherPhotoCount} more)</Text></Pressable>
     <View className="mt-6 h-[336px] rounded-[24px] border border-[rgba(224,191,183,0.4)] bg-white p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"><View className="flex-row items-start justify-between"><View className="flex-row gap-2"><Text className="text-lg text-brand">✦</Text><Text className="font-serif text-[16px] leading-[22px] text-ink">Want to change the moments{`\n`}we picked?</Text></View><View className="flex-row items-center gap-1 rounded-full bg-brand-tint px-2 py-0.5"><View className="size-1.5 rounded-full bg-brand" /><Text className="font-sans-semibold text-[10px] leading-[22px] tracking-[0.5px] text-brand-deep">AI DIRECTOR</Text></View></View><Text className="mt-3 font-sans text-xs leading-[18px] text-ink-soft">Tell our archival curator what to emphasize or swap out{`\n`}for your film.</Text><View className="relative mt-3 h-11 justify-center rounded-full border border-[rgba(224,191,183,0.6)] bg-surface-sunken pl-[13px] pr-24"><TextInput value={request} onChangeText={setRequest} placeholder="e.g., Add more photos of Mei, or show more food we tried..." placeholderTextColor="rgba(89,65,59,0.6)" className="font-sans text-xs text-ink" /><Pressable role="button" aria-label="Update moments" disabled={!request.trim() || updating} onPress={() => void submit()} className="absolute right-1.5 top-[7px] rounded-full bg-brand px-[14px] py-1.5"><Text className="font-sans-medium text-[11px] leading-[14px] text-white">{updating ? "Updating..." : "Update"}</Text></Pressable></View><View className="mt-4 gap-1.5">{plan.suggestions.map((suggestion) => <Pressable key={suggestion} role="button" aria-label={suggestion} onPress={() => setRequest(suggestion)} className="self-start rounded-full bg-surface-sunken px-2.5 py-1"><Text className="font-sans text-[11px] leading-[22px] text-ink-soft">{suggestion}</Text></Pressable>)}</View></View>
-    <View className="mt-4 py-2"><View className="flex-row justify-between px-1"><Text className="font-sans-medium text-xs leading-4 text-ink-soft">{selectedCount} moments selected</Text><Text className="font-sans-semibold text-xs leading-4 text-honey">{plan.estimatedFilmLabel}</Text></View><Pressable role="button" aria-label="Continue" disabled={updating} onPress={() => router.navigate(`/create?planId=${plan.planId}` as any)} className="mt-2 flex-row items-center justify-center gap-2 rounded-full bg-brand px-4 py-3.5 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"><Text className="font-sans-semibold text-sm leading-5 text-white">Continue</Text><ContinueArrowIcon /></Pressable><Text className="mt-2 text-center font-sans text-[11px] leading-[22px] text-[rgba(89,65,59,0.7)]">Step 4: Director mode enables audio overlay, pacing & chapter titles</Text></View>
+    <View className="mt-4 py-2"><View className="flex-row justify-between px-1"><Text className="font-sans-medium text-xs leading-4 text-ink-soft">{selectedCount} moments selected</Text><Text className="font-sans-semibold text-xs leading-4 text-honey">{plan.estimatedFilmLabel}</Text></View><Pressable role="button" aria-label="Continue" disabled={updating} onPress={() => router.navigate(route("/create", { planId: plan.planId }) as any)} className="mt-2 flex-row items-center justify-center gap-2 rounded-full bg-brand px-4 py-3.5 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"><Text className="font-sans-semibold text-sm leading-5 text-white">Continue</Text><ContinueArrowIcon /></Pressable><Text className="mt-2 text-center font-sans text-[11px] leading-[22px] text-[rgba(89,65,59,0.7)]">Step 4: Director mode enables audio overlay, pacing & chapter titles</Text></View>
   </View></ScrollView><BottomTabBar active="gallery" /></View>;
 }

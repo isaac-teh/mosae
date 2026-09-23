@@ -9,6 +9,7 @@ const boundary = vi.hoisted(() => ({
 }));
 vi.mock("@mosae/core", () => ({
   getStoryRepository: () => ({ createPlan: boundary.fixtureCreate }),
+  createFixtureStoryRepository: () => ({ createPlan: boundary.fixtureCreate }),
   startStoryPlan: boundary.start, watchStoryPlan: boundary.watch,
   setStoryRepository: boundary.setRepository, createApiStoryRepository: boundary.apiRepository,
   describeProgress: (progress: any) => describeProgress(progress),
@@ -63,9 +64,8 @@ describe("Tell AI the Story", () => {
       expect([...host.querySelectorAll('[role="status"]')].some(el => el.textContent?.includes(label))).toBe(true);
     }
     await job({ status: "succeeded" });
-    expect(boundary.apiRepository).toHaveBeenCalledWith({ projectId: "actual-project" });
-    expect(boundary.setRepository).toHaveBeenCalledWith({ projectId: "actual-project" });
-    expect(boundary.push).toHaveBeenCalledWith("/review-moments?planId=proposal-1");
+    expect(boundary.setRepository).not.toHaveBeenCalled();
+    expect(boundary.push).toHaveBeenCalledWith("/review-moments?planId=proposal-1&repository=api&projectId=actual-project");
   });
   it("keeps ingest progress visible while the queued plan waits for readiness", async () => {
     boundary.progress = { status: "processing", total: 3, done: 1, failed: 0, ready: false, finished: false };
@@ -122,7 +122,7 @@ describe("Tell AI the Story", () => {
     boundary.params = { projectId: "p1", count: "3" }; boundary.progress = null;
     await render(); await type(); await click("✨ Having fun"); await click("Find the moments");
     expect(boundary.fixtureCreate).toHaveBeenCalledWith("Our family trip\n\nFocus on: ✨ Having fun", ["p1"]);
-    expect(boundary.push).toHaveBeenCalledWith("/review-moments?planId=demo");
+    expect(boundary.push).toHaveBeenCalledWith("/review-moments?planId=demo&repository=fixture");
     expect(boundary.start).not.toHaveBeenCalled(); expect(boundary.watch).not.toHaveBeenCalled();
   });
   it("requires an actual project id in the live flow", async () => {
@@ -130,5 +130,41 @@ describe("Tell AI the Story", () => {
     await render(); await type();
     expect(button("Find the moments").disabled).toBe(true);
     expect(host.textContent).toContain("Choose your memories before planning");
+  });
+  it("ignores a pending submission from project A after switching to B", async () => {
+    let resolve!: (value: any) => void;
+    boundary.start.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    await render(); await type(); await click("Find the moments");
+    boundary.params = { projectId: "project-B", live: "1" };
+    await render(); await type("B story");
+    expect(button("Find the moments").disabled).toBe(false);
+    await act(async () => resolve({ id: "job-A", proposalId: "proposal-A", status: "queued" }));
+    expect(boundary.watch).not.toHaveBeenCalled();
+    await click("Find the moments");
+    expect(boundary.start).toHaveBeenLastCalledWith("project-B", "B story", []);
+    expect(boundary.watch).toHaveBeenLastCalledWith("project-B", "job-1", expect.any(Object));
+  });
+  it("discards the old subscription and reconnect state on a project switch", async () => {
+    await render(); await type(); await click("Find the moments");
+    const oldListener = boundary.watch.mock.lastCall![2];
+    const stop = boundary.watch.mock.results[0].value;
+    await act(async () => oldListener.onError(new Error("Connection lost")));
+    boundary.params = { projectId: "project-B", live: "1" };
+    await render(); await type("B story");
+    expect(host.textContent).not.toContain("Connection lost");
+    expect(stop).toHaveBeenCalled();
+    await act(async () => oldListener.onChange({ id: "job-1", proposalId: "proposal-A", status: "succeeded" }));
+    expect(boundary.push).not.toHaveBeenCalled();
+    expect(boundary.watch).toHaveBeenCalledTimes(1);
+    await click("Find the moments");
+    expect(boundary.start).toHaveBeenLastCalledWith("project-B", "B story", []);
+  });
+  it("can enter the fixture flow after completing live planning", async () => {
+    await render(); await type(); await click("Find the moments"); await job({ status: "succeeded" });
+    boundary.params = { projectId: "fixture-project" };
+    await render(); await type("Fixture story"); await click("Find the moments");
+    expect(boundary.fixtureCreate).toHaveBeenCalledWith("Fixture story", ["fixture-project"]);
+    expect(boundary.push).toHaveBeenLastCalledWith("/review-moments?planId=demo&repository=fixture");
+    expect(boundary.setRepository).not.toHaveBeenCalled();
   });
 });

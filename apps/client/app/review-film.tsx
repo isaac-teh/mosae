@@ -5,7 +5,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
 import Svg, { Path } from "react-native-svg";
-import { getStoryRepository, type Film } from "@mosae/core";
+import { useStoryFlow } from "@/lib/storyFlow";
+import { type Film } from "@mosae/core";
 import { FilmPlayer } from "@/components/FilmPlayer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { StepHeader } from "@/components/StepHeader";
@@ -22,19 +23,20 @@ function ErrorState({ error, retry }: { error: string; retry: () => void }) { re
 export default function ReviewFilmScreen() {
   const router = useRouter();
   const { filmId } = useLocalSearchParams<{ filmId: string }>();
+  const { repository, route } = useStoryFlow();
   const [film, setFilm] = useState<Film | null>(null);
-  const goBack = useStepBack((film ? `/direct-film?planId=${film.planId}` : "/") as Href);
+  const goBack = useStepBack((film ? route("/direct-film", { planId: film.planId }) : "/") as Href);
   const [error, setError] = useState<string | null>(null);
   const [manual, setManual] = useState(false);
   const [adjustment, setAdjustment] = useState("");
   const [revising, setRevising] = useState(false);
   const [versionReady, setVersionReady] = useState(false);
-  const load = () => { void getStoryRepository().getFilm(filmId).then(setFilm).catch((cause: Error) => setError(cause.message)); };
-  useEffect(load, [filmId]);
+  const load = () => { void repository.getFilm(filmId).then(setFilm).catch((cause: Error) => setError(cause.message)); };
+  useEffect(load, [filmId, repository]);
   if (error) return <ErrorState error={error} retry={() => { setError(null); load(); }} />;
   if (!film) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 5 OF 6" label="YOUR STORY" progress={0.83} onBack={() => goBack()} backLabel="Go back to directing" /></View>;
-  const revise = async () => { if (!adjustment || revising) return; setRevising(true); setVersionReady(false); try { await getStoryRepository().reviseFilm(film.filmId, adjustment); setVersionReady(true); setAdjustment(""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to revise your film"); } finally { setRevising(false); } };
-  const save = async () => { try { await getStoryRepository().saveFilm(film.filmId); router.navigate(`/save-film?filmId=${film.filmId}` as never); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save your film"); } };
+  const revise = async () => { if (!adjustment || revising) return; setRevising(true); setVersionReady(false); try { await repository.reviseFilm(film.filmId, adjustment); setVersionReady(true); setAdjustment(""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to revise your film"); } finally { setRevising(false); } };
+  const save = async () => { try { await repository.saveFilm(film.filmId); router.navigate(route("/save-film", { filmId: film.filmId }) as never); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save your film"); } };
   return <View className="flex-1 bg-canvas"><StepHeader step="STEP 5 OF 6" label="YOUR STORY" progress={0.83} onBack={() => goBack()} backLabel="Go back to directing" />
     <ScrollView className="flex-1" contentContainerClassName="min-h-[841px] px-5 pb-2" keyboardShouldPersistTaps="handled"><View className="pt-[22px]"><Text className="font-sans-semibold text-[15px] leading-5 text-ink">Review Your Film</Text><Text className="mt-1 font-sans text-sm leading-5 text-ink-soft">Curated from 52 captured moments</Text></View>
       <View className="mt-[27px]"><FilmPlayer source={require("../assets/demo/film.mp4")} poster={storyImage(film.posterKey)} durationSec={film.durationSec} initialTimeSec={74} aspect="portrait" />{revising && <View className="absolute inset-0 items-center justify-center rounded-[23px] bg-black/55"><Text className="font-sans-semibold text-sm text-white">Revising your film...</Text></View>}</View>

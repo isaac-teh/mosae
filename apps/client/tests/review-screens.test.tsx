@@ -4,9 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFixtureStoryRepository } from "../../../packages/core/src/story/fixtureRepository";
 import type { StoryPlan } from "@mosae/core";
 
-const boundary = vi.hoisted(() => ({ repository: {} as any, navigate: vi.fn() }));
-vi.mock("@mosae/core", () => ({ getStoryRepository: () => boundary.repository }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ planId: "initial" }), useRouter: () => ({ navigate: boundary.navigate }) }));
+const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, params: {} as any, navigate: vi.fn() }));
+vi.mock("@mosae/core", () => ({
+  getStoryRepository: () => boundary.repository,
+  createFixtureStoryRepository: () => new Proxy({}, { get: (_, key) => boundary.repository[key] }),
+  createApiStoryRepository: ({ projectId }: { projectId: string }) => {
+    if (projectId !== "live-project") throw new Error("Wrong project");
+    return boundary.apiRepository;
+  },
+}));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ navigate: boundary.navigate }) }));
 vi.mock("@/lib/useStepBack", () => ({ useStepBack: () => vi.fn() }));
 vi.mock("@/lib/demoAssets", () => ({ demoImage: (key: string) => {
   if (key.includes(":")) throw new Error("URI used as demo key");
@@ -42,6 +49,8 @@ beforeEach(async () => {
     reviseMoments: vi.fn(async () => ({ ...structuredClone(plan), planId: "revised", timelineIntro: { ...plan.timelineIntro, headline: "Revised story" } })),
   };
   boundary.navigate.mockReset();
+  boundary.params = { planId: "initial", repository: "fixture" };
+  boundary.apiRepository = { getPlan: vi.fn(async () => ({ ...structuredClone(plan), intro: { ...plan.intro, headline: "Live project story" } })) };
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 async function render(Component: React.ComponentType) { await act(async () => root.render(<Component />)); }
@@ -52,6 +61,50 @@ async function click(label: string) {
 }
 
 describe("review screens", () => {
+  it("restores the live repository from the URL on a fresh mount and carries identity forward", async () => {
+    boundary.params = { planId: "initial", repository: "api", projectId: "live-project" };
+    await render(ReviewMomentsScreen);
+    expect(host.textContent).toContain("Live project story");
+    expect(boundary.repository.getPlan).not.toHaveBeenCalled();
+    await click("Continue to curated timeline");
+    expect(boundary.navigate).toHaveBeenCalledWith("/curated-timeline?planId=initial&repository=api&projectId=live-project");
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await render(ReviewMomentsScreen);
+    expect(host.textContent).toContain("Live project story");
+  });
+  it("returns to a fixture review after a live review without retaining its repository", async () => {
+    boundary.params = { planId: "initial", repository: "api", projectId: "live-project" };
+    await render(ReviewMomentsScreen);
+    expect(host.textContent).toContain("Live project story");
+    boundary.params = { planId: "initial", repository: "fixture" };
+    await render(ReviewMomentsScreen);
+    expect(host.textContent).not.toContain("Live project story");
+    expect(host.textContent).toContain(plan.intro.headline);
+  });
+  it("ignores a previous flow's delayed load after navigation", async () => {
+    let resolve!: (value: StoryPlan) => void;
+    boundary.apiRepository.getPlan.mockImplementationOnce(() => new Promise<StoryPlan>(done => { resolve = done; }));
+    boundary.params = { planId: "initial", repository: "api", projectId: "live-project" };
+    await render(ReviewMomentsScreen);
+    boundary.params = { planId: "initial", repository: "fixture" };
+    await render(ReviewMomentsScreen);
+    await act(async () => resolve({ ...plan, intro: { ...plan.intro, headline: "Stale live story" } }));
+    expect(host.textContent).not.toContain("Stale live story");
+    expect(host.textContent).toContain(plan.intro.headline);
+  });
+  it("ignores a previous flow's delayed mutation after navigation", async () => {
+    let resolve!: (value: StoryPlan) => void;
+    boundary.repository.setMomentSelected.mockImplementationOnce(() => new Promise<StoryPlan>(done => { resolve = done; }));
+    await render(ReviewMomentsScreen); await click("Select Memory 0");
+    boundary.params = { planId: "initial", repository: "api", projectId: "live-project" };
+    await render(ReviewMomentsScreen);
+    await act(async () => resolve({ ...plan, intro: { ...plan.intro, headline: "Stale fixture edit" } }));
+    expect(host.textContent).not.toContain("Stale fixture edit");
+    expect(host.textContent).toContain("Live project story");
+    await click("Continue to curated timeline");
+    expect(boundary.navigate).toHaveBeenCalledWith("/curated-timeline?planId=initial&repository=api&projectId=live-project");
+  });
   it.each([0, 1, 7])("renders all %i moments and their URI images", async (count) => {
     plan.moments = plan.moments.slice(0, count);
     await render(ReviewMomentsScreen);
@@ -65,7 +118,7 @@ describe("review screens", () => {
     await click("Select Memory 1");
     expect(boundary.repository.setMomentSelected).toHaveBeenLastCalledWith("selected-revision", "real-1", false);
     await click("Continue to curated timeline");
-    expect(boundary.navigate).toHaveBeenCalledWith("/curated-timeline?planId=selected-revision");
+    expect(boundary.navigate).toHaveBeenCalledWith("/curated-timeline?planId=selected-revision&repository=fixture");
   });
   it("repeats hero / paired half / hero rows without dropping the final half row", async () => {
     await render(ReviewMomentsScreen);
@@ -79,7 +132,7 @@ describe("review screens", () => {
     await click("Favorite Memory 0");
     expect(boundary.repository.setMomentFavorite).toHaveBeenCalledWith("initial", "real-0", true);
     await click("Continue to curated timeline");
-    expect(boundary.navigate).toHaveBeenCalledWith("/curated-timeline?planId=favorite-revision");
+    expect(boundary.navigate).toHaveBeenCalledWith("/curated-timeline?planId=favorite-revision&repository=fixture");
   });
   it("keeps the plan after a failed edit and allows retry", async () => {
     boundary.repository.setMomentSelected.mockRejectedValueOnce(new Error("Connection lost"));
@@ -126,6 +179,6 @@ describe("review screens", () => {
     await click("Select Memory 0");
     expect(boundary.repository.setMomentSelected).toHaveBeenCalledWith("revised", "real-0", false);
     await click("Continue");
-    expect(boundary.navigate).toHaveBeenCalledWith("/create?planId=selected-revision");
+    expect(boundary.navigate).toHaveBeenCalledWith("/create?planId=selected-revision&repository=fixture");
   });
 });

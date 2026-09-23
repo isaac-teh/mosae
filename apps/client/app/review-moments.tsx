@@ -1,8 +1,9 @@
 // Figma: "Review Selected Moments" (1:384)
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
-import { getStoryRepository } from "@mosae/core";
+import { useStoryFlow } from "@/lib/storyFlow";
 import { momentRows } from "@/lib/momentRows";
 import { useStoryPlan } from "@/lib/useStoryPlan";
 import { StepHeader } from "@/components/StepHeader";
@@ -18,8 +19,9 @@ import {
 export default function ReviewMomentsScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
-  const goBack = useStepBack("/tell-story");
-  const { plan, error, mutationError, updating, mutate } = useStoryPlan(planId);
+  const { repository, route } = useStoryFlow();
+  const goBack = useStepBack(route("/tell-story") as Href);
+  const { plan, error, mutationError, updating, mutate } = useStoryPlan(planId, repository);
 
   if (error) {
     return (
@@ -54,7 +56,7 @@ export default function ReviewMomentsScreen() {
   }
 
   function navigateToCuratedTimeline() {
-    void router.navigate(`/curated-timeline?planId=${plan!.planId}` as any);
+    void router.navigate(route("/curated-timeline", { planId: plan!.planId }) as any);
   }
 
   return (
@@ -104,8 +106,8 @@ export default function ReviewMomentsScreen() {
                     key={moment.id}
                     moment={moment}
                     size={row.size}
-                    onToggleSelected={() => { void mutate((id) => getStoryRepository().setMomentSelected(id, moment.id, !moment.selected)); }}
-                    onToggleFavorite={() => { void mutate((id) => getStoryRepository().setMomentFavorite(id, moment.id, !moment.favorite)); }}
+                    onToggleSelected={() => { void mutate((id) => repository.setMomentSelected(id, moment.id, !moment.selected)); }}
+                    onToggleFavorite={() => { void mutate((id) => repository.setMomentFavorite(id, moment.id, !moment.favorite)); }}
                   />
                 ))}
               </View>

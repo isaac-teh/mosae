@@ -1,32 +1,51 @@
-import { useEffect, useRef, useState } from "react";
-import { getStoryRepository, type StoryPlan } from "@mosae/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type StoryPlan, type StoryRepository } from "@mosae/core";
 
-export function useStoryPlan(planId: string) {
-  const [plan, setPlan] = useState<StoryPlan | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [mutationError, setMutationError] = useState<string | null>(null);
-  const [updating, setUpdating] = useState(false);
-  const busy = useRef(false);
-  const load = () => {
-    setError(null);
-    return getStoryRepository().getPlan(planId).then(setPlan).catch((e) => setError(e.message));
-  };
-  useEffect(() => { void load(); }, [planId]);
-  const mutate = async (write: (id: string) => Promise<StoryPlan>) => {
-    if (!plan || busy.current) return false;
-    busy.current = true;
-    setUpdating(true);
-    setMutationError(null);
+export function useStoryPlan(planId: string, repository: StoryRepository) {
+  const identity = useMemo(() => ({ planId, repository }), [planId, repository]);
+  const currentIdentity = useRef(identity);
+  currentIdentity.current = identity;
+  const empty = { plan: null as StoryPlan | null, error: null as string | null, mutationError: null as string | null, updating: false };
+  const [state, setState] = useState({ identity, ...empty });
+  const visible = state.identity === identity ? state : empty;
+  const request = useRef(0);
+  const busy = useRef<typeof identity | null>(null);
+  const load = useCallback(async () => {
+    const operation = ++request.current;
+    const current = () => currentIdentity.current === identity && request.current === operation;
+    setState({ identity, plan: null, error: null, mutationError: null, updating: false });
+    busy.current = null;
     try {
-      setPlan(await write(plan.planId));
+      const plan = await repository.getPlan(planId);
+      if (current()) setState(value => ({ ...value, plan }));
+    } catch (cause) {
+      if (current()) setState(value => ({ ...value, error: cause instanceof Error ? cause.message : "Could not load your story." }));
+    }
+  }, [identity, repository, planId]);
+  useEffect(() => {
+    void load();
+    return () => { request.current++; };
+  }, [load]);
+  const mutate = async (write: (id: string) => Promise<StoryPlan>) => {
+    if (!visible.plan || busy.current === identity) return false;
+    busy.current = identity;
+    const operation = ++request.current;
+    const current = () => currentIdentity.current === identity && request.current === operation;
+    setState(value => ({ ...value, updating: true, mutationError: null }));
+    try {
+      const plan = await write(visible.plan.planId);
+      if (!current()) return false;
+      setState(value => ({ ...value, plan }));
       return true;
     } catch (e) {
-      setMutationError(e instanceof Error ? e.message : "Could not update your moments. Try again.");
+      if (current()) setState(value => ({ ...value, mutationError: e instanceof Error ? e.message : "Could not update your moments. Try again." }));
       return false;
     } finally {
-      busy.current = false;
-      setUpdating(false);
+      if (current()) {
+        busy.current = null;
+        setState(value => ({ ...value, updating: false }));
+      }
     }
   };
-  return { plan, error, mutationError, updating, mutate, load };
+  return { ...visible, mutate, load };
 }
