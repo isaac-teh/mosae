@@ -22,6 +22,7 @@ vi.mock("../store/directingStore.js", async () => {
 
 const projectStore = await import("../store/projectStore.js");
 const directingStore = await import("../store/directingStore.js");
+const actualDirectingStore = await vi.importActual<typeof import("../store/directingStore.js")>("../store/directingStore.js");
 const { createPlanJob, directingRouter } = await import("./directing.js");
 
 const db = {} as Firestore;
@@ -112,6 +113,16 @@ describe("directing routes", () => {
       waitForReady: false,
       createdAt: 42,
     }));
+  });
+
+  it("allocates story intent identity and initial version on the server", async () => {
+    const response = await request(buildApp())
+      .post("/api/projects/project-1/story-intents")
+      .send({ id: "reused-client-id", version: 99, text: "Keep this version immutable.", focus: [] });
+
+    expect(response.status).toBe(202);
+    const saved = vi.mocked(directingStore.saveIntent).mock.calls[0][1].intent;
+    expect(saved).toMatchObject({ id: "intent-new", version: 1, text: "Keep this version immutable." });
   });
 
   it.each([
@@ -287,6 +298,7 @@ function fakeFirestore(status: "processing" | "ready", proposalVersion = 3) {
           return { exists: data !== undefined, data: () => data, get: (field: string) => data?.[field] };
         },
         create: (ref: { path: string }, value: Record<string, unknown>) => documents.set(ref.path, value),
+        set: (ref: { path: string }, value: Record<string, unknown>) => documents.set(ref.path, value),
         update: (ref: { path: string }, value: Record<string, unknown>) => documents.set(ref.path, { ...documents.get(ref.path), ...value }),
       }),
   } as unknown as Firestore;
@@ -343,5 +355,68 @@ describe("createPlanJob", () => {
     });
 
     expect(job.status).toBe("queued");
+  });
+});
+
+describe("directing persistence invariants", () => {
+  it("refuses to overwrite an existing story intent with different text", async () => {
+    const { db: fakeDb, documents } = fakeFirestore("ready");
+    const intent: StoryIntent = {
+      schemaVersion: 1,
+      id: "intent-reused",
+      projectId: "project-1",
+      version: 1,
+      text: "Keep the original family story.",
+      focus: ["family"],
+    };
+    await actualDirectingStore.saveIntent(fakeDb, { userId: "user-1", intent, createdAt: 20 });
+
+    await expect(actualDirectingStore.saveIntent(fakeDb, {
+      userId: "user-1",
+      intent: { ...intent, text: "Replace it with a different story." },
+      createdAt: 30,
+    })).rejects.toMatchObject({ code: "invalid_intent" });
+
+    expect(documents.get("projects/project-1/storyIntents/intent-reused")).toEqual({ ...intent, createdAt: 20 });
+  });
+
+  it("allocates a constraint revision after reserved job versions so late jobs stay stale", async () => {
+    const { db: fakeDb, documents } = fakeFirestore("ready", 1);
+    documents.set("projects/project-1", { ...ownedProject("ready"), proposalVersionCounter: 1 });
+    const jobInput = {
+      userId: "user-1",
+      projectId: "project-1",
+      storyIntentId: "intent-1",
+      parentProposalId: "proposal-1",
+      minimumVersion: 2,
+      constraints,
+      waitForReady: false,
+      createdAt: 30,
+      intent: { text: "Preserve the family story.", focus: ["family"] },
+    };
+    const jobV2 = await createPlanJob(fakeDb, jobInput);
+    const jobV3 = await createPlanJob(fakeDb, { ...jobInput, createdAt: 31 });
+
+    const revised = await actualDirectingStore.reviseConstraints(fakeDb, {
+      userId: "user-1",
+      projectId: "project-1",
+      proposalId: "proposal-1",
+      constraints: { ...constraints, deselectedMomentIds: ["moment-1"] },
+      createdAt: 40,
+    });
+    const lateV3: StoryProposal = {
+      ...proposal,
+      id: jobV3.proposalId,
+      parentProposalId: proposal.id,
+      version: jobV3.version,
+    };
+
+    expect([jobV2.version, jobV3.version, revised.version]).toEqual([2, 3, 4]);
+    await expect(actualDirectingStore.saveProposal(fakeDb, {
+      jobId: jobV3.id,
+      proposal: lateV3,
+      createdAt: 50,
+    })).resolves.toBe("stale");
+    expect(documents.get("projects/project-1")?.currentProposalId).toBe(revised.id);
   });
 });

@@ -1,6 +1,7 @@
 import type { ProposalConstraints, StoryIntent, StoryProposal } from "@mosae/contracts";
 import { describe, expect, it } from "vitest";
 import { adminDb } from "../firebase/admin.js";
+import { createPlanJob } from "../routes/directing.js";
 import {
   acceptProposal,
   readProposal,
@@ -86,6 +87,30 @@ describe("directing store (emulator)", () => {
 
     await expect(saveIntent(adminDb, { userId: "intruder", intent, createdAt: 20 })).rejects.toMatchObject({ code: "not_found" });
     await expect(adminDb.doc(`projects/${projectId}/storyIntents/${intent.id}`).get().then((snap) => snap.exists)).resolves.toBe(false);
+  });
+
+  it("keeps a story intent immutable when its id is reused with different text", async () => {
+    const { projectId, userId } = await seedProject();
+    const intent: StoryIntent = {
+      schemaVersion: 1,
+      id: uniqueId("intent"),
+      projectId,
+      version: 1,
+      text: "Keep the original family story.",
+      focus: ["family"],
+    };
+    await saveIntent(adminDb, { userId, intent, createdAt: 20 });
+
+    await expect(saveIntent(adminDb, {
+      userId,
+      intent: { ...intent, text: "Replace it with a different story." },
+      createdAt: 30,
+    })).rejects.toMatchObject({ code: "invalid_intent" });
+
+    await expect(adminDb.doc(`projects/${projectId}/storyIntents/${intent.id}`).get().then((snap) => snap.data())).resolves.toEqual({
+      ...intent,
+      createdAt: 20,
+    });
   });
 
   it("publishes a proposal only when its persisted job version is newer", async () => {
@@ -200,6 +225,52 @@ describe("directing store (emulator)", () => {
       jobId: null,
       createdAt: 40,
     });
+  });
+
+  it("allocates a constraint revision after reserved job versions so late jobs stay stale", async () => {
+    const { projectId, userId } = await seedProject();
+    const intent: StoryIntent = {
+      schemaVersion: 1,
+      id: uniqueId("intent"),
+      projectId,
+      version: 1,
+      text: "Preserve the family story.",
+      focus: ["family"],
+    };
+    await saveIntent(adminDb, { userId, intent, createdAt: 10 });
+    const current = { ...proposal(projectId, uniqueId("proposal-current"), 1), storyIntentId: intent.id };
+    await adminDb.doc(`projects/${projectId}/storyProposals/${current.id}`).set({ ...current, jobId: "job-1", createdAt: 20 });
+    await adminDb.doc(`projects/${projectId}`).update({ currentProposalId: current.id, proposalVersionCounter: 1 });
+
+    const jobInput = {
+      userId,
+      projectId,
+      storyIntentId: intent.id,
+      parentProposalId: current.id,
+      minimumVersion: 2,
+      constraints: current.constraints,
+      waitForReady: false,
+      createdAt: 30,
+    };
+    const jobV2 = await createPlanJob(adminDb, jobInput);
+    const jobV3 = await createPlanJob(adminDb, { ...jobInput, createdAt: 31 });
+    expect([jobV2.version, jobV3.version]).toEqual([2, 3]);
+
+    const revised = await reviseConstraints(adminDb, {
+      userId,
+      projectId,
+      proposalId: current.id,
+      constraints: { ...current.constraints, deselectedMomentIds: [current.moments[0].id] },
+      createdAt: 40,
+    });
+    expect(revised.version).toBe(4);
+
+    const lateV3 = {
+      ...proposal(projectId, jobV3.proposalId, jobV3.version, current.id),
+      storyIntentId: intent.id,
+    };
+    await expect(saveProposal(adminDb, { jobId: jobV3.id, proposal: lateV3, createdAt: 50 })).resolves.toBe("stale");
+    expect((await adminDb.doc(`projects/${projectId}`).get()).get("currentProposalId")).toBe(revised.id);
   });
 
   it("refuses to revise a stale proposal id", async () => {

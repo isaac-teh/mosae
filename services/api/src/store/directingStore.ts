@@ -20,6 +20,12 @@ export class DirectingStoreError extends Error {
   }
 }
 
+/** Allocates after every version already published or reserved on the project. */
+export function nextProposalVersion(counter: unknown, currentVersion: number, minimumVersion: number): number {
+  const reserved = typeof counter === "number" && Number.isSafeInteger(counter) && counter >= 0 ? counter : 0;
+  return Math.max(reserved + 1, currentVersion + 1, minimumVersion);
+}
+
 const projectRef = (db: Firestore, projectId: string) => db.collection("projects").doc(projectId);
 const proposalRef = (db: Firestore, projectId: string, proposalId: string) =>
   projectRef(db, projectId).collection("storyProposals").doc(proposalId);
@@ -29,6 +35,23 @@ function parseStoredProposal(value: FirebaseFirestore.DocumentData | undefined):
   const { jobId: _jobId, createdAt: _createdAt, ...candidate } = value;
   const parsed = StoryProposalSchema.safeParse(candidate);
   return parsed.success ? parsed.data : null;
+}
+
+function parseStoredIntent(value: FirebaseFirestore.DocumentData | undefined): StoryIntent | null {
+  if (!value) return null;
+  const { createdAt: _createdAt, ...candidate } = value;
+  const parsed = StoryIntentSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : null;
+}
+
+function sameIntent(left: StoryIntent, right: StoryIntent): boolean {
+  return left.schemaVersion === right.schemaVersion
+    && left.id === right.id
+    && left.projectId === right.projectId
+    && left.version === right.version
+    && left.text === right.text
+    && left.focus.length === right.focus.length
+    && left.focus.every((value, index) => value === right.focus[index]);
 }
 
 export async function saveIntent(
@@ -42,12 +65,21 @@ export async function saveIntent(
   const project = projectRef(db, intent.projectId);
   const intentRef = project.collection("storyIntents").doc(intent.id);
   return db.runTransaction(async (transaction) => {
-    const projectSnap = await transaction.get(project);
+    const [projectSnap, intentSnap] = await Promise.all([
+      transaction.get(project),
+      transaction.get(intentRef),
+    ]);
     if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) {
       throw new DirectingStoreError("not_found");
     }
 
-    transaction.set(intentRef, { ...intent, createdAt: input.createdAt });
+    if (intentSnap.exists) {
+      const existing = parseStoredIntent(intentSnap.data());
+      if (!existing || !sameIntent(existing, intent)) throw new DirectingStoreError("invalid_intent");
+      return existing;
+    }
+
+    transaction.create(intentRef, { ...intent, createdAt: input.createdAt });
     transaction.update(project, {
       currentProposalId: projectSnap.get("currentProposalId") ?? null,
       acceptedProposalId: projectSnap.get("acceptedProposalId") ?? null,
@@ -163,13 +195,16 @@ export async function reviseConstraints(
       id: destination.id,
       parentProposalId: source.id,
       state: "draft",
-      version: source.version + 1,
+      version: nextProposalVersion(projectSnap.get("proposalVersionCounter"), source.version, source.version + 1),
       constraints: input.constraints,
     });
     if (!candidate.success) throw new DirectingStoreError("invalid_proposal");
 
     transaction.set(destination, { ...candidate.data, jobId: null, createdAt: input.createdAt });
-    transaction.update(project, { currentProposalId: destination.id });
+    transaction.update(project, {
+      currentProposalId: destination.id,
+      proposalVersionCounter: candidate.data.version,
+    });
     return candidate.data;
   });
 }

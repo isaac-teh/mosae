@@ -12,6 +12,7 @@ import { newOutboxTask } from "../domain/outbox.js";
 import {
   acceptProposal,
   DirectingStoreError,
+  nextProposalVersion,
   readProposal,
   reviseConstraints,
   saveIntent,
@@ -71,12 +72,13 @@ export async function createPlanJob(db: Firestore, input: QueuePlanInput): Promi
     const intent = input.intent ?? storedIntent((await transaction.get(intentRef)).data());
     if (!intent) throw new DirectingStoreError("invalid_intent");
 
-    let version = Math.max(input.minimumVersion, Number(projectSnap.get("proposalVersionCounter") ?? 0) + 1);
+    let currentVersion = 0;
     const currentProposalId = projectSnap.get("currentProposalId") as string | null | undefined;
     if (currentProposalId) {
       const currentSnap = await transaction.get(projectRef.collection("storyProposals").doc(currentProposalId));
-      version = Math.max(version, Number(currentSnap.get("version") ?? 0) + 1);
+      currentVersion = Number(currentSnap.get("version") ?? 0);
     }
+    const version = nextProposalVersion(projectSnap.get("proposalVersionCounter"), currentVersion, input.minimumVersion);
 
     const waitForReady = status === "processing";
     const jobStatus = waitForReady ? "waiting_for_ready" : "queued";
@@ -178,10 +180,10 @@ export function directingRouter(deps: {
         return;
       }
       const parsed = StoryIntentSchema.safeParse({
-        schemaVersion: req.body?.schemaVersion ?? 1,
-        id: req.body?.id ?? newId(),
+        schemaVersion: 1,
+        id: newId(),
         projectId,
-        version: req.body?.version ?? 1,
+        version: 1,
         text: req.body?.text,
         focus: req.body?.focus ?? [],
       });
