@@ -92,7 +92,7 @@ export function projectProposal(
 
   const selectedSeconds = proposal.moments
     .filter((moment) => !deselected.has(moment.id))
-    .reduce((total, moment) => total + momentSeconds(moment), 0);
+    .reduce((total, moment) => total + (moment.kind === "video" ? momentSeconds(moment) / 5 : 1) * 3, 0);
   const coverImageKey = moments[0]?.imageKey ?? "";
 
   return {

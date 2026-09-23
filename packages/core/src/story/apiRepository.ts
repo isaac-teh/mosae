@@ -1,9 +1,8 @@
 import { collection, doc, onSnapshot } from "firebase/firestore";
-import { getDownloadURL, ref } from "firebase/storage";
 import { ensureSignedIn } from "../auth";
 import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
-import { getFirestoreClient, getStorageClient } from "../firebase";
+import { getFirestoreClient } from "../firebase";
 import type { StoryRepository } from "./repository";
 import {
   projectProposal,
@@ -17,8 +16,8 @@ type RecordData = Record<string, unknown>;
 export type ApiStoryRepositoryDeps = {
   listenDocument(path: string, waitForExists?: boolean): Promise<unknown | null>;
   listenCollection(path: string): Promise<unknown[]>;
-  getDownloadUrl(path: string): Promise<string>;
-  request(method: "POST" | "PATCH", path: string, body?: unknown): Promise<unknown>;
+  getThumbnailUrl(projectId: string, assetId: string): Promise<string>;
+  request(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<unknown>;
 };
 
 export type ApiStoryRepositoryOptions = { projectId: string };
@@ -64,8 +63,12 @@ const firebaseDeps: ApiStoryRepositoryDeps = {
       });
     });
   },
-  getDownloadUrl(path) {
-    return getDownloadURL(ref(getStorageClient(), path));
+  async getThumbnailUrl(projectId, assetId) {
+    const response = record(await firebaseDeps.request(
+      "GET",
+      `/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}/thumbnail`,
+    ), "thumbnail response");
+    return stringField(response.url, "thumbnail URL");
   },
   async request(method, path, body) {
     const user = await ensureSignedIn();
@@ -147,13 +150,11 @@ async function loadSources(deps: ApiStoryRepositoryDeps, projectId: string, prop
     if (!neededShotIds.has(id)) return [];
     const asset = assets.get(stringField(shot.assetId, "shot asset id"));
     if (!asset) throw new Error(`Missing asset for shot ${id}`);
-    const derivatives = record(asset.derivatives, "asset derivatives");
-    const thumbPath = stringField(derivatives.thumbPath, "thumbnail path");
     const eventId = typeof asset.eventId === "string" ? asset.eventId : null;
     const event = eventId ? events.get(eventId) : undefined;
     const eventLabel = event && typeof event.label === "string" ? event.label : "Undated";
     const kind = shot.mediaType === "video" ? "video" as const : "photo" as const;
-    return [deps.getDownloadUrl(thumbPath).then((thumbnailUrl) => ({ id, kind, thumbnailUrl, eventLabel }))];
+    return [deps.getThumbnailUrl(projectId, stringField(asset.id, "asset id")).then((thumbnailUrl) => ({ id, kind, thumbnailUrl, eventLabel }))];
   }));
 
   return {

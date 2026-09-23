@@ -42,6 +42,26 @@ const shots = [
 ];
 
 describe("projectProposal", () => {
+  it.each([
+    { deselected: [], estimate: "~15 sec film" },
+    { deselected: ["moment-2"], estimate: "~9 sec film" },
+    { deselected: ["moment-1"], estimate: "~12 sec film" },
+    { deselected: ["moment-1", "moment-2", "moment-3"], estimate: "~0 sec film" },
+  ])("estimates mixed media in selected photo-equivalents: $estimate", ({ deselected, estimate }) => {
+    const mixed = {
+      ...proposal,
+      moments: [
+        proposal.moments[0],
+        { ...proposal.moments[1], kind: "video" as const, previewInSec: 2, previewOutSec: 12 },
+        { ...proposal.moments[2], kind: "video" as const, previewInSec: 5, previewOutSec: 15 },
+      ],
+      constraints: { ...proposal.constraints, deselectedMomentIds: deselected },
+    };
+    const plan = projectProposal(mixed, project, shots);
+    expect(plan.estimatedFilmLabel).toBe(estimate);
+    expect(plan.moments[1].durationLabel).toBe("10 sec");
+  });
+
   it("projects proposal deselections and resolved thumbnail URLs into review moments", () => {
     const plan = projectProposal(proposal, project, shots);
 

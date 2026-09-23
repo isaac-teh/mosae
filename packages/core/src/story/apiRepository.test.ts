@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 const firebaseMocks = vi.hoisted(() => ({
   ensureSignedIn: vi.fn(async () => ({ getIdToken: async () => "owner-token" })),
   onSnapshot: vi.fn(),
-  getDownloadURL: vi.fn(async (path: string) => `https://firebase.test/${encodeURIComponent(path)}`),
 }));
 
 vi.mock("../auth", () => ({ ensureSignedIn: firebaseMocks.ensureSignedIn }));
@@ -13,10 +12,6 @@ vi.mock("firebase/firestore", () => ({
   doc: (_db: unknown, ...segments: string[]) => segments.join("/"),
   collection: (_db: unknown, ...segments: string[]) => segments.join("/"),
   onSnapshot: firebaseMocks.onSnapshot,
-}));
-vi.mock("firebase/storage", () => ({
-  ref: (_storage: unknown, path: string) => path,
-  getDownloadURL: firebaseMocks.getDownloadURL,
 }));
 
 import { createApiStoryRepository, type ApiStoryRepositoryDeps } from "./apiRepository";
@@ -58,14 +53,22 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
   return {
     listenDocument: vi.fn(async (path) => documents[path] ?? null),
     listenCollection: vi.fn(async (path) => collections[path] ?? []),
-    getDownloadUrl: vi.fn(async (path) => `https://storage.test/${encodeURIComponent(path)}`),
+    getThumbnailUrl: vi.fn(async (projectId, assetId) => `https://storage.test/${projectId}/${assetId}?signed=true`),
     request: vi.fn(async () => ({})),
     ...overrides,
   };
 }
 
 describe("createApiStoryRepository", () => {
-  it("uses Firestore snapshots and Firebase Storage download URLs in its default read adapter", async () => {
+  it("uses Firestore snapshots and authenticated thumbnail API URLs in its default read adapter", async () => {
+    const fetchMock = vi.fn(async (url: string, options: RequestInit) => {
+      if (options.method !== "GET" || (options.headers as Record<string, string>).Authorization !== "Bearer owner-token") {
+        return new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401 });
+      }
+      const match = /\/api\/projects\/project-1\/assets\/(asset-[12])\/thumbnail$/.exec(url);
+      return new Response(JSON.stringify(match ? { url: `https://storage.test/${match[1]}?signed=true`, expiresAt: 301000 } : { error: "not_found" }), { status: match ? 200 : 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
     const documents: Record<string, unknown> = {
       "projects/project-1": { id: "project-1", title: "Family weekend", place: "Singapore", dateRange: "22–23 Sep 2026" },
       "projects/project-1/storyProposals/proposal-1": proposal,
@@ -88,9 +91,8 @@ describe("createApiStoryRepository", () => {
 
     const plan = await createApiStoryRepository({ projectId: "project-1" }).getPlan("proposal-1");
 
-    expect(plan.moments[0].imageKey).toBe("https://firebase.test/proxies%2Fowner%2Fproject-1%2Fasset-1%2F1%2Fthumb.jpg");
+    expect(plan.moments.map(({ imageKey }) => imageKey)).toEqual(["https://storage.test/asset-1?signed=true", "https://storage.test/asset-2?signed=true"]);
     expect(firebaseMocks.onSnapshot).toHaveBeenCalledTimes(5);
-    expect(firebaseMocks.getDownloadURL).toHaveBeenCalledWith("proxies/owner/project-1/asset-1/1/thumb.jpg");
   });
 
   it("authenticates default API writes", async () => {
@@ -113,11 +115,11 @@ describe("createApiStoryRepository", () => {
     const plan = await repository.getPlan("proposal-1");
 
     expect(plan.moments.map(({ imageKey }) => imageKey)).toEqual([
-      "https://storage.test/proxies%2Fuser%2Fproject-1%2Fasset-1%2F1%2Fthumb.jpg",
-      "https://storage.test/proxies%2Fuser%2Fproject-1%2Fasset-2%2F1%2Fthumb.jpg",
+      "https://storage.test/project-1/asset-1?signed=true",
+      "https://storage.test/project-1/asset-2?signed=true",
     ]);
     expect(plan.chapters[0].dayLabel).toBe("Day 1, evening");
-    expect(deps.getDownloadUrl).toHaveBeenCalledWith("proxies/user/project-1/asset-1/1/thumb.jpg");
+    expect(deps.getThumbnailUrl).toHaveBeenCalledWith("project-1", "asset-1");
   });
 
   it("formats the persisted project date range for the review plan", async () => {

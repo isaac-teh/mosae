@@ -3,6 +3,8 @@ import { adminDb } from "./firebase/admin.js";
 import { loadConfig } from "./config.js";
 import { requireServiceCaller } from "./auth/requireServiceCaller.js";
 import { projectsRouter } from "./routes/projects.js";
+import { thumbnailsRouter } from "./routes/thumbnails.js";
+import { firebaseThumbnailUrlStore } from "./ingest/objectStore.js";
 import { createPlanJob, directingRouter, type QueuePlan } from "./routes/directing.js";
 import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
@@ -95,6 +97,12 @@ app.use(
 app.use(
   "/api/projects",
   directingRouter({ db: adminDb, queuePlan }),
+);
+app.use(
+  "/api/projects",
+  thumbnailsRouter({ db: adminDb, thumbnails: {
+    signedReadUrl: (path, expiresAt) => firebaseThumbnailUrlStore(getStorage(getAdminApp()).bucket(config.storageBucket)).signedReadUrl(path, expiresAt),
+  } }),
 );
 app.use(
   "/events",
