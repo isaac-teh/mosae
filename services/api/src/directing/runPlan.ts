@@ -9,11 +9,11 @@ import {
 } from "./budget.js";
 import { createPlanningTools, planningToolDeclarations } from "./tools.js";
 import { validateProposal } from "./validateProposal.js";
-import { buildWorkingSet, type WorkingShot } from "./workingSet.js";
+import { buildWorkingSet, type WorkingSet, type WorkingShot } from "./workingSet.js";
 
 export type PlanningProgress = "searching" | "inspecting" | "organizing";
 export type PlanningTools = ReturnType<typeof createPlanningTools>;
-export type PlanningToolName = keyof PlanningTools;
+export type PlanningToolName = "searchShots" | "getShotDetails" | "getTranscript";
 export type DeadlineOperation = "progress" | "model" | "tool";
 
 export type DeadlineScheduler = {
@@ -129,6 +129,21 @@ async function executeTool(tools: PlanningTools, call: PlanToolCall): Promise<un
     default:
       throw new Error(`unknown planning tool ${String(call.name)}`);
   }
+}
+
+/**
+ * The working set is capped, but the tools search the whole project, so a
+ * correct search result can fall outside it. Validating against the working set
+ * alone would reject that shot and spend the single repair undoing a correct
+ * answer. Admit the union instead: tool results are project-scoped and
+ * eligibility-filtered inside the tool, so the model still cannot invent a
+ * shot. Working-set entries win on id collision.
+ */
+function admissibleSet(workingSet: WorkingSet, tools: PlanningTools): WorkingSet {
+  const shots = new Map<string, WorkingShot>();
+  for (const shot of workingSet.shots) shots.set(shot.id, shot);
+  for (const shot of tools.returnedShots()) if (!shots.has(shot.id)) shots.set(shot.id, shot);
+  return { shots: [...shots.values()], lines: workingSet.lines };
 }
 
 function budgetReason(kind: PlanBudgetKind): string {
@@ -249,7 +264,7 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
       }
 
       await progress("organizing");
-      const validation = validateProposal(output.submission, workingSet, {
+      const validation = validateProposal(output.submission, admissibleSet(workingSet, deps.tools), {
         targetSec: job.targetSec,
         excludedShotIds: job.constraints.excludedShotIds,
         mustIncludeShotIds,

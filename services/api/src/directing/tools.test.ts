@@ -155,4 +155,16 @@ describe("createPlanningTools", () => {
     expect(result[0]?.text).toBe("line 2");
     expect(result.at(-1)?.text).toBe("line 121");
   });
+
+  it("remembers only the shots it actually returned, so validation can admit them", async () => {
+    const shots = [shot("hit", { embedding: [1, 0] }), shot("miss", { embedding: [0, 1] }), shot("detailed", { embedding: [0.5, 0.5] })];
+    const { tools } = setup({ shots });
+
+    expect(tools.returnedShots()).toEqual([]);
+    await tools.searchShots({ query: "park", limit: 1 });
+    await tools.getShotDetails({ shotIds: ["detailed"] });
+    await tools.searchShots({ query: "park", limit: 1 });
+
+    expect(tools.returnedShots().map(({ id }) => id)).toEqual(["hit", "detailed"]);
+  });
 });

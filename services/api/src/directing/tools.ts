@@ -40,6 +40,20 @@ export type PlanningToolsDeps = {
 
 export type ShotDetails = Omit<PlanningShot, "embedding">;
 
+export type PlanningToolset = {
+  searchShots(input: { query: string; filters?: ShotFilters; limit?: number }): Promise<string[]>;
+  getShotDetails(input: { shotIds: string[] }): Promise<ShotDetails[]>;
+  getTranscript(input: { assetId: string; fromSec?: number; toSec?: number }): Promise<TranscriptLine[]>;
+  /**
+   * Every shot these tools actually handed the model during this run. The
+   * working set is capped, but the searchable pool is the whole project, so a
+   * legitimate search result can sit outside the working set. Validation admits
+   * this union: results are already project-scoped and eligibility-filtered
+   * here, so the model still cannot invent a shot.
+   */
+  returnedShots(): PlanningShot[];
+};
+
 const SEARCH_DEFAULT = 12;
 const SEARCH_MAX = 30;
 const DETAIL_MAX = 10;
@@ -77,10 +91,17 @@ function overlaps(line: TranscriptLine, start: number, end: number): boolean {
   return line.endSec > start && line.startSec < end;
 }
 
-export function createPlanningTools(deps: PlanningToolsDeps) {
+export function createPlanningTools(deps: PlanningToolsDeps): PlanningToolset {
   const excluded = new Set(deps.excludedShotIds);
+  const returned = new Map<string, PlanningShot>();
+  const remember = <T extends PlanningShot>(shots: T[]): T[] => {
+    for (const shot of shots) if (!returned.has(shot.id)) returned.set(shot.id, shot);
+    return shots;
+  };
 
   return {
+    returnedShots: () => [...returned.values()],
+
     async searchShots(input: { query: string; filters?: ShotFilters; limit?: number }): Promise<string[]> {
       const [vectors, loaded] = await Promise.all([
         deps.embedContent({ model: MODELS.embed, contents: [input.query], taskType: "RETRIEVAL_QUERY" }),
@@ -96,7 +117,7 @@ export function createPlanningTools(deps: PlanningToolsDeps) {
         candidates.map((shot) => ({ id: shot.id, assetId: shot.assetId, embedding: shot.embedding ?? [] })),
         clampLimit(input.limit, SEARCH_DEFAULT, SEARCH_MAX),
       );
-      return ranked.map(({ id }) => compactShotLine(byId.get(id)!));
+      return remember(ranked.map(({ id }) => byId.get(id)!)).map(compactShotLine);
     },
 
     async getShotDetails(input: { shotIds: string[] }): Promise<ShotDetails[]> {
@@ -106,12 +127,12 @@ export function createPlanningTools(deps: PlanningToolsDeps) {
       const offences = input.shotIds.filter((id) => !local.has(id) || foreign.has(id));
       if (offences.length > 0) throw outsideProjectError("shot", offences, deps.projectId);
 
-      return input.shotIds
+      const matched = input.shotIds
         .slice(0, DETAIL_MAX)
         .filter((id) => !excluded.has(id))
         .map((id) => local.get(id)!)
-        .filter((shot) => isEligible(shot, deps.projectId, excluded))
-        .map(({ embedding: _embedding, ...details }) => details);
+        .filter((shot) => isEligible(shot, deps.projectId, excluded));
+      return remember(matched).map(({ embedding: _embedding, ...details }) => details);
     },
 
     async getTranscript(input: { assetId: string; fromSec?: number; toSec?: number }): Promise<TranscriptLine[]> {

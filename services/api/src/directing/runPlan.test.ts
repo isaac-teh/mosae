@@ -12,6 +12,7 @@ import {
   type PlanningTools,
 } from "./runPlan.js";
 import type { ProposalSubmission } from "./assemble.js";
+import type { PlanningShot } from "./tools.js";
 import type { WorkingShot } from "./workingSet.js";
 
 const photo = (id: string): WorkingShot => ({
@@ -38,6 +39,9 @@ const photo = (id: string): WorkingShot => ({
 });
 
 const shots = ["p1", "p2", "p3", "p4", "p5"].map(photo);
+
+/** The shape the planning tools hand back: a working shot with catalog identity. */
+const searchable = (id: string): PlanningShot => ({ ...photo(id), projectId: "project-1", assetId: `asset-${id}`, embedding: null });
 
 const validSubmission: ProposalSubmission = {
   title: "A day together",
@@ -80,6 +84,7 @@ function tools(overrides: Partial<PlanningTools> = {}): PlanningTools {
     searchShots: async () => ["p1 | photo | 2026-05-03 | Park | | p1 family picnic"],
     getShotDetails: async () => [],
     getTranscript: async () => [],
+    returnedShots: () => [],
     ...overrides,
   };
 }
@@ -380,6 +385,40 @@ describe("runPlan", () => {
       expect(result.diagnostics.join("\n")).toMatch(/schema_submission.*invalid assembled proposal/i);
       expect(result.usage.modelTurns).toBe(2);
     }
+  });
+
+  it("admits a searched shot that the capped working set left out", async () => {
+    // A cap of 3 plus the must-include p5 leaves p4 outside the working set,
+    // but a project-scoped search legitimately returns it.
+    const capped: PlanJob = { ...job, workingSetCap: 3 };
+    const submit = (): PlanModelOutput => ({ type: "submit", submission: validSubmission });
+
+    const unsearched = await runPlan(capped, { model: scripted([submit(), submit()]).model, tools: tools() });
+    const searched = await runPlan(capped, {
+      model: scripted([submit()]).model,
+      tools: tools({ returnedShots: () => [searchable("p4")] }),
+    });
+
+    expect(unsearched).toMatchObject({ ok: false, code: "validation_failed" });
+    if (!unsearched.ok) expect(unsearched.diagnostics.join("\n")).toMatch(/working_set_membership.*p4/);
+    expect(searched).toMatchObject({ ok: true });
+  });
+
+  it("still rejects a shot that neither the working set nor any tool result contains", async () => {
+    const invented: ProposalSubmission = {
+      ...validSubmission,
+      moments: [...validSubmission.moments, { shotId: "invented", kind: "photo", title: "No", description: "d", rationale: "r" }],
+      chapters: [validSubmission.chapters[0], { ...validSubmission.chapters[1], momentIds: ["p4", "p5", "invented"] }],
+    };
+    const script = scripted([{ type: "submit", submission: invented }, { type: "submit", submission: invented }]);
+
+    const result = await runPlan(job, {
+      model: script.model,
+      tools: tools({ returnedShots: () => [searchable("p4")] }),
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "validation_failed" });
+    if (!result.ok) expect(result.diagnostics.join("\n")).toMatch(/working_set_membership.*invented/);
   });
 });
 
