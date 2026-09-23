@@ -113,6 +113,29 @@ export async function createPlanJob(db: Firestore, input: QueuePlanInput): Promi
   });
 }
 
+/**
+ * Queues a plan job and drains the outbox behind it. The dev runner executes
+ * the plan in-process, so awaiting that drain would hold POST /story-intents
+ * open for the whole bounded run: the client would attach to an already
+ * succeeded job and never see the progress UI. Pass `defer` there, exactly as
+ * the readiness dispatch does, and keep awaiting the cheap Cloud Tasks handoff
+ * everywhere else.
+ */
+export function createQueuePlan(deps: {
+  createJob: (input: QueuePlanInput) => Promise<QueuedPlanJob>;
+  dispatch: () => Promise<unknown>;
+  defer?: ((run: () => void) => void) | null;
+  onDispatchError?: (error: unknown) => void;
+}): QueuePlan {
+  const report = deps.onDispatchError ?? ((error: unknown) => console.error("plan dispatch failed", error));
+  return async (input) => {
+    const job = await deps.createJob(input);
+    if (deps.defer) deps.defer(() => { void deps.dispatch().catch(report); });
+    else await deps.dispatch();
+    return job;
+  };
+}
+
 const STATUS: Record<DirectingStoreError["code"], number> = {
   invalid_intent: 400,
   invalid_job: 409,

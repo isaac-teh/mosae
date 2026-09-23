@@ -23,7 +23,7 @@ vi.mock("../store/directingStore.js", async () => {
 const projectStore = await import("../store/projectStore.js");
 const directingStore = await import("../store/directingStore.js");
 const actualDirectingStore = await vi.importActual<typeof import("../store/directingStore.js")>("../store/directingStore.js");
-const { createPlanJob, directingRouter } = await import("./directing.js");
+const { createPlanJob, createQueuePlan, directingRouter } = await import("./directing.js");
 
 const db = {} as Firestore;
 const queuePlan = vi.fn();
@@ -418,5 +418,58 @@ describe("directing persistence invariants", () => {
       createdAt: 50,
     })).resolves.toBe("stale");
     expect(documents.get("projects/project-1")?.currentProposalId).toBe(revised.id);
+  });
+});
+
+describe("createQueuePlan", () => {
+  const input = {
+    userId: "user-1", projectId: "project-1", storyIntentId: "intent-1", parentProposalId: null,
+    minimumVersion: 1, constraints, waitForReady: false, createdAt: 10,
+  };
+  const job = { id: "job-1", proposalId: "proposal-1", version: 1, status: "queued" as const };
+
+  it("returns before an in-process dev dispatch finishes, so the client can watch the job", async () => {
+    let settled = false;
+    const deferred: Array<() => void> = [];
+    const dispatch = vi.fn(async () => { settled = true; });
+
+    const queued = await createQueuePlan({
+      createJob: async () => job,
+      dispatch,
+      defer: (run) => { deferred.push(run); },
+    })(input);
+
+    expect(queued).toEqual(job);
+    expect(settled).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+    deferred.forEach((run) => { run(); });
+    await Promise.resolve();
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("awaits the cheap Cloud Tasks handoff when nothing is deferred", async () => {
+    const order: string[] = [];
+    const dispatch = vi.fn(async () => { order.push("dispatched"); });
+
+    await createQueuePlan({ createJob: async () => { order.push("created"); return job; }, dispatch })(input);
+
+    expect(order).toEqual(["created", "dispatched"]);
+  });
+
+  it("reports a deferred dispatch failure instead of leaving an unhandled rejection", async () => {
+    const onDispatchError = vi.fn();
+    const deferred: Array<() => void> = [];
+
+    await createQueuePlan({
+      createJob: async () => job,
+      dispatch: async () => { throw new Error("outbox unavailable"); },
+      defer: (run) => { deferred.push(run); },
+      onDispatchError,
+    })(input);
+    deferred.forEach((run) => { run(); });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onDispatchError).toHaveBeenCalledWith(expect.objectContaining({ message: "outbox unavailable" }));
   });
 });

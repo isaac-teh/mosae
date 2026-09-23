@@ -5,7 +5,7 @@ import { requireServiceCaller } from "./auth/requireServiceCaller.js";
 import { projectsRouter } from "./routes/projects.js";
 import { thumbnailsRouter } from "./routes/thumbnails.js";
 import { firebaseThumbnailUrlStore } from "./ingest/objectStore.js";
-import { createPlanJob, directingRouter, type QueuePlan } from "./routes/directing.js";
+import { createPlanJob, createQueuePlan, directingRouter, type QueuePlan } from "./routes/directing.js";
 import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
@@ -61,11 +61,12 @@ const cluster = async (projectId: string): Promise<unknown> => {
   return result;
 };
 const plan = createPlan({ db: adminDb, geminiApiKey: config.geminiApiKey });
-const queuePlan: QueuePlan = async (input) => {
-  const job = await createPlanJob(adminDb, input);
-  await dispatchDue(adminDb, queue, Date.now());
-  return job;
-};
+const queuePlan: QueuePlan = createQueuePlan({
+  createJob: (input) => createPlanJob(adminDb, input),
+  dispatch: () => dispatchDue(adminDb, queue, Date.now()),
+  // The dev runner plans in-process; see createQueuePlan.
+  defer: useDevRunner ? (run) => { setImmediate(run); } : null,
+});
 
 const queue: TaskQueue = config.tasks
   ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.serviceUrl })
