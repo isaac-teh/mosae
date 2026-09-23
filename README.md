@@ -87,7 +87,7 @@ npm run dev:api
 ```
 
 Wait for "Mosaé API listening on port 8080".
-The Storage emulator emits no finalize events, so after uploading run `npm run replay:finalize -w services/api` to mark uploads as accepted.
+The Storage emulator emits no finalize events, so this setup (no `TASKS_*` env vars, not production, both emulator hosts set) also starts a dev-only task runner: it polls the emulator for new uploads, replays finalize itself, and runs ingest, understand and cluster in-process instead of delivering them to Cloud Tasks. A watch for "Cloud Tasks not configured; running tasks in-process and polling the Storage emulator" at startup confirms it's on. Uploads become assets, then thumbnails, shots and events, within a few seconds with no manual step. If you ever need the one-shot version instead (for example, replaying uploads after restarting the API without the poller), run `npm run replay:finalize -w services/api`.
 
 ### 3. Web app (port 8081)
 
@@ -112,24 +112,27 @@ If you change an env file, restart with `npm run web -w apps/client -- --clear` 
 
 ## Ingest pipeline
 
-After an upload finalizes, Mosaé creates an asset and queues `/tasks/ingest` for that asset. Ingest reads the original, then writes its results before marking the asset ingested. Once every closed upload session has no pending entries and every asset has either ingested or failed, the project settles and queues `/tasks/cluster` to build events and find near-duplicates.
+After an upload finalizes, Mosaé creates an asset and queues `/tasks/ingest` for that asset. Ingest reads the original, then writes its results before marking the asset ingested. Once every closed upload session has no pending entries and every asset has either understood or failed, the project settles and queues `/tasks/cluster` to build events and find near-duplicates.
 The project pass is guarded by a 5 minute lease and publishes the project status last.
 
 | Stage | Result |
 | --- | --- |
 | Finalize | Accepts the original upload, records an `uploaded` asset, and queues `/tasks/ingest`. |
 | Ingest | Records media facts and quality, creates a thumbnail plus a photo render copy or video proxy, and creates shots. |
+| Understand | Uses Gemini once per asset to analyze its shots and create search embeddings, then marks the asset `understood`. |
 | Settle and cluster | Waits for all uploads to finish, then queues `/tasks/cluster` to create events and link near-duplicate photos. |
 
 Derivatives live under `proxies/{userId}/{projectId}/{assetId}/{generation}/`. Photos get `thumb.jpg` and `render.jpg`; videos get a poster `thumb.jpg` and a 360p `proxy.mp4`. Every asset also gets media facts and quality facts, including `quality.dHash` for near-duplicate detection. Every photo gets exactly one shot with no source interval: `sourceStartSec` and `sourceEndSec` are `null`. Every video gets one shot per detected scene, with `sourceStartSec` and `sourceEndSec` in the original video's timebase. Shot IDs are deterministic: `{assetId}_{index padded to 4 digits}`.
+
+Understanding analyzes the photo or all known video shots in one Gemini request per asset, stores a search embedding per non-empty shot description, and records a transcript only for videos. Readiness waits for this stage, rather than merely waiting for ingest.
 
 | Project status | Trigger |
 | --- | --- |
 | `collecting` | A project is created. |
 | `processing` | Its first original upload is accepted at finalize. |
-| `ready` | All sessions are closed, no entries are pending, and every asset has ingested. |
-| `ready_with_errors` | The project has settled with at least one ingested asset and at least one failed asset. |
-| `failed` | The project has settled but no asset ingested. |
+| `ready` | All sessions are closed, no entries are pending, and every asset has understood. |
+| `ready_with_errors` | The project has settled with at least one understood asset and at least one failed asset. |
+| `failed` | The project has settled but no asset understood. |
 
 Inspect a local project through the Firestore emulator REST endpoint.
 The security rules deny unauthenticated reads, so send the emulator's admin header (`Authorization: Bearer owner`), or the call returns `PERMISSION_DENIED`:
@@ -141,12 +144,20 @@ curl -s -H "Authorization: Bearer owner" "$BASE/<projectId>/assets"   # per-asse
 curl -s -H "Authorization: Bearer owner" "$BASE/<projectId>/events"   # day and event clusters
 ```
 
+Phase 2 also exposes shot search at `GET /api/projects/:projectId/shots/search?q=...`. Unlike the Firestore emulator's `Bearer owner` bypass above, this API requires a real Firebase Auth emulator ID token:
+
+```bash
+curl -s -H "Authorization: Bearer <firebase-auth-emulator-id-token>" \
+  "http://localhost:8080/api/projects/<projectId>/shots/search?q=beach"
+```
+
 Ingest requires `ffmpeg` and `ffprobe` on `PATH`; the container also needs `heif-convert` on `PATH` for HEIC conversion. `GET /health` reports the availability of `ffmpeg`, `ffprobe`, and `exiftool`.
 
 ### Operational limits
 
 - Originals up to 2 GiB are ingested. Larger uploads are accepted, but their asset fails with `too_large_for_ingest` because Cloud Run temporary storage is memory-backed and each original is downloaded whole. A streaming path is the fix.
 - An asset whose processing keeps failing for environmental reasons is failed with reason `retries_exhausted` after 5 attempts.
+- A missing or invalid `GEMINI_API_KEY` fails an understand task with a clear reason; it never prevents the API from booting.
 - The Cloud Tasks queue must allow at least 6 attempts (`maxAttempts`) so that conversion can happen before the queue gives up.
 - Ingest is CPU and memory heavy. Deploy the API service with at least 4 GiB and set the Cloud Tasks queue's `maxConcurrentDispatches` low, starting at 4, so a 1,500-file upload does not exhaust a single instance.
 - HEIC needs `heif-convert` from `libheif-examples`, which is installed in the container. On a machine without it, a HEVC HEIC asset fails with `unsupported_image`.
