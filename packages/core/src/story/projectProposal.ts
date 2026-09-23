@@ -52,10 +52,20 @@ function momentSeconds(moment: ProposalProjectionSource["moments"][number]): num
   return 3;
 }
 
+export type ProposalProjectionOptions = {
+  /**
+   * Every shot in the project, used for the "add from N other photos" count.
+   * Callers that pass only the proposal's own shots leave this out and get 0,
+   * which is the truthful answer for the media they supplied.
+   */
+  totalShotCount?: number;
+};
+
 export function projectProposal(
   proposal: ProposalProjectionSource,
   project: ProjectProjectionSource,
   shots: ShotProjectionSource[],
+  options: ProposalProjectionOptions = {},
 ): StoryPlan {
   const shotsById = new Map(shots.map((shot) => [shot.id, shot]));
   const deselected = new Set(proposal.constraints.deselectedMomentIds);
@@ -113,7 +123,7 @@ export function projectProposal(
     },
     chapters,
     moments,
-    otherPhotoCount: Math.max(0, shots.length - moments.length),
+    otherPhotoCount: Math.max(0, (options.totalShotCount ?? shots.length) - moments.length),
     albumName: project.title ?? "Memories",
     suggestions: [],
     estimatedFilmLabel: durationLabel(selectedSeconds),

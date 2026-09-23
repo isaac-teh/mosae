@@ -44,6 +44,7 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
     "projects/project-1/shots": [
       { id: "shot-1", assetId: "asset-1", mediaType: "photo" },
       { id: "shot-2", assetId: "asset-2", mediaType: "photo" },
+      { id: "shot-3", assetId: "asset-1", mediaType: "photo" },
     ],
     "projects/project-1/assets": [
       { id: "asset-1", eventId: "event-1", derivatives: { thumbPath: "proxies/user/project-1/asset-1/1/thumb.jpg" } },
@@ -221,6 +222,12 @@ describe("createApiStoryRepository", () => {
     await expect(repository.reviseMoments("proposal-1", "Show more of dinner."))
       .rejects.toThrow("We couldn't build a valid story plan. Please try again.");
     expect(deps.listenDocument).not.toHaveBeenCalledWith("projects/project-1/storyProposals/proposal-next", true);
+  });
+
+  it("counts every project shot the proposal left out, not the shots it kept", async () => {
+    const plan = await createApiStoryRepository({ projectId: "project-1" }, dependencies()).getPlan("proposal-1");
+
+    expect(plan.otherPhotoCount).toBe(1);
   });
 
   it("degrades a card whose thumbnail will not sign instead of failing the whole screen", async () => {

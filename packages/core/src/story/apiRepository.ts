@@ -32,6 +32,8 @@ type ProjectionSources = {
   proposal: ProposalProjectionSource;
   project: ProjectProjectionSource;
   shots: ShotProjectionSource[];
+  /** Every shot in the project, not only the ones this proposal uses. */
+  totalShotCount: number;
 };
 
 // Favorites are presentation-only. Keep them for the lifetime of the client
@@ -205,6 +207,9 @@ async function loadSources(deps: ApiStoryRepositoryDeps, projectId: string, prop
 
   return {
     proposal: proposalRecord,
+    // Every shot in the project, so "add from N other photos" counts the media
+    // the proposal left out rather than the moments it kept.
+    totalShotCount: shotValues.length,
     project: {
       id: stringField(projectRecord.id, "project id"),
       title: typeof projectRecord.title === "string" ? projectRecord.title : null,
@@ -247,7 +252,7 @@ export function createApiStoryRepository(
   if (!options.projectId) throw new Error("project_id_required");
   const projectId = options.projectId;
   const render = (source: ProjectionSources) => {
-    const plan = projectProposal(source.proposal, source.project, source.shots);
+    const plan = projectProposal(source.proposal, source.project, source.shots, { totalShotCount: source.totalShotCount });
     const favorites = favoriteMomentIds(projectId, source.proposal.id);
     return { ...plan, moments: plan.moments.map((moment) => ({ ...moment, favorite: favorites.has(moment.id) })) };
   };

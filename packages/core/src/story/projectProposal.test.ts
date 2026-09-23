@@ -85,4 +85,8 @@ describe("projectProposal", () => {
     expect(plan.chapters[0]).toMatchObject({ id: "chapter-1", momentIds: ["moment-1", "moment-2"] });
     expect(plan.moments.filter(({ id }) => plan.chapters[0].momentIds.includes(id)).map(({ selected }) => selected)).toEqual([false, false]);
   });
+  it("counts the project's other photos from the total, not from the proposal's own shots", () => {
+    expect(projectProposal(proposal, project, shots).otherPhotoCount).toBe(0);
+    expect(projectProposal(proposal, project, shots, { totalShotCount: 12 }).otherPhotoCount).toBe(9);
+  });
 });
