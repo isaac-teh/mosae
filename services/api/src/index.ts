@@ -19,6 +19,7 @@ import { settleProject } from "./store/readinessStore.js";
 import { startStoragePoller } from "./store/storagePoller.js";
 import { createIngest } from "./ingest/wire.js";
 import { createUnderstand } from "./understand/wire.js";
+import { createPlan } from "./directing/wire.js";
 import { runProjectPass } from "./store/clusterStore.js";
 import { createGenAI, embedContentVia } from "./gemini/wire.js";
 import { embedText } from "./understand/embed.js";
@@ -46,7 +47,18 @@ const ingest = createIngest({ db: adminDb, bucketName: config.storageBucket, set
 const understand = createUnderstand({ db: adminDb, bucketName: config.storageBucket, geminiApiKey: config.geminiApiKey, settle });
 const geminiClient = createGenAI(config.geminiApiKey);
 const embedQuery = (text: string) => embedText(embedContentVia(geminiClient), text);
-const cluster = (projectId: string): Promise<unknown> => runProjectPass(adminDb, projectId, Date.now());
+const cluster = async (projectId: string): Promise<unknown> => {
+  const result = await runProjectPass(adminDb, projectId, Date.now());
+  // Local plan deliveries remain pending while media is processing. Drain them
+  // when clustering settles readiness, even if no more uploads arrive.
+  if (useDevRunner && result.status !== "skipped") {
+    setImmediate(() => {
+      void dispatchDue(adminDb, queue, Date.now()).catch((error) => console.error("plan readiness dispatch failed", error));
+    });
+  }
+  return result;
+};
+const plan = createPlan({ db: adminDb, geminiApiKey: config.geminiApiKey });
 const queuePlan: QueuePlan = async (input) => {
   const job = await createPlanJob(adminDb, input);
   await dispatchDue(adminDb, queue, Date.now());
@@ -56,7 +68,7 @@ const queuePlan: QueuePlan = async (input) => {
 const queue: TaskQueue = config.tasks
   ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.serviceUrl })
   : useDevRunner
-    ? new DevTaskQueue({ ingest, understand, cluster })
+    ? new DevTaskQueue({ ingest, understand, cluster, plan })
     : new InMemoryTaskQueue();
 
 if (!config.tasks && !useDevRunner)
@@ -104,6 +116,7 @@ app.use(
     ingest,
     understand,
     cluster,
+    plan,
   }),
 );
 

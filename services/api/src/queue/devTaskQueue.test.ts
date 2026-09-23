@@ -25,6 +25,22 @@ const understandTask: QueuedTask = {
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("DevTaskQueue", () => {
+  it("routes plans by path and makes deferred jobs redeliverable", async () => {
+    const plan = vi.fn().mockRejectedValueOnce(new Error("waiting_for_ready")).mockResolvedValue("published");
+    const ingest = vi.fn();
+    const understand = vi.fn();
+    const queue = new DevTaskQueue({ ingest, understand, cluster: vi.fn(), plan });
+    const task: QueuedTask = {
+      name: "plan-job", path: "/tasks/plan",
+      body: { projectId: "p", subjectKind: "job", subjectId: "j", generation: "2", workKey: "plan-job" },
+    };
+    await expect(queue.enqueue(task)).rejects.toThrow("waiting_for_ready");
+    await expect(queue.enqueue(task)).resolves.toBe("enqueued");
+    await expect(queue.enqueue(task)).resolves.toBe("already_exists");
+    expect(plan).toHaveBeenCalledWith({ projectId: "p", jobId: "j", generation: "2" });
+    expect(ingest).not.toHaveBeenCalled();
+    expect(understand).not.toHaveBeenCalled();
+  });
   it("routes an asset task to ingest with the subject as assetId", async () => {
     const ingest = vi.fn().mockResolvedValue("ingested");
     const cluster = vi.fn();
@@ -77,5 +93,18 @@ describe("DevTaskQueue", () => {
     await expect(q.enqueue(assetTask)).rejects.toThrow("boom");
     await expect(q.enqueue(assetTask)).rejects.toThrow("boom");
     expect(ingest).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not acknowledge a duplicate delivery while its planning run can still fail", async () => {
+    let reject!: (error: Error) => void;
+    const plan = vi.fn().mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
+    const q = new DevTaskQueue({ plan, ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn() });
+    const task: QueuedTask = { ...projectTask, name: "pending-plan", path: "/tasks/plan", body: { ...projectTask.body, subjectKind: "job" } };
+    const first = q.enqueue(task);
+    const repeated = q.enqueue(task);
+    const failed = Promise.all([expect(first).rejects.toThrow("interrupted"), expect(repeated).rejects.toThrow("interrupted")]);
+    reject(new Error("interrupted"));
+    await failed;
+    expect(plan).toHaveBeenCalledTimes(1);
   });
 });
