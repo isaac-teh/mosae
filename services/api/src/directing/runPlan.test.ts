@@ -41,7 +41,9 @@ const photo = (id: string): WorkingShot => ({
 const shots = ["p1", "p2", "p3", "p4", "p5"].map(photo);
 
 /** The shape the planning tools hand back: a working shot with catalog identity. */
-const searchable = (id: string): PlanningShot => ({ ...photo(id), projectId: "project-1", assetId: `asset-${id}`, embedding: null });
+const searchable = (id: string): PlanningShot => ({
+  ...photo(id), projectId: "project-1", assetId: `asset-${id}`, embedding: null, sourceStartSec: null, sourceEndSec: null,
+});
 
 const validSubmission: ProposalSubmission = {
   title: "A day together",
