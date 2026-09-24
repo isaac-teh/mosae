@@ -62,9 +62,10 @@ export function reflow(options: ReflowOptions): ReflowResult {
   }
 
   // Step 1: Compute startSec for each clip by walking with a cursor.
-  // The overlap is determined by the PREVIOUS clip's transitionIn.kind.
-  // A crossfade means the next clip starts at `cursor - prevTransition.durationSec`, clamped at 0.
-  // A cut and a dip mean the next clip starts exactly at the cursor.
+  // `transitionIn` is the transition INTO a clip, so the boundary between clips
+  // N-1 and N is governed by clip N — never by its predecessor. A crossfade on
+  // clip N means clip N starts at `cursor - N.transitionIn.durationSec`,
+  // clamped at 0. A cut and a dip start exactly at the cursor.
   const clips: Array<ClipPlan & { startSec: number }> = [];
 
   for (let index = 0; index < plans.length; index++) {
@@ -82,11 +83,11 @@ export function reflow(options: ReflowOptions): ReflowResult {
     const prevClip = clips[index - 1];
     const cursor = prevClip.startSec + prevClip.durationSec;
 
-    if (prevClip.transitionIn.kind === "crossfade") {
-      // Crossfade: clip starts before the previous one ends
-      const overlap = quantize(prevClip.transitionIn.durationSec, fps);
+    if (plan.transitionIn.kind === "crossfade") {
+      // Crossfade: this clip starts before the previous one ends
+      const overlap = quantize(plan.transitionIn.durationSec, fps);
       let startSec = cursor - overlap;
-      // Clamp at 0 — a leading crossfade should not go negative
+      // Clamp at 0 — an overlap longer than everything before it should not go negative
       startSec = Math.max(0, startSec);
       clips.push({ ...plan, startSec: quantize(startSec, fps) });
     } else {

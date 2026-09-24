@@ -5,7 +5,9 @@ const fps = 30;
 
 function makeClip(overrides: Partial<ClipPlan> = {}): ClipPlan {
   return {
-    id: `clip-${Math.random().toString(36).slice(2)}`,
+    // A fixed default, not a random one: a fixture that rolls its own ids
+    // cannot be snapshotted and makes a determinism test weaker than it reads.
+    id: "clip",
     source: { kind: "photo" as const, shotId: "shot1" },
     durationSec: 5,
     transitionIn: { kind: "cut", durationSec: 0 },
@@ -87,50 +89,98 @@ describe("reflow — multiple clips with cuts", () => {
 });
 
 describe("reflow — crossfades", () => {
-  it("a single leading crossfade clamps to 0 rather than going negative", () => {
+  it("a leading crossfade clamps to 0 rather than going negative", () => {
     const plans = [makeClip({ durationSec: 5, transitionIn: { kind: "crossfade" as const, durationSec: 1 } })];
     const result = reflow({ plans, fps, chapters: makeChapters() });
 
     expect(result.clips[0].startSec).toBeCloseTo(0);
   });
 
-  it("three crossfades in a row accumulate overlap correctly", () => {
-    const transitionDuration = 1; // 1 second crossfade
+  it("an overlap longer than everything before it clamps to 0", () => {
     const plans = [
-      makeClip({ id: "clip1", durationSec: 5, transitionIn: { kind: "crossfade" as const, durationSec: transitionDuration } }),
-      makeClip({ id: "clip2", durationSec: 4, transitionIn: { kind: "crossfade" as const, durationSec: transitionDuration } }),
+      makeClip({ id: "clip1", durationSec: 2, transitionIn: { kind: "cut" as const, durationSec: 0 } }),
+      makeClip({ id: "clip2", durationSec: 4, transitionIn: { kind: "crossfade" as const, durationSec: 5 } }),
+    ];
+    const result = reflow({ plans, fps, chapters: makeChapters() });
+
+    // 2 - 5 is negative; the clip starts at 0 instead.
+    expect(result.clips[1].startSec).toBeCloseTo(0);
+  });
+
+  it("each clip's own transitionIn governs the boundary it arrives on", () => {
+    // `transitionIn` is the transition INTO a clip. Clip N's declaration
+    // governs the boundary between N-1 and N; a predecessor's declaration
+    // governs the boundary before it, not the one after.
+    const plans = [
+      makeClip({ id: "clip1", durationSec: 5, transitionIn: { kind: "cut" as const, durationSec: 0 } }),
+      makeClip({ id: "clip2", durationSec: 4, transitionIn: { kind: "crossfade" as const, durationSec: 1 } }),
       makeClip({ id: "clip3", durationSec: 3, transitionIn: { kind: "cut" as const, durationSec: 0 } }),
     ];
     const result = reflow({ plans, fps, chapters: makeChapters() });
 
-    // Clip 1 starts at 0
     expect(result.clips[0].startSec).toBeCloseTo(0);
-
-    // Clip 2 starts at 5 - 1 = 4 (crossfade overlap from clip 1)
+    // Clip 2 declares the crossfade, so clip 2 is the one pulled back: 5 - 1.
     expect(result.clips[1].startSec).toBeCloseTo(4);
+    // Clip 3 declares a cut, so it sits flush after clip 2 — clip 2's crossfade
+    // is not applied a second time at the following boundary.
+    expect(result.clips[2].startSec).toBeCloseTo(8);
+    expect(result.durationSec).toBeCloseTo(11);
+  });
 
-    // Clip 3 starts at 4 + 4 - 1 = 7 (clip 2 has crossfade with duration 1, so overlap applies)
-    expect(result.clips[2].startSec).toBeCloseTo(7);
+  it("three crossfades in a row accumulate overlap correctly", () => {
+    const transitionDuration = 1; // 1 second crossfade
+    const plans = [
+      makeClip({ id: "clip1", durationSec: 5, transitionIn: { kind: "cut" as const, durationSec: 0 } }),
+      makeClip({ id: "clip2", durationSec: 4, transitionIn: { kind: "crossfade" as const, durationSec: transitionDuration } }),
+      makeClip({ id: "clip3", durationSec: 3, transitionIn: { kind: "crossfade" as const, durationSec: transitionDuration } }),
+      makeClip({ id: "clip4", durationSec: 2, transitionIn: { kind: "crossfade" as const, durationSec: transitionDuration } }),
+    ];
+    const result = reflow({ plans, fps, chapters: makeChapters() });
 
-    // Total duration: 7 + 3 = 10 seconds
-    expect(result.durationSec).toBeCloseTo(10);
+    expect(result.clips[0].startSec).toBeCloseTo(0);
+    expect(result.clips[1].startSec).toBeCloseTo(4); // 0 + 5 - 1
+    expect(result.clips[2].startSec).toBeCloseTo(7); // 4 + 4 - 1
+    expect(result.clips[3].startSec).toBeCloseTo(9); // 7 + 3 - 1
+
+    // 5 + 4 + 3 + 2 = 14 of material, less three 1s overlaps = 11.
+    expect(result.durationSec).toBeCloseTo(11);
+  });
+
+  it("the last clip's transition is applied, not dropped", () => {
+    const plans = [
+      makeClip({ id: "clip1", durationSec: 5, transitionIn: { kind: "cut" as const, durationSec: 0 } }),
+      makeClip({ id: "clip2", durationSec: 4, transitionIn: { kind: "crossfade" as const, durationSec: 2 } }),
+    ];
+    const result = reflow({ plans, fps, chapters: makeChapters() });
+
+    expect(result.clips[1].startSec).toBeCloseTo(3); // 5 - 2
+    expect(result.durationSec).toBeCloseTo(7);
   });
 
   it("crossfade overlap is subtracted exactly once", () => {
     const plans = [
-      makeClip({ id: "clip1", durationSec: 5, transitionIn: { kind: "crossfade" as const, durationSec: 2 } }),
-      makeClip({ id: "clip2", durationSec: 4, transitionIn: { kind: "cut" as const, durationSec: 0 } }),
+      makeClip({ id: "clip1", durationSec: 5, transitionIn: { kind: "cut" as const, durationSec: 0 } }),
+      makeClip({ id: "clip2", durationSec: 4, transitionIn: { kind: "crossfade" as const, durationSec: 2 } }),
+      makeClip({ id: "clip3", durationSec: 4, transitionIn: { kind: "cut" as const, durationSec: 0 } }),
     ];
     const result = reflow({ plans, fps, chapters: makeChapters() });
 
-    // Clip 1 starts at 0
     expect(result.clips[0].startSec).toBeCloseTo(0);
-
-    // Clip 2 starts at 5 - 2 = 3 (crossfade overlap from clip 1's transition)
     expect(result.clips[1].startSec).toBeCloseTo(3);
+    // The 2s overlap is taken at clip 2's boundary and nowhere else.
+    expect(result.clips[2].startSec).toBeCloseTo(7);
+    expect(result.durationSec).toBeCloseTo(11);
+  });
 
-    // Total: 3 + 4 = 7 seconds (overlap applied because clip 1 is crossfade)
-    expect(result.durationSec).toBeCloseTo(7);
+  it("a dip does not overlap", () => {
+    const plans = [
+      makeClip({ id: "clip1", durationSec: 5, transitionIn: { kind: "cut" as const, durationSec: 0 } }),
+      makeClip({ id: "clip2", durationSec: 4, transitionIn: { kind: "dip" as const, durationSec: 0.3 } }),
+    ];
+    const result = reflow({ plans, fps, chapters: makeChapters() });
+
+    expect(result.clips[1].startSec).toBeCloseTo(5);
+    expect(result.durationSec).toBeCloseTo(9);
   });
 });
 
