@@ -12,22 +12,30 @@ const { InMemoryTaskQueue } = await import("../queue/taskQueue.js");
 const db = {} as Firestore;
 const pass: express.RequestHandler = (_req, _res, next) => next();
 function buildApp({
+  db: customDb,
   ingest = vi.fn().mockResolvedValue("ingested"),
   understand = vi.fn().mockResolvedValue("understood"),
   cluster = vi.fn().mockResolvedValue({ status: "ready" }),
   plan = vi.fn().mockResolvedValue("published"),
+  generateStructured,
+  soundtrackIds,
+  assets,
 }: {
+  db?: Firestore;
   ingest?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
   understand?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
   cluster?: (projectId: string) => Promise<unknown>;
   plan?: (task: { projectId: string; jobId: string; generation: string }) => Promise<unknown>;
+  generateStructured?: (options: unknown, deps: unknown) => Promise<unknown>;
+  soundtrackIds?: Set<string>;
+  assets?: Map<string, { kind: "photo" | "video"; analysis?: { shots?: Array<{ id: string }> } }>;
 } = {}) {
   const app = express();
   app.use(express.json());
   app.use(
     "/",
     internalRouter({
-      db,
+      db: customDb ?? (db as Firestore),
       queue: new InMemoryTaskQueue(),
       now: () => 9,
       auth: pass,
@@ -156,5 +164,63 @@ describe("internal routes", () => {
     const res = await request(buildApp({ cluster })).post("/tasks/cluster").send({ projectId: "p1", subjectKind: "project", subjectId: "p1", generation: "3", workKey: "k" });
     expect(res.status).toBe(500);
     error.mockRestore();
+  });
+
+  // Task 9: /tasks/compose tests
+  it("rejects a malformed compose task with non-generation subjectKind", async () => {
+    const res = await request(buildApp()).post("/tasks/compose").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a compose task with missing fields", async () => {
+    const res = await request(buildApp()).post("/tasks/compose").send({ projectId: "p1" });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 when generation does not exist", async () => {
+    const genDoc = { exists: false };
+    const db = {
+      collection: vi.fn(() => ({
+        doc: vi.fn().mockReturnValue({
+          collection: vi.fn(() => ({
+            doc: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue(genDoc) }),
+          })),
+        }),
+      })),
+    };
+    const res = await request(buildApp({ db })).post("/tasks/compose").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 500 when compose throws", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const genData = { status: "composing" as const, settings: {}, mode: "creator" as const };
+    const db = {
+      collection: vi.fn(() => ({
+        doc: vi.fn().mockReturnValue({
+          collection: vi.fn(() => ({
+            doc: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ exists: true, data: () => genData }) }),
+          })),
+        }),
+      })),
+    };
+    const res = await request(buildApp({ db })).post("/tasks/compose").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(500);
+    error.mockRestore();
+  });
+
+  it("rejects compose task after max retry attempts", async () => {
+    const genData = { status: "composing" as const, settings: {}, mode: "creator" as const };
+    const db = {
+      collection: vi.fn(() => ({
+        doc: vi.fn().mockReturnValue({
+          collection: vi.fn(() => ({
+            doc: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ exists: true, data: () => genData }) }),
+          })),
+        }),
+      })),
+    };
+    const res = await request(buildApp({ db })).post("/tasks/compose").set("x-cloudtasks-taskretrycount", "3").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
+    expect(res.status).toBe(500);
   });
 });
