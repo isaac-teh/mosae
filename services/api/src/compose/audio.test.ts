@@ -177,4 +177,16 @@ describe("buildAudioClips — edge cases", () => {
     expect(result[1]!.order).toBe(2); // ambient
     expect(result[2]!.kind).toBe("music"); // music is last
   });
+
+describe("gainToDb", () => {
+  it("converts the linear gain the audio layer reasons in to the decibels the contract stores", async () => {
+    const { gainToDb } = await import("./audio.js");
+    expect(gainToDb(1)).toBe(0);
+    expect(gainToDb(0.6)).toBeCloseTo(-4.44, 2);
+    // The ducked music gain. `runCompose` used to discard this and write a flat
+    // -6dB from the clip's role, so the music never ducked under speech.
+    expect(gainToDb(0.3)).toBeCloseTo(-10.46, 2);
+    expect(gainToDb(0)).toBe(-60);
+  });
+});
 });
