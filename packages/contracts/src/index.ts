@@ -43,3 +43,17 @@ export {
   type CadenceId,
   type DurationId,
 } from "./direction.js";
+
+export {
+  GenerationSchema,
+  safeParseGeneration,
+  type Generation,
+} from "./generation.js";
+
+export {
+  reflow,
+  quantize,
+  type ClipPlan,
+  type ReflowOptions,
+  type ReflowResult,
+} from "./reflow.js";
