@@ -108,4 +108,18 @@ describe("DevTaskQueue", () => {
     await failed;
     expect(plan).toHaveBeenCalledTimes(1);
   });
+
+  it("runs a render task in process, so local development can render", async () => {
+    // Without a branch here a local render logged "unhandled task path" and was
+    // marked delivered, leaving the generation stuck in `rendering` forever.
+    const render = vi.fn().mockResolvedValue("rendered");
+    const queue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), render });
+    await queue.enqueue({
+      name: "p_generation_g_1_render_1",
+      path: "/tasks/render",
+      body: { projectId: "p", subjectKind: "generation", subjectId: "g", generation: "1", workKey: "p:generation:g:1:render:1" },
+    });
+    await flush();
+    expect(render).toHaveBeenCalledWith({ projectId: "p", generationId: "g" });
+  });
 });

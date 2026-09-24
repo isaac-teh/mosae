@@ -3,12 +3,16 @@ import type { IngestTask } from "../ingest/ingestAsset.js";
 import type { UnderstandTask } from "../understand/understandAsset.js";
 import type { QueuedTask, TaskQueue } from "./taskQueue.js";
 import type { PlanTask } from "../directing/wire.js";
+import type { ComposeTask } from "../compose/wire.js";
+import type { RenderTask } from "../render/dispatchRender.js";
 
 export type DevTaskDeps = {
   ingest(task: IngestTask): Promise<unknown>;
   understand(task: UnderstandTask): Promise<unknown>;
   cluster(projectId: string): Promise<unknown>;
   plan?(task: PlanTask): Promise<unknown>;
+  compose?(task: ComposeTask): Promise<unknown>;
+  render?(task: RenderTask): Promise<unknown>;
 };
 
 /**
@@ -73,6 +77,14 @@ export class DevTaskQueue implements TaskQueue {
           attempt: 0,
         });
         console.log("dev understand", task.name, result);
+      } else if (task.path === "/tasks/compose") {
+        if (!this.deps.compose) throw new Error("compose_not_configured");
+        const result = await this.deps.compose({ projectId: task.body.projectId, generationId: task.body.subjectId });
+        console.log("dev compose", task.name, result);
+      } else if (task.path === "/tasks/render") {
+        if (!this.deps.render) throw new Error("render_not_configured");
+        const result = await this.deps.render({ projectId: task.body.projectId, generationId: task.body.subjectId });
+        console.log("dev render", task.name, result);
       } else if (task.path === "/tasks/cluster") {
         const result = await this.deps.cluster(task.body.projectId);
         console.log("dev cluster", task.name, result);

@@ -6,6 +6,13 @@ import { dispatchDue } from "../outbox/dispatcher.js";
 import type { TaskQueue } from "../queue/taskQueue.js";
 import type { PlanTask } from "../directing/wire.js";
 import { isValidId } from "../domain/ids.js";
+import type { ComposeTask } from "../compose/wire.js";
+import type { RenderTask } from "../render/dispatchRender.js";
+
+const MAX_COMPOSE_ATTEMPTS = 3;
+// A render is the most expensive thing in the pipeline: Chromium, several GB,
+// concurrency 1. Three attempts, then the film is handed back playable.
+const MAX_RENDER_ATTEMPTS = 3;
 
 export function internalRouter(deps: {
   db: Firestore;
@@ -16,6 +23,8 @@ export function internalRouter(deps: {
   understand: (task: UnderstandTask) => Promise<unknown>;
   cluster: (projectId: string) => Promise<unknown>;
   plan?: (task: PlanTask) => Promise<unknown>;
+  compose?: (task: ComposeTask & { giveUp?: string }) => Promise<unknown>;
+  render?: (task: RenderTask) => Promise<unknown>;
 }): Router {
   const now = deps.now ?? Date.now;
   const router = Router();
@@ -93,5 +102,81 @@ export function internalRouter(deps: {
       res.status(500).json({ error: "cluster_failed" });
     }
   });
+
+  /**
+   * Compose is a thin route, like plan: it validates the task envelope and
+   * hands the work to the composer, which owns loading, running and settling
+   * the generation. Attempt exhaustion is terminal — the previous playable
+   * film stays current, so a failed compose never loses the user a film.
+   */
+  router.post("/tasks/compose", deps.auth, async (req, res) => {
+    const { projectId, subjectKind, subjectId, generation, workKey } = req.body ?? {};
+    if (![projectId, subjectKind, subjectId, generation, workKey].every((v) => typeof v === "string" && v.length > 0)
+      || subjectKind !== "generation" || !isValidId(projectId) || !isValidId(subjectId)) {
+      res.status(400).json({ error: "invalid_task" });
+      return;
+    }
+
+    const raw = req.header("x-cloudtasks-taskretrycount")?.trim();
+    const attempt = raw !== undefined && /^\d+$/.test(raw) ? Number(raw) : 0;
+
+    try {
+      if (!deps.compose) throw new Error("compose_not_configured");
+
+      if (attempt >= MAX_COMPOSE_ATTEMPTS) {
+        await deps.compose({ projectId, generationId: subjectId, giveUp: `exceeded ${MAX_COMPOSE_ATTEMPTS} compose attempts` });
+        res.sendStatus(204);
+        return;
+      }
+
+      const result = await deps.compose({ projectId, generationId: subjectId });
+      console.log("compose", workKey, result);
+      // A failed generation is a settled outcome, not a delivery failure: it is
+      // recorded on the generation and must not be retried by Cloud Tasks.
+      res.sendStatus(204);
+    } catch (error) {
+      console.error("compose task failed", workKey, error);
+      res.status(500).json({ error: "compose_failed" });
+    }
+  });
+
+  /**
+   * Render is a thin route over the render leg, exactly like compose. Without
+   * it the path `STAGE_PATHS.render` promises and `ids.test.ts` pins was a 404:
+   * `startRender` moved the generation to `rendering`, the outbox retried into
+   * nothing, and because `startRender` accepts only a `playable` film the user
+   * could not even ask again. Pressing Save bricked the film.
+   */
+  router.post("/tasks/render", deps.auth, async (req, res) => {
+    const { projectId, subjectKind, subjectId, generation, workKey } = req.body ?? {};
+    if (![projectId, subjectKind, subjectId, generation, workKey].every((v) => typeof v === "string" && v.length > 0)
+      || subjectKind !== "generation" || !isValidId(projectId) || !isValidId(subjectId)) {
+      res.status(400).json({ error: "invalid_task" });
+      return;
+    }
+
+    const raw = req.header("x-cloudtasks-taskretrycount")?.trim();
+    const attempt = raw !== undefined && /^\d+$/.test(raw) ? Number(raw) : 0;
+
+    try {
+      if (!deps.render) throw new Error("render_not_configured");
+
+      if (attempt >= MAX_RENDER_ATTEMPTS) {
+        await deps.render({ projectId, generationId: subjectId, giveUp: `exceeded ${MAX_RENDER_ATTEMPTS} render attempts` });
+        res.sendStatus(204);
+        return;
+      }
+
+      const result = await deps.render({ projectId, generationId: subjectId });
+      console.log("render", workKey, result);
+      // A render that gave the film back is a settled outcome recorded on the
+      // generation, not a delivery failure for Cloud Tasks to repeat.
+      res.sendStatus(204);
+    } catch (error) {
+      console.error("render task failed", workKey, error);
+      res.status(500).json({ error: "render_failed" });
+    }
+  });
+
   return router;
 }

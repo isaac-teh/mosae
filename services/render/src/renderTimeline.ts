@@ -5,6 +5,12 @@ export type RenderRequest = {
   timeline: Timeline;
   sources: Record<string, string>;
   outputFile: string;
+  /**
+   * Where the finished MP4 belongs. A signed PUT URL, so the render service
+   * needs no storage SDK and no credentials of its own, and the caller decides
+   * the destination path. Omitted for a local render, which stays on disk.
+   */
+  uploadUrl?: string;
 };
 
 export type RenderDeps = {
@@ -24,17 +30,55 @@ export function resolveOutputPath(dir: string, outputFile: string): string {
 }
 
 /**
- * Every shot, asset and soundtrack a Timeline names must resolve, or the render
- * silently drops picture or sound. Checking here turns that into a rejected
- * request instead of a film with holes in it.
+ * Every shot and asset a Timeline names must resolve, or the render silently
+ * drops picture or sound. Checking here turns that into a rejected request
+ * instead of a film with holes in it.
+ *
+ * A **soundtrack** id is deliberately not required. The soundtrack library does
+ * not exist — nothing can turn `soundtrack-dusk` into a file — and the spec
+ * says a film with no resolvable score is still a valid film. Requiring one
+ * rejected every film that had music, which is every film the composer scores,
+ * so the two sides disagreed and the golden fixture was exactly the case that
+ * could not render. `resolveSources` omits an unresolvable soundtrack and this
+ * accepts its absence; the Timeline component already renders no audio track
+ * for a source it has no URL for.
  */
-function missingSources(timeline: Timeline, sources: Record<string, string>): string[] {
+export function missingSources(timeline: Timeline, sources: Record<string, string>): string[] {
   const needed = new Set<string>();
   for (const clip of timeline.videoClips) needed.add(clip.source.shotId);
   for (const clip of timeline.audioClips) {
-    needed.add(clip.source.kind === "asset" ? clip.source.assetId : clip.source.soundtrackId);
+    if (clip.source.kind === "asset") needed.add(clip.source.assetId);
   }
   return [...needed].filter((key) => typeof sources[key] !== "string" || sources[key].length === 0);
+}
+
+/**
+ * Remotion is handed URLs, not storage paths. Anything that is already a URL is
+ * passed through; anything else is served from this process's own `/media`
+ * mount over the Remotion public directory. Dropping this rewrite left Remotion
+ * resolving `uploads/owner/…` as a relative URL, which 404s into black frames.
+ */
+export function resolveMediaUrls(sources: Record<string, string>, mediaBaseUrl: string): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(sources).map(([key, source]) => [
+      key,
+      /^(https?|file|data):/.test(source) ? source : `${mediaBaseUrl.replace(/\/$/, "")}/media/${source}`,
+    ]),
+  );
+}
+
+/**
+ * Wrap a bundler so it runs once per process. The thin slice builds the bundle
+ * at image build time; a `bundle()` per request is a full webpack build on
+ * every film. Concurrent first requests share the one in-flight build rather
+ * than starting a second.
+ */
+export function createBundleOnce(build: (entry: string) => Promise<string>): (entry: string) => Promise<string> {
+  let pending: Promise<string> | undefined;
+  return (entry) => {
+    pending ??= build(entry);
+    return pending;
+  };
 }
 
 export function parseRenderRequest(body: unknown): RenderRequest {
@@ -42,6 +86,9 @@ export function parseRenderRequest(body: unknown): RenderRequest {
   if (!input || typeof input !== "object") throw new Error("render request must be an object");
   if (typeof input.outputFile !== "string") {
     throw new Error("render request requires an outputFile");
+  }
+  if (input.uploadUrl !== undefined && (typeof input.uploadUrl !== "string" || !/^https?:\/\//.test(input.uploadUrl))) {
+    throw new Error("render request uploadUrl must be an http(s) URL");
   }
   resolveOutputPath("/unused", input.outputFile);
   const sources = input.sources;
@@ -57,7 +104,12 @@ export function parseRenderRequest(body: unknown): RenderRequest {
   const missing = missingSources(timeline, sources as Record<string, string>);
   if (missing.length > 0) throw new Error(`missing source for ${missing.join(", ")}`);
 
-  return { timeline, sources: sources as Record<string, string>, outputFile: input.outputFile };
+  return {
+    timeline,
+    sources: sources as Record<string, string>,
+    outputFile: input.outputFile,
+    ...(input.uploadUrl ? { uploadUrl: input.uploadUrl } : {}),
+  };
 }
 
 export async function renderTimeline(

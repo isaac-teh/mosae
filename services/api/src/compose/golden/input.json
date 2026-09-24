@@ -1,0 +1,73 @@
+{
+  "note": "The fixed input half of the determinism guard. The proposal and catalog are hand-built; `response` is one recorded structured reply from gemini-2.5-flash, kept verbatim so no live call is ever needed to reproduce the film.",
+  "job": {
+    "projectId": "golden-project",
+    "mode": "memory",
+    "aspect": "9:16",
+    "durationId": "30s",
+    "cadenceId": "tender",
+    "seed": "golden-seed-0001",
+    "soundtrackId": "soundtrack-dusk",
+    "note": "Open on the arrival and let her voice carry the middle.",
+    "captions": true
+  },
+  "proposal": {
+    "schemaVersion": 1,
+    "id": "golden-proposal",
+    "projectId": "golden-project",
+    "storyIntentId": "golden-intent",
+    "parentProposalId": null,
+    "state": "accepted",
+    "version": 1,
+    "title": "A day at the coast",
+    "moments": [
+      { "id": "m-arrival", "shotId": "shot-arrival", "kind": "photo", "title": "Arrival", "description": "The car doors open onto the dunes", "rationale": "Opens the day" },
+      { "id": "m-talking", "shotId": "shot-talking", "kind": "video", "previewInSec": 0, "previewOutSec": 20, "title": "Telling the story", "description": "She explains why this beach", "rationale": "The spine of the film" },
+      { "id": "m-water", "shotId": "shot-water", "kind": "video", "previewInSec": 0, "previewOutSec": 14, "title": "Into the water", "description": "Running at the shoreline", "rationale": "The peak" },
+      { "id": "m-dusk", "shotId": "shot-dusk", "kind": "photo", "title": "Dusk", "description": "The last light over the water", "rationale": "Closes the day" }
+    ],
+    "chapters": [
+      { "id": "ch-morning", "title": "Getting there", "summary": "The drive and the first sight of the sea", "momentIds": ["m-arrival", "m-talking"] },
+      { "id": "ch-evening", "title": "The water", "summary": "In the sea until the light goes", "momentIds": ["m-water", "m-dusk"] }
+    ],
+    "constraints": {
+      "excludedShotIds": [],
+      "deselectedMomentIds": [],
+      "mustIncludeMomentIds": ["m-talking"],
+      "feedback": []
+    },
+    "openQuestions": []
+  },
+  "catalog": {
+    "m-arrival": { "kind": "photo", "file": "IMG_0101.jpg", "keyMomentScore": 4, "analysis": { "caption": "Car doors open onto the dunes" } },
+    "m-talking": {
+      "kind": "video",
+      "file": "MVI_0102.mp4",
+      "analysis": {
+        "shots": [{ "startSec": 0, "endSec": 20, "description": "She talks to camera about the beach", "role": "A_ROLL", "quality": 0.9, "usable": true }],
+        "transcript": [{ "startSec": 4, "endSec": 9, "text": "We came here every summer when I was small." }]
+      }
+    },
+    "m-water": {
+      "kind": "video",
+      "file": "MVI_0103.mp4",
+      "analysis": {
+        "shots": [{ "startSec": 0, "endSec": 14, "description": "Running into the shallows", "role": "B_ROLL", "quality": 0.7, "usable": true }],
+        "transcript": []
+      }
+    },
+    "m-dusk": { "kind": "photo", "file": "IMG_0104.jpg", "keyMomentScore": 5, "analysis": { "caption": "Last light over the water" } }
+  },
+  "response": {
+    "clips": [
+      { "candidateId": "m-arrival#still@c0", "holdSec": 3.5, "transition": "cut", "audio": "mute" },
+      { "candidateId": "m-talking#s0@4c0", "transition": "crossfade", "audio": "keep" },
+      { "candidateId": "m-water#s0@0.15c1", "transition": "cut", "audio": "duck", "textOverlay": "Into the water" },
+      { "candidateId": "m-dusk#still@c1", "holdSec": 5, "transition": "crossfade", "audio": "mute" }
+    ],
+    "musicCues": [
+      { "atSec": 0, "cue": "enter under the first still" },
+      { "atSec": 8, "cue": "lift as she starts speaking" }
+    ]
+  }
+}

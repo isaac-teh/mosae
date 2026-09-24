@@ -9,6 +9,7 @@ import { createPlanJob, createQueuePlan, directingRouter, type QueuePlan } from 
 import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
+import { generationsRouter } from "./routes/generations.js";
 import {
   CloudTasksQueue,
   InMemoryTaskQueue,
@@ -22,6 +23,8 @@ import { startStoragePoller } from "./store/storagePoller.js";
 import { createIngest } from "./ingest/wire.js";
 import { createUnderstand } from "./understand/wire.js";
 import { createPlan } from "./directing/wire.js";
+import { createCompose } from "./compose/wire.js";
+import { createRender } from "./render/dispatchRender.js";
 import { runProjectPass } from "./store/clusterStore.js";
 import { createGenAI, embedContentVia } from "./gemini/wire.js";
 import { embedText } from "./understand/embed.js";
@@ -61,6 +64,34 @@ const cluster = async (projectId: string): Promise<unknown> => {
   return result;
 };
 const plan = createPlan({ db: adminDb, geminiApiKey: config.geminiApiKey });
+const compose = createCompose({ db: adminDb, geminiApiKey: config.geminiApiKey });
+
+// A Timeline names shots; files hang off assets, so the shot is the hop in
+// between. The same lookup the generations route uses.
+const loadSource = async (projectId: string, shotId: string) => {
+  const project = adminDb.collection("projects").doc(projectId);
+  const shot = await project.collection("shots").doc(shotId).get();
+  if (!shot.exists) return null;
+  const asset = await project.collection("assets").doc(shot.get("assetId") as string).get();
+  if (!asset.exists) return null;
+  return { storagePath: asset.get("storagePath") as string, derivatives: asset.get("derivatives") };
+};
+const renderBucket = () => getStorage(getAdminApp()).bucket(config.storageBucket);
+const render = createRender({
+  db: adminDb,
+  renderServiceUrl: config.renderServiceUrl,
+  sources: { loadAsset: loadSource },
+  // The render service is handed URLs it can fetch and one it can PUT to, so
+  // it needs no storage credentials of its own.
+  signRead: async (path) => {
+    const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "read", expires: Date.now() + 6 * 60 * 60 * 1000 });
+    return url;
+  },
+  signUpload: async (path) => {
+    const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "write", contentType: "video/mp4", expires: Date.now() + 6 * 60 * 60 * 1000 });
+    return url;
+  },
+});
 const queuePlan: QueuePlan = createQueuePlan({
   createJob: (input) => createPlanJob(adminDb, input),
   dispatch: () => dispatchDue(adminDb, queue, Date.now()),
@@ -71,7 +102,7 @@ const queuePlan: QueuePlan = createQueuePlan({
 const queue: TaskQueue = config.tasks
   ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.serviceUrl })
   : useDevRunner
-    ? new DevTaskQueue({ ingest, understand, cluster, plan })
+    ? new DevTaskQueue({ ingest, understand, cluster, plan, compose, render })
     : new InMemoryTaskQueue();
 
 if (!config.tasks && !useDevRunner)
@@ -106,6 +137,10 @@ app.use(
   } }),
 );
 app.use(
+  "/api/projects",
+  generationsRouter({ db: adminDb, loadSource, dispatch: () => dispatchDue(adminDb, queue, Date.now()) }),
+);
+app.use(
   "/events",
   storageEventsRouter({
     db: adminDb,
@@ -126,6 +161,8 @@ app.use(
     understand,
     cluster,
     plan,
+    compose,
+    render,
   }),
 );
 

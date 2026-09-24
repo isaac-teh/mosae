@@ -162,7 +162,7 @@ When a project is `ready` or `ready_with_errors`, Tell AI the Story creates a ve
 | Story intent | `storyIntents` records the user's text and focus. A `jobs` record is queued for planning; a project still processing waits until it is ready. |
 | Plan | The planner searches and inspects project media, then writes a versioned draft to `storyProposals`. The job records progress (`searching`, `inspecting`, or `organizing`), bounded usage, and any diagnostics. |
 | Review | Selecting or deselecting moments clones a new draft with updated constraints and no model call. Written feedback queues a new plan job. |
-| Accept | Accepting the current proposal changes its state to `accepted` and records `acceptedProposalId` on the project. Composition and film generation are Phase 4 work. |
+| Accept | Accepting the current proposal changes its state to `accepted` and records `acceptedProposalId` on the project. From there, posting a generation composes a film — see [Compose and render pipeline](#compose-and-render-pipeline). |
 
 The relevant collections live below `projects/{projectId}`: `storyIntents`, `storyProposals`, and `jobs`; `shots`, `assets`, and `events` remain the read-only media context for a proposal. Inspect a local proposal with the Firestore emulator REST endpoint using the admin header:
 
@@ -178,7 +178,13 @@ curl -s -H "Authorization: Bearer owner" "$BASE/storyProposals/<proposalId>"  # 
 
 - Originals up to 2 GiB are ingested. Larger uploads are accepted, but their asset fails with `too_large_for_ingest` because Cloud Run temporary storage is memory-backed and each original is downloaded whole. A streaming path is the fix.
 - An asset whose processing keeps failing for environmental reasons is failed with reason `retries_exhausted` after 5 attempts.
-- A missing or invalid `GEMINI_API_KEY` fails an understand task with a clear reason; it never prevents the API from booting.
+- A missing or invalid `GEMINI_API_KEY` fails an understand or a compose task with a clear reason; it never prevents the API from booting. The Gemini client is constructed only once work begins, never at boot.
+- A compose task is retried at most 3 times. On the third, the generation is failed with `exceeded 3 compose attempts` rather than being redelivered forever. A failed composition is a settled outcome, so `/tasks/compose` answers 204, not 500 — a 500 would ask Cloud Tasks to retry work that is already recorded.
+- Composition fails rather than producing a film the user did not ask for: if every pick is dropped, or one deterministic repair pass cannot fix validation, the generation is `failed` and the previous playable film stays current.
+- A render task is retried at most 3 times. Every failed render — an unreachable render service, a render error, a source that will not resolve, retries exhausted — puts the generation **back to `playable`** with the reason on `failureReasons`, so the film the user already had keeps working and Save can be pressed again. A render left stuck at `rendering` could never be retried, because `startRender` accepts only a `playable` film.
+- The dev task runner runs `/tasks/render` in process against `RENDER_SERVICE_URL`, which defaults to `http://127.0.0.1:8081`. `services/render` must be running for a local save to finish.
+- `RENDER_SERVICE_URL` is required in production. Without it, saving a film queues a task that can reach nothing.
+- Render progress is written to the generation at most once a second **and** once per 5% moved, plus the final 1.0. A five-minute film is 9,000 frames and Remotion reports every one; unthrottled that is 9,000 Firestore writes per render.
 - The Cloud Tasks queue must allow at least 6 attempts (`maxAttempts`) so that conversion can happen before the queue gives up.
 - Ingest is CPU and memory heavy. Deploy the API service with at least 4 GiB and set the Cloud Tasks queue's `maxConcurrentDispatches` low, starting at 4, so a 1,500-file upload does not exhaust a single instance.
 - HEIC needs `heif-convert` from `libheif-examples`, which is installed in the container. On a machine without it, a HEVC HEIC asset fails with `unsupported_image`.
@@ -199,6 +205,47 @@ curl -s -H "Authorization: Bearer owner" "$BASE/storyProposals/<proposalId>"  # 
 
 From Tell AI the Story onward the screens use the Figma example data (`createFixtureStoryRepository` in `packages/core`) until the API serves proposals, revisions and renders.
 Those screens need no emulators or API, so you can open one directly, for example http://localhost:8081/review-moments?planId=demo or http://localhost:8081/review-film?filmId=demo-film.
+
+## Compose and render pipeline
+
+Accepting a proposal does not make a film. Posting a generation does. `POST /api/projects/:id/generations` pins the accepted proposal, the `DirectionSettings` and a `seed`, writes the generation as `composing`, and queues `/tasks/compose`. Composition is **one structured Gemini call**, not an agent loop: code builds every legal clip and hands the model a closed set to arrange, so the model never invents a timestamp.
+
+| Stage | Result |
+| --- | --- |
+| Candidates | Code emits every legal clip per chapter. A photo yields one candidate with a hold range from the cadence; a video yields ranges that sit inside one shot and never begin or end mid-sentence. Arithmetic, not taste. |
+| Composer call | One structured call returns, per clip, a `candidateId`, an optional hold, a transition of `cut`/`crossfade`/`dip`, an optional text overlay and an audio treatment — plus music cues. It never sees a file path or a storage URL. |
+| Assemble | Drops what it cannot use rather than trusting it: an unknown `candidateId`, the same candidate twice, more than three clips from one source, the same still twice running. Drops are recorded on the generation; they are not failures. |
+| Fit and reflow | Code fits the film to within 10% of `DURATION_SECONDS[durationId]`, quantizes every start and duration to a 30fps frame boundary, resolves crossfade overlaps into absolute `startSec`, and recomputes chapter starts. Reflow is a pure function in `@mosae/contracts`, shared so that direct editing can reuse it. |
+| Audio | Added after reflow, against the final geometry. Speech keeps its own audio, ambient is ducked, and a soundtrack becomes one music clip with fades. `soundtrackId: null` is a valid film: it simply plays its own sound. |
+| Validate | `safeParseTimeline` plus semantic rules — every shot belongs to a moment the user kept, every range sits inside its shot, clips are contiguous, every id resolves. On failure, **one** deterministic repair pass, no model call. A second pass would be a loop in disguise. |
+| Render | `POST /api/projects/:id/generations/:gid/render` resolves each id to an original file and queues `/tasks/render`. That task signs a read URL per source and a PUT URL for `renders/{userId}/{projectId}/{generationId}.mp4`, hands the timeline to `mosae-render`, and reads back a stream of progress; the render service uploads the finished MP4 itself, so it holds no storage credentials. A soundtrack id resolves only when a soundtrack library exists — until then a scored film renders without its score rather than being rejected. |
+
+One composition is meant to drive both hosts. `packages/video/src/timelineMetadata.ts` already types the render props as `{ timeline, sources }`, which is exactly what `@remotion/player` will need on the Review screen, so the preview and the download read the same film with no adapter between them. That holds only while composition is a pure function of its inputs, and `services/api/src/compose/golden.test.ts` is what holds it: one fixed proposal and one recorded model response must reproduce `golden/timeline.json` byte for byte. The Player itself arrives with the Direct, Review and Save screens, which are planned separately.
+
+| Generation status | Meaning |
+| --- | --- |
+| `composing` | Queued or running. The film does not exist yet. |
+| `playable` | A validated `Timeline` is on the generation and the Player can show it. No server render has happened. |
+| `rendering` | A render is running; `renderProgress` moves from 0 to 1. |
+| `saved` | The MP4 exists at `outputPath` and `GET .../download` returns a signed URL for it. |
+| `failed` | `failureReasons` says why. |
+
+The project document carries three pointers. `latestRequestedGenerationId` moves the moment a generation is asked for, whatever becomes of it. `currentPlayableGenerationId` moves only when a film publishes, and `savedGenerationId` only when a render completes. **A failed generation moves neither of the last two**, so a revision that fails leaves the user the film that worked.
+
+Changing cadence, soundtrack, duration, aspect, captions or the directing note recomposes from the same accepted proposal — one composition, no planning. Changing *which moments are in the film* is a planning change and goes back to review. Which endpoint the client calls decides this; no model classifies the request.
+
+Inspect a local generation through the Firestore emulator REST endpoint, with the same admin header the sections above use:
+
+```bash
+BASE="http://127.0.0.1:8085/v1/projects/demo-mosae/databases/(default)/documents/projects/<projectId>"
+curl -s -H "Authorization: Bearer owner" "$BASE"                                # the three generation pointers
+curl -s -H "Authorization: Bearer owner" "$BASE/generations"                    # every attempt, with status and failureReasons
+curl -s -H "Authorization: Bearer owner" "$BASE/generations/<generationId>"     # one generation's embedded Timeline, droppedPicks, outputPath
+curl -s -H "Authorization: Bearer owner" "$BASE/taskOutbox"                     # whether compose or render was queued and delivered
+curl -s -H "Authorization: Bearer owner" "${BASE%/projects/*}/geminiUsage"      # per-call tokens and estimated USD, stage "compose"
+```
+
+A generation's `timeline` is a deeply nested Firestore document, so the REST reply is verbose; `| python3 -m json.tool` or `jq` is worth the keystrokes. The emulator's `Bearer owner` bypass reads what the security rules would otherwise deny — the rules allow the owner to read `generations` and deny all client writes.
 
 ## Checks
 
@@ -223,6 +270,10 @@ Firestore and Storage store tests run inside the emulators with `npm run test:em
 ## Gemini proof of concept
 
 `poc/gemini` is a standalone package with its own setup and commands; see `poc/gemini/README.md` and `poc/gemini/POC_SPEC.md`.
+
+### Compose live-run record
+
+**Blocked, 2026-09-24.** The Phase 4 task 14 live Gemini composition and render of the `trip` sample set was not made: `GEMINI_API_KEY` is unavailable in the process environment and in the repository-root `.env`, exactly as in Phase 3. No API request was sent, no generation was composed from real content, and no charge was incurred, so there is no cost to log and no film to watch end to end. The whole compose pipeline is covered by mocked and recorded-response tests, including the byte-identical golden timeline; what remains unverified is only what a live model actually picks, and whether the resulting film is watchable with its audio and transitions. When a key is available, run one composition on the `trip` set, watch the rendered MP4 whole — not through a `-c copy -an` preview — and record the estimated cost, which production composition writes to the project's `geminiUsage` collection under stage `compose`.
 
 ### Directing live-run record
 

@@ -67,6 +67,22 @@ describe("storage.rules (emulator)", () => {
     await assertFails(ref.delete());
     await assertFails(env.authenticatedContext("bob").storage().ref(ref.fullPath).getMetadata());
   });
+
+  it("lets the owner read a finished film and no one write one", async () => {
+    // `renders/{userId}/{projectId}/{generationId}.mp4` is the one path the
+    // render leg writes to, through a signed URL the API issues. A client may
+    // read its own film and write none.
+    const path = "renders/alice/p1/g1.mp4";
+    const alice = env.authenticatedContext("alice").storage();
+    await env.withSecurityRulesDisabled(async (context) => {
+      await context.storage().ref(path).put(jpeg, { contentType: "video/mp4" });
+    });
+
+    await assertSucceeds(alice.ref(path).getMetadata());
+    await assertFails(alice.ref(path).put(jpeg, { contentType: "video/mp4" }).then(() => undefined));
+    await assertFails(env.authenticatedContext("bob").storage().ref(path).getMetadata());
+    await assertFails(env.unauthenticatedContext().storage().ref(path).getMetadata());
+  });
 });
 
 describe("storage.rules derivatives (emulator)", () => {

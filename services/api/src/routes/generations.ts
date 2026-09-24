@@ -1,0 +1,249 @@
+import { Router, type Response } from "express";
+import type { Firestore } from "firebase-admin/firestore";
+import { requireUser } from "../auth/requireUser.js";
+import { isValidId } from "../domain/ids.js";
+import { createGeneration, getGeneration, startRender, StoreError } from "../store/generationStore.js";
+import { newOutboxTask } from "../domain/outbox.js";
+import { safeParseDirectionSettings, type Generation } from "@mosae/contracts";
+
+const STATUS: Record<StoreError["code"], number> = {
+  not_found: 404,
+  forbidden: 403,
+  validation_error: 400,
+};
+
+function handleError(res: Response, error: unknown): void {
+  if (error instanceof StoreError) {
+    res.status(STATUS[error.code]).json({ error: error.code });
+    return;
+  }
+  console.error("generations route failed", error);
+  res.status(500).json({ error: "internal" });
+}
+
+export function generationsRouter(deps: {
+  db: Firestore;
+  /** Resolve a shot id to the asset whose files back it. */
+  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
+  /** Drains the outbox after a task is written; the dispatcher does it in production. */
+  dispatch?: () => Promise<unknown>;
+}): Router {
+  const router = Router();
+  router.use(requireUser());
+
+  // A Timeline names shots. Files hang off assets, so the shot is the hop in
+  // between — `resolveSources` is deliberately given a flat id-to-file lookup
+  // and never learns the project's collection layout.
+  const resolve: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null> =
+    deps.loadSource ?? (async (projectId, shotId) => {
+      const project = deps.db.collection("projects").doc(projectId);
+      const shot = await project.collection("shots").doc(shotId).get();
+      if (!shot.exists) return null;
+      const asset = await project.collection("assets").doc(shot.get("assetId") as string).get();
+      if (!asset.exists) return null;
+      return { storagePath: asset.get("storagePath") as string, derivatives: asset.get("derivatives") };
+    });
+
+  for (const name of ["projectId", "generationId"]) {
+    router.param(name, (_req, res, next, value: string) => {
+      if (!isValidId(value)) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      next();
+    });
+  }
+
+  // POST /api/projects/:id/generations — create a new generation (triggers compose)
+  router.post("/:projectId/generations", async (req, res) => {
+    const userId = res.locals.userId;
+    const projectId = req.params.projectId;
+
+    // Verify ownership
+    const projectSnap = await deps.db.collection("projects").doc(projectId).get();
+    if (!projectSnap.exists || projectSnap.get("userId") !== userId) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    const body = req.body ?? {};
+    const proposalId = typeof body.proposalId === "string" ? body.proposalId : null;
+    if (!proposalId) {
+      return res.status(400).json({ error: "missing_proposal_id" });
+    }
+
+    const parentGenerationId = typeof body.parentGenerationId === "string" ? body.parentGenerationId : null;
+    const seed = typeof body.seed === "string" ? body.seed : crypto.randomUUID();
+
+    // Parse direction settings from the proposal or request
+    let settings: Generation["settings"] | null = null;
+    if (body.settings && typeof body.settings === "object") {
+      const parsed = safeParseDirectionSettings(body.settings);
+      if (!parsed.ok) {
+        return res.status(400).json({ error: "invalid_settings", details: parsed.errors });
+      }
+      settings = parsed.settings;
+    }
+
+    // Settings are required: every field the composer reads comes from them, and
+    // the placeholder this once fell back to could not itself parse — an empty
+    // id, version 0 and a cadence that is not in CADENCES — so it would only
+    // have failed later, at publication, with a worse message.
+    if (!settings) {
+      return res.status(400).json({ error: "missing_settings" });
+    }
+    const resolvedSettings = settings;
+
+    try {
+      const generation = await createGeneration(deps.db, {
+        userId,
+        projectId,
+        proposalId,
+        parentGenerationId,
+        settings: resolvedSettings,
+        seed,
+        now: Date.now(),
+      });
+
+      // The outbox the dispatcher actually reads is per project, under
+      // `taskOutbox`, in the OutboxTask shape. A record anywhere else is
+      // written and never delivered.
+      const task = newOutboxTask({
+        projectId,
+        subjectKind: "generation",
+        subjectId: generation.id,
+        generation: String(generation.schemaVersion),
+        stage: "compose",
+        now: Date.now(),
+      });
+      await deps.db.collection("projects").doc(projectId).collection("taskOutbox").doc(task.id).set(task);
+      await deps.dispatch?.();
+
+      return res.status(201).json({ generation });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  // GET /api/projects/:id/generations/:gid — get generation status + timeline
+  router.get("/:projectId/generations/:generationId", async (req, res) => {
+    const userId = res.locals.userId;
+    const projectId = req.params.projectId;
+    const generationId = req.params.generationId;
+
+    try {
+      const generation = await getGeneration(deps.db, userId, projectId, generationId);
+      if (!generation) {
+        return res.status(404).json({ error: "not_found" });
+      }
+
+      // Return what the Player needs: status, timeline (if playable), preview sources
+      const response: Record<string, unknown> = {
+        id: generation.id,
+        status: generation.status,
+        timeline: generation.timeline,
+        droppedPicks: generation.droppedPicks,
+        failureReasons: generation.failureReasons,
+        renderProgress: generation.renderProgress,
+        outputPath: generation.outputPath,
+      };
+
+      // Resolve preview-mode sources if timeline exists
+      let sources: Record<string, string> | undefined;
+      if (generation.timeline) {
+        const { resolveSources } = await import("../compose/resolveSources.js");
+        try {
+          sources = await resolveSources(generation.timeline, { loadAsset: resolve }, projectId, "preview");
+        } catch {
+          // Sources missing — still return the generation without them
+        }
+      }
+
+      if (sources) response.sources = sources;
+
+      return res.json(response);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  // POST /api/projects/:id/generations/:gid/render — trigger render
+  router.post("/:projectId/generations/:generationId/render", async (req, res) => {
+    const userId = res.locals.userId;
+    const projectId = req.params.projectId;
+    const generationId = req.params.generationId;
+
+    try {
+      const generation = await getGeneration(deps.db, userId, projectId, generationId);
+      if (!generation || !generation.timeline) {
+        return res.status(400).json({ error: "no_timeline" });
+      }
+
+      // Resolve render-mode sources
+      const { resolveSources } = await import("../compose/resolveSources.js");
+
+      let sources: Record<string, string>;
+      try {
+        sources = await resolveSources(generation.timeline, { loadAsset: resolve }, projectId, "render");
+      } catch (error) {
+        return res.status(400).json({ error: "source_resolution_failed", detail: error instanceof Error ? error.message : String(error) });
+      }
+
+      // The status moves through the store, which refuses anything but a
+      // playable film, so a second render cannot start on top of a running one.
+      await startRender(deps.db, { userId, projectId, generationId });
+
+      const task = newOutboxTask({
+        projectId,
+        subjectKind: "generation",
+        subjectId: generationId,
+        generation: String(generation.schemaVersion),
+        stage: "render",
+        now: Date.now(),
+      });
+      await deps.db.collection("projects").doc(projectId).collection("taskOutbox").doc(task.id).set(task);
+      await deps.dispatch?.();
+
+      return res.status(202).json({ generationId, status: "rendering", sources });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  // GET /api/projects/:id/generations/:gid/download — get download URL
+  router.get("/:projectId/generations/:generationId/download", async (req, res) => {
+    const userId = res.locals.userId;
+    const projectId = req.params.projectId;
+    const generationId = req.params.generationId;
+
+    try {
+      const generation = await getGeneration(deps.db, userId, projectId, generationId);
+      if (!generation) {
+        return res.status(404).json({ error: "not_found" });
+      }
+
+      if (generation.status !== "saved" || !generation.outputPath) {
+        return res.status(400).json({ error: "render_not_complete", status: generation.status });
+      }
+
+      // Return a signed URL for the output file
+      const { getStorage } = await import("firebase-admin/storage");
+      const { getAdminApp } = await import("../firebase/admin.js");
+      const bucket = getStorage(getAdminApp()).bucket();
+      const file = bucket.file(generation.outputPath);
+
+      try {
+        const [url] = await file.getSignedUrl({
+          action: "read",
+          expires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+        });
+        return res.json({ downloadUrl: url, outputPath: generation.outputPath });
+      } catch {
+        return res.status(500).json({ error: "url_generation_failed" });
+      }
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  return router;
+}
