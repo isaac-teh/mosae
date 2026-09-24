@@ -110,13 +110,50 @@ describe("generationsRouter", () => {
     });
 
     it("returns 201 when generation is created successfully", async () => {
-      const dbMock = makeDbMock(true, false);
+      const dbMock = {
+        collection: vi.fn((name: string) => ({
+          doc: vi.fn().mockReturnValue({
+            get: vi.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({ userId: "test-user" }),
+              get: (field: string) => {
+                const d: Record<string, string> = { userId: "test-user" };
+                return d[field];
+              },
+            }),
+            collection: vi.fn((subName: string) => ({
+              doc: vi.fn().mockReturnValue({
+                id: "gen-123",
+                set: vi.fn().mockResolvedValue(undefined),
+              }),
+            })),
+          }),
+        })),
+      };
+
       // Add outbox support: the route calls deps.db.collection("outbox").add() after creation.
       (dbMock as any).collection.mockImplementation((name: string) => {
         if (name === "outbox") {
           return { add: vi.fn().mockResolvedValue({ id: "outbox-1" }) };
         }
-        return makeDbMock(true, false)[name === "projects" ? "collection" : "collection"](name);
+        return {
+          doc: vi.fn().mockReturnValue({
+            get: vi.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({ userId: "test-user" }),
+              get: (field: string) => {
+                const d: Record<string, string> = { userId: "test-user" };
+                return d[field];
+              },
+            }),
+            collection: vi.fn((subName: string) => ({
+              doc: vi.fn().mockReturnValue({
+                id: "gen-123",
+                set: vi.fn().mockResolvedValue(undefined),
+              }),
+            })),
+          }),
+        };
       });
 
       const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
