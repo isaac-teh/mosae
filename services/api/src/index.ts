@@ -9,6 +9,7 @@ import { createPlanJob, createQueuePlan, directingRouter, type QueuePlan } from 
 import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
+import { generationsRouter } from "./routes/generations.js";
 import {
   CloudTasksQueue,
   InMemoryTaskQueue,
@@ -104,6 +105,10 @@ app.use(
   thumbnailsRouter({ db: adminDb, thumbnails: {
     signedReadUrl: (path, expiresAt) => firebaseThumbnailUrlStore(getStorage(getAdminApp()).bucket(config.storageBucket)).signedReadUrl(path, expiresAt),
   } }),
+);
+app.use(
+  "/api/projects",
+  generationsRouter({ db: adminDb }),
 );
 app.use(
   "/events",
