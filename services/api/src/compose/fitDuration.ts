@@ -1,5 +1,6 @@
 import type { AssembledClip } from "./assemble.js";
 import type { Holds } from "./brief.js";
+import { overlapSec } from "./transitions.js";
 
 /**
  * Fit assembled clips to target duration by adjusting photo holds and trimming silent video.
@@ -12,6 +13,29 @@ export interface FitResult {
   clips: AssembledClip[];
   /** Notes about what was done to fit duration. */
   notes: string[];
+  /**
+   * The length the film is now committed to: the requested target, or the
+   * total actually reachable when the proposal had too little media for it.
+   * The spec shortens the target rather than padding the film, so this is the
+   * number validation must measure the film against — the requested one would
+   * condemn a film that is as long as its media allows.
+   */
+  targetSec: number;
+}
+
+/**
+ * How long the film actually runs: the clips' own lengths, less the overlap each
+ * crossfade takes back off its predecessor. Fitting the raw sum instead leaves a
+ * film with seven crossfades three and a half seconds shorter than it was fitted
+ * to, which is a real miss of the target and not a rounding difference.
+ */
+function filmLength(clips: AssembledClip[]): number {
+  let total = 0;
+  clips.forEach((clip, index) => {
+    total += clipLength(clip);
+    if (index > 0) total -= overlapSec(clip.transition);
+  });
+  return Math.max(0, total);
 }
 
 /** Duration of a single clip (photo holdSec or video sourceOutSec - sourceInSec). */
@@ -37,14 +61,15 @@ export function fitDuration(
   mustIncludeMomentIds: string[] = [],
 ): FitResult {
   const notes: string[] = [];
+  let effectiveTargetSec = targetSec;
 
-  if (!clips.length) return { clips: [], notes };
+  if (!clips.length) return { clips: [], notes, targetSec: effectiveTargetSec };
 
   // Deep clone to avoid mutating input unexpectedly
   const workingClips = JSON.parse(JSON.stringify(clips)) as AssembledClip[];
 
   for (let pass = 0; pass < 20; pass++) {
-    const total = workingClips.reduce((sum, c) => sum + clipLength(c), 0);
+    const total = filmLength(workingClips);
     const drift = total - targetSec;
 
     // Within tolerance? Done.
@@ -73,8 +98,10 @@ export function fitDuration(
         notes.push(`trimmed silent video by ${(drift - excess).toFixed(1)}s`);
       } else {
         // Too short: photo holds exhausted at min, can't pad
-        const currentTotal = workingClips.reduce((sum, c) => sum + clipLength(c), 0);
+        const currentTotal = filmLength(workingClips);
         notes.push(`photo holds exhausted at ${currentTotal.toFixed(1)}s (target was ${targetSec}s)`);
+        // Never pad. The target is what the media can reach.
+        effectiveTargetSec = currentTotal;
       }
       break;
     }
@@ -87,10 +114,10 @@ export function fitDuration(
     }
   }
 
-  const finalTotal = workingClips.reduce((sum, c) => sum + clipLength(c), 0);
-  if (Math.abs(finalTotal - targetSec) > targetSec * 0.1) {
-    notes.push(`final duration ${finalTotal.toFixed(1)}s not within 10% of ${targetSec}s`);
+  const finalTotal = filmLength(workingClips);
+  if (Math.abs(finalTotal - effectiveTargetSec) > effectiveTargetSec * 0.1) {
+    notes.push(`final duration ${finalTotal.toFixed(1)}s not within 10% of ${effectiveTargetSec}s`);
   }
 
-  return { clips: workingClips, notes };
+  return { clips: workingClips, notes, targetSec: effectiveTargetSec };
 }
