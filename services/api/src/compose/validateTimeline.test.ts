@@ -221,7 +221,7 @@ describe("repairOnce — deterministic fixes", () => {
     expect(issues.some(i => i.severity === "fixable")).toBe(true);
 
     const repaired = repairOnce(timeline, issues, ctx);
-    expect(repaired.ok).toBe(true);
+    if (!repaired.ok) throw new Error("expected repair to succeed");
 
     // Second pass should have no issues (hold was clamped to maxHoldSec=6)
     const secondIssues = validateTimeline(repaired.timeline, ctx);
