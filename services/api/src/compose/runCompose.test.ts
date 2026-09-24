@@ -69,6 +69,8 @@ function makeJob(overrides?: Partial<ComposeJob>): ComposeJob {
     cadenceId: "tender" as const,
     seed: "seed-123",
     soundtrackId: null,
+    note: "",
+    captions: false,
     ...overrides,
   };
 }

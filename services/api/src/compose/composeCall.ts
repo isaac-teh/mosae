@@ -13,6 +13,14 @@ export interface ComposeCallDeps {
   proposal: StoryProposal;
   brief: string;
   holds: Holds;
+  /**
+   * The user's directing note from the Review screen. The spec's revision
+   * mechanism is this text reaching the model: it can reorder, retime and
+   * re-transition what the accepted proposal already contains.
+   */
+  note?: string;
+  /** The film's target length. `craftBrief` already states it; repeating it wrong is worse than not repeating it. */
+  targetSec?: number;
 }
 
 /**
@@ -23,7 +31,7 @@ export function composeCall(deps: ComposeCallDeps): {
   prompt: string;
   schema: object;
 } {
-  const { candidates, proposal, brief, holds } = deps;
+  const { candidates, proposal, brief, holds, note, targetSec } = deps;
 
   // Build candidate map by ID for quick lookup in the prompt
   const byId = new Map(candidates.map(c => [c.candidateId, c]));
@@ -54,8 +62,19 @@ export function composeCall(deps: ComposeCallDeps): {
     `- Pick candidateIds in the order they should play, following chapter order. A source item may appear up to 3 times, but only through different candidates.`,
     "- Every chapter must contribute at least one clip.",
     `- For photo candidates give holdSec between ${holds.min} and ${holds.max}. Video clip length is fixed by the candidate.`,
-    `Aim for a total near ${proposal.constraints.mustIncludeMomentIds.length * 5}s; small drift is corrected afterwards by adjusting photo holds.`,
+    // The brief already carries the target. A second one computed from the
+    // must-include count contradicted it — 5s against a 30s film, or "near 0s"
+    // when the proposal names no must-includes.
+    "- Small drift from the target is corrected afterwards by adjusting photo holds.",
     "",
+    ...(note && note.trim()
+      ? [
+          "The person whose film this is asked for this, in their own words. It outranks your own preference about order, length and transitions, but it cannot add or remove media:",
+          note.trim(),
+          "",
+        ]
+      : []),
+    ...(targetSec != null ? [`Target length: ${targetSec}s.`, ""] : []),
     `Chapters: ${JSON.stringify(chapterInfo)}`,
     `Candidates: ${JSON.stringify(candidateList)}`,
   ].join("\n");

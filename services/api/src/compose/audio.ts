@@ -16,6 +16,17 @@ export interface AudioClip {
   gain: number;
 }
 
+/**
+ * The contract stores gain in decibels; the audio layer reasons in a linear
+ * 0–1 multiplier. One conversion, rounded so the same plan always serializes to
+ * the same bytes.
+ */
+export function gainToDb(gain: number): number {
+  if (gain <= 0) return -60;
+  const db = 20 * Math.log10(gain);
+  return Number(Math.min(12, Math.max(-60, db)).toFixed(2));
+}
+
 /** Duration of a single clip in the film timeline. */
 function clipDuration(clip: AssembledClip): number {
   if (clip.holdSec != null) return clip.holdSec;

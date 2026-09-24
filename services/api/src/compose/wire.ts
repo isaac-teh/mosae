@@ -161,6 +161,11 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       cadenceId: settings.settings.cadenceId as ComposeJob["cadenceId"],
       seed: generation.seed,
       soundtrackId: settings.settings.soundtrackId,
+      // The directing note is the whole of the spec's revision mechanism: a
+      // recompose differs from its parent only by the settings, and this is the
+      // field that carries what the user actually asked for.
+      note: settings.settings.note,
+      captions: settings.settings.captions,
     };
 
     const result = await runCompose(job, {

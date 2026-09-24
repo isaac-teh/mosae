@@ -7,7 +7,9 @@
     "durationId": "30s",
     "cadenceId": "tender",
     "seed": "golden-seed-0001",
-    "soundtrackId": "soundtrack-dusk"
+    "soundtrackId": "soundtrack-dusk",
+    "note": "Open on the arrival and let her voice carry the middle.",
+    "captions": true
   },
   "proposal": {
     "schemaVersion": 1,
@@ -60,7 +62,7 @@
     "clips": [
       { "candidateId": "m-arrival#still@c0", "holdSec": 3.5, "transition": "cut", "audio": "mute" },
       { "candidateId": "m-talking#s0@4c0", "transition": "crossfade", "audio": "keep" },
-      { "candidateId": "m-water#s0@0.15c1", "transition": "cut", "audio": "duck" },
+      { "candidateId": "m-water#s0@0.15c1", "transition": "cut", "audio": "duck", "textOverlay": "Into the water" },
       { "candidateId": "m-dusk#still@c1", "holdSec": 5, "transition": "crossfade", "audio": "mute" }
     ],
     "musicCues": [

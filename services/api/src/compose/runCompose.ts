@@ -5,7 +5,8 @@ import { composeCall, validateComposeResponse } from "./composeCall.js";
 import { assemble, isEmptyResult } from "./assemble.js";
 import { fitDuration } from "./fitDuration.js";
 import { craftBrief, holdsFor } from "./brief.js";
-import { buildAudioClips } from "./audio.js";
+import { buildAudioClips, gainToDb } from "./audio.js";
+import { TRANSITION_SECONDS } from "./transitions.js";
 import { validateTimeline, repairOnce } from "./validateTimeline.js";
 import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
@@ -47,6 +48,14 @@ export interface ComposeJob {
   cadenceId: CadenceId;
   seed: string;
   soundtrackId: string | null;
+  /**
+   * The user's free text from the Review screen. The spec's whole revision
+   * mechanism is this string reaching the model, so it is part of the job, not
+   * an afterthought the settings quietly drop.
+   */
+  note: string;
+  /** Whether the model's text overlays are burned into the film. */
+  captions: boolean;
 }
 
 /**
@@ -90,6 +99,8 @@ export async function runCompose(
     proposal: job.proposal,
     brief,
     holds: holdsFor(job.cadenceId),
+    note: job.note,
+    targetSec,
   });
 
   // Call Gemini (mocked in tests)
@@ -122,7 +133,7 @@ export async function runCompose(
   }
 
   // Stage 4: fitDuration — adjust photo holds to target duration
-  const { clips: fittedClips, notes: fitNotes } = fitDuration(
+  const { clips: fittedClips, notes: fitNotes, targetSec: fittedTargetSec } = fitDuration(
     assembledClips,
     targetSec,
     holdsFor(job.cadenceId),
@@ -133,13 +144,26 @@ export async function runCompose(
     return { ok: false, reasons: ["no clips after duration fitting"] };
   }
 
+  // Every clip must name a shot the renderer can resolve to a file. A moment id
+  // is not one, so a moment with no shot is a failure here rather than a film
+  // whose picture silently does not load.
+  const unresolved = fittedClips.filter((clip) => !shotIdByMoment.has(clip.itemId));
+  if (unresolved.length > 0) {
+    return {
+      ok: false,
+      reasons: [`no shot for moment ${[...new Set(unresolved.map((clip) => clip.itemId))].join(", ")}`],
+    };
+  }
+
   // Stage 5: reflow — compute startSec, quantize to 30fps, resolve overlaps
+  const transitionFor = (kind: "cut" | "crossfade" | "dip") => ({ kind, durationSec: TRANSITION_SECONDS[kind] });
+
   const clipPlans: ClipPlan[] = fittedClips.map((clip, index) => ({
     id: `clip-${index + 1}`,
-    source: { shotId: clip.itemId },
+    source: { shotId: shotIdByMoment.get(clip.itemId) },
     durationSec: clip.holdSec ?? (clip.sourceOutSec! - (clip.sourceInSec ?? 0)),
-    transitionIn: { kind: clip.transition, durationSec: clip.transition === "crossfade" ? 0.5 : clip.transition === "dip" ? 0.3 : 0 },
-    strength: 0, // not available on AssembledClip; use 0 as default
+    transitionIn: transitionFor(clip.transition),
+    strength: 0, // deferred: fitDuration does not yet rank by strength (I7)
     minHoldSec: clip.minHoldSec ?? 0,
     maxHoldSec: clip.maxHoldSec ?? Infinity,
   }));
@@ -176,21 +200,22 @@ export async function runCompose(
     chapters: result.chapters.map(ch => ({ title: ch.title, startSec: ch.startSec })),
     videoClips: result.clips.map((reflowClip, index) => {
       const fitted = fittedClips[index];
+      const shotId = shotIdByMoment.get(fitted.itemId)!;
       if (fitted.kind === "video") {
         return {
           id: fitted.candidateId,
-          source: { kind: "video" as const, shotId: shotIdByMoment.get(fitted.itemId) ?? fitted.itemId, sourceInSec: fitted.sourceInSec ?? 0, sourceOutSec: fitted.sourceOutSec ?? fitted.sourceInSec! + reflowClip.durationSec },
+          source: { kind: "video" as const, shotId, sourceInSec: fitted.sourceInSec ?? 0, sourceOutSec: fitted.sourceOutSec ?? fitted.sourceInSec! + reflowClip.durationSec },
           startSec: reflowClip.startSec,
           durationSec: reflowClip.durationSec,
-          transitionIn: { kind: fitted.transition as "cut" | "crossfade" | "dip", durationSec: fitted.transition === "crossfade" ? 0.5 : fitted.transition === "dip" ? 0.3 : 0 },
+          transitionIn: transitionFor(fitted.transition),
         };
       } else {
         return {
           id: fitted.candidateId,
-          source: { kind: "photo" as const, shotId: shotIdByMoment.get(fitted.itemId) ?? fitted.itemId },
+          source: { kind: "photo" as const, shotId },
           startSec: reflowClip.startSec,
           durationSec: reflowClip.durationSec,
-          transitionIn: { kind: fitted.transition as "cut" | "crossfade" | "dip", durationSec: fitted.transition === "crossfade" ? 0.5 : fitted.transition === "dip" ? 0.3 : 0 },
+          transitionIn: transitionFor(fitted.transition),
         };
       }
     }),
@@ -219,12 +244,24 @@ export async function runCompose(
             })(),
         role: ac.kind as "speech" | "ambient" | "music",
         startSec,
-        gainDb: ac.kind === "speech" ? 0 : ac.kind === "ambient" ? -7 : -6,
+        // The gain `buildAudioClips` computed, including the music duck under
+        // speech. Hardcoding it from the role threw that away and left the
+        // music sitting on top of every line of dialogue.
+        gainDb: gainToDb(ac.gain),
         fadeInSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
         fadeOutSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
       };
     }),
-    captions: [],
+    // Text overlays the model chose, burned in when the user asked for captions.
+    // Collecting them and emitting an empty array made DirectionSettings.captions
+    // do nothing and Rule 6 unable to fire.
+    captions: job.captions
+      ? result.clips.flatMap((reflowClip, index) => {
+          const text = fittedClips[index].textOverlay?.trim();
+          if (!text) return [];
+          return [{ text, startSec: reflowClip.startSec, endSec: reflowClip.startSec + reflowClip.durationSec }];
+        })
+      : [],
   };
 
   // Validate the assembled timeline
@@ -233,6 +270,10 @@ export async function runCompose(
     shotIds: new Set(job.proposal.moments.map((moment) => moment.shotId)),
     candidates: candidateMap,
     soundtrackIds: deps.soundtrackIds,
+    // The length the film is committed to after fitting — the requested target,
+    // or the shortened one when the media could not reach it.
+    targetSec: fittedTargetSec,
+    fps: 30,
   };
 
   const droppedPicks = dropped.map((drop) => drop.reason);

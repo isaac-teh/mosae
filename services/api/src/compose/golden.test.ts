@@ -117,6 +117,57 @@ describe("golden composition", () => {
     expect(generateStructured).toHaveBeenCalledTimes(1);
   });
 
+  it("gives each clip the overlap its own transitionIn declares", async () => {
+    // `transitionIn` is the transition INTO a clip. m-talking and m-dusk declare
+    // crossfades and are the clips pulled back over their predecessors;
+    // m-water declares a cut and sits flush. Before the fix each declaration
+    // landed one boundary early, so m-talking got no overlap and m-water —
+    // which asked for a hard cut — was pulled back half a second.
+    const timeline = await composeOrThrow();
+    const [arrival, talking, water, dusk] = timeline.videoClips;
+
+    const boundary = (out: typeof arrival, incoming: typeof arrival) =>
+      Number(((out.startSec + out.durationSec) - incoming.startSec).toFixed(6));
+
+    expect(talking.transitionIn.kind).toBe("crossfade");
+    expect(boundary(arrival, talking)).toBeCloseTo(0.5);
+
+    expect(water.transitionIn.kind).toBe("cut");
+    expect(boundary(talking, water)).toBeCloseTo(0);
+
+    expect(dusk.transitionIn.kind).toBe("crossfade");
+    expect(boundary(water, dusk)).toBeCloseTo(0.5);
+  });
+
+  it("lands within 10% of the length it was fitted to", async () => {
+    const timeline = await composeOrThrow();
+    // 30s was asked for; the cadence's 6s maximum hold on both stills is all
+    // the media can reach, so the target shortened to 28s rather than padding.
+    expect(timeline.durationSec).toBeCloseTo(28);
+    expect(Math.abs(timeline.durationSec - 28)).toBeLessThanOrEqual(2.8);
+  });
+
+  it("burns in the model's text overlay and ducks the music under speech", async () => {
+    const timeline = await composeOrThrow();
+    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 10.5, endSec: 22.5 }]);
+
+    const music = timeline.audioClips.find((clip) => clip.role === "music");
+    const speech = timeline.audioClips.find((clip) => clip.role === "speech");
+    expect(speech?.gainDb).toBe(0);
+    // Ducked, not the flat -6 the role-keyed constant used to hardcode.
+    expect(music?.gainDb).toBeLessThan(-6);
+  });
+
+  it("carries the directing note to the model", async () => {
+    const generateStructured = vi.fn().mockResolvedValue(input.response);
+    await runCompose(
+      { ...input.job, proposal: input.proposal },
+      { generateStructured, soundtrackIds: new Set(["soundtrack-dusk"]), assets: new Map(Object.entries(input.catalog)) },
+    );
+    const options = generateStructured.mock.calls[0][0] as { contents: string };
+    expect(options.contents).toContain(input.job.note);
+  });
+
   it("changes the film when the recorded response changes", async () => {
     // Guards the guard: a comparison that passed whatever it was handed would
     // look exactly like a passing determinism test.
