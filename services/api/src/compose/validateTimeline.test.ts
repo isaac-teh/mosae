@@ -3,10 +3,14 @@ import { validateTimeline, repairOnce, type TimelineIssue, type ValidationContex
 import type { Timeline, VideoClip, AudioClip } from "@mosae/contracts";
 
 function makeCtx(overrides?: Partial<ValidationContext>): ValidationContext {
+  // Keyed by candidate id, which is also the Timeline clip id. `shotId` is the
+  // shot the renderer resolves and is deliberately a different value, so a
+  // lookup that confused the two would fail this fixture rather than pass it.
   const candidates = new Map<string, any>([
-    ["shot-photo-1", { candidateId: "cand-photo-1", itemId: "photo-1", kind: "photo" as const, inSec: undefined, outSec: undefined, minHoldSec: 2, maxHoldSec: 6 }],
-    ["shot-video-1", { candidateId: "cand-video-1", itemId: "video-1", kind: "video" as const, inSec: 0, outSec: 10, minHoldSec: undefined, maxHoldSec: undefined }],
-    ["shot-photo-2", { candidateId: "cand-photo-2", itemId: "photo-2", kind: "photo" as const, inSec: undefined, outSec: undefined, minHoldSec: 2, maxHoldSec: 6 }],
+    ["cand-photo-1", { candidateId: "cand-photo-1", itemId: "photo-1", kind: "photo" as const, inSec: undefined, outSec: undefined, minHoldSec: 2, maxHoldSec: 6 }],
+    ["cand-photo-1b", { candidateId: "cand-photo-1b", itemId: "photo-1", kind: "photo" as const, inSec: undefined, outSec: undefined, minHoldSec: 2, maxHoldSec: 6 }],
+    ["cand-video-1", { candidateId: "cand-video-1", itemId: "video-1", kind: "video" as const, inSec: 0, outSec: 10, minHoldSec: undefined, maxHoldSec: undefined }],
+    ["cand-photo-2", { candidateId: "cand-photo-2", itemId: "photo-2", kind: "photo" as const, inSec: undefined, outSec: undefined, minHoldSec: 2, maxHoldSec: 6 }],
   ]);
 
   const assets = new Map<string, any>([
@@ -35,7 +39,7 @@ function makeTimeline(overrides?: Partial<Timeline>): Timeline {
     chapters: [{ title: "Chapter 1", startSec: 0 }],
     videoClips: [
       {
-        id: "clip-1",
+        id: "cand-photo-1",
         source: { kind: "photo" as const, shotId: "shot-photo-1" },
         startSec: 0,
         durationSec: 4,
@@ -54,7 +58,7 @@ describe("validateTimeline — semantic rules", () => {
     const timeline = makeTimeline({
       videoClips: [
         {
-          id: "clip-1",
+          id: "cand-photo-2",
           source: { kind: "photo" as const, shotId: "shot-photo-2" },
           startSec: 0,
           durationSec: 4,
@@ -75,7 +79,7 @@ describe("validateTimeline — semantic rules", () => {
     const timeline = makeTimeline({
       videoClips: [
         {
-          id: "clip-1",
+          id: "cand-video-1",
           source: { kind: "video" as const, shotId: "shot-video-1", sourceInSec: 0, sourceOutSec: 15 }, // exceeds shot's outSec=10
           startSec: 0,
           durationSec: 4,
@@ -95,14 +99,14 @@ describe("validateTimeline — semantic rules", () => {
     const timeline = makeTimeline({
       videoClips: [
         {
-          id: "clip-1",
+          id: "cand-photo-1",
           source: { kind: "photo" as const, shotId: "shot-photo-1" },
           startSec: 0,
           durationSec: 4,
           transitionIn: { kind: "cut" as const, durationSec: 0 },
         } as VideoClip,
         {
-          id: "clip-2",
+          id: "cand-photo-1b",
           source: { kind: "photo" as const, shotId: "shot-photo-1" },
           startSec: 8, // gap of 0s (4+4=8, so no gap) — wait, let me use a bigger gap
           durationSec: 4,
@@ -122,7 +126,7 @@ describe("validateTimeline — semantic rules", () => {
     const timeline = makeTimeline({
       videoClips: [
         {
-          id: "clip-1",
+          id: "cand-photo-1",
           source: { kind: "photo" as const, shotId: "shot-photo-1" },
           startSec: 0,
           durationSec: 8, // exceeds maxHoldSec=6
@@ -186,7 +190,7 @@ describe("validateTimeline — semantic rules", () => {
     const timeline = makeTimeline({
       videoClips: [
         {
-          id: "clip-1",
+          id: "cand-photo-1",
           source: { kind: "photo" as const, shotId: "shot-photo-1" },
           startSec: 0,
           durationSec: 4, // within bounds [2,6]
@@ -208,7 +212,7 @@ describe("repairOnce — deterministic fixes", () => {
     const timeline = makeTimeline({
       videoClips: [
         {
-          id: "clip-1",
+          id: "cand-photo-1",
           source: { kind: "photo" as const, shotId: "shot-photo-1" },
           startSec: 0,
           durationSec: 8, // exceeds maxHoldSec=6
@@ -233,7 +237,7 @@ describe("repairOnce — deterministic fixes", () => {
     const timeline = makeTimeline({
       videoClips: [
         {
-          id: "clip-1",
+          id: "cand-photo-2",
           source: { kind: "photo" as const, shotId: "shot-photo-2" }, // deselected moment → fatal
           startSec: 0,
           durationSec: 4,
@@ -257,7 +261,7 @@ describe("repairOnce — deterministic fixes", () => {
     const timeline = makeTimeline({
       videoClips: [
         {
-          id: "clip-1",
+          id: "cand-video-1",
           source: { kind: "video" as const, shotId: "shot-video-1", sourceInSec: 0, sourceOutSec: 20 }, // exceeds shot's outSec=10
           startSec: 0,
           durationSec: 4,
@@ -282,14 +286,14 @@ describe("repairOnce — deterministic fixes", () => {
     const timeline = makeTimeline({
       videoClips: [
         {
-          id: "clip-1",
+          id: "cand-photo-1",
           source: { kind: "photo" as const, shotId: "shot-photo-1" },
           startSec: 0,
           durationSec: 4,
           transitionIn: { kind: "cut" as const, durationSec: 0 },
         } as VideoClip,
         {
-          id: "clip-2",
+          id: "cand-photo-1b",
           source: { kind: "photo" as const, shotId: "shot-photo-1" },
           startSec: 8, // gap of 0s (4+4=8) — actually no gap here
           durationSec: 4,
@@ -316,7 +320,7 @@ describe("repairOnce — deterministic fixes", () => {
     const timeline = makeTimeline({
       videoClips: [
         {
-          id: "clip-1",
+          id: "cand-photo-1",
           source: { kind: "photo" as const, shotId: "shot-photo-1" },
           startSec: 0,
           durationSec: 4,

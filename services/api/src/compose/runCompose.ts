@@ -1,4 +1,4 @@
-import { reflow, type ClipPlan } from "@mosae/contracts";
+import { reflow, safeParseTimeline, type ClipPlan } from "@mosae/contracts";
 import { DURATION_SECONDS } from "@mosae/contracts";
 import { buildCandidates } from "./buildCandidates.js";
 import { composeCall, validateComposeResponse } from "./composeCall.js";
@@ -14,6 +14,10 @@ import type { Candidate, Asset } from "./buildCandidates.js";
 export type ComposeResult = {
   ok: true;
   timeline: Timeline;
+  /** Picks the drop rules rejected. Not failures — kept on the generation for debugging. */
+  droppedPicks: string[];
+  /** What duration fitting had to do. Empty when the film landed on target. */
+  notes: string[];
 } | {
   ok: false;
   reasons: string[];
@@ -21,8 +25,12 @@ export type ComposeResult = {
 
 /** Dependencies needed by the compose pipeline. */
 export interface ComposeDeps {
-  /** Generate structured response from Gemini (mocked in tests). */
-  generateStructured: (options: unknown, deps: unknown) => Promise<unknown>;
+  /**
+   * Run one structured model call. The caller supplies the transport — the real
+   * Gemini client in `compose/wire.ts`, a recorded response in tests — so this
+   * pipeline never constructs an SDK and never needs an API key to be loaded.
+   */
+  generateStructured: (options: unknown) => Promise<unknown>;
   /** Soundtrack IDs available for this project. */
   soundtrackIds: Set<string>;
   /** Assets map keyed by itemId. */
@@ -53,6 +61,12 @@ export async function runCompose(
 ): Promise<ComposeResult> {
   const targetSec = DURATION_SECONDS[job.durationId] ?? 60;
 
+  // `buildCandidates` keys its catalog by moment id, because that is what the
+  // proposal's chapters name. A Timeline names shots, so the two are joined
+  // here rather than letting a moment id reach `source.shotId`, where
+  // `resolveSources` would try to resolve it to a file and fail.
+  const shotIdByMoment = new Map(job.proposal.moments.map((moment) => [moment.id, moment.shotId]));
+
   // Stage 1: buildCandidates — every legal clip per chapter
   const chapterInputs = job.proposal.chapters.map((ch, index) => ({
     index,
@@ -81,20 +95,14 @@ export async function runCompose(
   // Call Gemini (mocked in tests)
   let rawResponse;
   try {
-    rawResponse = await deps.generateStructured(
-      {
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        responseSchema: schema,
-        validate: (value: unknown) => value,
-        stage: "compose",
-        subjectId: job.proposal.id,
-      },
-      {
-        generateContent: async () => { throw new Error("generateStructured called without mock"); },
-        recordUsage: async () => {},
-      },
-    );
+    rawResponse = await deps.generateStructured({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      responseSchema: schema,
+      validate: (value: unknown) => value,
+      stage: "compose",
+      subjectId: job.proposal.id,
+    });
   } catch (error) {
     return { ok: false, reasons: [`gemini call failed: ${error instanceof Error ? error.message : String(error)}`] };
   }
@@ -166,7 +174,7 @@ export async function runCompose(
       if (fitted.kind === "video") {
         return {
           id: fitted.candidateId,
-          source: { kind: "video" as const, shotId: fitted.candidateId, sourceInSec: fitted.sourceInSec ?? 0, sourceOutSec: fitted.sourceOutSec ?? fitted.sourceInSec! + reflowClip.durationSec },
+          source: { kind: "video" as const, shotId: shotIdByMoment.get(fitted.itemId) ?? fitted.itemId, sourceInSec: fitted.sourceInSec ?? 0, sourceOutSec: fitted.sourceOutSec ?? fitted.sourceInSec! + reflowClip.durationSec },
           startSec: reflowClip.startSec,
           durationSec: reflowClip.durationSec,
           transitionIn: { kind: fitted.transition as "cut" | "crossfade" | "dip", durationSec: fitted.transition === "crossfade" ? 0.5 : fitted.transition === "dip" ? 0.3 : 0 },
@@ -174,7 +182,7 @@ export async function runCompose(
       } else {
         return {
           id: fitted.candidateId,
-          source: { kind: "photo" as const, shotId: fitted.candidateId },
+          source: { kind: "photo" as const, shotId: shotIdByMoment.get(fitted.itemId) ?? fitted.itemId },
           startSec: reflowClip.startSec,
           durationSec: reflowClip.durationSec,
           transitionIn: { kind: fitted.transition as "cut" | "crossfade" | "dip", durationSec: fitted.transition === "crossfade" ? 0.5 : fitted.transition === "dip" ? 0.3 : 0 },
@@ -206,31 +214,31 @@ export async function runCompose(
     soundtrackIds: deps.soundtrackIds,
   };
 
+  const droppedPicks = dropped.map((drop) => drop.reason);
   const issues = validateTimeline(timeline, validationCtx);
 
+  let final = timeline;
   if (issues.length > 0) {
-    // Try one repair pass
+    // One repair pass, deterministic only. A second pass is a loop in disguise.
     const repaired = repairOnce(timeline, issues, validationCtx);
     if (!repaired.ok) {
       return { ok: false, reasons: [`validation failed: ${repaired.reasons.join("; ")}`] };
     }
 
-    // Validate the repaired timeline
-    if (!repaired.ok) throw new Error("repair returned non-ok without setting ok:false");
     const secondIssues = validateTimeline(repaired.timeline, validationCtx);
     if (secondIssues.length > 0) {
       return { ok: false, reasons: [`repair did not fix all issues: ${secondIssues.map(i => i.message).join("; ")}`] };
     }
 
-    return { ok: true, timeline: repaired.timeline };
+    final = repaired.timeline;
   }
 
-  // Check if structural parse passes
-  const { safeParseTimeline } = await import("@mosae/contracts");
-  const parsedResult = safeParseTimeline(timeline);
+  // Structural parse is the last gate on both paths. A repair that drops a clip
+  // can leave the timeline structurally invalid, so it is not exempt from this.
+  const parsedResult = safeParseTimeline(final);
   if (!parsedResult.ok) {
     return { ok: false, reasons: [`structural validation failed: ${parsedResult.errors.join("; ")}`] };
   }
 
-  return { ok: true, timeline };
+  return { ok: true, timeline: parsedResult.timeline, droppedPicks, notes: fitNotes };
 }

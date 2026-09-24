@@ -1,5 +1,4 @@
-import type { Timeline, VideoClip, AudioClip, Caption } from "@mosae/contracts";
-import type { AssembledClip } from "./assemble.js";
+import type { Timeline } from "@mosae/contracts";
 import type { Candidate } from "./buildCandidates.js";
 
 /** A semantic issue found during validation. */
@@ -18,7 +17,7 @@ export interface ValidationContext {
   chapters: Array<{ index: number; itemIds: string[] }>;
   /** Asset registry keyed by itemId. */
   assets: Map<string, { kind: "photo" | "video"; analysis?: { shots?: Array<{ id: string }> } }>;
-  /** Candidate map for resolving shotId → candidate. */
+  /** Candidate map keyed by candidate id, which is also the Timeline clip id. */
   candidates: Map<string, Candidate>;
   /** Soundtrack IDs that are valid. */
   soundtrackIds: Set<string>;
@@ -31,19 +30,20 @@ export function validateTimeline(
 ): TimelineIssue[] {
   const issues: TimelineIssue[] = [];
 
-  // Rule 1: Every shotId resolves and belongs to an accepted chapter's itemIds
+  // Rule 1: Every clip traces back to a candidate this composition offered, and
+  // that candidate's moment is one the accepted proposal still contains. The
+  // clip *id* is the candidate id; `source.shotId` is the shot the renderer
+  // resolves, so the join runs through the id, not through the shot.
   for (const clip of timeline.videoClips) {
-    const shotId = clip.source.shotId;
-    if (!ctx.candidates.has(shotId)) {
-      issues.push({ path: `videoClips[${clip.id}].source.shotId`, message: `unknown shot ${shotId}`, severity: "fatal" });
+    const candidate = ctx.candidates.get(clip.id);
+    if (!candidate) {
+      issues.push({ path: `videoClips[${clip.id}]`, message: `unknown candidate ${clip.id}`, severity: "fatal" });
       continue;
     }
-
-    const candidate = ctx.candidates.get(shotId)!;
     // Check that the candidate's itemId is in an accepted chapter
     const foundInChapter = ctx.chapters.some(ch => ch.itemIds.includes(candidate.itemId));
     if (!foundInChapter) {
-      issues.push({ path: `videoClips[${clip.id}].source.shotId`, message: `shot ${shotId} belongs to deselected moment (itemId=${candidate.itemId})`, severity: "fatal" });
+      issues.push({ path: `videoClips[${clip.id}].source.shotId`, message: `clip ${clip.id} belongs to deselected moment (itemId=${candidate.itemId})`, severity: "fatal" });
     }
 
     // Rule 2: Video range sits inside its shot
@@ -141,7 +141,7 @@ export function repairOnce(
   // Fix 1: Clamp photo holds to cadence bounds
   for (const clip of repaired.videoClips) {
     if (clip.source.kind === "photo") {
-      const candidate = ctx.candidates.get(clip.source.shotId);
+      const candidate = ctx.candidates.get(clip.id);
       if (!candidate || candidate.minHoldSec == null || candidate.maxHoldSec == null) continue;
 
       if (clip.durationSec < candidate.minHoldSec) {
@@ -154,7 +154,7 @@ export function repairOnce(
 
   // Fix 2: Drop clips with ranges outside their shot bounds
   repaired.videoClips = repaired.videoClips.filter(clip => {
-    const candidate = ctx.candidates.get(clip.source.shotId);
+    const candidate = ctx.candidates.get(clip.id);
     if (!candidate || clip.source.kind !== "video") return true;
 
     const inSec = clip.source.sourceInSec;

@@ -23,6 +23,7 @@ import { startStoragePoller } from "./store/storagePoller.js";
 import { createIngest } from "./ingest/wire.js";
 import { createUnderstand } from "./understand/wire.js";
 import { createPlan } from "./directing/wire.js";
+import { createCompose } from "./compose/wire.js";
 import { runProjectPass } from "./store/clusterStore.js";
 import { createGenAI, embedContentVia } from "./gemini/wire.js";
 import { embedText } from "./understand/embed.js";
@@ -62,6 +63,7 @@ const cluster = async (projectId: string): Promise<unknown> => {
   return result;
 };
 const plan = createPlan({ db: adminDb, geminiApiKey: config.geminiApiKey });
+const compose = createCompose({ db: adminDb, geminiApiKey: config.geminiApiKey });
 const queuePlan: QueuePlan = createQueuePlan({
   createJob: (input) => createPlanJob(adminDb, input),
   dispatch: () => dispatchDue(adminDb, queue, Date.now()),
@@ -72,7 +74,7 @@ const queuePlan: QueuePlan = createQueuePlan({
 const queue: TaskQueue = config.tasks
   ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.serviceUrl })
   : useDevRunner
-    ? new DevTaskQueue({ ingest, understand, cluster, plan })
+    ? new DevTaskQueue({ ingest, understand, cluster, plan, compose })
     : new InMemoryTaskQueue();
 
 if (!config.tasks && !useDevRunner)
@@ -108,7 +110,7 @@ app.use(
 );
 app.use(
   "/api/projects",
-  generationsRouter({ db: adminDb }),
+  generationsRouter({ db: adminDb, dispatch: () => dispatchDue(adminDb, queue, Date.now()) }),
 );
 app.use(
   "/events",
@@ -131,6 +133,7 @@ app.use(
     understand,
     cluster,
     plan,
+    compose,
   }),
 );
 

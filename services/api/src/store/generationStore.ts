@@ -7,8 +7,11 @@ export class StoreError extends Error {
   }
 }
 
+const generationsRef = (db: Firestore, projectId: string) =>
+  db.collection("projects").doc(projectId).collection("generations");
+
 const generationRef = (db: Firestore, projectId: string, generationId: string) =>
-  db.collection("projects").doc(projectId).collection("generations").doc(generationId);
+  generationsRef(db, projectId).doc(generationId);
 
 /** Create a new generation in composing state. */
 export async function createGeneration(
@@ -29,7 +32,8 @@ export async function createGeneration(
     throw new StoreError("forbidden");
   }
 
-  const ref = generationRef(db, input.projectId, "");
+  // `.doc("")` is not an auto id — it is an invalid path. `.doc()` is.
+  const ref = generationsRef(db, input.projectId).doc();
   const id = ref.id;
   const generation: Generation = {
     schemaVersion: 1,
@@ -47,7 +51,12 @@ export async function createGeneration(
     renderProgress: 0,
   };
 
-  await ref.set(generation);
+  const batch = db.batch();
+  batch.set(ref, generation);
+  // The request pointer moves the moment a generation is asked for, whatever
+  // becomes of it; the playable and saved pointers only move on success.
+  batch.update(db.collection("projects").doc(input.projectId), { latestRequestedGenerationId: id });
+  await batch.commit();
   return generation;
 }
 
@@ -117,23 +126,14 @@ export async function publishGeneration(
     };
     tx.set(genRef, updated);
 
-    // Conditional pointer write: only if this generation is newer than current
-    const projectDoc = await tx.get(db.collection("projects").doc(input.projectId));
-    const currentPlayableId = projectDoc.get("currentPlayableGenerationId") as string | null;
-
-    if (currentPlayableId) {
-      // Compare timestamps — only update if this generation was created after the current one
-      const currentGenSnap = await tx.get(generationRef(db, input.projectId, currentPlayableId));
-      if (currentGenSnap.exists) {
-        const currentGen = currentGenSnap.data() as Generation;
-        // If current is still newer or equal, skip pointer update
-        if (existing.id <= currentGen.id) {
-          return updated;
-        }
-      }
+    // A late-finishing older composition must not displace a newer film. Auto
+    // ids do not sort by time, so recency is read from the request pointer the
+    // creation wrote, which is the only record of what was asked for last.
+    const latestRequestedId = projectSnap.get("latestRequestedGenerationId") as string | null | undefined;
+    if (latestRequestedId && latestRequestedId !== input.generationId) {
+      return updated;
     }
 
-    // Move the pointer
     tx.update(db.collection("projects").doc(input.projectId), {
       currentPlayableGenerationId: input.generationId,
     });
@@ -258,7 +258,37 @@ export async function markSaved(
       renderProgress: 1,
     };
     tx.set(genRef, updated);
+    tx.update(db.collection("projects").doc(input.projectId), {
+      savedGenerationId: input.generationId,
+    });
 
+    return updated;
+  });
+}
+
+/** Begin a render. Only a playable film can be rendered, and only once at a time. */
+export async function startRender(
+  db: Firestore,
+  input: { userId: string; projectId: string; generationId: string },
+): Promise<Generation> {
+  const genRef = generationRef(db, input.projectId, input.generationId);
+
+  return db.runTransaction(async (tx) => {
+    const projectSnap = await tx.get(db.collection("projects").doc(input.projectId));
+    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) {
+      throw new StoreError("forbidden");
+    }
+
+    const genSnap = await tx.get(genRef);
+    if (!genSnap.exists) throw new StoreError("not_found");
+
+    const existing = genSnap.data() as Generation;
+    if (existing.status !== "playable") {
+      throw new Error(`cannot render generation in status ${existing.status}`);
+    }
+
+    const updated: Generation = { ...existing, status: "rendering", renderProgress: 0 };
+    tx.set(genRef, updated);
     return updated;
   });
 }

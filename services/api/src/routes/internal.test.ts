@@ -17,18 +17,14 @@ function buildApp({
   understand = vi.fn().mockResolvedValue("understood"),
   cluster = vi.fn().mockResolvedValue({ status: "ready" }),
   plan = vi.fn().mockResolvedValue("published"),
-  generateStructured,
-  soundtrackIds,
-  assets,
+  compose = vi.fn().mockResolvedValue("composed"),
 }: {
   db?: Firestore;
   ingest?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
   understand?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
   cluster?: (projectId: string) => Promise<unknown>;
   plan?: (task: { projectId: string; jobId: string; generation: string }) => Promise<unknown>;
-  generateStructured?: (options: unknown, deps: unknown) => Promise<unknown>;
-  soundtrackIds?: Set<string>;
-  assets?: Map<string, { kind: "photo" | "video"; analysis?: { shots?: Array<{ id: string }> } }>;
+  compose?: (task: { projectId: string; generationId: string; giveUp?: string }) => Promise<unknown>;
 } = {}) {
   const app = express();
   app.use(express.json());
@@ -43,6 +39,7 @@ function buildApp({
       understand,
       cluster,
       plan,
+      compose,
     }),
   );
   return app;
@@ -166,9 +163,11 @@ describe("internal routes", () => {
     error.mockRestore();
   });
 
-  // Task 9: /tasks/compose tests
+  // Task 9 + 13: /tasks/compose is a thin route over the composer.
+  const composeTask = { projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" };
+
   it("rejects a malformed compose task with non-generation subjectKind", async () => {
-    const res = await request(buildApp()).post("/tasks/compose").send({ projectId: "p1", subjectKind: "asset", subjectId: "a1", generation: "7", workKey: "k" });
+    const res = await request(buildApp()).post("/tasks/compose").send({ ...composeTask, subjectKind: "asset" });
     expect(res.status).toBe(400);
   });
 
@@ -177,50 +176,46 @@ describe("internal routes", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 404 when generation does not exist", async () => {
-    const genDoc = { exists: false };
-    const db = {
-      collection: vi.fn(() => ({
-        doc: vi.fn().mockReturnValue({
-          collection: vi.fn(() => ({
-            doc: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue(genDoc) }),
-          })),
-        }),
-      })),
-    };
-    const res = await request(buildApp({ db: db as unknown as Firestore })).post("/tasks/compose").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
-    expect(res.status).toBe(404);
+  it("hands the generation to the composer and acknowledges delivery", async () => {
+    const compose = vi.fn().mockResolvedValue("composed");
+    const res = await request(buildApp({ compose })).post("/tasks/compose").send(composeTask);
+    expect(res.status).toBe(204);
+    expect(compose).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1" });
   });
 
-  it("returns 500 when compose throws", async () => {
+  it("acknowledges a failed composition instead of asking for redelivery", async () => {
+    // The generation carries its own reasons. Answering 500 would make Cloud
+    // Tasks retry work that is already settled.
+    const compose = vi.fn().mockResolvedValue("failed");
+    const res = await request(buildApp({ compose })).post("/tasks/compose").send(composeTask);
+    expect(res.status).toBe(204);
+  });
+
+  it("returns 500 when the composer throws, so the task is redelivered", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const genData = { status: "composing" as const, settings: {}, mode: "creator" as const };
-    const db = {
-      collection: vi.fn(() => ({
-        doc: vi.fn().mockReturnValue({
-          collection: vi.fn(() => ({
-            doc: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ exists: true, data: () => genData }) }),
-          })),
-        }),
-      })),
-    };
-    const res = await request(buildApp({ db: db as unknown as Firestore })).post("/tasks/compose").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
+    const compose = vi.fn().mockRejectedValue(new Error("firestore unavailable"));
+    const res = await request(buildApp({ compose })).post("/tasks/compose").send(composeTask);
     expect(res.status).toBe(500);
     error.mockRestore();
   });
 
-  it("rejects compose task after max retry attempts", async () => {
-    const genData = { status: "composing" as const, settings: {}, mode: "creator" as const };
-    const db = {
-      collection: vi.fn(() => ({
-        doc: vi.fn().mockReturnValue({
-          collection: vi.fn(() => ({
-            doc: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ exists: true, data: () => genData }) }),
-          })),
-        }),
-      })),
-    };
-    const res = await request(buildApp({ db: db as unknown as Firestore })).post("/tasks/compose").set("x-cloudtasks-taskretrycount", "3").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
+  it("returns 500 when no composer is configured", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const bare = express();
+    bare.use(express.json());
+    bare.use("/", internalRouter({
+      db, queue: new InMemoryTaskQueue(), now: () => 9, auth: pass,
+      ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(),
+    }));
+    const res = await request(bare).post("/tasks/compose").send(composeTask);
     expect(res.status).toBe(500);
+    error.mockRestore();
+  });
+
+  it("settles the generation as failed once retries are exhausted", async () => {
+    const compose = vi.fn().mockResolvedValue("failed");
+    const res = await request(buildApp({ compose })).post("/tasks/compose").set("x-cloudtasks-taskretrycount", "3").send(composeTask);
+    expect(res.status).toBe(204);
+    expect(compose).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1", giveUp: "exceeded 3 compose attempts" });
   });
 });

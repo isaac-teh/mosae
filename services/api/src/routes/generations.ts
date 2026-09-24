@@ -2,7 +2,8 @@ import { Router, type Response } from "express";
 import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
-import { createGeneration, getGeneration, StoreError } from "../store/generationStore.js";
+import { createGeneration, getGeneration, startRender, StoreError } from "../store/generationStore.js";
+import { newOutboxTask } from "../domain/outbox.js";
 import { safeParseDirectionSettings, type Generation } from "@mosae/contracts";
 
 const STATUS: Record<StoreError["code"], number> = {
@@ -22,12 +23,26 @@ function handleError(res: Response, error: unknown): void {
 
 export function generationsRouter(deps: {
   db: Firestore;
-  generateStructured?: (options: unknown, deps: unknown) => Promise<unknown>;
-  soundtrackIds?: Set<string>;
-  assets?: Map<string, { kind: "photo" | "video"; analysis?: { shots?: Array<{ id: string }> } }>;
+  /** Resolve a shot id to the asset whose files back it. */
+  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
+  /** Drains the outbox after a task is written; the dispatcher does it in production. */
+  dispatch?: () => Promise<unknown>;
 }): Router {
   const router = Router();
   router.use(requireUser());
+
+  // A Timeline names shots. Files hang off assets, so the shot is the hop in
+  // between — `resolveSources` is deliberately given a flat id-to-file lookup
+  // and never learns the project's collection layout.
+  const resolve: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null> =
+    deps.loadSource ?? (async (projectId, shotId) => {
+      const project = deps.db.collection("projects").doc(projectId);
+      const shot = await project.collection("shots").doc(shotId).get();
+      if (!shot.exists) return null;
+      const asset = await project.collection("assets").doc(shot.get("assetId") as string).get();
+      if (!asset.exists) return null;
+      return { storagePath: asset.get("storagePath") as string, derivatives: asset.get("derivatives") };
+    });
 
   for (const name of ["projectId", "generationId"]) {
     router.param(name, (_req, res, next, value: string) => {
@@ -69,20 +84,14 @@ export function generationsRouter(deps: {
       settings = parsed.settings;
     }
 
-    // At this point, if settings is null it's valid (user didn't provide any);
-    // otherwise it has been validated by safeParseDirectionSettings.
-    const resolvedSettings = settings ?? {
-      schemaVersion: 1,
-      id: "",
-      projectId: "",
-      version: 0,
-      note: "",
-      cadenceId: "standard",
-      soundtrackId: null,
-      durationId: "30s",
-      aspect: "9:16",
-      captions: false,
-    };
+    // Settings are required: every field the composer reads comes from them, and
+    // the placeholder this once fell back to could not itself parse — an empty
+    // id, version 0 and a cadence that is not in CADENCES — so it would only
+    // have failed later, at publication, with a worse message.
+    if (!settings) {
+      return res.status(400).json({ error: "missing_settings" });
+    }
+    const resolvedSettings = settings;
 
     try {
       const generation = await createGeneration(deps.db, {
@@ -95,19 +104,19 @@ export function generationsRouter(deps: {
         now: Date.now(),
       });
 
-      // Enqueue compose task immediately after creation
-      // (The dispatcher will pick it up via the outbox)
-      await deps.db.collection("outbox").add({
+      // The outbox the dispatcher actually reads is per project, under
+      // `taskOutbox`, in the OutboxTask shape. A record anywhere else is
+      // written and never delivered.
+      const task = newOutboxTask({
         projectId,
-        stage: "compose",
         subjectKind: "generation",
         subjectId: generation.id,
-        generation: generation.id,
-        workKey: `compose-${generation.id}`,
-        status: "pending",
-        attempt: 0,
-        createdAt: Date.now(),
+        generation: String(generation.schemaVersion),
+        stage: "compose",
+        now: Date.now(),
       });
+      await deps.db.collection("projects").doc(projectId).collection("taskOutbox").doc(task.id).set(task);
+      await deps.dispatch?.();
 
       return res.status(201).json({ generation });
     } catch (error) {
@@ -142,13 +151,8 @@ export function generationsRouter(deps: {
       let sources: Record<string, string> | undefined;
       if (generation.timeline) {
         const { resolveSources } = await import("../compose/resolveSources.js");
-        const depsForResolve = {
-          loadAsset: async (assetId: string) => {
-            return deps.assets?.get(assetId) ?? null;
-          },
-        };
         try {
-          sources = await resolveSources(generation.timeline, depsForResolve as any, projectId, "preview");
+          sources = await resolveSources(generation.timeline, { loadAsset: resolve }, projectId, "preview");
         } catch {
           // Sources missing — still return the generation without them
         }
@@ -176,37 +180,30 @@ export function generationsRouter(deps: {
 
       // Resolve render-mode sources
       const { resolveSources } = await import("../compose/resolveSources.js");
-      const depsForResolve = {
-        loadAsset: async (assetId: string) => {
-          return deps.assets?.get(assetId) ?? null;
-        },
-      };
 
       let sources: Record<string, string>;
       try {
-        sources = await resolveSources(generation.timeline, depsForResolve as any, projectId, "render");
+        sources = await resolveSources(generation.timeline, { loadAsset: resolve }, projectId, "render");
       } catch (error) {
         return res.status(400).json({ error: "source_resolution_failed", detail: error instanceof Error ? error.message : String(error) });
       }
 
-      // Enqueue render task
-      await deps.db.collection("outbox").add({
+      // The status moves through the store, which refuses anything but a
+      // playable film, so a second render cannot start on top of a running one.
+      await startRender(deps.db, { userId, projectId, generationId });
+
+      const task = newOutboxTask({
         projectId,
-        stage: "render",
         subjectKind: "generation",
         subjectId: generationId,
-        generation: generationId,
-        workKey: `render-${generationId}`,
-        status: "pending",
-        attempt: 0,
-        createdAt: Date.now(),
+        generation: String(generation.schemaVersion),
+        stage: "render",
+        now: Date.now(),
       });
+      await deps.db.collection("projects").doc(projectId).collection("taskOutbox").doc(task.id).set(task);
+      await deps.dispatch?.();
 
-      // Update generation to rendering state
-      const genRef = deps.db.collection("projects").doc(projectId).collection("generations").doc(generationId);
-      await genRef.update({ status: "rendering" });
-
-      return res.status(202).json({ generationId, status: "rendering" });
+      return res.status(202).json({ generationId, status: "rendering", sources });
     } catch (error) {
       handleError(res, error);
     }

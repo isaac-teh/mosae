@@ -61,6 +61,11 @@ vi.mock("../auth/requireUser.js", () => ({
 
 const { generationsRouter } = await import("./generations.js");
 
+const settings = {
+  schemaVersion: 1, id: "settings-1", projectId: "p1", version: 1, note: "",
+  cadenceId: "tender", soundtrackId: null, durationId: "30s", aspect: "9:16", captions: false,
+};
+
 function buildApp({
   db: customDb,
 }: { db?: Firestore } = {}) {
@@ -153,15 +158,37 @@ describe("generationsRouter", () => {
               }),
             })),
           }),
+          batch: undefined,
         };
       });
+      (dbMock as any).batch = vi.fn(() => ({
+        set: vi.fn(), update: vi.fn(), commit: vi.fn().mockResolvedValue(undefined),
+      }));
+
+      const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
+        .post("/api/projects/p1/generations")
+        .set("Authorization", "Bearer user-token")
+        .send({ proposalId: "proposal-1", settings });
+
+      expect(res.status).toBe(201);
+    });
+
+    it("refuses a generation with no direction settings rather than inventing them", async () => {
+      const dbMock = {
+        collection: vi.fn(() => ({
+          doc: vi.fn().mockReturnValue({
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ userId: "test-user" }), get: (f: string) => ({ userId: "test-user" } as Record<string, string>)[f] }),
+          }),
+        })),
+      };
 
       const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
         .post("/api/projects/p1/generations")
         .set("Authorization", "Bearer user-token")
         .send({ proposalId: "proposal-1" });
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("missing_settings");
     });
   });
 
