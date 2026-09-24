@@ -68,7 +68,10 @@ export function reflow(options: ReflowOptions): ReflowResult {
   const clips: Array<ClipPlan & { startSec: number }> = [];
 
   for (let index = 0; index < plans.length; index++) {
-    const plan = plans[index];
+    // Both ends of a clip land on a frame. Quantizing only the starts lets the
+    // Player and the renderer round a duration differently, which is exactly
+    // the drift one shared composition exists to make impossible.
+    const plan = { ...plans[index], durationSec: quantize(plans[index].durationSec, fps) };
 
     if (index === 0) {
       // First clip always starts at 0

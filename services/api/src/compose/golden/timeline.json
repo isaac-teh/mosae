@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "projectId": "golden-project",
+  "mode": "memory",
+  "aspect": "9:16",
+  "fps": 30,
+  "durationSec": 28.266666666666666,
+  "chapters": [
+    {
+      "title": "Getting there",
+      "startSec": 0
+    },
+    {
+      "title": "The water",
+      "startSec": 10.266666666666666
+    }
+  ],
+  "videoClips": [
+    {
+      "id": "m-arrival#still@c0",
+      "source": {
+        "kind": "photo",
+        "shotId": "shot-arrival"
+      },
+      "startSec": 0,
+      "durationSec": 5.766666666666667,
+      "transitionIn": {
+        "kind": "cut",
+        "durationSec": 0
+      }
+    },
+    {
+      "id": "m-talking#s0@4c0",
+      "source": {
+        "kind": "video",
+        "shotId": "shot-talking",
+        "sourceInSec": 4,
+        "sourceOutSec": 9
+      },
+      "startSec": 5.766666666666667,
+      "durationSec": 5,
+      "transitionIn": {
+        "kind": "crossfade",
+        "durationSec": 0.5
+      }
+    },
+    {
+      "id": "m-water#s0@0.15c1",
+      "source": {
+        "kind": "video",
+        "shotId": "shot-water",
+        "sourceInSec": 0.15,
+        "sourceOutSec": 12.15
+      },
+      "startSec": 10.266666666666666,
+      "durationSec": 12,
+      "transitionIn": {
+        "kind": "cut",
+        "durationSec": 0
+      }
+    },
+    {
+      "id": "m-dusk#still@c1",
+      "source": {
+        "kind": "photo",
+        "shotId": "shot-dusk"
+      },
+      "startSec": 22.266666666666666,
+      "durationSec": 6,
+      "transitionIn": {
+        "kind": "crossfade",
+        "durationSec": 0.5
+      }
+    }
+  ],
+  "audioClips": [
+    {
+      "id": "audio-1",
+      "source": {
+        "kind": "asset",
+        "assetId": "shot-talking",
+        "sourceInSec": 4,
+        "sourceOutSec": 9
+      },
+      "role": "speech",
+      "startSec": 5.766666666666667,
+      "gainDb": 0,
+      "fadeInSec": 0,
+      "fadeOutSec": 0
+    },
+    {
+      "id": "audio-2",
+      "source": {
+        "kind": "asset",
+        "assetId": "shot-water",
+        "sourceInSec": 0.15,
+        "sourceOutSec": 12.15
+      },
+      "role": "ambient",
+      "startSec": 10.266666666666666,
+      "gainDb": -7,
+      "fadeInSec": 0,
+      "fadeOutSec": 0
+    },
+    {
+      "id": "audio-3",
+      "source": {
+        "kind": "soundtrack",
+        "soundtrackId": "soundtrack-dusk",
+        "sourceInSec": 0,
+        "sourceOutSec": 28.266666666666666
+      },
+      "role": "music",
+      "startSec": 0,
+      "gainDb": -6,
+      "fadeInSec": 1,
+      "fadeOutSec": 1
+    }
+  ],
+  "captions": []
+}

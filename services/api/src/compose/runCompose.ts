@@ -157,6 +157,11 @@ export async function runCompose(
     chapters: reflowChapters,
   });
 
+  // Where each clip actually sits once reflow has had its say.
+  const pictureByCandidate = new Map(
+    result.clips.map((clip, index) => [fittedClips[index].candidateId, { startSec: clip.startSec, durationSec: clip.durationSec }]),
+  );
+
   // Stage 6: buildAudioClips — speech/ambient/music tracks
   const audioPlanClips = buildAudioClips(fittedClips, job.soundtrackId, result.durationSec);
 
@@ -189,27 +194,43 @@ export async function runCompose(
         };
       }
     }),
-    audioClips: audioPlanClips.map((ac, index) => ({
-      id: `audio-${index + 1}`,
-      source: ac.kind === "music" && job.soundtrackId
-        ? { kind: "soundtrack" as const, soundtrackId: job.soundtrackId, sourceInSec: 0, sourceOutSec: result.durationSec }
-        : (() => {
-            const candidate = candidateMap.get(ac.sourceCandidateId);
-            return { kind: "asset" as const, assetId: candidate?.itemId ?? ac.sourceCandidateId, sourceInSec: 0, sourceOutSec: ac.endSec - ac.startSec };
-          })(),
-      role: ac.kind as "speech" | "ambient" | "music",
-      startSec: ac.startSec,
-      gainDb: ac.kind === "speech" ? 0 : ac.kind === "ambient" ? -7 : -6,
-      fadeInSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
-      fadeOutSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
-    })),
+    audioClips: audioPlanClips.map((ac, index) => {
+      // `buildAudioClips` lays audio out by walking raw clip lengths. Reflow has
+      // since quantized those lengths and pulled crossfaded clips back over
+      // their predecessors, so a clip's own sound must be placed against the
+      // final picture geometry or it drifts out of sync with the shot it
+      // belongs to.
+      const picture = pictureByCandidate.get(ac.sourceCandidateId);
+      const startSec = picture?.startSec ?? ac.startSec;
+      const durationSec = picture?.durationSec ?? (ac.endSec - ac.startSec);
+      return {
+        id: `audio-${index + 1}`,
+        source: ac.kind === "music" && job.soundtrackId
+          ? { kind: "soundtrack" as const, soundtrackId: job.soundtrackId, sourceInSec: 0, sourceOutSec: result.durationSec }
+          : (() => {
+              const candidate = candidateMap.get(ac.sourceCandidateId);
+              // The renderer resolves a source id to a file; a moment id is not
+              // one, so audio names the same shot its picture does. The source
+              // range is the clip's own range within that shot, not a read from
+              // the head of the file.
+              const shotId = candidate ? shotIdByMoment.get(candidate.itemId) ?? candidate.itemId : ac.sourceCandidateId;
+              const sourceInSec = candidate?.inSec ?? 0;
+              return { kind: "asset" as const, assetId: shotId, sourceInSec, sourceOutSec: sourceInSec + durationSec };
+            })(),
+        role: ac.kind as "speech" | "ambient" | "music",
+        startSec,
+        gainDb: ac.kind === "speech" ? 0 : ac.kind === "ambient" ? -7 : -6,
+        fadeInSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
+        fadeOutSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
+      };
+    }),
     captions: [],
   };
 
   // Validate the assembled timeline
   const validationCtx: import("./validateTimeline.js").ValidationContext = {
     chapters: job.proposal.chapters.map((ch, i) => ({ index: i, itemIds: ch.momentIds })),
-    assets: deps.assets as unknown as Map<string, { kind: "photo" | "video"; analysis?: { shots?: Array<{ id: string }> } }>,
+    shotIds: new Set(job.proposal.moments.map((moment) => moment.shotId)),
     candidates: candidateMap,
     soundtrackIds: deps.soundtrackIds,
   };

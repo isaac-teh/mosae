@@ -15,8 +15,12 @@ export interface TimelineIssue {
 export interface ValidationContext {
   /** Accepted proposal chapter inputs (itemIds per chapter). */
   chapters: Array<{ index: number; itemIds: string[] }>;
-  /** Asset registry keyed by itemId. */
-  assets: Map<string, { kind: "photo" | "video"; analysis?: { shots?: Array<{ id: string }> } }>;
+  /**
+   * Every shot the accepted proposal names. A Timeline's `source.shotId` and an
+   * asset audio clip's `assetId` are both resolved through this, because both
+   * are ids the renderer must turn into a file.
+   */
+  shotIds: Set<string>;
   /** Candidate map keyed by candidate id, which is also the Timeline clip id. */
   candidates: Map<string, Candidate>;
   /** Soundtrack IDs that are valid. */
@@ -102,7 +106,7 @@ export function validateTimeline(
   for (const audio of timeline.audioClips) {
     if (audio.source.kind === "asset") {
       const assetId = audio.source.assetId;
-      if (!ctx.assets.has(assetId)) {
+      if (!ctx.shotIds.has(assetId)) {
         issues.push({ path: `audioClips[${audio.id}].source.assetId`, message: `unknown asset ${assetId}`, severity: "fatal" });
       }
     } else if (audio.source.kind === "soundtrack") {

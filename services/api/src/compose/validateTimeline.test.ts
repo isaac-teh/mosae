@@ -13,15 +13,9 @@ function makeCtx(overrides?: Partial<ValidationContext>): ValidationContext {
     ["cand-photo-2", { candidateId: "cand-photo-2", itemId: "photo-2", kind: "photo" as const, inSec: undefined, outSec: undefined, minHoldSec: 2, maxHoldSec: 6 }],
   ]);
 
-  const assets = new Map<string, any>([
-    ["video-1", { kind: "video" as const, analysis: { shots: [{ id: "shot-video-1" }] } }],
-    ["photo-1", { kind: "photo" as const }],
-    ["photo-2", { kind: "photo" as const }],
-  ]);
-
   return {
     chapters: [{ index: 0, itemIds: ["video-1", "photo-1"] }], // photo-2 is NOT in accepted chapter
-    assets,
+    shotIds: new Set(["shot-photo-1", "shot-photo-2", "shot-video-1"]),
     candidates,
     soundtrackIds: new Set(["soundtrack-1"]),
     ...overrides,

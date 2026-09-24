@@ -175,3 +175,24 @@ describe("determinism", () => {
     expect(result1).toEqual(result2);
   });
 });
+
+describe("frame boundaries", () => {
+  it("quantizes durations as well as starts", () => {
+    // A hold the duration fit produced, such as 5.75s, is 172.5 frames at 30fps.
+    // Leaving it unrounded lets the Player and the renderer resolve the clip to
+    // different frame counts, which is precisely the drift one shared
+    // composition exists to prevent.
+    const plans = [
+      makeClip({ id: "clip1", durationSec: 5.75 }),
+      makeClip({ id: "clip2", durationSec: 2.01 }),
+    ];
+
+    const result = reflow({ plans, fps, chapters: makeChapters() });
+
+    for (const clip of result.clips) {
+      expect(Number.isInteger(Math.round(clip.durationSec * fps * 1e6) / 1e6)).toBe(true);
+      expect(Number.isInteger(Math.round(clip.startSec * fps * 1e6) / 1e6)).toBe(true);
+    }
+    expect(Number.isInteger(Math.round(result.durationSec * fps * 1e6) / 1e6)).toBe(true);
+  });
+});
