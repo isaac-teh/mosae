@@ -110,7 +110,7 @@ describe("resolveSources", () => {
     expect(sources["shot-audio-1"]).toBe("uploads/alice/p1/s1/a2/original.mp4");
   });
 
-  it("skips soundtrackId audio clips without error", async () => {
+  it("omits a soundtrack when no library is configured, rather than failing the film", async () => {
     const timeline = makeTimeline({
       videoClips: [
         {
@@ -139,11 +139,85 @@ describe("resolveSources", () => {
         storagePath: "uploads/alice/p1/s1/a1/original.jpg",
         derivatives: { thumbPath: "proxies/u/p/a/1/thumb.jpg" },
       },
-    }); // No soundtrack assets needed
+    }); // No soundtrack library exists yet
 
     const sources = await resolveSources(timeline, deps, "proj-1", "render");
 
     expect(sources["shot-photo-1"]).toBe("uploads/alice/p1/s1/a1/original.jpg");
+    // The other side of this agreement is pinned in `services/render`
+    // (`renderRoute.test.ts`, "accepts a film whose soundtrack has no
+    // resolvable source"): `missingSources` no longer requires a soundtrack id.
+    // The two used to disagree — this omitted the id and `parseRenderRequest`
+    // required it, so every scored film was rejected, the golden fixture
+    // included.
+    expect(sources["bgm-001"]).toBeUndefined();
+    expect(Object.keys(sources)).toEqual(["shot-photo-1"]);
+  });
+
+  it("resolves a soundtrack through its library when one is configured", async () => {
+    const timeline = makeTimeline({
+      videoClips: [
+        {
+          id: "clip-1",
+          source: { kind: "photo" as const, shotId: "shot-photo-1" },
+          startSec: 0,
+          durationSec: 4,
+          transitionIn: { kind: "cut" as const, durationSec: 0 },
+        },
+      ],
+      audioClips: [
+        {
+          id: "audio-1",
+          source: { kind: "soundtrack" as const, soundtrackId: "bgm-001", sourceInSec: 0, sourceOutSec: 4 },
+          role: "music",
+          startSec: 0,
+          gainDb: -6,
+          fadeInSec: 0.5,
+          fadeOutSec: 0.5,
+        },
+      ],
+    });
+
+    const deps = {
+      ...mockDeps({ "shot-photo-1": { storagePath: "uploads/a.jpg", derivatives: { thumbPath: "t.jpg" } } }),
+      loadSoundtrack: async (id: string) => `soundtracks/${id}.m4a`,
+    };
+
+    const sources = await resolveSources(timeline, deps, "proj-1", "render");
+    expect(sources["bgm-001"]).toBe("soundtracks/bgm-001.m4a");
+  });
+
+  it("fails when a configured library cannot resolve the soundtrack", async () => {
+    // A library that does not have the track is a broken film, not a silent one.
+    const timeline = makeTimeline({
+      videoClips: [
+        {
+          id: "clip-1",
+          source: { kind: "photo" as const, shotId: "shot-photo-1" },
+          startSec: 0,
+          durationSec: 4,
+          transitionIn: { kind: "cut" as const, durationSec: 0 },
+        },
+      ],
+      audioClips: [
+        {
+          id: "audio-1",
+          source: { kind: "soundtrack" as const, soundtrackId: "bgm-404", sourceInSec: 0, sourceOutSec: 4 },
+          role: "music",
+          startSec: 0,
+          gainDb: -6,
+          fadeInSec: 0.5,
+          fadeOutSec: 0.5,
+        },
+      ],
+    });
+
+    const deps = {
+      ...mockDeps({ "shot-photo-1": { storagePath: "uploads/a.jpg", derivatives: { thumbPath: "t.jpg" } } }),
+      loadSoundtrack: async () => null,
+    };
+
+    await expect(resolveSources(timeline, deps, "proj-1", "render")).rejects.toThrow(/missing soundtrack: bgm-404/);
   });
 
   it("deduplicates identical shotIds across clips", async () => {
