@@ -1,4 +1,7 @@
+import type { z } from "zod";
 import type { TransitionSchema } from "./timeline.js";
+
+type TransitionType = z.infer<typeof TransitionSchema>;
 
 /**
  * An ordered clip before geometry exists: it has a duration and transition,
@@ -8,7 +11,7 @@ export interface ClipPlan {
   id: string;
   source: unknown; // shotId + range info (video) or just shotId (photo)
   durationSec: number;
-  transitionIn: TransitionSchema;
+  transitionIn: TransitionType;
   strength: number;
   minHoldSec: number;
   maxHoldSec: number;

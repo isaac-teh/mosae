@@ -188,7 +188,7 @@ describe("internal routes", () => {
         }),
       })),
     };
-    const res = await request(buildApp({ db })).post("/tasks/compose").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
+    const res = await request(buildApp({ db: db as unknown as Firestore })).post("/tasks/compose").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
     expect(res.status).toBe(404);
   });
 
@@ -204,7 +204,7 @@ describe("internal routes", () => {
         }),
       })),
     };
-    const res = await request(buildApp({ db })).post("/tasks/compose").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
+    const res = await request(buildApp({ db: db as unknown as Firestore })).post("/tasks/compose").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
     expect(res.status).toBe(500);
     error.mockRestore();
   });
@@ -220,7 +220,7 @@ describe("internal routes", () => {
         }),
       })),
     };
-    const res = await request(buildApp({ db })).post("/tasks/compose").set("x-cloudtasks-taskretrycount", "3").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
+    const res = await request(buildApp({ db: db as unknown as Firestore })).post("/tasks/compose").set("x-cloudtasks-taskretrycount", "3").send({ projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" });
     expect(res.status).toBe(500);
   });
 });
