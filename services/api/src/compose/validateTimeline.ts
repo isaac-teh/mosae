@@ -126,15 +126,15 @@ export function repairOnce(
   issues: TimelineIssue[],
   ctx: ValidationContext,
 ): { ok: true; timeline: Timeline } | { ok: false; reasons: string[] } {
-  const fixableIssues = issues.filter(i => i.severity === "fixable");
-
-  if (fixableIssues.length === 0) return { ok: true, timeline };
-
-  // Check for fatal issues — cannot repair those
+  // Check for fatal issues first — cannot repair those regardless of fixable count
   if (issues.some(i => i.severity === "fatal")) {
     const reasons = issues.map(i => `${i.path}: ${i.message}`);
     return { ok: false, reasons };
   }
+
+  const fixableIssues = issues.filter(i => i.severity === "fixable");
+
+  if (fixableIssues.length === 0) return { ok: true, timeline };
 
   let repaired = JSON.parse(JSON.stringify(timeline)) as Timeline;
 

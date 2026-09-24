@@ -31,7 +31,7 @@ function makeTimeline(overrides?: Partial<Timeline>): Timeline {
     mode: "creator" as const,
     aspect: "9:16" as const,
     fps: 30,
-    durationSec: 12,
+    durationSec: 4, // default: single photo clip at 4s — matches the default videoClips below
     chapters: [{ title: "Chapter 1", startSec: 0 }],
     videoClips: [
       {
