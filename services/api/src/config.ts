@@ -6,6 +6,8 @@ export type Config = {
   invokerEmails: string[];
   allowedOrigins: string[];
   geminiApiKey: string;
+  /** Base URL of the `mosae-render` Cloud Run service. */
+  renderServiceUrl: string;
   tasks: { project: string; location: string; queue: string; invokerServiceAccount: string } | null;
 };
 
@@ -30,6 +32,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     production,
     storageBucket: required(env, "FIREBASE_STORAGE_BUCKET"),
     geminiApiKey: env.GEMINI_API_KEY ?? "",
+    // Required in production: without it, saving a film is a task that cannot
+    // reach anything. Locally it defaults to the render service's own port.
+    renderServiceUrl: production ? required(env, "RENDER_SERVICE_URL") : (env.RENDER_SERVICE_URL ?? "http://127.0.0.1:8081"),
     serviceUrl: required(env, "SERVICE_URL"),
     invokerEmails: invokers.split(",").map((s) => s.trim()).filter(Boolean),
     allowedOrigins,

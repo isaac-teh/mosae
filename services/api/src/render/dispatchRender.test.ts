@@ -1,0 +1,196 @@
+import { describe, it, expect, vi } from "vitest";
+import type { Firestore } from "firebase-admin/firestore";
+import type { Generation, Timeline } from "@mosae/contracts";
+import { createRender, renderOutputPath, type RenderEvent } from "./dispatchRender.js";
+import { FakeFirestore } from "./fakeFirestore.js";
+
+const TIMELINE: Timeline = {
+  schemaVersion: 1,
+  projectId: "p1",
+  mode: "memory",
+  aspect: "9:16",
+  fps: 30,
+  durationSec: 4,
+  chapters: [{ title: "One", startSec: 0 }],
+  videoClips: [{
+    id: "c1",
+    source: { kind: "photo", shotId: "shot-1" },
+    startSec: 0,
+    durationSec: 4,
+    transitionIn: { kind: "cut", durationSec: 0 },
+  }],
+  audioClips: [],
+  captions: [],
+};
+
+const SETTINGS = {
+  schemaVersion: 1 as const, id: "d1", projectId: "p1", version: 1, note: "",
+  cadenceId: "tender", soundtrackId: null, durationId: "30s", aspect: "9:16" as const, captions: false,
+};
+
+function seed(status: Generation["status"] = "rendering", timeline: Timeline | null = TIMELINE) {
+  const db = new FakeFirestore();
+  db.docs.set("projects/p1", { id: "p1", userId: "owner" });
+  db.docs.set("projects/p1/generations/g1", {
+    schemaVersion: 1, id: "g1", projectId: "p1", proposalId: "pr1", parentGenerationId: null,
+    settings: SETTINGS, seed: "s", status, timeline, droppedPicks: [], failureReasons: [],
+    outputPath: null, renderProgress: 0,
+  });
+  return db;
+}
+
+const generation = (db: FakeFirestore) => db.docs.get("projects/p1/generations/g1") as unknown as Generation;
+
+function stream(...events: RenderEvent[]) {
+  return async function* (_url: string, _body: unknown): AsyncIterable<RenderEvent> {
+    void _url;
+    void _body;
+    for (const event of events) yield event;
+  };
+}
+
+function build(db: FakeFirestore, events: RenderEvent[], overrides: Record<string, unknown> = {}) {
+  const post: ReturnType<typeof vi.fn> = vi.fn(stream(...events));
+  const render = createRender({
+    db: db as unknown as Firestore,
+    renderServiceUrl: "http://render.test/",
+    sources: { loadAsset: async () => ({ storagePath: "uploads/owner/p1/s/a/original.jpg", derivatives: { thumbPath: "t.jpg" } }) },
+    post: (url, body) => post(url, body),
+    now: () => 0,
+    ...overrides,
+  });
+  return { render, post };
+}
+
+describe("createRender", () => {
+  it("renders the film and marks the generation saved at the spec's path", async () => {
+    const db = seed();
+    const { render, post } = build(db, [{ progress: 0.5 }, { done: true, outputPath: "/tmp/g1.mp4", durationInFrames: 120 }]);
+
+    expect(await render({ projectId: "p1", generationId: "g1" })).toBe("rendered");
+
+    const [url, body] = post.mock.calls[0] as unknown as [string, { sources: Record<string, string>; outputFile: string }];
+    expect(url).toBe("http://render.test/tasks/render");
+    expect(body.outputFile).toBe("g1.mp4");
+    expect(body.sources["shot-1"]).toBe("uploads/owner/p1/s/a/original.jpg");
+
+    expect(generation(db).status).toBe("saved");
+    expect(generation(db).renderProgress).toBe(1);
+    expect(generation(db).outputPath).toBe("renders/owner/p1/g1.mp4");
+    expect(renderOutputPath("owner", "p1", "g1")).toBe("renders/owner/p1/g1.mp4");
+    expect(db.docs.get("projects/p1")?.savedGenerationId).toBe("g1");
+  });
+
+  it("signs every source and the destination when signing is configured", async () => {
+    const db = seed();
+    const { render, post } = build(db, [{ done: true, outputPath: "/tmp/g1.mp4", durationInFrames: 120 }], {
+      signRead: async (path: string) => `https://signed.example/read/${path}`,
+      signUpload: async (path: string) => `https://signed.example/put/${path}`,
+    });
+
+    await render({ projectId: "p1", generationId: "g1" });
+
+    const body = post.mock.calls[0][1] as unknown as { sources: Record<string, string>; uploadUrl: string };
+    expect(body.sources["shot-1"]).toBe("https://signed.example/read/uploads/owner/p1/s/a/original.jpg");
+    expect(body.uploadUrl).toBe("https://signed.example/put/renders/owner/p1/g1.mp4");
+  });
+
+  it("throttles the progress it writes", async () => {
+    const db = seed();
+    let clock = 0;
+    const ticks: RenderEvent[] = Array.from({ length: 300 }, (_, i) => ({ progress: (i + 1) / 300 }));
+    const { render } = build(db, [...ticks, { done: true, outputPath: "/tmp/g1.mp4", durationInFrames: 300 }], {
+      now: () => (clock += 10),
+    });
+    await render({ projectId: "p1", generationId: "g1" });
+
+    const progressWrites = db.writes
+      .filter((write) => write.path === "projects/p1/generations/g1" && write.value.status === "rendering")
+      .map((write) => write.value.renderProgress as number);
+
+    // Three seconds of render, so three throttled writes, plus the explicit
+    // 1.0 the leg always writes before marking the film saved. Four, not 300.
+    // An unthrottled onProgress is 9,000 writes for a five-minute film.
+    expect(progressWrites).toHaveLength(4);
+    expect(progressWrites.map((value) => Number(value.toFixed(2)))).toEqual([0.33, 0.67, 1, 1]);
+  });
+
+  it("hands the film back playable when the render service reports an error", async () => {
+    // The recovery path. `startRender` only accepts a playable film, so leaving
+    // the generation in `rendering` would mean it could never be retried and
+    // `/download` would refuse forever — the film bricked by pressing Save.
+    const db = seed();
+    const { render } = build(db, [{ progress: 0.2 }, { error: "render_failed", detail: "chromium died" }]);
+
+    expect(await render({ projectId: "p1", generationId: "g1" })).toBe("failed");
+    expect(generation(db).status).toBe("playable");
+    expect(generation(db).renderProgress).toBe(0);
+    expect(generation(db).failureReasons.join(" ")).toContain("chromium died");
+    // The film itself never stopped working, so no pointer moves.
+    expect(db.docs.get("projects/p1")?.savedGenerationId).toBeUndefined();
+  });
+
+  it("hands the film back when the stream ends without finishing", async () => {
+    const db = seed();
+    const { render } = build(db, [{ progress: 0.9 }]);
+
+    expect(await render({ projectId: "p1", generationId: "g1" })).toBe("failed");
+    expect(generation(db).status).toBe("playable");
+    expect(generation(db).failureReasons.join(" ")).toContain("without finishing");
+  });
+
+  it("hands the film back when the render service is unreachable", async () => {
+    const db = seed();
+    const { render } = build(db, [], {
+      post: () => { throw new Error("ECONNREFUSED"); },
+    });
+
+    expect(await render({ projectId: "p1", generationId: "g1" })).toBe("failed");
+    expect(generation(db).status).toBe("playable");
+    expect(generation(db).failureReasons.join(" ")).toContain("ECONNREFUSED");
+  });
+
+  it("hands the film back when a source cannot be resolved", async () => {
+    const db = seed();
+    const { render, post } = build(db, [], { sources: { loadAsset: async () => null } });
+
+    expect(await render({ projectId: "p1", generationId: "g1" })).toBe("failed");
+    expect(generation(db).status).toBe("playable");
+    expect(generation(db).failureReasons.join(" ")).toContain("missing source: shot-1");
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("hands the film back when retries are exhausted", async () => {
+    const db = seed();
+    const { render, post } = build(db, []);
+
+    expect(await render({ projectId: "p1", generationId: "g1", giveUp: "exceeded 3 render attempts" })).toBe("failed");
+    expect(generation(db).status).toBe("playable");
+    expect(generation(db).failureReasons).toEqual(["exceeded 3 render attempts"]);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("skips a generation that is not rendering", async () => {
+    const db = seed("saved");
+    const { render, post } = build(db, [{ done: true, outputPath: "/tmp/g1.mp4", durationInFrames: 1 }]);
+
+    // A redelivered task must not render over a film that is already settled.
+    expect(await render({ projectId: "p1", generationId: "g1" })).toBe("skipped");
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("skips a generation that does not exist", async () => {
+    const db = seed();
+    const { render } = build(db, []);
+    expect(await render({ projectId: "p1", generationId: "missing" })).toBe("skipped");
+  });
+
+  it("fails a generation left rendering with no timeline", async () => {
+    const db = seed("rendering", null);
+    const { render } = build(db, []);
+
+    expect(await render({ projectId: "p1", generationId: "g1" })).toBe("failed");
+    // There is no playable film to give back to, so this one is genuinely failed.
+    expect(generation(db).status).toBe("failed");
+  });
+});

@@ -3,7 +3,8 @@ import express from "express";
 import request from "supertest";
 import { adminDb } from "../firebase/admin.js";
 import { createCompose } from "../compose/wire.js";
-import { startRender, setRenderProgress, markSaved, getGeneration } from "./generationStore.js";
+import { startRender, getGeneration } from "./generationStore.js";
+import { createRender, type RenderEvent } from "../render/dispatchRender.js";
 import { dispatchDue } from "../outbox/dispatcher.js";
 import { DevTaskQueue } from "../queue/devTaskQueue.js";
 import { loadConfig } from "../config.js";
@@ -119,6 +120,32 @@ async function deliverOwnTasks(projectId: string, queue: DevTaskQueue): Promise<
   return delivered;
 }
 
+/**
+ * The render leg, with the one thing that cannot run in a test stubbed: the
+ * HTTP call to `mosae-render`. Everything else is the production path — the
+ * outbox record, the dispatcher, `/tasks/render`'s handler, source resolution,
+ * throttled progress and the store transitions.
+ */
+function renderLeg(events: RenderEvent[]): (task: { projectId: string; generationId: string; giveUp?: string }) => Promise<unknown> {
+  return createRender({
+    db: adminDb,
+    renderServiceUrl: "http://render.test",
+    sources: {
+      loadAsset: async (projectId, shotId) => {
+        const project = adminDb.collection("projects").doc(projectId);
+        const shot = await project.collection("shots").doc(shotId).get();
+        if (!shot.exists) return null;
+        const asset = await project.collection("assets").doc(shot.get("assetId") as string).get();
+        if (!asset.exists) return null;
+        return { storagePath: asset.get("storagePath") as string, derivatives: asset.get("derivatives") };
+      },
+    },
+    post: async function* () {
+      for (const event of events) yield event;
+    },
+  });
+}
+
 const pointers = async (projectId: string): Promise<Record<string, string | null>> => {
   const snap = await adminDb.doc(`projects/${projectId}`).get();
   return {
@@ -157,17 +184,59 @@ describe("compose flow (emulator)", () => {
     // Render resolves through the shot to the asset's original file.
     expect(rendered.body.sources["shot-clip"]).toBe(`uploads/owner/${projectId}/s/clip.mp4`);
     expect((await getGeneration(adminDb, "owner", projectId, generationId))?.status).toBe("rendering");
-    await retireTasks(projectId);
     expect(await pointers(projectId)).toEqual({ latestRequested: generationId, currentPlayable: generationId, saved: null });
 
+    // The render task the Save wrote is delivered the same way the compose task
+    // was, through the real dispatcher to the real render leg. Calling
+    // `setRenderProgress` and `markSaved` from the test instead would
+    // manufacture by hand a state the system could not reach: until this
+    // existed, `/tasks/render` was a 404 and the film was stuck at `rendering`
+    // forever.
     const outputPath = `renders/owner/${projectId}/${generationId}.mp4`;
-    await setRenderProgress(adminDb, { userId: "owner", projectId, generationId, progress: 1 });
-    await markSaved(adminDb, { userId: "owner", projectId, generationId, outputPath });
+    const render = vi.fn(renderLeg([{ progress: 0.5 }, { done: true, outputPath: "/tmp/out.mp4", durationInFrames: 500 }]));
+    const renderQueue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), render });
+    expect(await deliverOwnTasks(projectId, renderQueue)).toHaveLength(2);
+    expect(render).toHaveBeenCalledWith({ projectId, generationId });
 
     const saved = await getGeneration(adminDb, "owner", projectId, generationId);
     expect(saved?.status).toBe("saved");
     expect(saved?.outputPath).toBe(outputPath);
+    expect(saved?.renderProgress).toBe(1);
     expect(await pointers(projectId)).toEqual({ latestRequested: generationId, currentPlayable: generationId, saved: generationId });
+
+    const download = await request(buildApp(projectId)).get(`/api/projects/${projectId}/generations/${generationId}/download`);
+    // The download route gets past its status gate now; only the signing itself
+    // is beyond an emulator without a service-account key.
+    expect(download.status).not.toBe(400);
+  });
+
+  it("gives the film back playable when the render fails, so Save can be pressed again", async () => {
+    // The whole of C1's recovery path. `startRender` accepts only a `playable`
+    // film, so a generation abandoned in `rendering` could never be rendered or
+    // retried: pressing Save once bricked the film.
+    const { projectId, proposalId } = await seed();
+    const generationId = await requestGeneration(projectId, proposalId, true);
+    const queue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), compose: createCompose({ db: adminDb, generateStructured: async () => RECORDED }) });
+    await deliverOwnTasks(projectId, queue);
+
+    await request(buildApp(projectId)).post(`/api/projects/${projectId}/generations/${generationId}/render`).send({});
+    const failing = new DevTaskQueue({
+      ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(),
+      render: renderLeg([{ progress: 0.3 }, { error: "render_failed", detail: "chromium died" }]),
+    });
+    await deliverOwnTasks(projectId, failing);
+
+    const given = await getGeneration(adminDb, "owner", projectId, generationId);
+    expect(given?.status).toBe("playable");
+    expect(given?.renderProgress).toBe(0);
+    expect(given?.failureReasons.join(" ")).toContain("chromium died");
+    // The film still works, so no pointer moves.
+    expect(await pointers(projectId)).toEqual({ latestRequested: generationId, currentPlayable: generationId, saved: null });
+
+    // And it can be asked for again, which is the point.
+    const retry = await request(buildApp(projectId)).post(`/api/projects/${projectId}/generations/${generationId}/render`).send({});
+    expect(retry.status).toBe(202);
+    await retireTasks(projectId);
   });
 
   it("leaves every pointer where it was when a second generation fails", async () => {
@@ -177,9 +246,9 @@ describe("compose flow (emulator)", () => {
     const good = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), compose: createCompose({ db: adminDb, generateStructured: async () => RECORDED }) });
     await deliverOwnTasks(projectId, good);
     await retireTasks(projectId);
+    // Saved through the real render leg, not by hand.
     await startRender(adminDb, { userId: "owner", projectId, generationId: first });
-    await setRenderProgress(adminDb, { userId: "owner", projectId, generationId: first, progress: 1 });
-    await markSaved(adminDb, { userId: "owner", projectId, generationId: first, outputPath: "renders/first.mp4" });
+    await renderLeg([{ done: true, outputPath: "/tmp/first.mp4", durationInFrames: 1 }])({ projectId, generationId: first });
     const before = await pointers(projectId);
     expect(before).toEqual({ latestRequested: first, currentPlayable: first, saved: first });
 

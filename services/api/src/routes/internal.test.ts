@@ -18,6 +18,7 @@ function buildApp({
   cluster = vi.fn().mockResolvedValue({ status: "ready" }),
   plan = vi.fn().mockResolvedValue("published"),
   compose = vi.fn().mockResolvedValue("composed"),
+  render = vi.fn().mockResolvedValue("rendered"),
 }: {
   db?: Firestore;
   ingest?: (task: { projectId: string; assetId: string; generation: string; attempt?: number }) => Promise<unknown>;
@@ -25,6 +26,7 @@ function buildApp({
   cluster?: (projectId: string) => Promise<unknown>;
   plan?: (task: { projectId: string; jobId: string; generation: string }) => Promise<unknown>;
   compose?: (task: { projectId: string; generationId: string; giveUp?: string }) => Promise<unknown>;
+  render?: (task: { projectId: string; generationId: string; giveUp?: string }) => Promise<unknown>;
 } = {}) {
   const app = express();
   app.use(express.json());
@@ -40,6 +42,7 @@ function buildApp({
       cluster,
       plan,
       compose,
+      render,
     }),
   );
   return app;
@@ -217,5 +220,48 @@ describe("internal routes", () => {
     const res = await request(buildApp({ compose })).post("/tasks/compose").set("x-cloudtasks-taskretrycount", "3").send(composeTask);
     expect(res.status).toBe(204);
     expect(compose).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1", giveUp: "exceeded 3 compose attempts" });
+  });
+
+  // C1: /tasks/render is the path STAGE_PATHS.render promises. Without it a
+  // Save moved the generation to `rendering`, the outbox retried into a 404,
+  // and the film could never be rendered or retried again.
+  const renderTask = { projectId: "p1", subjectKind: "generation", subjectId: "g1", generation: "7", workKey: "k" };
+
+  it("hands the generation to the render leg and acknowledges delivery", async () => {
+    const render = vi.fn().mockResolvedValue("rendered");
+    const res = await request(buildApp({ render })).post("/tasks/render").send(renderTask);
+    expect(res.status).toBe(204);
+    expect(render).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1" });
+  });
+
+  it("rejects a malformed render task with non-generation subjectKind", async () => {
+    const res = await request(buildApp()).post("/tasks/render").send({ ...renderTask, subjectKind: "asset" });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a render task with missing fields", async () => {
+    const res = await request(buildApp()).post("/tasks/render").send({ projectId: "p1" });
+    expect(res.status).toBe(400);
+  });
+
+  it("answers 204 when the render gave the film back, so Cloud Tasks does not repeat it", async () => {
+    const render = vi.fn().mockResolvedValue("failed");
+    const res = await request(buildApp({ render })).post("/tasks/render").send(renderTask);
+    expect(res.status).toBe(204);
+  });
+
+  it("returns 500 when the render leg throws, so the task is redelivered", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const render = vi.fn().mockRejectedValue(new Error("firestore unavailable"));
+    const res = await request(buildApp({ render })).post("/tasks/render").send(renderTask);
+    expect(res.status).toBe(500);
+    error.mockRestore();
+  });
+
+  it("gives the film back once render retries are exhausted", async () => {
+    const render = vi.fn().mockResolvedValue("failed");
+    const res = await request(buildApp({ render })).post("/tasks/render").set("x-cloudtasks-taskretrycount", "3").send(renderTask);
+    expect(res.status).toBe(204);
+    expect(render).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1", giveUp: "exceeded 3 render attempts" });
   });
 });

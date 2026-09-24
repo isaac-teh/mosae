@@ -15,6 +15,12 @@ service firebase.storage {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false;
     }
+    // A finished film. Written only by the render service through a signed URL
+    // the API issues, and read by its owner.
+    match /renders/{userId}/{projectId}/{file} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
     match /{allPaths=**} {
       allow read, write: if false;
     }

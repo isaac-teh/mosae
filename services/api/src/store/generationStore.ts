@@ -266,6 +266,47 @@ export async function markSaved(
   });
 }
 
+/**
+ * Give a film back after a render that did not finish.
+ *
+ * `startRender` accepts only a `playable` generation, so a generation left in
+ * `rendering` can never be rendered again and never be retried — pressing Save
+ * once would brick the film permanently, with `/download` refusing forever.
+ * This is the way out: the status goes back to `playable`, the progress resets,
+ * and the reason is recorded on the generation. No pointer moves, because the
+ * film itself never stopped working.
+ */
+export async function resetRender(
+  db: Firestore,
+  input: { userId: string; projectId: string; generationId: string; reasons: string[] },
+): Promise<Generation> {
+  const genRef = generationRef(db, input.projectId, input.generationId);
+
+  return db.runTransaction(async (tx) => {
+    const projectSnap = await tx.get(db.collection("projects").doc(input.projectId));
+    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) {
+      throw new StoreError("forbidden");
+    }
+
+    const genSnap = await tx.get(genRef);
+    if (!genSnap.exists) throw new StoreError("not_found");
+
+    const existing = genSnap.data() as Generation;
+    if (existing.status !== "rendering") {
+      throw new Error(`cannot reset a render in status ${existing.status}`);
+    }
+
+    const updated: Generation = {
+      ...existing,
+      status: "playable",
+      renderProgress: 0,
+      failureReasons: input.reasons,
+    };
+    tx.set(genRef, updated);
+    return updated;
+  });
+}
+
 /** Begin a render. Only a playable film can be rendered, and only once at a time. */
 export async function startRender(
   db: Firestore,
@@ -287,7 +328,9 @@ export async function startRender(
       throw new Error(`cannot render generation in status ${existing.status}`);
     }
 
-    const updated: Generation = { ...existing, status: "rendering", renderProgress: 0 };
+    // A retry starts clean: the reasons a previous render gave back with are
+    // not this render's.
+    const updated: Generation = { ...existing, status: "rendering", renderProgress: 0, failureReasons: [] };
     tx.set(genRef, updated);
     return updated;
   });

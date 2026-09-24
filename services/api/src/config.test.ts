@@ -3,6 +3,7 @@ import { loadConfig } from "./config.js";
 
 const base = { FIREBASE_STORAGE_BUCKET: "b", SERVICE_URL: "http://localhost:8080" };
 const tasks = { GCP_PROJECT_ID: "p", TASKS_LOCATION: "l", TASKS_QUEUE: "q", TASKS_INVOKER_SERVICE_ACCOUNT: "sa@p.iam.gserviceaccount.com" };
+const prod = { ...tasks, RENDER_SERVICE_URL: "https://render.example", NODE_ENV: "production" };
 
 describe("loadConfig", () => {
   it("allows local development without Cloud Tasks", () => {
@@ -20,13 +21,21 @@ describe("loadConfig", () => {
 
   it("requires Cloud Tasks and invokers in production", () => {
     expect(() => loadConfig({ ...base, NODE_ENV: "production", INVOKER_SERVICE_ACCOUNTS: "a@b", ALLOWED_ORIGINS: "https://web.example" })).toThrow("missing env GCP_PROJECT_ID");
-    const config = loadConfig({ ...base, ...tasks, NODE_ENV: "production", INVOKER_SERVICE_ACCOUNTS: "a@b, c@d", ALLOWED_ORIGINS: "https://web.example" });
+    const config = loadConfig({ ...base, ...prod, INVOKER_SERVICE_ACCOUNTS: "a@b, c@d", ALLOWED_ORIGINS: "https://web.example" });
     expect(config.invokerEmails).toEqual(["a@b", "c@d"]);
     expect(config.tasks?.queue).toBe("q");
   });
 
   it("trims allowed origins and requires them in production", () => {
     expect(loadConfig({ ...base, ALLOWED_ORIGINS: " https://web.example, https://admin.example " }).allowedOrigins).toEqual(["https://web.example", "https://admin.example"]);
-    expect(() => loadConfig({ ...base, ...tasks, NODE_ENV: "production", INVOKER_SERVICE_ACCOUNTS: "a@b" })).toThrow("missing env ALLOWED_ORIGINS");
+    expect(() => loadConfig({ ...base, ...prod, INVOKER_SERVICE_ACCOUNTS: "a@b" })).toThrow("missing env ALLOWED_ORIGINS");
+  });
+
+  it("requires the render service URL in production and defaults it locally", () => {
+    // Without it, saving a film enqueues a task that can reach nothing.
+    expect(() => loadConfig({ ...base, ...tasks, NODE_ENV: "production", INVOKER_SERVICE_ACCOUNTS: "a@b", ALLOWED_ORIGINS: "https://web.example" }))
+      .toThrow("missing env RENDER_SERVICE_URL");
+    expect(loadConfig(base).renderServiceUrl).toBe("http://127.0.0.1:8081");
+    expect(loadConfig({ ...base, RENDER_SERVICE_URL: "http://elsewhere" }).renderServiceUrl).toBe("http://elsewhere");
   });
 });
