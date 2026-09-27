@@ -35,6 +35,11 @@ describe("GenerationSchema", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("accepts optional compose reasons", () => {
+    expect(GenerationSchema.safeParse({ ...valid, reasons: ["Closing on the whole family together."] }).success).toBe(true);
+    expect(GenerationSchema.safeParse(valid).success).toBe(true);
+  });
+
   it("accepts nullable parent and outputPath", () => {
     const gen = { ...valid, parentGenerationId: "gen-parent", outputPath: "gs://bucket/path.mp4" };
     expect(safeParseGeneration(gen).ok).toBe(true);

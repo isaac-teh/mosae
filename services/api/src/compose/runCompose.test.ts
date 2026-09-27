@@ -146,6 +146,17 @@ describe("runCompose — failure modes", () => {
 });
 
 describe("runCompose — Gemini mock", () => {
+  it("adds the cast summary to the compose prompt when present", async () => {
+    const mockGenerate = vi.fn().mockResolvedValue({
+      clips: [
+        { candidateId: "video1#s0@0.15c0", transition: "cut" as const, audio: "keep" as const },
+        { candidateId: "photo1#still@c1", transition: "crossfade" as const, audio: "duck" as const, holdSec: 4 },
+      ], musicCues: [],
+    });
+    await runCompose(makeJob({ cast: { summary: "2 parents, 1 child", core: [], focus: [], peopleByMoment: new Map(), namesById: {} } }), makeDeps({ generateStructured: mockGenerate }));
+    expect(mockGenerate.mock.calls[0]?.[0]).toMatchObject({ contents: expect.stringContaining("Cast: 2 parents") });
+  });
+
   it("calls generateStructured with the correct model and stage", async () => {
     const job = makeJob();
     const mockGenerate = vi.fn().mockResolvedValue({

@@ -20,6 +20,7 @@ export const GenerationSchema = z.strictObject({
   status: z.enum(["composing", "playable", "rendering", "saved", "failed"]),
   timeline: TimelineSchema.nullable(),
   droppedPicks: z.array(z.string()),
+  reasons: z.array(z.string()).optional(),
   failureReasons: z.array(z.string()),
   outputPath: z.string().min(1).nullable(),
   renderProgress: z.number().min(0).max(1),

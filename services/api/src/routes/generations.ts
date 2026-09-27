@@ -145,6 +145,7 @@ export function generationsRouter(deps: {
         status: generation.status,
         timeline: generation.timeline,
         droppedPicks: generation.droppedPicks,
+        reasons: generation.reasons,
         failureReasons: generation.failureReasons,
         renderProgress: generation.renderProgress,
         outputPath: generation.outputPath,

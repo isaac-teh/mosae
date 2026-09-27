@@ -88,6 +88,7 @@ export async function publishGeneration(
     generationId: string;
     timeline: Generation["timeline"];
     droppedPicks: string[];
+    reasons?: string[];
     now: number;
   },
 ): Promise<Generation> {
@@ -112,7 +113,7 @@ export async function publishGeneration(
     }
 
     // Validate timeline against schema
-    const parsed = GenerationSchema.safeParse({ ...existing, timeline: input.timeline, droppedPicks: input.droppedPicks, status: "playable" });
+    const parsed = GenerationSchema.safeParse({ ...existing, timeline: input.timeline, droppedPicks: input.droppedPicks, reasons: input.reasons, status: "playable" });
     if (!parsed.success) {
       throw new Error(`generation validation failed: ${parsed.error.issues.map(i => i.message).join("; ")}`);
     }
@@ -122,6 +123,7 @@ export async function publishGeneration(
       ...existing,
       timeline: input.timeline,
       droppedPicks: input.droppedPicks,
+      ...(input.reasons ? { reasons: input.reasons } : {}),
       status: "playable",
     };
     tx.set(genRef, updated);

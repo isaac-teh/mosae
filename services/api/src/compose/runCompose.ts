@@ -8,6 +8,8 @@ import { craftBrief, holdsFor } from "./brief.js";
 import { buildAudioClips, gainToDb } from "./audio.js";
 import { TRANSITION_SECONDS } from "./transitions.js";
 import { validateTimeline, repairOnce } from "./validateTimeline.js";
+import { applyCastGuards } from "./castGuards.js";
+import type { AssembledClip } from "./assemble.js";
 import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
 
@@ -19,6 +21,7 @@ export type ComposeResult = {
   droppedPicks: string[];
   /** What duration fitting had to do. Empty when the film landed on target. */
   notes: string[];
+  reasons: string[];
 } | {
   ok: false;
   reasons: string[];
@@ -66,6 +69,7 @@ export interface ComposeJob {
    * keeps a null-focus film byte-identical to the pre-focus output.
    */
   focusCenter?: Map<string, { cx: number; cy: number }>;
+  cast?: { summary: string; core: string[]; focus: string[]; peopleByMoment: Map<string, Set<string>>; namesById: Record<string, string> };
 }
 
 /**
@@ -111,6 +115,7 @@ export async function runCompose(
     holds: holdsFor(job.cadenceId),
     note: job.note,
     targetSec,
+    cast: job.cast?.summary,
   });
 
   // Call Gemini (mocked in tests)
@@ -142,9 +147,27 @@ export async function runCompose(
     return { ok: false, reasons: ["every pick was dropped — no film possible"] };
   }
 
-  // Stage 4: fitDuration — adjust photo holds to target duration
+  // Stage 4: deterministic cast coverage and story-order guards.
+  let selectedClips = assembledClips;
+  let castReasons: string[] = [];
+  if (job.cast) {
+    const pickedItems = new Set(assembledClips.map((clip) => clip.itemId));
+    const holds = holdsFor(job.cadenceId);
+    const unused: AssembledClip[] = candidates.filter((candidate) => candidate.kind === "photo" && !pickedItems.has(candidate.itemId)).map((candidate) => ({
+      ...candidate, order: -1, transition: "crossfade", audio: "mute", holdSec: holds.base,
+    }));
+    const guarded = applyCastGuards({
+      clips: assembledClips, unused, core: job.cast.core, focus: job.cast.focus,
+      peopleByMoment: job.cast.peopleByMoment,
+      label: (personId) => job.cast!.namesById[personId] ?? "a family member",
+    });
+    selectedClips = guarded.clips;
+    castReasons = guarded.reasons;
+  }
+
+  // Stage 5: fitDuration — adjust photo holds to target duration
   const { clips: fittedClips, notes: fitNotes, targetSec: fittedTargetSec } = fitDuration(
-    assembledClips,
+    selectedClips,
     targetSec,
     holdsFor(job.cadenceId),
     job.proposal.constraints.mustIncludeMomentIds,
@@ -314,5 +337,5 @@ export async function runCompose(
     return { ok: false, reasons: [`structural validation failed: ${parsedResult.errors.join("; ")}`] };
   }
 
-  return { ok: true, timeline: parsedResult.timeline, droppedPicks, notes: fitNotes };
+  return { ok: true, timeline: parsedResult.timeline, droppedPicks, notes: fitNotes, reasons: castReasons };
 }

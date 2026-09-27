@@ -10,6 +10,8 @@ import { stripProposalEnvelope } from "../store/directingStore.js";
 import { runCompose, type ComposeDeps, type ComposeJob } from "./runCompose.js";
 import type { Asset as CandidateAsset } from "./buildCandidates.js";
 import type { Face } from "../domain/understanding.js";
+import { castSummary } from "../cast/castSummary.js";
+import type { Cast, FaceRef } from "../cast/types.js";
 
 export type ComposeTask = {
   projectId: string;
@@ -199,6 +201,30 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
     // empty map, which keeps the film byte-identical to the pre-focus output.
     const focusCenter = await buildFocusCenterMap(db, task.projectId, proposal.proposal);
 
+    const castSnap = await project.collection("cast").doc("current").get();
+    const storedCast = castSnap.exists ? castSnap.data() as Cast : null;
+    const peopleByMoment = new Map<string, Set<string>>();
+    const castFaces: FaceRef[] = [];
+    const shotSnaps = await project.collection("shots").get();
+    const shotById = new Map(shotSnaps.docs.map((doc) => [doc.id, doc.data()]));
+    for (const moment of proposal.proposal.moments) {
+      const analysis = shotById.get(moment.shotId)?.analysis as ShotAnalysis | undefined;
+      if (analysis?.kind !== "photo") continue;
+      const people = new Set<string>();
+      for (const face of analysis.faces ?? []) {
+        if (!face.characterId || face.prominence === "background") continue;
+        people.add(face.characterId);
+        castFaces.push({ faceId: face.faceId, shotId: moment.shotId, photoHash: "", bbox: face.bbox, ageBand: face.ageBand, prominence: face.prominence });
+      }
+      peopleByMoment.set(moment.id, people);
+    }
+    const identities = new Map(castFaces.flatMap((face) => {
+      const analysis = shotById.get(face.shotId)?.analysis as ShotAnalysis | undefined;
+      const found = analysis?.kind === "photo" ? analysis.faces?.find((item) => item.faceId === face.faceId)?.characterId : undefined;
+      return found ? [[face.faceId, found] as const] : [];
+    }));
+    const summary = storedCast ? castSummary(storedCast, castFaces, identities) : null;
+
     // Constructed here, not at module load, and only when a key exists.
     const call: ComposeDeps["generateStructured"] = config.generateStructured
       ?? (geminiConfigured(config.geminiApiKey)
@@ -225,6 +251,12 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       note: settings.settings.note,
       captions: settings.settings.captions,
       focusCenter,
+      ...(storedCast && summary ? {
+        cast: {
+          summary, core: storedCast.core, focus: storedCast.focus, peopleByMoment,
+          namesById: Object.fromEntries(storedCast.people.map((person) => [person.personId, person.role === "child" ? "your child" : person.role === "parent" ? "a parent" : "a family member"])),
+        },
+      } : {}),
     };
 
     const result = await runCompose(job, {
@@ -241,6 +273,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       generationId: task.generationId,
       timeline: result.timeline,
       droppedPicks: result.droppedPicks,
+      reasons: result.reasons,
       now: Date.now(),
     });
 

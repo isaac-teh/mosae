@@ -21,6 +21,7 @@ export interface ComposeCallDeps {
   note?: string;
   /** The film's target length. `craftBrief` already states it; repeating it wrong is worse than not repeating it. */
   targetSec?: number;
+  cast?: string;
 }
 
 /**
@@ -31,7 +32,7 @@ export function composeCall(deps: ComposeCallDeps): {
   prompt: string;
   schema: object;
 } {
-  const { candidates, proposal, brief, holds, note, targetSec } = deps;
+  const { candidates, proposal, brief, holds, note, targetSec, cast } = deps;
 
   // Build candidate map by ID for quick lookup in the prompt
   const byId = new Map(candidates.map(c => [c.candidateId, c]));
@@ -75,6 +76,7 @@ export function composeCall(deps: ComposeCallDeps): {
         ]
       : []),
     ...(targetSec != null ? [`Target length: ${targetSec}s.`, ""] : []),
+    ...(cast ? [`Cast: ${cast}. Keep every core family member on screen; end on the whole family together if possible.`, ""] : []),
     `Chapters: ${JSON.stringify(chapterInfo)}`,
     `Candidates: ${JSON.stringify(candidateList)}`,
   ].join("\n");
