@@ -355,7 +355,7 @@ describe("film adapters", () => {
     const film = await createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1");
     expect(film).toMatchObject({
       filmId: "gen-1", planId: "proposal-1", version: 1, title: "Family weekend", durationSec: 30, momentCount: 2,
-      status: "ready", videoUrl: null, reasons: ["Closing on the whole family together."],
+      status: "ready", videoUrl: null, rendering: true, reasons: ["Closing on the whole family together."],
       posterKey: "https://storage.test/project-1/asset-2?signed=true",
     });
     expect(deps.request).not.toHaveBeenCalled();
@@ -367,6 +367,7 @@ describe("film adapters", () => {
     });
     const film = await createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1");
     expect(film.videoUrl).toBe("http://127.0.0.1:9199/download/film.mp4");
+    expect(film.rendering).toBe(false);
     expect(deps.request).toHaveBeenCalledWith("GET", "/api/projects/project-1/generations/gen-1/download");
   });
 

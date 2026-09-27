@@ -197,6 +197,7 @@ const baseFilm: Film = {
   ],
   status: "ready",
   videoUrl: null,
+  rendering: false,
   reasons: [],
 };
 

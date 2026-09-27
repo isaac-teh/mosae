@@ -90,7 +90,7 @@ const directionOptions = (note: string): DirectionOptions => ({
 const film = (filmId: string, planId: string, posterKey: string): Film => ({
   filmId, planId, posterKey, savePosterKey: `${posterKey}-save`, version: 1,
   title: filmId, subtitle: "A story", place: "Singapore", dateLabel: "Sep 2026",
-  durationSec: 60, videoKey: "film", momentCount: 2, audioLabel: "Piano", shortcuts: [], status: "ready", videoUrl: null, reasons: [],
+  durationSec: 60, videoKey: "film", momentCount: 2, audioLabel: "Piano", shortcuts: [], status: "ready", videoUrl: null, rendering: false, reasons: [],
 });
 
 describe("review screens", () => {
@@ -289,6 +289,21 @@ describe("downstream story screens", () => {
     expect(document.body.textContent).toContain("No music yet");
     await click("Direct my film");
     expect(repo.directFilm).toHaveBeenCalledWith("plan-a", expect.objectContaining({ cadenceId: "playful", soundtrackId: null }));
+  });
+
+  it("shows the rendering overlay only while the film is actually rendering", async () => {
+    const repo = { getFilm: vi.fn(async () => ({ ...film("film-1", "plan-a", "poster"), rendering: true })) };
+    boundary.apiRepositories = new Map([["project-a", repo]]);
+    boundary.params = { filmId: "film-1", repository: "api", projectId: "project-a" };
+    await render(ReviewFilmScreen);
+    expect(document.body.textContent).toContain("Rendering your film…");
+
+    repo.getFilm.mockResolvedValue({ ...film("film-1", "plan-a", "poster"), rendering: false, videoUrl: "http://x/film.mp4" });
+    await act(async () => { await new Promise((done) => setTimeout(done, 2100)); });
+    expect(document.body.textContent).not.toContain("Rendering your film…");
+    const calls = repo.getFilm.mock.calls.length;
+    await act(async () => { await new Promise((done) => setTimeout(done, 2100)); });
+    expect(repo.getFilm.mock.calls.length).toBe(calls);
   });
 
   it("does not navigate when directing the previous project finishes", async () => {

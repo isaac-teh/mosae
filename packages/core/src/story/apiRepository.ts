@@ -433,6 +433,7 @@ export function createApiStoryRepository(
       shortcuts: [],
       status: "ready",
       videoUrl,
+      rendering: isStatus(generation, "playable", "rendering"),
       reasons: Array.isArray(generation.reasons) ? generation.reasons.filter((reason): reason is string => typeof reason === "string") : [],
     };
   }

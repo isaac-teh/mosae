@@ -44,10 +44,10 @@ function ReviewFilmScreenContent({ filmId, repository, route }: {
     .then((value) => { if (isCurrent()) setFilm(value); })
     .catch((cause: Error) => { if (isCurrent()) setError(cause.message); }); }, [filmId, isCurrent, repository]);
   useEffect(load, [load]);
-  // Task 7B: while the render is still running, poll getFilm every 2s until
-  // videoUrl is populated; clear the timer on unmount.
-  const [rendering, setRendering] = useState(false);
-  useEffect(() => { if (!film || film.videoUrl) return; setRendering(true); const id = setInterval(load, 2000); return () => { clearInterval(id); setRendering(false); }; }, [film, load]);
+  // While the MP4 is still being made, ask again every 2s. A demo film is never
+  // rendering, so it never polls.
+  const rendering = Boolean(film?.rendering);
+  useEffect(() => { if (!rendering) return; const id = setInterval(load, 2000); return () => clearInterval(id); }, [rendering, load]);
   if (error) return <ErrorState error={error} retry={() => { setError(null); load(); }} />;
   if (!film) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 5 OF 6" label="YOUR STORY" progress={0.83} onBack={() => goBack()} backLabel="Go back to directing" /></View>;
   const revise = async () => { if (!adjustment || revising) return; setRevising(true); setVersionReady(false); try { await repository.reviseFilm(film.filmId, adjustment); if (!isCurrent()) return; setVersionReady(true); setAdjustment(""); } catch (cause) { if (isCurrent()) setError(cause instanceof Error ? cause.message : "Unable to revise your film"); } finally { if (isCurrent()) setRevising(false); } };

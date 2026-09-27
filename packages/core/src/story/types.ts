@@ -82,6 +82,8 @@ export type Film = {
   status: "ready" | "revising";
   /** The playable MP4 once rendered; null while the film is still being made. */
   videoUrl: string | null;
+  /** True while the MP4 is still being made; the player waits on it. */
+  rendering: boolean;
   /** Why the director placed what it placed, for the Review Film explanation. */
   reasons: string[];
 };
