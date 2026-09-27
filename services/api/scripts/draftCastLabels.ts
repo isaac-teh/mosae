@@ -57,7 +57,8 @@ async function main(): Promise<void> {
 
   initializeApp({ projectId: "demo-mosae" });
   const db = getFirestore();
-  const bucket: Bucket = getStorage().bucket();
+  // The admin app has no default bucket; name it, as the API does.
+  const bucket: Bucket = getStorage().bucket(process.env.FIREBASE_STORAGE_BUCKET ?? "demo-mosae.appspot.com");
 
   // Hash every photo asset once, then map assetId -> hash.
   const deps = firestorePhotoHashDeps(db, bucket);
