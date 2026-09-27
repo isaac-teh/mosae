@@ -15,7 +15,7 @@ type FilmPlayerProps = {
 
 const formatTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
 
-export function FilmPlayer({ source, poster, durationSec, initialTimeSec = 74, aspect, compact = false }: FilmPlayerProps) {
+export function FilmPlayer({ source, poster, durationSec, initialTimeSec = 0, aspect, compact = false }: FilmPlayerProps) {
   const video = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(initialTimeSec);
