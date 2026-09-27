@@ -26,6 +26,8 @@ export function generationsRouter(deps: {
   db: Firestore;
   /** Resolve a shot id to the asset whose files back it. */
   loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
+  /** The bucket renders are stored in. The admin app has no default bucket. */
+  storageBucket?: string;
   /** Drains the outbox after a task is written; the dispatcher does it in production. */
   dispatch?: () => Promise<unknown>;
 }): Router {
@@ -227,7 +229,7 @@ export function generationsRouter(deps: {
       const { firebaseDownloadUrlStore } = await import("../ingest/objectStore.js");
       const { getAdminApp } = await import("../firebase/admin.js");
       const { getStorage } = await import("firebase-admin/storage");
-      const bucket = getStorage(getAdminApp()).bucket();
+      const bucket = getStorage(getAdminApp()).bucket(deps.storageBucket);
       const store = firebaseDownloadUrlStore(bucket);
 
       try {

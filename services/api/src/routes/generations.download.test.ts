@@ -45,7 +45,8 @@ function makeBucket() {
 // mock both so the emulator branch can be exercised without a real app. The
 // factory reads `currentBucket`, which each test sets before building its app.
 let currentBucket: unknown = {};
-vi.mock("firebase-admin/storage", () => ({ getStorage: () => ({ bucket: () => currentBucket }) }));
+let requestedBucket: string | undefined;
+vi.mock("firebase-admin/storage", () => ({ getStorage: () => ({ bucket: (name?: string) => { requestedBucket = name; return currentBucket; } }) }));
 vi.mock("../firebase/admin.js", () => ({ getAdminApp: () => ({}), adminDb: {} }));
 
 const { generationsRouter } = await import("./generations.js");
@@ -54,7 +55,7 @@ function buildApp(db: Firestore, fakeBucket: ReturnType<typeof makeBucket>) {
   currentBucket = fakeBucket.bucket;
   const app = express();
   app.use(express.json());
-  app.use("/api/projects", generationsRouter({ db, dispatch: async () => undefined }));
+  app.use("/api/projects", generationsRouter({ db, storageBucket: "demo-mosae.appspot.com", dispatch: async () => undefined }));
   return app;
 }
 
@@ -82,6 +83,14 @@ describe("GET /download — emulator branch", () => {
     expect(res.status).toBe(200);
     expect(calls[0].path).toBe("renders/owner/p1/g1.mp4");
     expect(calls[0].options).toMatchObject({ version: "v4", action: "read" });
+  });
+
+  it("reads the configured bucket, since the admin app has no default one", async () => {
+    process.env.FIREBASE_STORAGE_EMULATOR_HOST = "127.0.0.1:9199";
+    requestedBucket = undefined;
+    const app = buildApp(makeDb(generation), makeBucket());
+    await request(app).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
+    expect(requestedBucket).toBe("demo-mosae.appspot.com");
   });
 
   it("returns 400 when the render is not complete", async () => {

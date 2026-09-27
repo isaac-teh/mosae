@@ -164,7 +164,7 @@ app.use(
 );
 app.use(
   "/api/projects",
-  generationsRouter({ db: adminDb, loadSource, dispatch: () => dispatchDue(adminDb, queue, Date.now()) }),
+  generationsRouter({ db: adminDb, loadSource, storageBucket: config.storageBucket, dispatch: () => dispatchDue(adminDb, queue, Date.now()) }),
 );
 app.use(
   "/api/projects",
