@@ -4,7 +4,7 @@ import { loadConfig } from "./config.js";
 import { requireServiceCaller } from "./auth/requireServiceCaller.js";
 import { projectsRouter } from "./routes/projects.js";
 import { thumbnailsRouter } from "./routes/thumbnails.js";
-import { firebaseThumbnailUrlStore } from "./ingest/objectStore.js";
+import { firebaseDownloadUrlStore, firebaseThumbnailUrlStore } from "./ingest/objectStore.js";
 import { createPlanJob, createQueuePlan, directingRouter, type QueuePlan } from "./routes/directing.js";
 import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
@@ -84,15 +84,24 @@ const render = createRender({
   renderServiceUrl: config.renderServiceUrl,
   sources: { loadAsset: loadSource },
   // The render service is handed URLs it can fetch and one it can PUT to, so
-  // it needs no storage credentials of its own.
-  signRead: async (path) => {
-    const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "read", expires: Date.now() + 6 * 60 * 60 * 1000 });
-    return url;
-  },
-  signUpload: async (path) => {
-    const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "write", contentType: "video/mp4", expires: Date.now() + 6 * 60 * 60 * 1000 });
-    return url;
-  },
+  // it needs no storage credentials of its own. On the storage emulator there
+  // are no credentials to sign with at all: reads use the emulator's direct
+  // download form, and there is no signed PUT, so the render stays on disk and
+  // storeLocalOutput below copies it into the bucket.
+  signRead: process.env.FIREBASE_STORAGE_EMULATOR_HOST
+    ? (path) => firebaseDownloadUrlStore(renderBucket()).signedDownloadUrl(path)
+    : async (path) => {
+        const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "read", expires: Date.now() + 6 * 60 * 60 * 1000 });
+        return url;
+      },
+  ...(process.env.FIREBASE_STORAGE_EMULATOR_HOST
+    ? {}
+    : {
+        signUpload: async (path: string) => {
+          const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "write", contentType: "video/mp4", expires: Date.now() + 6 * 60 * 60 * 1000 });
+          return url;
+        },
+      }),
   // A local render never uploads, so the MP4 stays on the render service's disk
   // and /download (a storage-emulator URL for generation.outputPath) would 404.
   // When the emulator is set, copy the finished file into the bucket at its
