@@ -61,8 +61,26 @@ function normalisePhoto(raw: unknown): Record<string, unknown> {
   }
 
   let faces = obj.faces;
+  let interactions = obj.interactions;
   if (Array.isArray(faces)) {
-    faces = faces.map((face: unknown) => {
+    // One malformed face (Gemini has nested every box inside the first face's
+    // bbox) must cost that face, not the whole photo: a rejected analysis is
+    // replayed identically on every retry and the photo never lands. Dropping
+    // a face shifts the indices after it, so interactions are renumbered too.
+    const all: unknown[] = faces;
+    const kept = all.flatMap((face, index) => (isFlatBox(face) ? [index] : []));
+    const newIndex = new Map(kept.map((oldIndex, position) => [oldIndex, position]));
+    faces = kept.map((index) => all[index]);
+    if (Array.isArray(interactions)) {
+      interactions = interactions.flatMap((item: unknown) => {
+        if (typeof item !== "object" || item === null) return [];
+        const link = item as Record<string, unknown>;
+        const from = newIndex.get(Number(link.from));
+        const to = newIndex.get(Number(link.to));
+        return from === undefined || to === undefined ? [] : [{ ...link, from, to }];
+      });
+    }
+    faces = (faces as unknown[]).map((face: unknown) => {
       if (typeof face !== "object" || face === null) return face;
       const f = { ...(face as Record<string, unknown>) };
       if (f.ageBand !== undefined && !VALID_AGE_BANDS.has(String(f.ageBand))) {
@@ -79,7 +97,14 @@ function normalisePhoto(raw: unknown): Record<string, unknown> {
     ...obj,
     subjects,
     ...(faces !== undefined ? { faces } : {}),
+    ...(interactions !== undefined ? { interactions } : {}),
   };
+}
+
+function isFlatBox(face: unknown): boolean {
+  if (typeof face !== "object" || face === null) return false;
+  const bbox = (face as Record<string, unknown>).bbox;
+  return Array.isArray(bbox) && bbox.length === 4 && bbox.every((value) => typeof value === "number" && Number.isFinite(value));
 }
 const videoShotSchema = z.strictObject({ description: z.string().min(1), camera: z.string().min(1), role: z.enum(["A_ROLL", "B_ROLL"]), subjects: z.array(z.string()), emotion: z.string().min(1), quality: z.number().min(1).max(5), usable: z.boolean(), reason: z.string().min(1) });
 const videoSchema = z.strictObject({ shots: z.array(videoShotSchema), transcript: z.array(z.strictObject({ startSec: z.number().min(0), endSec: z.number().min(0), text: z.string() })) });

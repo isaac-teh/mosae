@@ -88,6 +88,30 @@ describe("Gemini shot analysis", () => {
     }
   });
 
+  it("drops a face with a malformed box instead of failing the whole photo", async () => {
+    // Recorded from Gemini on trip1: every face's box nested inside the first.
+    const json = JSON.stringify({
+      caption: "c", subjects: [], setting: "lawn", activities: [], mood: "happy", shotType: "medium",
+      aesthetics: 4, keyMomentScore: 5, tags: [],
+      faces: [
+        { bbox: [[419, 342, 513, 508], [457, 424, 568, 540]], confidence: 0.99, ageBand: "adult" },
+        { bbox: [513, 424, 846, 574], confidence: 0.99, ageBand: "child" },
+        { bbox: [455, 521, 551, 639], confidence: 0.9, ageBand: "adult" },
+      ],
+      interactions: [{ from: 0, to: 1, kind: "holding hands" }, { from: 2, to: 1, kind: "holding hands" }],
+    });
+    const dir = await mkdtemp(path.join(tmpdir(), "mosae-analyze-test-"));
+    try {
+      const renderPath = path.join(dir, "render.jpg");
+      await writeFile(renderPath, "jpeg-bytes");
+      const result = await analyzePhoto(deps(vi.fn().mockResolvedValue(reply(json))), { assetId: "a1", shotId: "s1", renderPath });
+      expect(result.faces?.map((face) => face.ageBand)).toEqual(["child", "adult"]);
+      expect(result.interactions).toEqual([{ from: "s1-1", to: "s1-0", kind: "holding hands" }]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects aesthetics scores outside 1-5 integers rather than clamping", async () => {
     const invalidJson = JSON.stringify({
       caption: "c",
