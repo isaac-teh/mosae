@@ -280,3 +280,115 @@ describe("createApiStoryRepository", () => {
     );
   });
 });
+
+const settings = {
+  schemaVersion: 1, id: "settings-1", projectId: "project-1", version: 1, note: "",
+  cadenceId: "playful", soundtrackId: null, durationId: "30s", aspect: "9:16", captions: false,
+};
+
+function generation(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1, id: "gen-1", projectId: "project-1", proposalId: "proposal-1", parentGenerationId: null,
+    settings, seed: "seed", status: "playable",
+    timeline: { durationSec: 30, videoClips: [{ id: "c1", source: { kind: "photo", shotId: "shot-2" } }, { id: "c2", source: { kind: "photo", shotId: "shot-1" } }] },
+    droppedPicks: [], failureReasons: [], outputPath: null, renderProgress: 0,
+    ...overrides,
+  };
+}
+
+function filmDependencies(generations: Record<string, unknown>, overrides: Partial<ApiStoryRepositoryDeps> = {}) {
+  const base = dependencies();
+  const read = async (path: string) => generations[path] ?? await base.listenDocument(path);
+  return dependencies({
+    listenDocument: vi.fn(read),
+    listenUntil: vi.fn(async (path, accept) => {
+      const value = await read(path);
+      if (!accept(value)) throw new Error(`listenUntil would hang on ${path}`);
+      return value;
+    }),
+    ...overrides,
+  });
+}
+
+describe("film adapters", () => {
+  const genPath = "projects/project-1/generations/gen-1";
+
+  it("returns the direction options route body unchanged", async () => {
+    const body = { note: "n", rewrites: [], cadences: [], soundtracks: [], durations: [], recommendedDuration: "30s", recommendedCadence: "playful", cadenceReason: "kids laughing" };
+    const deps = dependencies({ request: vi.fn(async () => body) });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getDirectionOptions("proposal-1")).resolves.toEqual(body);
+    expect(deps.request).toHaveBeenCalledWith("GET", "/api/projects/project-1/proposals/proposal-1/direction-options");
+  });
+
+  it("accepts the plan, then posts a generation and returns its id as the film id", async () => {
+    const deps = dependencies({
+      request: vi.fn(async (_method: string, path: string) => (path.endsWith("/generations") ? { generation: { id: "gen-9" } } : {})),
+    });
+    const result = await createApiStoryRepository({ projectId: "project-1" }, deps)
+      .directFilm("proposal-1", { note: "warm", cadenceId: "playful", soundtrackId: null, durationId: "30s" });
+    expect(result).toEqual({ filmId: "gen-9" });
+    const calls = vi.mocked(deps.request).mock.calls;
+    expect(calls[0]).toEqual(["POST", "/api/projects/project-1/proposals/proposal-1/accept"]);
+    expect(calls[1][0]).toBe("POST");
+    expect(calls[1][1]).toBe("/api/projects/project-1/generations");
+    expect(calls[1][2]).toMatchObject({ proposalId: "proposal-1", settings: { projectId: "project-1", note: "warm", cadenceId: "playful", durationId: "30s", soundtrackId: null, schemaVersion: 1, version: 1 } });
+  });
+
+  it("still directs the film when the plan was already accepted", async () => {
+    const deps = dependencies({
+      request: vi.fn(async (_method: string, path: string) => {
+        if (path.endsWith("/accept")) throw Object.assign(new Error("invalid_state"), { status: 409 });
+        return { generation: { id: "gen-9" } };
+      }),
+    });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps)
+      .directFilm("proposal-1", { note: "", cadenceId: "playful", soundtrackId: null, durationId: null })).resolves.toEqual({ filmId: "gen-9" });
+  });
+
+  it("throws a failed film's reasons instead of showing an empty player", async () => {
+    const deps = filmDependencies({ [genPath]: generation({ status: "failed", timeline: null, failureReasons: ["every pick was dropped"] }) });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1")).rejects.toThrow("every pick was dropped");
+  });
+
+  it("maps a playable film with no video yet, its reasons and its poster", async () => {
+    const deps = filmDependencies({ [genPath]: generation({ reasons: ["Closing on the whole family together."] }) });
+    const film = await createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1");
+    expect(film).toMatchObject({
+      filmId: "gen-1", planId: "proposal-1", version: 1, title: "Family weekend", durationSec: 30, momentCount: 2,
+      status: "ready", videoUrl: null, reasons: ["Closing on the whole family together."],
+      posterKey: "https://storage.test/project-1/asset-2?signed=true",
+    });
+    expect(deps.request).not.toHaveBeenCalled();
+  });
+
+  it("gives a saved film its download URL", async () => {
+    const deps = filmDependencies({ [genPath]: generation({ status: "saved", outputPath: "renders/u/p/gen-1.mp4" }) }, {
+      request: vi.fn(async () => ({ downloadUrl: "http://127.0.0.1:9199/download/film.mp4", outputPath: "renders/u/p/gen-1.mp4" })),
+    });
+    const film = await createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1");
+    expect(film.videoUrl).toBe("http://127.0.0.1:9199/download/film.mp4");
+    expect(deps.request).toHaveBeenCalledWith("GET", "/api/projects/project-1/generations/gen-1/download");
+  });
+
+  it("revises by posting a child generation with the request as its note, never touching the old one", async () => {
+    const child = generation({ id: "gen-2", parentGenerationId: "gen-1", settings: { ...settings, version: 2, note: "shorter please" } });
+    const deps = filmDependencies({ [genPath]: generation(), "projects/project-1/generations/gen-2": child }, {
+      request: vi.fn(async () => ({ generation: { id: "gen-2" } })),
+    });
+    const film = await createApiStoryRepository({ projectId: "project-1" }, deps).reviseFilm("gen-1", "shorter please");
+    const calls = vi.mocked(deps.request).mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toBe("POST");
+    expect(calls[0][1]).toBe("/api/projects/project-1/generations");
+    expect(calls[0][2]).toMatchObject({ proposalId: "proposal-1", parentGenerationId: "gen-1", settings: { note: "shorter please", version: 2 } });
+    expect(film).toMatchObject({ filmId: "gen-2", version: 2 });
+  });
+
+  it("saves by rendering, waiting for the file, and returning its download URL", async () => {
+    const deps = filmDependencies({ [genPath]: generation({ status: "saved", outputPath: "renders/u/p/gen-1.mp4" }) }, {
+      request: vi.fn(async (_method: string, path: string) => (path.endsWith("/download") ? { downloadUrl: "http://x/film.mp4" } : { status: "rendering" })),
+    });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).saveFilm("gen-1")).resolves.toEqual({ downloadKey: "http://x/film.mp4" });
+    expect(deps.request).toHaveBeenCalledWith("POST", "/api/projects/project-1/generations/gen-1/render");
+  });
+});

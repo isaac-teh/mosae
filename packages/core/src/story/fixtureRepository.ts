@@ -171,6 +171,8 @@ const directionOptions: DirectionOptions = {
   soundtracks,
   durations,
   recommendedDuration: "2m",
+  recommendedCadence: cadences[0].id,
+  cadenceReason: null,
 };
 
 const baseFilm: Film = {
@@ -194,6 +196,8 @@ const baseFilm: Film = {
     { emoji: "📀", label: "4K Master Audio • 2:10" },
   ],
   status: "ready",
+  videoUrl: null,
+  reasons: [],
 };
 
 export interface FixtureOptions {

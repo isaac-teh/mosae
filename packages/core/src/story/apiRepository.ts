@@ -4,6 +4,7 @@ import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
 import { getFirestoreClient } from "../firebase";
 import type { StoryRepository } from "./repository";
+import type { DirectionOptions, Film } from "./types";
 import {
   projectProposal,
   type ProjectProjectionSource,
@@ -241,16 +242,13 @@ async function awaitPlanJob(deps: ApiStoryRepositoryDeps, projectId: string, job
   throw new Error(typeof job.reason === "string" && job.reason ? job.reason : PLAN_FAILED);
 }
 
-function unavailable(operation: string): Promise<never> {
-  return Promise.reject(new Error(`${operation}_not_available`));
-}
-
 export function createApiStoryRepository(
   options: ApiStoryRepositoryOptions,
   deps: ApiStoryRepositoryDeps = firebaseDeps,
 ): StoryRepository {
   if (!options.projectId) throw new Error("project_id_required");
   const projectId = options.projectId;
+  const generationsPath = `/api/projects/${encodeURIComponent(projectId)}/generations`;
   const render = (source: ProjectionSources) => {
     const plan = projectProposal(source.proposal, source.project, source.shots, { totalShotCount: source.totalShotCount });
     const favorites = favoriteMomentIds(projectId, source.proposal.id);
@@ -316,10 +314,135 @@ export function createApiStoryRepository(
       );
       return { available: true };
     },
-    getDirectionOptions: () => unavailable("get_direction_options"),
-    directFilm: () => unavailable("direct_film"),
-    getFilm: () => unavailable("get_film"),
-    reviseFilm: () => unavailable("revise_film"),
-    saveFilm: () => unavailable("save_film"),
+    getDirectionOptions: async (planId) => await deps.request(
+      "GET",
+      `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/direction-options`,
+    ) as DirectionOptions,
+    directFilm: async (planId, direction) => {
+      // Accept is idempotent on the server; a conflict only means another screen
+      // got there first, which is no reason to stop directing the film.
+      await deps.request("POST", `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/accept`)
+        .catch((error: unknown) => { if ((error as { status?: number }).status !== 409) throw error; });
+      const settings = {
+        schemaVersion: 1, id: newId(), projectId, version: 1, note: direction.note,
+        cadenceId: direction.cadenceId, soundtrackId: null, durationId: direction.durationId,
+        aspect: "9:16", captions: false,
+      };
+      return { filmId: await postGeneration({ proposalId: planId, settings }) };
+    },
+    getFilm: (filmId) => loadFilm(filmId),
+    reviseFilm: async (filmId, request) => {
+      const parent = await readGeneration(filmId);
+      const settings = record(parent.settings, "generation settings");
+      const childId = await postGeneration({
+        proposalId: stringField(parent.proposalId, "proposal id"),
+        parentGenerationId: filmId,
+        settings: { ...settings, id: newId(), version: Number(settings.version ?? 1) + 1, note: request },
+      });
+      return loadFilm(childId);
+    },
+    saveFilm: async (filmId) => {
+      await deps.request("POST", `${generationsPath}/${encodeURIComponent(filmId)}/render`)
+        .catch((error: unknown) => { if ((error as { status?: number }).status !== 409) throw error; });
+      const generation = record(await deps.listenUntil(
+        `projects/${projectId}/generations/${filmId}`,
+        (value) => isStatus(value, "saved", "failed"),
+      ), "generation");
+      if (generation.status === "failed") throw new Error(failureMessage(generation));
+      return { downloadKey: await downloadUrl(filmId) };
+    },
   };
+
+  async function postGeneration(body: unknown): Promise<string> {
+    const response = record(await deps.request("POST", generationsPath, body), "generation response");
+    return stringField(record(response.generation, "generation").id, "generation id");
+  }
+
+  async function readGeneration(filmId: string): Promise<RecordData> {
+    return record(await deps.listenDocument(`projects/${projectId}/generations/${filmId}`), "generation");
+  }
+
+  async function downloadUrl(filmId: string): Promise<string> {
+    const response = record(await deps.request("GET", `${generationsPath}/${encodeURIComponent(filmId)}/download`), "download response");
+    return stringField(response.downloadUrl, "download URL");
+  }
+
+  /** How many generations deep this one sits; the first film is version 1. */
+  async function versionOf(generation: RecordData): Promise<number> {
+    let version = 1;
+    let parentId = generation.parentGenerationId;
+    while (typeof parentId === "string" && parentId && version < 50) {
+      const parent = await deps.listenDocument(`projects/${projectId}/generations/${parentId}`) as RecordData | null;
+      if (!parent) break;
+      version += 1;
+      parentId = parent.parentGenerationId;
+    }
+    return version;
+  }
+
+  async function loadFilm(filmId: string): Promise<Film> {
+    // Composing is the only state a film leaves on its own; wait it out here so
+    // the review screen never renders a film that has no timeline yet.
+    const generation = record(await deps.listenUntil(
+      `projects/${projectId}/generations/${filmId}`,
+      (value) => Boolean(value) && !isStatus(value, "composing"),
+    ), "generation");
+    if (generation.status === "failed") throw new Error(failureMessage(generation));
+
+    const planId = stringField(generation.proposalId, "proposal id");
+    const timeline = record(generation.timeline, "timeline");
+    const clips = Array.isArray(timeline.videoClips) ? timeline.videoClips as RecordData[] : [];
+    const [proposalValue, projectValue, shotValues, version, videoUrl] = await Promise.all([
+      deps.listenDocument(`projects/${projectId}/storyProposals/${planId}`),
+      deps.listenDocument(`projects/${projectId}`),
+      deps.listenCollection(`projects/${projectId}/shots`),
+      versionOf(generation),
+      generation.status === "saved" ? downloadUrl(filmId) : Promise.resolve(null),
+    ]);
+    const proposalRecord = (proposalValue ?? {}) as RecordData;
+    const projectRecord = (projectValue ?? {}) as RecordData;
+
+    const firstShotId = (record(clips[0]?.source ?? {}, "clip source") as RecordData).shotId;
+    const firstShot = shotValues.map((value) => value as RecordData).find((shot) => shot.id === firstShotId);
+    const poster = typeof firstShot?.assetId === "string"
+      ? await deps.getThumbnailUrl(projectId, firstShot.assetId).catch(() => "")
+      : "";
+
+    const durationSec = Number(timeline.durationSec ?? 0);
+    const place = typeof projectRecord.place === "string" ? projectRecord.place : "";
+    const dateLabel = [place, projectDateRange(projectRecord.dateRange)].filter(Boolean).join(" • ");
+    const length = `${Math.floor(durationSec / 60)}:${String(Math.round(durationSec % 60)).padStart(2, "0")}`;
+    return {
+      filmId,
+      planId,
+      version,
+      title: typeof proposalRecord.title === "string" ? proposalRecord.title : "Your film",
+      subtitle: `Curated from ${clips.length} moments`,
+      place,
+      dateLabel,
+      durationSec,
+      posterKey: poster,
+      savePosterKey: poster,
+      videoKey: "",
+      momentCount: clips.length,
+      audioLabel: length,
+      shortcuts: [],
+      status: "ready",
+      videoUrl,
+      reasons: Array.isArray(generation.reasons) ? generation.reasons.filter((reason): reason is string => typeof reason === "string") : [],
+    };
+  }
+}
+
+function isStatus(value: unknown, ...statuses: string[]): boolean {
+  return Boolean(value) && typeof value === "object" && statuses.includes(String((value as RecordData).status));
+}
+
+function failureMessage(generation: RecordData): string {
+  const reasons = Array.isArray(generation.failureReasons) ? generation.failureReasons.filter((reason) => typeof reason === "string") : [];
+  return reasons.join("; ") || "Film failed";
+}
+
+function newId(): string {
+  return globalThis.crypto.randomUUID();
 }

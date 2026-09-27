@@ -57,6 +57,9 @@ export type DirectionOptions = {
   soundtracks: Soundtrack[];
   durations: DurationChoice[];
   recommendedDuration: DurationChoice["id"];
+  /** The tone the planner suggests from the photos' mood; preselected on Direct Film. */
+  recommendedCadence: string;
+  cadenceReason: string | null;
 };
 
 export type Direction = { note: string; cadenceId: string; soundtrackId: string | null; durationId: DurationChoice["id"] | null };
@@ -77,4 +80,8 @@ export type Film = {
   audioLabel: string;
   shortcuts: { emoji: string; label: string }[];
   status: "ready" | "revising";
+  /** The playable MP4 once rendered; null while the film is still being made. */
+  videoUrl: string | null;
+  /** Why the director placed what it placed, for the Review Film explanation. */
+  reasons: string[];
 };

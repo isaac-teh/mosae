@@ -83,12 +83,14 @@ const directionOptions = (note: string): DirectionOptions => ({
   soundtracks: [{ id: "piano", name: "Piano", description: "Soft" }],
   durations: [{ id: "1m", label: "1 min", caption: "Brief", seconds: 60 }],
   recommendedDuration: "1m",
+  recommendedCadence: "gentle",
+  cadenceReason: null,
 });
 
 const film = (filmId: string, planId: string, posterKey: string): Film => ({
   filmId, planId, posterKey, savePosterKey: `${posterKey}-save`, version: 1,
   title: filmId, subtitle: "A story", place: "Singapore", dateLabel: "Sep 2026",
-  durationSec: 60, videoKey: "film", momentCount: 2, audioLabel: "Piano", shortcuts: [], status: "ready",
+  durationSec: 60, videoKey: "film", momentCount: 2, audioLabel: "Piano", shortcuts: [], status: "ready", videoUrl: null, reasons: [],
 });
 
 describe("review screens", () => {
@@ -268,6 +270,25 @@ describe("downstream story screens", () => {
     await click("Direct my film");
 
     expect(repoB.directFilm).toHaveBeenCalledWith("plan-b", expect.objectContaining({ note: "Project B note" }));
+  });
+
+  it("starts on the suggested tone and directs without a soundtrack catalog", async () => {
+    const options: DirectionOptions = {
+      ...directionOptions("Our trip"),
+      cadences: [{ id: "tender", name: "Tender", description: "Slow" }, { id: "playful", name: "Playful", description: "Quick" }],
+      soundtracks: [],
+      recommendedCadence: "playful",
+      cadenceReason: "kids laughing on the beach",
+    };
+    const repo = { getDirectionOptions: vi.fn(async () => options), directFilm: vi.fn(async () => ({ filmId: "film-1" })) };
+    boundary.apiRepositories = new Map([["project-a", repo]]);
+    boundary.params = { planId: "plan-a", repository: "api", projectId: "project-a" };
+    await render(DirectFilmScreen);
+
+    expect(document.body.textContent).toContain("Suggested for your photos: kids laughing on the beach");
+    expect(document.body.textContent).toContain("No music yet");
+    await click("Direct my film");
+    expect(repo.directFilm).toHaveBeenCalledWith("plan-a", expect.objectContaining({ cadenceId: "playful", soundtrackId: null }));
   });
 
   it("does not navigate when directing the previous project finishes", async () => {
