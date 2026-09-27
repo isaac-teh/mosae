@@ -384,11 +384,26 @@ describe("film adapters", () => {
     expect(film).toMatchObject({ filmId: "gen-2", version: 2 });
   });
 
-  it("saves by rendering, waiting for the file, and returning its download URL", async () => {
-    const deps = filmDependencies({ [genPath]: generation({ status: "saved", outputPath: "renders/u/p/gen-1.mp4" }) }, {
-      request: vi.fn(async (_method: string, path: string) => (path.endsWith("/download") ? { downloadUrl: "http://x/film.mp4" } : { status: "rendering" })),
+  it("requests a render for a film still at playable, then returns its download URL", async () => {
+    let status = "playable";
+    const deps = filmDependencies({}, {
+      listenDocument: vi.fn(async () => generation({ status })),
+      listenUntil: vi.fn(async () => generation({ status: "saved", outputPath: "renders/u/p/gen-1.mp4" })),
+      request: vi.fn(async (_method: string, path: string) => {
+        if (path.endsWith("/render")) status = "rendering";
+        return path.endsWith("/download") ? { downloadUrl: "http://x/film.mp4" } : { status: "rendering" };
+      }),
     });
     await expect(createApiStoryRepository({ projectId: "project-1" }, deps).saveFilm("gen-1")).resolves.toEqual({ downloadKey: "http://x/film.mp4" });
     expect(deps.request).toHaveBeenCalledWith("POST", "/api/projects/project-1/generations/gen-1/render");
+  });
+
+  it("does not ask again for a render compose already started", async () => {
+    const deps = filmDependencies({ [genPath]: generation({ status: "rendering" }) }, {
+      listenUntil: vi.fn(async () => generation({ status: "saved", outputPath: "renders/u/p/gen-1.mp4" })),
+      request: vi.fn(async () => ({ downloadUrl: "http://x/film.mp4" })),
+    });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).saveFilm("gen-1")).resolves.toEqual({ downloadKey: "http://x/film.mp4" });
+    expect(deps.request).not.toHaveBeenCalledWith("POST", expect.stringContaining("/render"));
   });
 });

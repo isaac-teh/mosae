@@ -342,8 +342,12 @@ export function createApiStoryRepository(
       return loadFilm(childId);
     },
     saveFilm: async (filmId) => {
-      await deps.request("POST", `${generationsPath}/${encodeURIComponent(filmId)}/render`)
-        .catch((error: unknown) => { if ((error as { status?: number }).status !== 409) throw error; });
+      // Compose starts the render itself, so by the time Save is tapped the film
+      // is usually already rendering or saved; asking again would be refused.
+      // Only a film still sitting at playable needs the render requested.
+      if (isStatus(await readGeneration(filmId), "playable")) {
+        await deps.request("POST", `${generationsPath}/${encodeURIComponent(filmId)}/render`);
+      }
       const generation = record(await deps.listenUntil(
         `projects/${projectId}/generations/${filmId}`,
         (value) => isStatus(value, "saved", "failed"),
