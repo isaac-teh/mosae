@@ -40,4 +40,75 @@ describe("Gemini shot analysis", () => {
     const generateContent = vi.fn().mockResolvedValue(reply(videoJson(1)));
     await expect(analyzeVideo(deps(generateContent), { assetId: "a1", file: { uri: "gs://x", mimeType: "video/mp4" }, shotCount: 3, durationSec: 5 })).rejects.toThrow("expected 3 shots, got 1");
   });
+
+  it("extracts per-face attributes and maps interactions to faceIds", async () => {
+    const enrichedJson = JSON.stringify({
+      caption: "c",
+      subjects: ["man", "girl"],
+      setting: "beach",
+      activities: [],
+      mood: "joyful",
+      shotType: "wide",
+      aesthetics: 4,
+      keyMomentScore: 5,
+      tags: [],
+      faces: [
+        { bbox: [100, 100, 300, 300], confidence: 0.9, ageBand: "adult", appearance: "blue shirt", prominence: "primary", expression: "smiling", lookingAtCamera: true },
+        { bbox: [400, 400, 600, 600], confidence: 0.8, ageBand: "kid", prominence: "primary" },
+      ],
+      interactions: [{ from: 0, to: 1, kind: "carrying" }, { from: 0, to: 9, kind: "hugging" }],
+    });
+    const generateContent = vi.fn().mockResolvedValue(reply(enrichedJson));
+    const dir = await mkdtemp(path.join(tmpdir(), "mosae-analyze-test-"));
+    try {
+      const renderPath = path.join(dir, "render.jpg");
+      await writeFile(renderPath, "jpeg-bytes");
+      const result = await analyzePhoto(deps(generateContent), { assetId: "a1", shotId: "s1", renderPath });
+      expect(result.faces?.[0]).toEqual({
+        faceId: "s1-0",
+        bbox: [0.1, 0.1, 0.3, 0.3],
+        confidence: 0.9,
+        ageBand: "adult",
+        appearance: "blue shirt",
+        prominence: "primary",
+        expression: "smiling",
+        lookingAtCamera: true,
+      });
+      expect(result.faces?.[1]).toEqual({
+        faceId: "s1-1",
+        bbox: [0.4, 0.4, 0.6, 0.6],
+        confidence: 0.8,
+        prominence: "primary",
+      });
+      expect(result.interactions).toEqual([
+        { from: "s1-0", to: "s1-1", kind: "carrying" },
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects aesthetics scores outside 1-5 integers rather than clamping", async () => {
+    const invalidJson = JSON.stringify({
+      caption: "c",
+      subjects: ["man"],
+      setting: "beach",
+      activities: [],
+      mood: "calm",
+      shotType: "wide",
+      aesthetics: 8.5,
+      keyMomentScore: 5,
+      tags: [],
+    });
+    const generateContent = vi.fn().mockResolvedValue(reply(invalidJson));
+    const dir = await mkdtemp(path.join(tmpdir(), "mosae-analyze-test-"));
+    try {
+      const renderPath = path.join(dir, "render.jpg");
+      await writeFile(renderPath, "jpeg-bytes");
+      await expect(analyzePhoto(deps(generateContent), { assetId: "a1", shotId: "s1", renderPath })).rejects.toThrow();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
+

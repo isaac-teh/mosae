@@ -17,6 +17,7 @@ export type PhotoAnalysis = {
    * produced before face tagging (and the many tests that build literals) keep
    * validating; new photos always carry it once deployed. */
   faces?: Face[];
+  interactions?: { from: string; to: string; kind: string }[];
 };
 
 export type Face = {
@@ -29,6 +30,11 @@ export type Face = {
   characterId?: string;
   name?: string; // denormalized display name (for UI convenience)
   role?: "MAIN" | "SUPPORTING"; // denormalized role for the same reason
+  ageBand?: "child" | "teen" | "adult" | "senior";
+  appearance?: string;
+  prominence?: "primary" | "secondary" | "background";
+  expression?: string;
+  lookingAtCamera?: boolean;
 };
 
 export type VideoShotAnalysis = {
