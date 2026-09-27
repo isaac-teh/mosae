@@ -62,7 +62,6 @@ const validProposal: ProposalSubmission = {
 };
 
 const options = {
-  targetSec: 30,
   excludedShotIds: [] as string[],
   mustIncludeShotIds: [] as string[],
 };
@@ -143,19 +142,30 @@ describe("validateProposal", () => {
       ],
     };
 
-    expect(diagnostics(validateProposal(proposal, workingSet, { ...options, targetSec: 15 }))).toEqual(expect.arrayContaining([
+    expect(diagnostics(validateProposal(proposal, workingSet, options))).toEqual(expect.arrayContaining([
       expect.stringMatching(/proposal_minimum_distinct.*p1.*p2.*p3.*3 distinct.*at least 4/i),
     ]));
   });
 
-  it("duration_coverage rejects a proposal too thin for the target duration", () => {
-    const result = diagnostics(validateProposal(validProposal, workingSet, {
-      ...options,
-      targetSec: 31,
-    }));
-    const diagnostic = result.find((item) => item.startsWith("duration_coverage:"));
-    expect(diagnostic).toMatch(/6 photo-equivalents.*at least 6\.2.*31 seconds.*add/i);
-    for (const shotId of ["p1", "p2", "p3", "p4", "v1"]) expect(diagnostic).toContain(shotId);
+  it("accepts a proposal of any length — duration is compose's job", () => {
+    const proposal: ProposalSubmission = {
+      title: "A day together",
+      moments: [
+        { shotId: "p1", kind: "photo", title: "One", description: "", rationale: "" },
+        { shotId: "p2", kind: "photo", title: "Two", description: "", rationale: "" },
+        { shotId: "p3", kind: "photo", title: "Three", description: "", rationale: "" },
+      ],
+      chapters: [
+        { title: "Arrival", summary: "", momentIds: ["p1", "p2", "p3"] },
+      ],
+      openQuestions: [],
+    };
+    const set: WorkingSet = {
+      shots: [photo("p1"), photo("p2"), photo("p3")],
+      lines: [],
+    };
+    const result = validateProposal(proposal, set, { excludedShotIds: [], mustIncludeShotIds: [] });
+    expect(result.ok).toBe(true);
   });
 
   it("video_preview_bounds names a video preview outside its own shot interval", () => {
@@ -183,11 +193,10 @@ describe("validateProposal", () => {
         : moment),
     };
 
-    const result = diagnostics(validateProposal(proposal, oneSecondVideoSet, { ...options, targetSec: 25 }));
+    const result = diagnostics(validateProposal(proposal, oneSecondVideoSet, options));
     expect(result).toEqual(expect.arrayContaining([
       expect.stringMatching(/catalog_media_kind.*v1.*video.*photo.*set kind/i),
       expect.stringMatching(/video_preview_bounds.*v1.*undefined.*10.*11.*inside/i),
-      expect.stringMatching(/duration_coverage.*4 photo-equivalents.*at least 5/i),
     ]));
   });
 
@@ -199,19 +208,5 @@ describe("validateProposal", () => {
     };
 
     expect(validateProposal(validProposal, intervalWorkingSet, options)).toEqual({ ok: true });
-  });
-  it("counts only the preview range a video actually plays, matching the client estimate", async () => {
-    // v1's source interval is 10 seconds, but the proposal previews 2 of them.
-    const shortPreview: ProposalSubmission = {
-      ...validProposal,
-      moments: validProposal.moments.map((moment) => moment.shotId === "v1"
-        ? { ...moment, previewInSec: 10, previewOutSec: 12 }
-        : moment),
-    };
-
-    const diagnostic = diagnostics(validateProposal(shortPreview, workingSet, options))
-      .find((item) => item.startsWith("duration_coverage:"));
-
-    expect(diagnostic).toMatch(/4\.4 photo-equivalents.*at least 6.*30 seconds/i);
   });
 });

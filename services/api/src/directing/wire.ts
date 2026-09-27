@@ -26,7 +26,7 @@ type StoredJob = Pick<PlanJob, "proposalId" | "storyIntentId" | "version" | "par
   type: "plan";
   status: string;
   attempts: number;
-  pinnedInputs: Pick<PlanJob, "intent" | "constraints" | "targetSec">;
+  pinnedInputs: Pick<PlanJob, "intent" | "constraints">;
   completedResult?: Extract<PlanResult, { ok: true }>;
 };
 
@@ -170,7 +170,6 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
         // replay a self-correcting conversation turn-for-turn.
         if (cached && workingSet) {
           const validation = validateProposal(cached.submission, workingSet, {
-            targetSec: job.targetSec,
             excludedShotIds: job.constraints.excludedShotIds,
             mustIncludeShotIds: constraintShotIds(job),
           });

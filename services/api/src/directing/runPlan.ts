@@ -30,7 +30,6 @@ export type PlanJob = {
   parentProposalId: string | null;
   intent: { text: string; focus: string[] };
   constraints: ProposalConstraints;
-  targetSec: number;
   shots: WorkingShot[];
   parentProposal?: Pick<StoryProposal, "moments"> | null;
   workingSetCap?: number;
@@ -109,7 +108,7 @@ function initialPrompt(job: PlanJob, catalog: string[]): string {
     "Build a story proposal using only literal shot ids from the working set.",
     `Intent: ${job.intent.text}`,
     `Focus: ${JSON.stringify(job.intent.focus)}`,
-    `Target duration: ${job.targetSec} seconds`,
+    "Keep every moment worth keeping; the film's length is chosen later.",
     `Carried constraints: ${JSON.stringify(job.constraints)}`,
     `Prior feedback: ${JSON.stringify(job.constraints.feedback)}`,
     "Working set:",
@@ -294,7 +293,6 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
 
       await progress("organizing");
       const validation = validateProposal(output.submission, admissibleSet(workingSet, deps.tools), {
-        targetSec: job.targetSec,
         excludedShotIds: job.constraints.excludedShotIds,
         mustIncludeShotIds,
       });

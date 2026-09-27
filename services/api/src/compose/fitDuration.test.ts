@@ -143,4 +143,12 @@ describe("fitDuration — edge cases", () => {
 
     expect(result.clips[0]!.holdSec).toBe(5); // adjusted to target
   });
+
+  it("shortens rather than fails when 6 photos cannot fill 60s", () => {
+    const clips = Array.from({ length: 6 }, (_, i) => makePhotoClip(`m${i}`, 3));
+    const result = fitDuration(clips, 60, { base: 3, min: 1, max: 5 });
+    expect(result.clips).toHaveLength(6);
+    expect(result.targetSec).toBeLessThan(60);
+    expect(result.notes.join(" ")).toMatch(/exhausted/);
+  });
 });

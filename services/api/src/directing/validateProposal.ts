@@ -2,7 +2,6 @@ import type { ProposalSubmission } from "./assemble.js";
 import type { WorkingSet, WorkingShot } from "./workingSet.js";
 
 export type ProposalValidationOptions = {
-  targetSec: number;
   excludedShotIds?: string[];
   mustIncludeShotIds?: string[];
 };
@@ -79,38 +78,6 @@ function validateProposalMinimumDistinct({ proposal }: RuleContext): string[] {
   return [`proposal_minimum_distinct: chapter selections ${listed(distinct) || "none"} provide ${distinct.size} distinct moments; use at least ${required} distinct moments across ${proposal.chapters.length} chapters.`];
 }
 
-/**
- * A video contributes only the seconds its preview range actually plays, which
- * is what the client estimate in `projectProposal` shows the user and what
- * composition will cut from. Counting the whole source interval let a proposal
- * pass this guard while promising the user a much shorter film.
- */
-function previewSeconds(moment: ProposalSubmission["moments"][number]): number {
-  if (moment.kind !== "video") return 0;
-  const start = moment.previewInSec;
-  const end = moment.previewOutSec;
-  if (start === undefined || end === undefined) return 0;
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
-  return Math.max(0, end - start);
-}
-
-function validateDurationCoverage({ proposal, shotsById, options }: RuleContext): string[] {
-  let equivalents = 0;
-  const selected = chapterShotIds(proposal);
-  const momentsByShotId = new Map(proposal.moments.map((moment) => [moment.shotId, moment]));
-  for (const shotId of selected) {
-    const moment = momentsByShotId.get(shotId);
-    if (!moment) continue;
-    const shot = shotsById.get(shotId);
-    if (shot?.analysis?.kind === "photo") equivalents += 1;
-    if (shot?.analysis?.kind === "video") equivalents += previewSeconds(moment) / 5;
-  }
-
-  const required = options.targetSec / 5;
-  if (equivalents >= required) return [];
-  return [`duration_coverage: selected moments provide ${equivalents} photo-equivalents from shot ids ${listed(selected) || "none"}, but need at least ${required} for a ${options.targetSec} seconds target; add photos or usable video duration.`];
-}
-
 function shotInterval(shot: WorkingShot): readonly [number, number] | null {
   const start = shot.sourceStartSec;
   const end = shot.sourceEndSec;
@@ -149,7 +116,6 @@ const RULES: ValidationRule[] = [
   validateMustIncludeShots,
   validateChapterMinimumDistinct,
   validateProposalMinimumDistinct,
-  validateDurationCoverage,
   validateVideoPreviewBounds,
 ];
 

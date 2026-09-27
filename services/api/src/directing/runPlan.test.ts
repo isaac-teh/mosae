@@ -77,7 +77,6 @@ const job: PlanJob = {
   parentProposalId: null,
   intent: { text: "Tell the story of our picnic.", focus: ["family"] },
   constraints,
-  targetSec: 25,
   shots,
 };
 
@@ -202,7 +201,6 @@ describe("runPlan", () => {
 
     expect(result.ok).toBe(true);
     expect(script.inputs[1]?.messages.at(-1)?.content).toMatch(/must_include_shots.*p5.*add/i);
-    expect(script.inputs[1]?.messages.at(-1)?.content).toMatch(/duration_coverage/i);
     if (result.ok) expect(result.usage.modelTurns).toBe(2);
   });
 
@@ -438,6 +436,13 @@ describe("runPlan", () => {
       expect(result.diagnostics.join("\n")).toMatch(/must_include_conflict.*p5/);
       expect(result.usage.modelTurns).toBe(0);
     }
+  });
+
+  it("does not put a target duration in the plan prompt", async () => {
+    const script = scripted([{ type: "submit", submission: validSubmission }]);
+    await runPlan(job, { model: script.model, tools: tools() });
+    const firstPrompt = script.inputs[0].messages[0].content;
+    expect(firstPrompt).not.toMatch(/Target duration/);
   });
 });
 

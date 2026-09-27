@@ -47,7 +47,6 @@ const job: PlanJob = {
   parentProposalId: null,
   intent: { text: "Tell the story of our picnic.", focus: ["family"] },
   constraints,
-  targetSec: 25,
   shots,
 };
 
@@ -114,7 +113,6 @@ describe("proposalCache", () => {
 
     // The cached submission is still valid against this run's working set.
     expect(validateProposal(hit.submission, workingSet, {
-      targetSec: job.targetSec,
       excludedShotIds: job.constraints.excludedShotIds,
       mustIncludeShotIds: constraintShotIds(job),
     })).toEqual({ ok: true });

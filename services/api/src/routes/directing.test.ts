@@ -326,7 +326,7 @@ describe("createPlanJob", () => {
       proposalId: job.proposalId,
       version: 4,
       waitForReady: true,
-      pinnedInputs: { intent: { text: "Tell the story", focus: [] }, constraints, targetSec: 60 },
+      pinnedInputs: { intent: { text: "Tell the story", focus: [] }, constraints },
     });
     expect([...documents.entries()].find(([path]) => path.includes("/taskOutbox/"))?.[1]).toMatchObject({
       projectId: "project-1",
