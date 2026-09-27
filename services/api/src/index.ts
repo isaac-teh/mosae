@@ -66,7 +66,15 @@ const cluster = async (projectId: string): Promise<unknown> => {
   return result;
 };
 const plan = createPlan({ db: adminDb, geminiApiKey: config.geminiApiKey, cache: new FirestoreProposalCache(adminDb) });
-const compose = createCompose({ db: adminDb, geminiApiKey: config.geminiApiKey });
+const compose = createCompose({
+  db: adminDb,
+  geminiApiKey: config.geminiApiKey,
+  // Compose runs inside a drain, so deliver the render it queued on the next
+  // tick, the same hand-off clustering uses for plan readiness.
+  afterRenderEnqueued: useDevRunner
+    ? () => { setImmediate(() => { void dispatchDue(adminDb, queue, Date.now()).catch((error) => console.error("render dispatch failed", error)); }); }
+    : undefined,
+});
 
 // A Timeline names shots; files hang off assets, so the shot is the hop in
 // between. The same lookup the generations route uses.

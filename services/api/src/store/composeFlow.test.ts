@@ -160,8 +160,12 @@ describe("compose flow (emulator)", () => {
     const { projectId, proposalId } = await seed();
 
     const generationId = await requestGeneration(projectId, proposalId, true);
-    const queue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), compose: createCompose({ db: adminDb, generateStructured: async () => RECORDED }) });
+    const afterRenderEnqueued = vi.fn();
+    const queue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), compose: createCompose({ db: adminDb, generateStructured: async () => RECORDED, afterRenderEnqueued }) });
     expect(await deliverOwnTasks(projectId, queue)).toHaveLength(1);
+    // The local runner drains only on events; this hook is how the render task
+    // compose just wrote gets delivered at all.
+    expect(afterRenderEnqueued).toHaveBeenCalledTimes(1);
 
     // Compose success moves the generation to playable and immediately enqueues
     // a render: the film is `rendering` with a real `taskOutbox` record in the

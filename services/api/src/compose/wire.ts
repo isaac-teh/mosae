@@ -25,6 +25,12 @@ export type ComposeConfig = {
   /** Test seam: a recorded model response in place of the SDK. */
   generateStructured?: ComposeDeps["generateStructured"];
   soundtrackIds?: Set<string>;
+  /**
+   * Called once the render task is written. Production's dispatcher polls the
+   * outbox; the local dev runner only drains on events, so it hooks in here or
+   * the render task sits undelivered and the film stays "rendering" forever.
+   */
+  afterRenderEnqueued?: () => void;
 };
 
 /**
@@ -247,6 +253,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       generationId: task.generationId,
       schemaVersion: generation.schemaVersion,
     });
+    config.afterRenderEnqueued?.();
 
     return "composed";
   };
