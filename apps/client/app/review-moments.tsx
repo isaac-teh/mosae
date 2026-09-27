@@ -19,10 +19,8 @@ import {
 export default function ReviewMomentsScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
-  const { flow, repository, route } = useStoryFlow();
-  // Opened from a link there is no history to pop: the previous step is the
-  // character picker, except in the fixture flow, which skips it.
-  const goBack = useStepBack(route(flow.repository === "api" ? "/character-picker" : "/tell-story", { planId }) as Href);
+  const { repository, route } = useStoryFlow();
+  const goBack = useStepBack(route("/tell-story") as Href);
   const { plan, error, mutationError, updating, mutate } = useStoryPlan(planId, repository);
 
   if (error) {
@@ -42,9 +40,9 @@ export default function ReviewMomentsScreen() {
   if (!plan) {
     return (
       <StepHeader
-        step="STEP 4 OF 7"
+        step="STEP 3 OF 6"
         label="CURATED MOMENT"
-        progress={0.4744}
+        progress={0.5}
         onBack={() => goBack()}
         backLabel="Go back to tell story"
       />
@@ -66,9 +64,9 @@ export default function ReviewMomentsScreen() {
       {/* Header overlay - absolute positioned over content */}
       <View className="absolute inset-x-0 top-0 z-30">
         <StepHeader
-          step="STEP 4 OF 7"
+          step="STEP 3 OF 6"
           label="CURATED MOMENT"
-          progress={0.4744}
+          progress={0.5}
           onBack={() => goBack()}
           backLabel="Go back to tell story"
         />

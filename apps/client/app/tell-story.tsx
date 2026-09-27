@@ -83,9 +83,11 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
           if (next.status === "failed") {
             setError(next.reason || "Couldn't find the moments. Please try again.");
           } else {
-            // The character picker sits between the plan and reviewing its moments:
-            // faces exist by now, and naming them still feeds back into the plan.
-            push(storyRoute("/character-picker", { planId: next.proposalId }, { repository: "api", projectId }) as any);
+            // The character picker is built and routable, but kept out of the
+            // flow while face grouping is unsolved: it asks the user to name
+            // every crop individually, which does not scale past a few photos.
+            // See BACKLOG "Face grouping".
+            push(storyRoute("/review-moments", { planId: next.proposalId }, { repository: "api", projectId }) as any);
           }
         }
       },
@@ -152,7 +154,7 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
       keyboardShouldPersistTaps="handled"
     >
       <StepHeader
-        step="Step 2 of 7"
+        step="Step 2 of 6"
         label="STORY INTENT"
         progress={2 / 7}
         onBack={() => goBack()}

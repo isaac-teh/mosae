@@ -158,7 +158,7 @@ export default function CharacterPickerScreen() {
 
   return (
     <View className="flex-1 bg-canvas">
-      <StepHeader step="STEP 3 OF 7" label="CHARACTERS" progress={0.43} onBack={() => goBack()} backLabel="Go back to your story" />
+      <StepHeader step="CHARACTERS" label="OPTIONAL" progress={0.5} onBack={() => goBack()} backLabel="Go back to your story" />
       <ScrollView className="flex-1" contentContainerClassName="px-5 pb-[112px] pt-4" keyboardShouldPersistTaps="handled">
         <View className="mt-1">
           <Text className="font-serif text-[26px] leading-[32.5px] tracking-[-0.65px] text-ink">Who&apos;s in your film?</Text>
