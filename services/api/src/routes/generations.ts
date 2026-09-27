@@ -225,18 +225,19 @@ export function generationsRouter(deps: {
         return res.status(400).json({ error: "render_not_complete", status: generation.status });
       }
 
-      // Return a signed URL for the output file
-      const { getStorage } = await import("firebase-admin/storage");
+      // Return a URL that answers 200 with video/mp4 locally. On the storage
+      // emulator, getSignedUrl has no credentials and fails, so address the file
+      // directly through the same GCS-style download path the thumbnail store
+      // uses (firebaseDownloadUrlStore). Otherwise sign a read.
+      const { firebaseDownloadUrlStore } = await import("../ingest/objectStore.js");
       const { getAdminApp } = await import("../firebase/admin.js");
+      const { getStorage } = await import("firebase-admin/storage");
       const bucket = getStorage(getAdminApp()).bucket();
-      const file = bucket.file(generation.outputPath);
+      const store = firebaseDownloadUrlStore(bucket);
 
       try {
-        const [url] = await file.getSignedUrl({
-          action: "read",
-          expires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
-        });
-        return res.json({ downloadUrl: url, outputPath: generation.outputPath });
+        const downloadUrl = await store.signedDownloadUrl(generation.outputPath);
+        return res.json({ downloadUrl, outputPath: generation.outputPath });
       } catch {
         return res.status(500).json({ error: "url_generation_failed" });
       }
