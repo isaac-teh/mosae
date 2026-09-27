@@ -3,7 +3,7 @@ import type { ImageSourcePropType } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 type FilmPlayerProps = {
-  source: number;
+  source: number | string;
   poster: ImageSourcePropType;
   durationSec: number;
   initialTimeSec?: number;
