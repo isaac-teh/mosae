@@ -53,3 +53,16 @@ export function safeParseDirectionSettings(
   if (result.success) return { ok: true, settings: result.data };
   return { ok: false, errors: result.error.issues.map(describe) };
 }
+
+/** Default photo hold in seconds; the spec's 3s. */
+export const DEFAULT_HOLD_SEC = 3;
+
+/** Usable photos × 3s, snapped down to a tier, never below 30s. */
+export function recommendDuration(usablePhotoCount: number): DurationId {
+  const seconds = usablePhotoCount * DEFAULT_HOLD_SEC;
+  const tiers = (Object.entries(DURATION_SECONDS) as [DurationId, number][]).sort((a, b) => a[1] - b[1]);
+  let pick: DurationId = "30s";
+  for (const [id, tierSec] of tiers) if (tierSec <= seconds) pick = id;
+  return pick;
+}
+

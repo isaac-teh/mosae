@@ -39,6 +39,8 @@ export {
   safeParseDirectionSettings,
   CADENCES,
   DURATION_SECONDS,
+  DEFAULT_HOLD_SEC,
+  recommendDuration,
   type DirectionSettings,
   type CadenceId,
   type DurationId,

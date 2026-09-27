@@ -9,14 +9,14 @@ export interface Holds {
 
 // Hold table keyed directly by CadenceId — no mapping, no substring matching.
 const HOLDS: Record<CadenceId, Holds> = {
-  tender: { base: 3.5, min: 2, max: 6 },
-  reflective: { base: 4, min: 2.5, max: 7 },
-  playful: { base: 2.2, min: 1.5, max: 4 },
-  energetic: { base: 1.6, min: 1, max: 3 },
-  celebratory: { base: 2.5, min: 1.5, max: 4.5 },
+  tender: { base: 4, min: 2.5, max: 5 },
+  reflective: { base: 4.5, min: 3, max: 5 },
+  playful: { base: 2, min: 1, max: 3.5 },
+  energetic: { base: 1.5, min: 1, max: 2.5 },
+  celebratory: { base: 2.5, min: 1.5, max: 4 },
 };
 
-const DEFAULT_HOLDS: Holds = { base: 3, min: 1.5, max: 5 };
+const DEFAULT_HOLDS: Holds = { base: 3, min: 1, max: 5 };
 
 /**
  * Look up holds for a cadence id. Total over CadenceId — the type system enforces exhaustiveness.

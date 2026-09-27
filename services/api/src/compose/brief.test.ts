@@ -16,18 +16,28 @@ describe("holdsFor", () => {
     },
   );
 
-  it("tender has the longest holds", () => {
+  it("keeps every cadence inside 1–5s", () => {
+    for (const { id } of CADENCES) {
+      const h = holdsFor(id);
+      expect(h.min).toBeGreaterThanOrEqual(1);
+      expect(h.max).toBeLessThanOrEqual(5);
+      expect(h.base).toBeGreaterThanOrEqual(h.min);
+      expect(h.base).toBeLessThanOrEqual(h.max);
+    }
+  });
+
+  it("tender holds match the table", () => {
     const h = holdsFor("tender" as any);
-    expect(h.base).toBe(3.5);
-    expect(h.min).toBe(2);
-    expect(h.max).toBe(6);
+    expect(h.base).toBe(4);
+    expect(h.min).toBe(2.5);
+    expect(h.max).toBe(5);
   });
 
   it("energetic has the shortest holds", () => {
     const h = holdsFor("energetic" as any);
-    expect(h.base).toBe(1.6);
+    expect(h.base).toBe(1.5);
     expect(h.min).toBe(1);
-    expect(h.max).toBe(3);
+    expect(h.max).toBe(2.5);
   });
 });
 
@@ -35,17 +45,17 @@ describe("craftBrief", () => {
   it("includes rhythm section with correct hold values for tender", () => {
     const brief = craftBrief("tender" as any, 60);
     expect(brief).toContain("Rhythm");
-    expect(brief).toContain("3.5s");
-    expect(brief).toContain("2s");
-    expect(brief).toContain("6s");
+    expect(brief).toContain("4s");
+    expect(brief).toContain("2.5s");
+    expect(brief).toContain("5s");
     expect(brief).toContain("60s");
   });
 
   it("includes rhythm section with correct hold values for energetic", () => {
     const brief = craftBrief("energetic" as any, 30);
-    expect(brief).toContain("1.6s");
+    expect(brief).toContain("1.5s");
     expect(brief).toContain("1s");
-    expect(brief).toContain("3s");
+    expect(brief).toContain("2.5s");
     expect(brief).toContain("30s");
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CADENCES, DURATION_SECONDS, safeParseDirectionSettings } from "./direction.js";
+import { CADENCES, DURATION_SECONDS, safeParseDirectionSettings, recommendDuration } from "./direction.js";
 
 const valid = {
   schemaVersion: 1,
@@ -47,4 +47,9 @@ describe("DirectionSettingsSchema", () => {
     expect(CADENCES.map((cadence) => cadence.id)).toContain("tender");
     for (const cadence of CADENCES) expect(cadence.description.length).toBeGreaterThan(0);
   });
+});
+
+describe("recommendDuration", () => {
+  it.each([[0, "30s"], [5, "30s"], [12, "30s"], [20, "1m"], [45, "2m"], [70, "3m"], [200, "5m"]])(
+    "%i usable photos → %s", (count, expected) => expect(recommendDuration(count)).toBe(expected));
 });

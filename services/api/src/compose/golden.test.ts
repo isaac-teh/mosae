@@ -141,15 +141,15 @@ describe("golden composition", () => {
 
   it("lands within 10% of the length it was fitted to", async () => {
     const timeline = await composeOrThrow();
-    // 30s was asked for; the cadence's 6s maximum hold on both stills is all
-    // the media can reach, so the target shortened to 28s rather than padding.
-    expect(timeline.durationSec).toBeCloseTo(28);
-    expect(Math.abs(timeline.durationSec - 28)).toBeLessThanOrEqual(2.8);
+    // 30s was asked for; the cadence's 5s maximum hold on both stills is all
+    // the media can reach, so the target shortened to 24s rather than padding.
+    expect(timeline.durationSec).toBeCloseTo(24);
+    expect(Math.abs(timeline.durationSec - 24)).toBeLessThanOrEqual(2.4);
   });
 
   it("burns in the model's text overlay and ducks the music under speech", async () => {
     const timeline = await composeOrThrow();
-    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 10.5, endSec: 22.5 }]);
+    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 9.5, endSec: 19.5 }]);
 
     const music = timeline.audioClips.find((clip) => clip.role === "music");
     const speech = timeline.audioClips.find((clip) => clip.role === "speech");
