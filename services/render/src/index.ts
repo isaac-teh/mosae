@@ -9,7 +9,10 @@ import { loadConfig } from "./config.js";
 import { requireServiceCaller } from "./auth/requireServiceCaller.js";
 
 const config = loadConfig();
-const port = Number(process.env.PORT || 8080);
+// The API expects render on 8081 (`services/api/src/config.ts:37`), not the
+// default 8080 which is the API's own port. `start-all.sh` passes PORT=8081;
+// this keeps the two from colliding if someone forgets to set it.
+const port = Number(process.env.PORT || 8081);
 const publicDir = process.env.MOSAE_REMOTION_PUBLIC_DIR ?? new URL("../../../apps/client/assets/demo", import.meta.url).pathname;
 const app = express();
 app.use(express.json({ limit: "8mb" }));

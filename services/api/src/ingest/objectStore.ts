@@ -29,6 +29,27 @@ export function firebaseThumbnailUrlStore(bucket: Bucket): ThumbnailUrlStore {
   };
 }
 
+/**
+ * A download URL for any object, not just thumbnails. The render output is an
+ * MP4 the browser must play directly, so it needs the same emulator form as the
+ * thumbnail store — a direct GCS-style `/download/storage/v1/...?alt=media`
+ * address when the storage emulator is running, because `getSignedUrl` has no
+ * credentials there and would fail. The non-emulator path signs a read with v4.
+ */
+export function firebaseDownloadUrlStore(bucket: Bucket): { signedDownloadUrl(path: string): Promise<string> } {
+  return {
+    async signedDownloadUrl(path) {
+      const emulator = process.env.FIREBASE_STORAGE_EMULATOR_HOST;
+      if (emulator) {
+        const host = emulator.startsWith("http") ? emulator : `http://${emulator}`;
+        return `${host}/download/storage/v1/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media`;
+      }
+      const [url] = await bucket.file(path).getSignedUrl({ version: "v4", action: "read", expires: Date.now() + 24 * 60 * 60 * 1000 });
+      return url;
+    },
+  };
+}
+
 export interface ObjectStore {
   download(input: { path: string; generation: string; destination: string }): Promise<void>;
   downloadCurrent(input: { path: string; destination: string }): Promise<void>;
