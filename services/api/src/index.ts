@@ -10,6 +10,7 @@ import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
 import { generationsRouter } from "./routes/generations.js";
+import { directionOptionsRouter } from "./routes/directionOptions.js";
 import {
   CloudTasksQueue,
   InMemoryTaskQueue,
@@ -140,6 +141,10 @@ app.use(
 app.use(
   "/api/projects",
   generationsRouter({ db: adminDb, loadSource, dispatch: () => dispatchDue(adminDb, queue, Date.now()) }),
+);
+app.use(
+  "/api/projects",
+  directionOptionsRouter({ db: adminDb }),
 );
 app.use(
   "/events",
