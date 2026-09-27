@@ -109,6 +109,7 @@ function initialPrompt(job: PlanJob, catalog: string[]): string {
     `Intent: ${job.intent.text}`,
     `Focus: ${JSON.stringify(job.intent.focus)}`,
     "Keep every moment worth keeping; the film's length is chosen later.",
+    "Also recommend the film's cadence (one of tender, reflective, playful, energetic, celebratory) from the photos' mood, with a short reason.",
     `Carried constraints: ${JSON.stringify(job.constraints)}`,
     `Prior feedback: ${JSON.stringify(job.constraints.feedback)}`,
     "Working set:",

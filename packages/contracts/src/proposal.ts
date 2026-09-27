@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CADENCES, type CadenceId } from "./direction.js";
 
 /**
  * The review contract. Moments are narrative selections with stable ids;
@@ -68,6 +69,8 @@ const BaseProposalSchema = z.strictObject({
   chapters: z.array(ProposalChapterSchema).min(1),
   constraints: ProposalConstraintsSchema,
   openQuestions: z.array(z.string().min(1)),
+  recommendedCadence: z.enum(CADENCES.map((c) => c.id) as [CadenceId, ...CadenceId[]]).optional(),
+  cadenceReason: z.string().min(1).max(200).optional(),
 });
 
 /**

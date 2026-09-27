@@ -58,4 +58,10 @@ describe("assembleProposal", () => {
   it("uses stable ids for identical assemblies", () => {
     expect(assembleProposal(body, context)).toEqual(assembleProposal(body, context));
   });
+
+  it("carries the cadence recommendation onto the proposal", () => {
+    const proposal = assembleProposal({ ...body, recommendedCadence: "tender", cadenceReason: "quiet sunset" }, context);
+    expect(proposal.recommendedCadence).toBe("tender");
+    expect(proposal.cadenceReason).toBe("quiet sunset");
+  });
 });

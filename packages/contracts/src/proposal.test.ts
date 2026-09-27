@@ -77,4 +77,10 @@ describe("StoryProposalSchema", () => {
   it("rejects an unknown state", () => {
     expect(safeParseStoryProposal({ ...valid, state: "published" }).ok).toBe(false);
   });
+
+  it("accepts an optional cadence recommendation and rejects unknown cadences", () => {
+    expect(safeParseStoryProposal({ ...valid, recommendedCadence: "playful", cadenceReason: "kids laughing" }).ok).toBe(true);
+    expect(safeParseStoryProposal({ ...valid, recommendedCadence: "sad" }).ok).toBe(false);
+    expect(safeParseStoryProposal(valid).ok).toBe(true);
+  });
 });

@@ -1,4 +1,4 @@
-import { StoryProposalSchema, type ProposalConstraints, type StoryProposal } from "@mosae/contracts";
+import { StoryProposalSchema, type CadenceId, type ProposalConstraints, type StoryProposal } from "@mosae/contracts";
 
 export type SubmittedMoment = {
   shotId: string;
@@ -16,6 +16,8 @@ export type ProposalSubmission = {
   /** References are shot ids. The model does not mint application ids. */
   chapters: Array<{ title: string; summary: string; momentIds: string[] }>;
   openQuestions: string[];
+  recommendedCadence?: CadenceId;
+  cadenceReason?: string;
 };
 
 export type ProposalAssemblyContext = {
@@ -109,6 +111,8 @@ export function assembleProposal(body: ProposalSubmission, context: ProposalAsse
     chapters,
     constraints,
     openQuestions: body.openQuestions,
+    ...(body.recommendedCadence !== undefined ? { recommendedCadence: body.recommendedCadence } : {}),
+    ...(body.cadenceReason !== undefined ? { cadenceReason: body.cadenceReason } : {}),
   };
   const parsed = StoryProposalSchema.safeParse(candidate);
   if (!parsed.success) {
