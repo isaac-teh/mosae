@@ -8,8 +8,8 @@
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
     "test": "vitest run --exclude \"src/store/**\" --exclude \"src/**/*.emulator.test.ts\"",
-    "vitest:store": "vitest run src/store --no-file-parallelism",
-    "test:emulator": "cd ../.. && firebase emulators:exec --only firestore,storage --project demo-mosae \"npm run vitest:store -w services/api -- src/directing/directing.emulator.test.ts src/routes/characterPicker.emulator.test.ts src/routes/directionOptions.emulator.test.ts\"",
+    "vitest:store": "vitest run --no-file-parallelism",
+    "test:emulator": "cd ../.. && firebase emulators:exec --only firestore,storage --project demo-mosae \"npm run vitest:store -w services/api -- src/directing/directing.emulator.test.ts src/routes/characterPicker.emulator.test.ts src/routes/directionOptions.emulator.test.ts src/cast/ensureCast.emulator.test.ts\"",
     "replay:finalize": "tsx --env-file-if-exists=.env scripts/replayFinalize.ts"
   },
   "dependencies": {

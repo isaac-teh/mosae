@@ -65,7 +65,7 @@ const cluster = async (projectId: string): Promise<unknown> => {
   }
   return result;
 };
-const plan = createPlan({ db: adminDb, geminiApiKey: config.geminiApiKey, cache: new FirestoreProposalCache(adminDb) });
+const plan = createPlan({ db: adminDb, storageBucket: config.storageBucket, geminiApiKey: config.geminiApiKey, cache: new FirestoreProposalCache(adminDb) });
 const compose = createCompose({
   db: adminDb,
   geminiApiKey: config.geminiApiKey,

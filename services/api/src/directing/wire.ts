@@ -14,6 +14,7 @@ import { cacheKeyFor, constraintShotIds, type ProposalCache } from "./proposalCa
 import { z } from "zod";
 import { estimateUsd, MODELS, type GenerateDeps } from "../gemini/client.js";
 import { createEmbedClient, createGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
+import { ensureCast } from "../cast/ensureCast.js";
 
 export const MAX_PLAN_ATTEMPTS = 3;
 export const PLAN_LEASE_MS = DEFAULT_PLAN_BUDGET_LIMITS.elapsedMs + 60_000;
@@ -34,6 +35,7 @@ type Publish = (input: Parameters<typeof saveProposal>[1]) => Promise<SavePropos
 
 export type PlanConfig = {
   db: Firestore;
+  storageBucket?: string;
   geminiApiKey?: string;
   model?: PlanningModel;
   embedContent?: EmbedContent;
@@ -139,11 +141,16 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
         const parent = acquired.parentProposalId
           ? await project.collection("storyProposals").doc(acquired.parentProposalId).get()
           : null;
+        const ensured = await ensureCast(db, task.projectId, { storageBucket: config.storageBucket });
+        const constraints = { ...acquired.pinnedInputs.constraints };
+        if ((!constraints.focusCharacterIds || constraints.focusCharacterIds.length === 0) && ensured.cast.focus.length > 0) {
+          constraints.focusCharacterIds = ensured.cast.focus;
+        }
         const job: PlanJob = {
           id: task.jobId, projectId: task.projectId,
           proposalId: acquired.proposalId, storyIntentId: acquired.storyIntentId,
           version: acquired.version, parentProposalId: acquired.parentProposalId,
-          ...acquired.pinnedInputs, shots,
+          ...acquired.pinnedInputs, constraints, shots, castSummary: ensured.summary ?? undefined,
           parentProposal: parent?.exists ? parent.data() as StoryProposal : null,
         };
         // Build the working set once so the cache key and validation agree on

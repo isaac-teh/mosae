@@ -144,6 +144,12 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 describe("runPlan", () => {
+  it("includes the cast summary in the first prompt when available", async () => {
+    const script = scripted([{ type: "submit", submission: validSubmission }]);
+    await runPlan({ ...job, castSummary: "2 parents, 1 child; focus: the child; all core together in 2 photos." }, { model: script.model, tools: tools() });
+    expect(script.inputs[0]?.messages[0]?.content).toContain("Cast: 2 parents");
+  });
+
   it("builds context, executes read-only tools, reports coarse progress and returns an assembled proposal", async () => {
     const script = scripted([
       {
