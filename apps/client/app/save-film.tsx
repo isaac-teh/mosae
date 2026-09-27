@@ -39,13 +39,28 @@ function SaveFilmScreenContent({ filmId, repository, route }: {
   useEffect(() => { void repository.getFilm(filmId)
     .then((value) => { if (isCurrent()) setFilm(value); })
     .catch((cause: Error) => { if (isCurrent()) setError(cause.message); }); }, [filmId, isCurrent, repository]);
-  const download = () => {
+  const download = async () => {
+    if (!film) return;
+    // The rendered film lives on another origin (storage), where the browser
+    // ignores `download` and just opens the video. Fetching it into a blob
+    // keeps it a save, under the film's own name.
+    let href = Asset.fromModule(require("../assets/demo/film.mp4")).uri;
+    let objectUrl: string | null = null;
+    if (film.videoUrl) {
+      try {
+        objectUrl = URL.createObjectURL(await (await fetch(film.videoUrl)).blob());
+        href = objectUrl;
+      } catch {
+        href = film.videoUrl;
+      }
+    }
     const anchor = document.createElement("a");
-    anchor.href = Asset.fromModule(require("../assets/demo/film.mp4")).uri;
-    anchor.download = "Mei's 7th Birthday in Japan.mp4";
+    anchor.href = href;
+    anchor.download = `${film.title.replace(/[\\/:*?"<>|]/g, "")}.mp4`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
+    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl!), 1000);
   };
   if (error) return <View className="flex-1 items-center justify-center bg-canvas"><Text className="text-brand">{error}</Text></View>;
   if (!film) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => goBack()} backLabel="Go back to your film" /></View>;
@@ -53,9 +68,9 @@ function SaveFilmScreenContent({ filmId, repository, route }: {
   return <View className="flex-1 bg-canvas"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => goBack()} backLabel="Go back to your film" />
     <ScrollView className="flex-1" contentContainerClassName="min-h-[845px] px-5 pb-3" showsVerticalScrollIndicator={false}>
       <View className="pt-[23px]"><Text className="font-sans-semibold text-[15px] leading-5 text-ink">Your memory is ready</Text><Text className="mt-1 font-sans text-sm leading-[22px] text-ink-soft">Crafted with love and safeguarded in your memory{`\n`}gallery.</Text></View>
-      <View className="mt-[14px] rounded-[38px] bg-white px-4 pb-[18px] pt-3 shadow-[0_8px_24px_rgba(66,50,40,0.07)]"><View><FilmPlayer source={film.videoUrl ?? require("../assets/demo/film.mp4")} poster={storyImage(film.savePosterKey)} durationSec={film.durationSec} aspect="landscape" compact /><View className="absolute bottom-2.5 left-2.5 flex-row items-center rounded-full bg-black/75 px-2 py-1"><Text className="mr-1 text-[10px] text-white">▣</Text><Text className="font-sans-medium text-[11px] text-white">4K Master Audio • 2:10</Text></View></View><Text className="mt-4 font-serif text-[19px] leading-6 text-ink">Mei’s 7th Birthday in Japan</Text><View className="mt-1 flex-row items-center"><PinIcon /><Text className="ml-1 font-sans text-xs text-ink-soft">Tokyo & Kyoto • March 2026</Text></View></View>
+      <View className="mt-[14px] rounded-[38px] bg-white px-4 pb-[18px] pt-3 shadow-[0_8px_24px_rgba(66,50,40,0.07)]"><View><FilmPlayer source={film.videoUrl ?? require("../assets/demo/film.mp4")} poster={storyImage(film.savePosterKey)} durationSec={film.durationSec} aspect="landscape" compact /><View className="absolute bottom-2.5 left-2.5 flex-row items-center rounded-full bg-black/75 px-2 py-1"><Text className="mr-1 text-[10px] text-white">▣</Text><Text className="font-sans-medium text-[11px] text-white">{film.audioLabel}</Text></View></View><Text className="mt-4 font-serif text-[19px] leading-6 text-ink">{film.title}</Text><View className="mt-1 flex-row items-center"><PinIcon /><Text className="ml-1 font-sans text-xs text-ink-soft">{film.dateLabel}</Text></View></View>
       <Text className="mt-[23px] px-1 font-sans-medium text-[11px] tracking-[.35px] text-ink-soft">CHOOSE WHERE TO SHARE</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4 -mr-5"><View className="flex-row gap-2 pr-2">{share("Download", <DownloadIcon />, download)}{share("WhatsApp", <WhatsAppIcon />, () => setComingSoon(true))}{share("Instagram", <InstagramIcon />, () => setComingSoon(true))}{share("Facebook", <FacebookIcon />, () => setComingSoon(true))}{share("More", <Text className="text-lg text-ink-soft">•••</Text>, () => setComingSoon(true))}</View></ScrollView>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4 -mr-5"><View className="flex-row gap-2 pr-2">{share("Download", <DownloadIcon />, () => void download())}{share("WhatsApp", <WhatsAppIcon />, () => setComingSoon(true))}{share("Instagram", <InstagramIcon />, () => setComingSoon(true))}{share("Facebook", <FacebookIcon />, () => setComingSoon(true))}{share("More", <Text className="text-lg text-ink-soft">•••</Text>, () => setComingSoon(true))}</View></ScrollView>
       {comingSoon && <Text className="mt-2 px-1 font-sans text-xs text-ink-soft">Coming soon</Text>}
       <View className="box-border mt-[37px] h-[142px] flex-row overflow-hidden rounded-[26px] bg-[#f0eeeb] p-4"><View className="h-24 w-20 self-center overflow-hidden rounded-sm bg-[#d9b898]"><img src={Asset.fromModule(demoImage("archive-print")).uri} alt="Linen Bound keepsake folio" style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scale(1.55)" }} /><View className="absolute bottom-1 left-0 right-0 items-center"><Text className="rounded bg-black/80 px-1 font-sans-medium text-[8px] text-white">Linen Bound</Text></View></View><View className="flex-1 px-4 py-1"><Text className="font-sans-medium text-[11px] text-honey">▰ ARTISANAL ARCHIVE</Text><Text className="font-serif text-[18px] leading-5 text-ink">Fine-Art Print Edition</Text><Text numberOfLines={2} className="mt-2 font-sans text-xs leading-[17px] text-ink-soft">Hand-crafted Japanese mulberry{`\n`}paper booklet of Mei’s birthday...</Text><Pressable role="button" aria-label="Order keepsake folio" onPress={() => setComingSoon(true)} className="mt-2"><Text className="font-sans-medium text-[11px] text-brand">Order keepsake folio →</Text></Pressable></View></View>
       <Pressable role="button" aria-label="Go back to memory gallery" onPress={() => router.navigate("/" as never)} className="mt-[47px] h-12 flex-row items-center justify-center gap-2 rounded-full bg-[#e9e6e2]"><GalleryIcon /><Text className="font-sans-medium text-[15px] text-ink">Go back to memory gallery</Text></Pressable>
