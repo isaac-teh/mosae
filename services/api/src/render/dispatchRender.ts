@@ -33,6 +33,13 @@ export type RenderConfig = {
   signRead?: (path: string) => Promise<string>;
   /** Sign a PUT URL for the finished MP4. Absent when the render stays on disk. */
   signUpload?: (path: string) => Promise<string>;
+  /**
+   * Copy a local render to its storage path so it can be read back. Absent in
+   * production, where `signUpload` hands the render service a signed PUT. Only
+   * runs when the render stayed local (`done.uploaded !== true`), so a local
+   * run can still `/download` a file the emulator holds.
+   */
+  storeLocalOutput?: (localFile: string, storagePath: string) => Promise<void>;
   /** Test seam: POST the request and yield the service's events. */
   post?: (url: string, body: unknown) => AsyncIterable<RenderEvent>;
   now?: () => number;
@@ -128,7 +135,7 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
       return giveBack([`source resolution failed: ${error instanceof Error ? error.message : String(error)}`]);
     }
 
-    const outputPath = renderOutputPath(userId, task.projectId, task.generationId);
+    let outputPath = renderOutputPath(userId, task.projectId, task.generationId);
     let uploadUrl: string | undefined;
     try {
       uploadUrl = await config.signUpload?.(outputPath);
@@ -172,6 +179,15 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
 
     // The progress the screen waits on, written whatever the throttle did.
     await setRenderProgress(db, { ...identity, progress: 1 });
+    // A local render stays on the render service's disk (its done event has
+    // uploaded !== true). Copy it to the storage path so `/download` can read
+    // it, and save that path instead of the on-disk one. A production render
+    // (signUpload set) already uploaded, so it is untouched.
+    if (done.uploaded !== true && config.storeLocalOutput) {
+      const storagePath = renderOutputPath(userId, task.projectId, task.generationId);
+      await config.storeLocalOutput(done.outputPath, storagePath);
+      outputPath = storagePath;
+    }
     await markSaved(db, { ...identity, outputPath });
     return "rendered";
   };

@@ -81,6 +81,46 @@ describe("createRender", () => {
     expect(db.docs.get("projects/p1")?.savedGenerationId).toBe("g1");
   });
 
+  it("copies a local render to its storage path and saves that path", async () => {
+    // A local render never uploads, so its done event has uploaded !== true.
+    // Without storeLocalOutput the MP4 would stay on the render service's disk
+    // and /download (a storage-emulator URL for generation.outputPath) would 404.
+    // With it, we copy the file to the storage path and save that path.
+    const db = seed();
+    const storeLocalOutput = vi.fn(async () => {});
+    const { render } = build(db, [{ done: true, outputPath: "/tmp/g1.mp4", durationInFrames: 120, uploaded: false }], {
+      storeLocalOutput,
+    });
+
+    expect(await render({ projectId: "p1", generationId: "g1" })).toBe("rendered");
+
+    expect(storeLocalOutput).toHaveBeenCalledTimes(1);
+    const [localFile, storagePath] = storeLocalOutput.mock.calls[0] as unknown as [string, string];
+    expect(localFile).toBe("/tmp/g1.mp4");
+    expect(storagePath).toBe("renders/owner/p1/g1.mp4");
+    expect(generation(db).outputPath).toBe("renders/owner/p1/g1.mp4");
+  });
+
+  it("does not copy a local render when storeLocalOutput is absent", async () => {
+    const db = seed();
+    const { render } = build(db, [{ done: true, outputPath: "/tmp/g1.mp4", durationInFrames: 120, uploaded: false }]);
+
+    expect(await render({ projectId: "p1", generationId: "g1" })).toBe("rendered");
+    expect(generation(db).outputPath).toBe("renders/owner/p1/g1.mp4");
+  });
+
+  it("does not copy a render that already uploaded", async () => {
+    const db = seed();
+    const storeLocalOutput = vi.fn(async () => {});
+    const { render } = build(db, [{ done: true, outputPath: "/tmp/g1.mp4", durationInFrames: 120, uploaded: true }], {
+      storeLocalOutput,
+    });
+
+    expect(await render({ projectId: "p1", generationId: "g1" })).toBe("rendered");
+    expect(storeLocalOutput).not.toHaveBeenCalled();
+    expect(generation(db).outputPath).toBe("renders/owner/p1/g1.mp4");
+  });
+
   it("signs every source and the destination when signing is configured", async () => {
     const db = seed();
     const { render, post } = build(db, [{ done: true, outputPath: "/tmp/g1.mp4", durationInFrames: 120 }], {

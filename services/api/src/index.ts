@@ -93,6 +93,13 @@ const render = createRender({
     const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "write", contentType: "video/mp4", expires: Date.now() + 6 * 60 * 60 * 1000 });
     return url;
   },
+  // A local render never uploads, so the MP4 stays on the render service's disk
+  // and /download (a storage-emulator URL for generation.outputPath) would 404.
+  // When the emulator is set, copy the finished file into the bucket at its
+  // storage path so the same /download form serves it back.
+  ...(process.env.FIREBASE_STORAGE_EMULATOR_HOST
+    ? { storeLocalOutput: async (localFile: string, storagePath: string) => { await renderBucket().upload(localFile, { destination: storagePath, contentType: "video/mp4" as const }); } }
+    : {}),
 });
 const queuePlan: QueuePlan = createQueuePlan({
   createJob: (input) => createPlanJob(adminDb, input),
