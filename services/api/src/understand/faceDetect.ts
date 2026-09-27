@@ -3,12 +3,17 @@ import { z } from "zod";
 /**
  * Validate + normalize raw Gemini face output into clean [0,1] boxes.
  *
- * Gemini Vision is observed to return raw PIXEL coordinates despite instructions
- * to return normalized values; this module auto-detects that case when image
- * dimensions are supplied (any coordinate above 1.05 ⇒ pixel space) and rescales
- * each box to [0,1] before validating shape, confidence-gating, and IoU-deduping
- * (lightweight NMS). It is the pure, dependency-free half of that step; the stable
- * `faceId` (`${shotId}-${index}`) is assigned by the caller once the shot id is known.
+ * Gemini returns detection boxes on a fixed 0–1000 grid regardless of the
+ * image's real size, and regardless of the prompt asking for pixels. Dividing
+ * by the image's pixel dimensions instead — which this did — is only harmless
+ * when the image happens to be about 1000px on a side: a 1024x1024 photo lands
+ * within 2.4% and looks correct, while a 1365x2048 one puts every face about
+ * twice as high as it belongs, out of the frame entirely. So the divisor is the
+ * grid, not the picture.
+ *
+ * Boxes are then validated for shape, confidence-gated, and IoU-deduped
+ * (lightweight NMS). The stable `faceId` (`${shotId}-${index}`) is assigned by
+ * the caller once the shot id is known.
  *
  * Detection quality is intentionally not this module's concern — Gemini Vision is
  * a noisy detector on real albums, so it acts as a filter the picker corrects, not
@@ -50,8 +55,11 @@ function dedup(boxes: { bbox: number[]; confidence: number }[]): { bbox: number[
   return kept;
 }
 
-/** True when any coordinate exceeds the normalized [0,1] range ⇒ pixel space. */
-function looksLikePixels(raw: unknown[]): boolean {
+/** The grid Gemini reports detection boxes on. */
+export const DETECTION_GRID = 1000;
+
+/** True when any coordinate is off the [0,1] scale ⇒ it is on the 0–1000 grid. */
+function onDetectionGrid(raw: unknown[]): boolean {
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const bbox = (item as { bbox?: unknown }).bbox;
@@ -63,21 +71,20 @@ function looksLikePixels(raw: unknown[]): boolean {
 
 export function normalizeFaces(
   raw: unknown[],
-  dims?: { width: number; height: number },
 ): { bbox: [number, number, number, number]; confidence: number }[] {
   const parsed = z.array(FaceSchema).safeParse(raw);
   if (!parsed.success) return [];
-  // Gemini Vision returns pixel coordinates; rescale using image dimensions when
-  // present. Auto-detect so this keeps working if it ever returns [0,1].
-  const asPixels = dims && dims.width > 0 && dims.height > 0 && looksLikePixels(parsed.data);
+  // Auto-detected rather than assumed, so a reply that is already normalised
+  // passes through untouched.
+  const scaled = onDetectionGrid(parsed.data);
   const boxes: { bbox: number[]; confidence: number }[] = [];
   for (const item of parsed.data) {
     let [ymin, xmin, ymax, xmax] = item.bbox as [number, number, number, number];
-    if (asPixels) {
-      ymin /= dims!.height;
-      xmin /= dims!.width;
-      ymax /= dims!.height;
-      xmax /= dims!.width;
+    if (scaled) {
+      ymin /= DETECTION_GRID;
+      xmin /= DETECTION_GRID;
+      ymax /= DETECTION_GRID;
+      xmax /= DETECTION_GRID;
     }
     const conf = Number(item.confidence ?? 1);
     if (!Number.isFinite(conf) || conf < CONFIDENCE_MIN) continue;

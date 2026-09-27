@@ -1,22 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { CONFIDENCE_MIN, IOU_THRESHOLD, normalizeFaces } from "./faceDetect.js";
+import { CONFIDENCE_MIN, DETECTION_GRID, IOU_THRESHOLD, normalizeFaces } from "./faceDetect.js";
 
 describe("normalizeFaces", () => {
-  const pixelFaces = [
-    { bbox: [100, 200, 300, 400], confidence: 0.9 }, // image ~600x800
+  const gridFaces = [
+    { bbox: [100, 200, 300, 400], confidence: 0.9 },
     { bbox: [105, 205, 305, 405], confidence: 0.8 }, // overlaps first heavily → deduped
     { bbox: [400, 450, 500, 550], confidence: 0.7 }, // distinct person
     { bbox: [10, 10, 20, 20], confidence: 0.2 }, // below CONFIDENCE_MIN → dropped
   ];
 
-  it("rescales pixel coordinates to [0,1] using image dimensions", () => {
-    const out = normalizeFaces(pixelFaces, { width: 600, height: 800 });
+  it("divides grid coordinates by 1000, not by the image size", () => {
+    const out = normalizeFaces(gridFaces);
     expect(out).toHaveLength(2); // heavy overlap deduped the second box; low-conf dropped
-    expect(out[0].bbox).toEqual([100 / 800, 200 / 600, 300 / 800, 400 / 600]);
+    expect(out[0].bbox).toEqual([0.1, 0.2, 0.3, 0.4]);
     expect(out[0].confidence).toBeCloseTo(0.9);
   });
 
-  it("passes through already-normalized coordinates when no dims given", () => {
+  /**
+   * The bug this pins: boxes were divided by the image's pixel dimensions. On a
+   * roughly 1000px-square photo that is within a few percent and looks right,
+   * which is exactly why it survived. On a tall photo it put every face about
+   * twice as high as it belonged — off the top of the frame, into the sky.
+   */
+  it("places a face identically whatever the image's shape", () => {
+    const face = [{ bbox: [389, 483, 453, 532], confidence: 0.99 }];
+    const [square] = normalizeFaces(face);
+    const [tall] = normalizeFaces(face);
+    expect(square.bbox).toEqual(tall.bbox);
+    expect(square.bbox[0]).toBeCloseTo(0.389);
+    expect(square.bbox[1]).toBeCloseTo(0.483);
+    // Comfortably inside the frame, where the face actually is.
+    expect(square.bbox.every((v) => v >= 0 && v <= 1)).toBe(true);
+  });
+
+  it("passes through already-normalized coordinates untouched", () => {
     const normalized = [
       { bbox: [0.1, 0.1, 0.4, 0.4], confidence: 0.7 },
       { bbox: [0.6, 0.6, 0.9, 0.9], confidence: 0.8 },
@@ -27,7 +44,7 @@ describe("normalizeFaces", () => {
   });
 
   it("drops faces below the confidence gate", () => {
-    const out = normalizeFaces(pixelFaces, { width: 600, height: 800 });
+    const out = normalizeFaces(gridFaces);
     expect(out.every((f) => f.confidence >= CONFIDENCE_MIN)).toBe(true);
   });
 
@@ -57,5 +74,6 @@ describe("normalizeFaces", () => {
   it("exposes its tunable constants", () => {
     expect(IOU_THRESHOLD).toBeGreaterThan(0);
     expect(CONFIDENCE_MIN).toBeGreaterThan(0);
+    expect(DETECTION_GRID).toBe(1000);
   });
 });

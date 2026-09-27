@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import sharp from "sharp";
 import { z } from "zod";
 import type { PhotoAnalysis, TranscriptLine, VideoShotAnalysis } from "../domain/understanding.js";
 import { generateStructured, type GenerateDeps } from "../gemini/client.js";
@@ -84,18 +83,11 @@ export async function analyzePhoto(deps: GenerateDeps, input: { assetId: string;
   const bytes = await readFile(input.renderPath);
   // Step 1 of face tagging: detect faces in the SAME Gemini call as analysis.
   // Detection piggybacks on the existing Vision request (same model), so it adds
-  // no new API cost beyond the analysis call already made. Gemini returns raw
-  // pixel coordinates; normalize to [0,1] using image dimensions. Stable ids
-  // require the shot id, which only the caller knows.
-  let dims: { width: number; height: number } | undefined;
-  try {
-    const info = await sharp(input.renderPath).metadata();
-    if (info.width && info.height) dims = { width: info.width, height: info.height };
-  } catch {
-    // Metadata is best-effort; detection still runs without it.
-  }
+  // no new API cost beyond the analysis call already made. Gemini reports boxes
+  // on a fixed 0-1000 grid, so normalising them needs no knowledge of the
+  // image's real size. Stable ids require the shot id, which only the caller knows.
   const value = photoSchema.parse(normalisePhoto(await generateStructured({ model: MODELS.analyze, stage: "understand.analyze", subjectId: input.assetId, contents: [{ text: photoPrompt }, { inlineData: { mimeType: "image/jpeg", data: bytes.toString("base64") } }], responseSchema: photoResponseSchema, validate: (v) => v as unknown, thinking: "LOW" }, deps)));
-  const faces = normalizeFaces(value.faces ?? [], dims).map((face, index) => ({ faceId: `${input.shotId}-${index}`, bbox: face.bbox, confidence: face.confidence }));
+  const faces = normalizeFaces(value.faces ?? []).map((face, index) => ({ faceId: `${input.shotId}-${index}`, bbox: face.bbox, confidence: face.confidence }));
   return { kind: "photo", caption: value.caption, subjects: value.subjects, setting: value.setting, activities: value.activities, mood: value.mood, shotType: value.shotType, aesthetics: value.aesthetics, keyMomentScore: value.keyMomentScore, tags: value.tags, ...(faces.length ? { faces } : {}) };
 }
 export type VideoFile = { uri: string; mimeType: string };

@@ -20,7 +20,14 @@ import {
 import { assignFaceCharacter, getProjectFaces } from "../store/understandStore.js";
 import { getOwnedProject, type Project } from "../store/projectStore.js";
 
-const DEFAULT_TARGET_SEC = 60;
+/**
+ * The length planning aims at. It decides how many photo-equivalents a proposal
+ * must cover (target / 5), so a small album needs a shorter target to plan at
+ * all: twelve photos exactly meet a 60-second target and fail the moment the
+ * planner leaves one out. Overridable so a run can be planned against a
+ * different length without touching the product default.
+ */
+const DEFAULT_TARGET_SEC = Number(process.env.PLAN_TARGET_SEC) || 60;
 
 type DirectingProject = Project & { currentProposalId?: string | null };
 
