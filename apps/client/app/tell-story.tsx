@@ -83,7 +83,9 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
           if (next.status === "failed") {
             setError(next.reason || "Couldn't find the moments. Please try again.");
           } else {
-            push(storyRoute("/review-moments", { planId: next.proposalId }, { repository: "api", projectId }) as any);
+            // The character picker sits between the plan and reviewing its moments:
+            // faces exist by now, and naming them still feeds back into the plan.
+            push(storyRoute("/character-picker", { planId: next.proposalId }, { repository: "api", projectId }) as any);
           }
         }
       },
@@ -131,6 +133,7 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
         return;
       }
       const { planId } = await getFixtureRepository().createPlan(`${storyText.trim()}${focus}`, projectId ? [projectId] : []);
+      // The fixture flow has no stored faces to name, so it skips the picker.
       if (current()) push(storyRoute("/review-moments", { planId }, { repository: "fixture" }) as any);
     } catch (e) {
       if (!current()) return;
@@ -149,7 +152,7 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
       keyboardShouldPersistTaps="handled"
     >
       <StepHeader
-        step="Step 2 of 6"
+        step="Step 2 of 7"
         label="STORY INTENT"
         progress={2 / 7}
         onBack={() => goBack()}

@@ -9,7 +9,7 @@ export type UnderstandTask = { projectId: string; assetId: string; generation: s
 export type UnderstandResult = "understood" | "failed" | "skipped";
 export type UnderstandDeps = {
   loadAsset(projectId: string, assetId: string): Promise<Asset | null>; loadShots(projectId: string, assetId: string): Promise<ShotRef[]>; objects: ObjectStore;
-  analyzePhoto(input: { assetId: string; renderPath: string }): Promise<PhotoAnalysis>; analyzeVideo(input: { assetId: string; file: VideoFile; shotCount: number; durationSec: number }): Promise<{ shots: VideoShotAnalysis[]; transcript: TranscriptLine[] }>;
+  analyzePhoto(input: { assetId: string; shotId: string; renderPath: string }): Promise<PhotoAnalysis>; analyzeVideo(input: { assetId: string; file: VideoFile; shotCount: number; durationSec: number }): Promise<{ shots: VideoShotAnalysis[]; transcript: TranscriptLine[] }>;
   embedShots(shots: { shotId: string; analysis: ShotAnalysis }[]): Promise<{ shotId: string; embedding: number[] | null }[]>; uploadVideoFile(path: string): Promise<VideoFile & { name: string }>; deleteVideoFile(name: string): Promise<void>;
   commitUnderstood(input: UnderstandCommit): Promise<"understood" | "skipped">; commitUnderstandFailed(input: { projectId: string; assetId: string; generation: string; reason: string; now: number }): Promise<"failed" | "skipped">; settle(projectId: string): Promise<void>; makeWorkDir(): Promise<string>; removeWorkDir(dir: string): Promise<void>; now(): number;
 };
@@ -18,7 +18,7 @@ async function understandOriginal(deps: UnderstandDeps, asset: Asset, shots: Sho
   if (asset.media?.kind === "photo") {
     if (!asset.derivatives?.renderPath) throw new PermanentIngestError("missing_derivatives");
     const renderPath = path.join(workDir, "render.jpg"); await deps.objects.downloadCurrent({ path: asset.derivatives.renderPath, destination: renderPath });
-    const analysis = await deps.analyzePhoto({ assetId: asset.id, renderPath }); const embedded = await deps.embedShots([{ shotId: shots[0].id, analysis }]);
+    const analysis = await deps.analyzePhoto({ assetId: asset.id, shotId: shots[0].id, renderPath }); const embedded = await deps.embedShots([{ shotId: shots[0].id, analysis }]);
     return commit(deps, asset, [{ shotId: shots[0].id, analysis, embedding: embedded[0]?.embedding ?? null }], null);
   }
   if (!asset.derivatives?.proxyPath) throw new PermanentIngestError("missing_derivatives");

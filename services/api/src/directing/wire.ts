@@ -4,12 +4,16 @@ import { saveProposal, type SaveProposalResult } from "../store/directingStore.j
 import type { Asset } from "../store/finalizeStore.js";
 import type { ShotAnalysis } from "../domain/understanding.js";
 import type { EmbedContent } from "../understand/embed.js";
+import { assembleProposal } from "./assemble.js";
 import { createPlanningTools, type PlanningShot } from "./tools.js";
 import { runPlan, type PlanJob, type PlanResult, type PlanningModel } from "./runPlan.js";
 import { DEFAULT_PLAN_BUDGET_LIMITS, type PlanBudgetLimits } from "./budget.js";
+import { validateProposal } from "./validateProposal.js";
+import { buildWorkingSet, MustIncludeConflict, type WorkingSet } from "./workingSet.js";
+import { cacheKeyFor, constraintShotIds, type ProposalCache } from "./proposalCache.js";
 import { z } from "zod";
 import { estimateUsd, MODELS, type GenerateDeps } from "../gemini/client.js";
-import { createGenAI, embedContentVia, generateContentVia, recordUsageToLog } from "../gemini/wire.js";
+import { createEmbedClient, createGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
 
 export const MAX_PLAN_ATTEMPTS = 3;
 export const PLAN_LEASE_MS = DEFAULT_PLAN_BUDGET_LIMITS.elapsedMs + 60_000;
@@ -36,6 +40,8 @@ export type PlanConfig = {
   now?: () => number;
   budgetLimits?: Partial<PlanBudgetLimits>;
   publish?: Publish;
+  /** Cache of published submissions, keyed by intent + working set. */
+  cache?: ProposalCache;
 };
 
 /** Joins shots to their current asset generation; old generation analysis is never eligible. */
@@ -140,16 +146,64 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
           ...acquired.pinnedInputs, shots,
           parentProposal: parent?.exists ? parent.data() as StoryProposal : null,
         };
+        // Build the working set once so the cache key and validation agree on
+        // exactly which catalog shots are eligible. A must-include conflict is
+        // reported by runPlan; here it only means we skip the cache path.
+        let workingSet: WorkingSet | null = null;
+        try {
+          workingSet = buildWorkingSet(job.shots, {
+            cap: job.workingSetCap,
+            excludedShotIds: job.constraints.excludedShotIds,
+            mustIncludeMomentIds: constraintShotIds(job),
+            focusCharacterIds: job.constraints.focusCharacterIds,
+          });
+        } catch (error) {
+          if (!(error instanceof MustIncludeConflict)) throw error;
+        }
+        const cacheKey = workingSet ? cacheKeyFor(job, workingSet) : null;
+        const cached = cacheKey && config.cache ? await config.cache.get(cacheKey, task.projectId) : null;
+        // A replay run reproduces an existing proposal without driving the model
+        // again. The working set is built from Firestore shot doc ids, which are
+        // stable across plan runs for a project, so a cached submission whose
+        // shot references still match can be re-assembled into a fresh, valid
+        // proposal with no model call — sidestepping the recorder's inability to
+        // replay a self-correcting conversation turn-for-turn.
+        if (cached && workingSet) {
+          const validation = validateProposal(cached.submission, workingSet, {
+            targetSec: job.targetSec,
+            excludedShotIds: job.constraints.excludedShotIds,
+            mustIncludeShotIds: constraintShotIds(job),
+          });
+          if (validation.ok) {
+            try {
+              const proposal = assembleProposal(cached.submission, {
+                proposalId: job.proposalId,
+                projectId: job.projectId,
+                storyIntentId: job.storyIntentId,
+                version: job.version,
+                parentProposalId: job.parentProposalId,
+                constraints: job.constraints,
+                parentProposal: job.parentProposal,
+              });
+              const cachedResult = { ok: true as const, proposal, usage: { modelTurns: 0, toolCalls: 0, elapsedMs: 0 }, submission: cached.submission };
+              await ownedUpdate({ status: "publishing", completedResult: cachedResult, usage: cachedResult.usage, diagnostics: [] });
+              completed = cachedResult;
+            } catch {
+              // A stale cache entry that no longer assembles falls through to a
+              // fresh model run rather than failing the job.
+            }
+          }
+        }
         // Construct the SDK only during work, so a missing API key cannot
         // prevent API boot or publication recovery from a saved result.
-        const client = !config.model && config.geminiApiKey ? createGenAI(config.geminiApiKey) : undefined;
+        const usable = !config.model && geminiConfigured(config.geminiApiKey);
         const unavailable = async (): Promise<never> => { throw new Error("gemini_api_key_missing"); };
-        const model = config.model ?? (client ? createPlanningModel({
-          generateContent: generateContentVia(client), recordUsage: recordUsageToLog(db, { projectId: task.projectId }),
+        const model = config.model ?? (usable ? createPlanningModel({
+          generateContent: createGeminiClient(config.geminiApiKey), recordUsage: recordUsageToLog(db, { projectId: task.projectId }),
         }, task.jobId) : { runTurn: unavailable });
         const tools = createPlanningTools({
           projectId: task.projectId, excludedShotIds: job.constraints.excludedShotIds,
-          embedContent: config.embedContent ?? (client ? embedContentVia(client) : unavailable),
+          embedContent: config.embedContent ?? (usable ? createEmbedClient(config.geminiApiKey) : unavailable),
           loadShots: async (projectId) => projectId === task.projectId ? shots : [],
           loadAsset: async (projectId, assetId) => {
             const asset = projectId === task.projectId ? assets.get(assetId) : undefined;
@@ -211,6 +265,81 @@ const SubmissionSchema = z.object({
   chapters: z.array(z.object({ title: z.string(), summary: z.string(), momentIds: z.array(z.string()) })),
   openQuestions: z.array(z.string()),
 });
+/**
+ * Written out by hand rather than taken from `z.toJSONSchema(ActionSchema)`.
+ * A Zod discriminated union becomes `anyOf` + `const`, and Gemini honours
+ * neither: it answered `"type": "submission"` against a `const: "submit"`
+ * and the whole plan failed to parse. A flat object with a real `enum` is a
+ * shape structured output does respect. ActionSchema below stays the
+ * gatekeeper, so a wrong answer is still rejected — it just stops being the
+ * default one.
+ */
+const actionResponseSchema = {
+  type: "object",
+  properties: {
+    type: { type: "string", enum: ["submit", "tool_calls"] },
+    submission: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        moments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              shotId: { type: "string" },
+              kind: { type: "string", enum: ["photo", "video"] },
+              title: { type: "string" },
+              description: { type: "string" },
+              rationale: { type: "string" },
+              previewInSec: { type: "number" },
+              previewOutSec: { type: "number" },
+            },
+            required: ["shotId", "kind", "title", "description", "rationale"],
+          },
+        },
+        chapters: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              summary: { type: "string" },
+              momentIds: { type: "array", items: { type: "string" } },
+            },
+            required: ["title", "summary", "momentIds"],
+          },
+        },
+        openQuestions: { type: "array", items: { type: "string" } },
+      },
+      required: ["title", "moments", "chapters", "openQuestions"],
+    },
+    calls: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string", enum: ["searchShots", "getShotDetails", "getTranscript"] },
+          input: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+              shotIds: { type: "array", items: { type: "string" } },
+              assetId: { type: "string" },
+              fromSec: { type: "number" },
+              toSec: { type: "number" },
+              limit: { type: "number" },
+            },
+          },
+        },
+        required: ["name", "input"],
+      },
+    },
+  },
+  required: ["type"],
+};
+
 const ActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("submit"), submission: SubmissionSchema }),
   z.object({ type: z.literal("tool_calls"), calls: z.array(z.object({
@@ -240,7 +369,7 @@ export function createPlanningModel(deps: Pick<GenerateDeps, "generateContent" |
           `Available tools: ${JSON.stringify(input.toolDeclarations)}`,
           `Conversation: ${JSON.stringify(input.messages)}`,
         ].join("\n"),
-        config: { responseMimeType: "application/json", responseJsonSchema: z.toJSONSchema(ActionSchema) },
+        config: { responseMimeType: "application/json", responseJsonSchema: actionResponseSchema },
       }) as { text?: string; usageMetadata?: Record<string, number> };
       const meta = response.usageMetadata ?? {};
       tokens = { promptTokens: meta.promptTokenCount ?? 0, candidatesTokens: meta.candidatesTokenCount ?? 0, thoughtsTokens: meta.thoughtsTokenCount ?? 0, totalTokens: meta.totalTokenCount ?? 0 };

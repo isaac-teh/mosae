@@ -12,12 +12,28 @@ export type DirectingStoreErrorCode =
   | "invalid_job"
   | "invalid_proposal"
   | "not_found"
-  | "stale_proposal";
+  | "stale_proposal"
+  | "invalid_face"
+  | "invalid_assignment";
 
 export class DirectingStoreError extends Error {
   constructor(public readonly code: DirectingStoreErrorCode) {
     super(code);
   }
+}
+
+/** Lowercase, trim, collapse whitespace to dashes. Pure helper for the
+ *  name-derived characterId scheme (see assignFaceCharacter). */
+export function slugName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+/** Deterministic, project-scoped person id derived from the assigned name.
+ *  Two crops named "daughter" (even in different shots) resolve to the same
+ *  id, so identical names merge automatically without a person list. The
+ *  picker never sees this — it only sends a name; the backend computes the id. */
+export function characterIdFor(projectId: string, name: string): string {
+  return `char-${projectId}-${slugName(name)}`;
 }
 
 /** Allocates after every version already published or reserved on the project. */
@@ -30,10 +46,23 @@ const projectRef = (db: Firestore, projectId: string) => db.collection("projects
 const proposalRef = (db: Firestore, projectId: string, proposalId: string) =>
   projectRef(db, projectId).collection("storyProposals").doc(proposalId);
 
+/**
+ * A stored proposal carries a delivery envelope the schema does not know
+ * about. Every reader has to take it off first, and the schema is strict, so
+ * a reader that forgets rejects the very document this module wrote — which
+ * is how compose came to fail on `Unrecognized keys: "jobId", "createdAt"`.
+ * One exported definition, so a third envelope field cannot split the two
+ * sides again.
+ */
+export function stripProposalEnvelope(value: FirebaseFirestore.DocumentData | undefined): unknown {
+  if (!value) return value;
+  const { jobId: _jobId, createdAt: _createdAt, ...candidate } = value;
+  return candidate;
+}
+
 function parseStoredProposal(value: FirebaseFirestore.DocumentData | undefined): StoryProposal | null {
   if (!value) return null;
-  const { jobId: _jobId, createdAt: _createdAt, ...candidate } = value;
-  const parsed = StoryProposalSchema.safeParse(candidate);
+  const parsed = StoryProposalSchema.safeParse(stripProposalEnvelope(value));
   return parsed.success ? parsed.data : null;
 }
 

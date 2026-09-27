@@ -15,3 +15,10 @@ apps/client/expo-env.d.ts
 poc/gemini/samples/
 poc/gemini/out/
 packages/video/out/
+
+# Recorded Gemini responses. The small ones carry real model judgment and are
+# committed; the embedding vectors are not: 33 KB of incompressible floats each,
+# rewritten in full whenever a prompt changes, and `syntheticVector` in
+# services/api/src/gemini/recorder.ts already supplies a deterministic stand-in.
+services/api/fixtures/gemini/embed-*.json
+services/api/fixtures/gemini-misses/

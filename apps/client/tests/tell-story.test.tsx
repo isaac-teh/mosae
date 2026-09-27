@@ -65,7 +65,8 @@ describe("Tell AI the Story", () => {
     }
     await job({ status: "succeeded" });
     expect(boundary.setRepository).not.toHaveBeenCalled();
-    expect(boundary.push).toHaveBeenCalledWith("/review-moments?planId=proposal-1&repository=api&projectId=actual-project");
+    // The API flow now stops at the character picker before reviewing moments.
+    expect(boundary.push).toHaveBeenCalledWith("/character-picker?planId=proposal-1&repository=api&projectId=actual-project");
   });
   it("keeps ingest progress visible while the queued plan waits for readiness", async () => {
     boundary.progress = { status: "processing", total: 3, done: 1, failed: 0, ready: false, finished: false };

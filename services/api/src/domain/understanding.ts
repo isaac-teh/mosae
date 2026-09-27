@@ -13,6 +13,22 @@ export type PhotoAnalysis = {
   aesthetics: number;
   keyMomentScore: number;
   tags: string[];
+  /** Per-face bounding boxes detected by Gemini Vision. Optional so analyses
+   * produced before face tagging (and the many tests that build literals) keep
+   * validating; new photos always carry it once deployed. */
+  faces?: Face[];
+};
+
+export type Face = {
+  /** Stable across reloads/re-plans: `${shotId}-${index}` within a photo. */
+  faceId: string;
+  bbox: [number, number, number, number]; // [ymin, xmin, ymax, xmax] normalized 0–1
+  confidence: number;
+  /** Project-scoped person id assigned by the picker. Two faces share a
+   *  characterId only when the user explicitly merges them into one person. */
+  characterId?: string;
+  name?: string; // denormalized display name (for UI convenience)
+  role?: "MAIN" | "SUPPORTING"; // denormalized role for the same reason
 };
 
 export type VideoShotAnalysis = {

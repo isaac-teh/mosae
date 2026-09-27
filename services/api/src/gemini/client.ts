@@ -110,6 +110,7 @@ export async function generateStructured<T>(options: GenerateOptions<T>, deps: G
         await deps.recordUsage({ stage: options.stage, model: options.model, subjectId: options.subjectId, ...tokens, latencyMs: Date.now() - started, estimatedUsd: estimateUsd(options.model, tokens), attempt });
         return parsed;
       } catch (invalid) {
+        console.error(`[gemini:${options.stage}] RAW RESPONSE:\n${text}\n---\nVALIDATION ERROR:`, invalid);
         diagnostics = invalid instanceof Error ? invalid.message : String(invalid);
         lastError = new Error(`response failed schema validation: ${diagnostics}`);
         await deps.recordUsage({ stage: options.stage, model: options.model, subjectId: options.subjectId, ...tokens, latencyMs: Date.now() - started, estimatedUsd: estimateUsd(options.model, tokens), attempt, error: `schema: ${diagnostics}` });

@@ -23,6 +23,7 @@ import { startStoragePoller } from "./store/storagePoller.js";
 import { createIngest } from "./ingest/wire.js";
 import { createUnderstand } from "./understand/wire.js";
 import { createPlan } from "./directing/wire.js";
+import { FirestoreProposalCache } from "./directing/proposalCache.js";
 import { createCompose } from "./compose/wire.js";
 import { createRender } from "./render/dispatchRender.js";
 import { runProjectPass } from "./store/clusterStore.js";
@@ -63,7 +64,7 @@ const cluster = async (projectId: string): Promise<unknown> => {
   }
   return result;
 };
-const plan = createPlan({ db: adminDb, geminiApiKey: config.geminiApiKey });
+const plan = createPlan({ db: adminDb, geminiApiKey: config.geminiApiKey, cache: new FirestoreProposalCache(adminDb) });
 const compose = createCompose({ db: adminDb, geminiApiKey: config.geminiApiKey });
 
 // A Timeline names shots; files hang off assets, so the shot is the hop in

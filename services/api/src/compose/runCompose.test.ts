@@ -188,3 +188,45 @@ describe("runCompose — mode and aspect propagation", () => {
     expect(result.timeline.aspect).toBe("16:9");
   });
 });
+
+describe("runCompose — person-anchored Ken Burns", () => {
+  it("emits no motion when the job has no focus center (byte-identical to pre-focus output)", async () => {
+    const job = makeJob({ focusCenter: new Map() });
+    const deps = makeDeps();
+
+    const result = await runCompose(job, deps);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+
+    const photoClip = result.timeline.videoClips.find((c) => c.source.kind === "photo")!;
+    expect(photoClip.motion).toBeUndefined();
+  });
+
+  it("anchors a slow-zoom on the focus face's bbox center when present", async () => {
+    // Focus face bbox [0.2,0.3,0.5,0.6] → midpoint (cx=0.4, cy=0.35).
+    const job = makeJob({
+      focusCenter: new Map([["photo1", { cx: 0.4, cy: 0.35 }]]),
+    });
+    const deps = makeDeps();
+
+    const result = await runCompose(job, deps);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+
+    const photoClip = result.timeline.videoClips.find((c) => c.source.kind === "photo")!;
+    expect(photoClip.motion).toMatchObject({ kind: "slow-zoom", from: 1 });
+    expect((photoClip.motion as { center?: { cx: number; cy: number } }).center).toEqual({ cx: 0.4, cy: 0.35 });
+  });
+
+  it("leaves video clips motionless regardless of focus", async () => {
+    const job = makeJob({ focusCenter: new Map([["video1", { cx: 0.5, cy: 0.5 }]]) });
+    const deps = makeDeps();
+
+    const result = await runCompose(job, deps);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+
+    const videoClip = result.timeline.videoClips.find((c) => c.source.kind === "video")!;
+    expect(videoClip.motion).toBeUndefined();
+  });
+});

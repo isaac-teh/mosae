@@ -27,6 +27,15 @@ export type WorkingSetOptions = {
   mustIncludeMomentIds?: string[];
   /** Alias useful to callers that have shot ids rather than moment ids. */
   mustIncludeShotIds?: string[];
+  /**
+   * Person ids (from the picker) whose faces should be kept in the film. Each
+   * qualifying shot — one whose stored analysis carries at least one face whose
+   * `characterId` is listed here — is folded into `mustIncludeMomentIds`, so a
+   * focus character gets the same "explicit choice outranks ranking" behaviour
+   * as any other must-include. Resolved against the working set's own shots, so
+   * an id that names no face simply contributes nothing rather than failing.
+   */
+  focusCharacterIds?: string[];
 };
 
 export type WorkingSet = {
@@ -77,8 +86,36 @@ export function compactShotLine(shot: WorkingShot): string {
   return [shot.id, shot.analysis.kind, day, place, duration, analysisSearchText(shot.analysis)].join(" | ");
 }
 
+/**
+ * Resolve focus character ids to shot ids: a shot qualifies when its stored
+ * analysis carries at least one face whose `characterId` is in the list. Only
+ * photo analyses carry faces, so video shots never qualify. An id that matches
+ * no face contributes nothing — it does not throw, because a stale or empty
+ * focus list must degrade gracefully rather than block planning.
+ */
+export function resolveFocusShots(shots: WorkingShot[], focusCharacterIds: string[]): string[] {
+  if (focusCharacterIds.length === 0) return [];
+  const wanted = new Set(focusCharacterIds);
+  const shotIds = new Set<string>();
+  for (const shot of shots) {
+    const faces = shot.analysis?.kind === "photo" ? shot.analysis.faces : undefined;
+    if (!faces) continue;
+    if (faces.some((face) => face.characterId && wanted.has(face.characterId))) {
+      shotIds.add(shot.id);
+    }
+  }
+  return [...shotIds];
+}
+
 export function buildWorkingSet(shots: WorkingShot[], options: WorkingSetOptions = {}): WorkingSet {
   const excluded = new Set(options.excludedShotIds ?? []);
+  // Focus characters are resolved to shot ids against the working set's own
+  // shots, then folded into mustInclude so they behave exactly like any other
+  // explicit choice. Resolving here (rather than at plan time) keeps the join
+  // in one place and lets a focus id that names no face contribute nothing.
+  const focusShotIds = resolveFocusShots(shots, options.focusCharacterIds ?? []);
+  const mustIncludeMomentIds = [...new Set([...(options.mustIncludeMomentIds ?? []), ...focusShotIds])];
+
   const candidates = shots
     .map((shot, index) => ({ shot, index }))
     .filter(({ shot }) => eligible(shot, excluded));
@@ -125,7 +162,7 @@ export function buildWorkingSet(shots: WorkingShot[], options: WorkingSetOptions
     if (!added) break;
   }
 
-  const mustInclude = new Set([...(options.mustIncludeMomentIds ?? []), ...(options.mustIncludeShotIds ?? [])]);
+  const mustInclude = new Set([...mustIncludeMomentIds, ...(options.mustIncludeShotIds ?? [])]);
   if (mustInclude.size > 0) {
     // Match against every shot, not only the eligible candidates: an explicit
     // choice outranks our eligibility ranking.

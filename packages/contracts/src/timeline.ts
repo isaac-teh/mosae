@@ -50,9 +50,12 @@ export const VideoClipSchema = z.strictObject({
   crop: CropSchema.optional(),
   /**
    * Slow zoom for stills. A photo-only stretch reads as a slideshow without it.
-   * Ignored for video sources.
+   * Ignored for video sources. When `center` is present the zoom/pan anchors on
+   * that normalized point (cx, cy in 0–1) instead of the frame midpoint — this
+   * is how a focus character's face drives Ken Burns. Absent center keeps the
+   * plain geometry behaviour and the field stays byte-identical to older films.
    */
-  motion: z.strictObject({ kind: z.literal("slow-zoom"), from: positiveSeconds, to: positiveSeconds }).optional(),
+  motion: z.strictObject({ kind: z.literal("slow-zoom"), from: positiveSeconds, to: positiveSeconds, center: z.object({ cx: z.number().min(0).max(1), cy: z.number().min(0).max(1) }).optional() }).optional(),
 });
 
 const AssetAudioSourceSchema = z.strictObject({

@@ -34,7 +34,7 @@ export const DirectionSettingsSchema = z.strictObject({
   /** null means let the director choose a length. */
   durationId: z.enum(durationIds).nullable(),
   aspect: z.enum(["16:9", "9:16"]),
-  captions: z.boolean(),
+  captions: z.boolean().default(false),
 });
 
 export type CadenceId = (typeof CADENCES)[number]["id"];

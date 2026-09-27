@@ -19,7 +19,16 @@ describe("apiCors", () => {
   it("answers allowed preflights", async () => {
     const res = await request(app()).options("/api/ping").set("Origin", "https://web.example");
     expect(res.status).toBe(204);
-    expect(res.headers["access-control-allow-methods"]).toBe("POST, GET, OPTIONS");
+    expect(res.headers["access-control-allow-methods"]).toBe("GET, POST, PATCH, OPTIONS");
+  });
+  /**
+   * Proposal constraints are revised with PATCH, by both the moment screens and
+   * the character picker. Omitting it from the preflight fails the request in
+   * the browser before it is ever sent, with no server-side trace.
+   */
+  it("permits the PATCH used to revise proposal constraints", async () => {
+    const res = await request(app()).options("/api/ping").set("Origin", "https://web.example");
+    expect(res.headers["access-control-allow-methods"]).toContain("PATCH");
   });
   it("allows localhost only outside production and never applies to events", async () => {
     expect((await request(app()).get("/api/ping").set("Origin", "http://localhost:3100")).headers["access-control-allow-origin"]).toBe("http://localhost:3100");

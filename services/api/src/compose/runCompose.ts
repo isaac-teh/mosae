@@ -56,6 +56,16 @@ export interface ComposeJob {
   note: string;
   /** Whether the model's text overlays are burned into the film. */
   captions: boolean;
+  /**
+   * Person-anchored Ken Burns hint, keyed by moment id → face bbox center in
+   * normalized 0–1 coordinates. When a photo clip's moment names a focus person
+   * (a stored face whose characterId is in the proposal's `focusCharacterIds`),
+   * composition centers the slow-zoom on that point instead of the frame
+   * midpoint. Absent for a moment with no focus face, so it falls back to plain
+   * geometry — and absent entirely means no person-anchored motion at all, which
+   * keeps a null-focus film byte-identical to the pre-focus output.
+   */
+  focusCenter?: Map<string, { cx: number; cy: number }>;
 }
 
 /**
@@ -210,12 +220,14 @@ export async function runCompose(
           transitionIn: transitionFor(fitted.transition),
         };
       } else {
+        const focus = job.focusCenter?.get(fitted.itemId);
         return {
           id: fitted.candidateId,
           source: { kind: "photo" as const, shotId },
           startSec: reflowClip.startSec,
           durationSec: reflowClip.durationSec,
           transitionIn: transitionFor(fitted.transition),
+          ...(focus ? { motion: { kind: "slow-zoom" as const, from: 1.0, to: 1.15, center: focus } } : {}),
         };
       }
     }),

@@ -11,6 +11,18 @@ export interface ThumbnailUrlStore {
 export function firebaseThumbnailUrlStore(bucket: Bucket): ThumbnailUrlStore {
   return {
     async signedReadUrl(path, expiresAt) {
+      // v4 signing needs real service-account credentials, which a local
+      // emulator run does not have, so every image on every screen fails with
+      // "Could not load the default credentials". The emulator serves its
+      // objects unsigned, so address them directly when it is the one running.
+      // Use the GCS-style download path, not the Firebase `/v0/` one: the
+      // latter enforces storage rules, which deny public reads, and answers
+      // with JSON that the browser then blocks as a non-image response.
+      const emulator = process.env.FIREBASE_STORAGE_EMULATOR_HOST;
+      if (emulator) {
+        const host = emulator.startsWith("http") ? emulator : `http://${emulator}`;
+        return `${host}/download/storage/v1/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media`;
+      }
       const [url] = await bucket.file(path).getSignedUrl({ version: "v4", action: "read", expires: expiresAt });
       return url;
     },

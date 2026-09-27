@@ -20,7 +20,7 @@ describe("Gemini shot analysis", () => {
     try {
       const renderPath = path.join(dir, "render.jpg");
       await writeFile(renderPath, "jpeg-bytes");
-      const result = await analyzePhoto(deps(generateContent), { assetId: "a1", renderPath });
+      const result = await analyzePhoto(deps(generateContent), { assetId: "a1", shotId: "s1", renderPath });
       expect(result).toMatchObject({ kind: "photo", caption: "A family on a beach" });
       const [request] = generateContent.mock.calls[0];
       expect(request.contents[1].inlineData.mimeType).toBe("image/jpeg");

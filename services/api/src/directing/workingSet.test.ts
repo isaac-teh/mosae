@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkingSet, compactShotLine, type WorkingShot } from "./workingSet.js";
+import { buildWorkingSet, compactShotLine, resolveFocusShots, type WorkingShot } from "./workingSet.js";
+import type { Face } from "../domain/understanding.js";
 
 const photoAnalysis = (score: number) => ({
   kind: "photo" as const,
@@ -18,6 +19,14 @@ const videoAnalysis = (quality: number, usable = true) => ({
 const shot = (id: string, eventId: string, analysis: WorkingShot["analysis"], overrides: Partial<WorkingShot> = {}): WorkingShot => ({
   id, assetStatus: "understood", eventId, day: "2026-05-03", place: "Park",
   durationSec: analysis?.kind === "video" ? 3 : null, analysis, ...overrides,
+});
+
+const face = (characterId: string, confidence = 0.9): Face => ({
+  faceId: `${characterId}-face`, bbox: [0.2, 0.3, 0.5, 0.6], confidence, characterId, name: characterId, role: "MAIN",
+});
+
+const photoWithFaces = (score: number, faces: Face[]) => ({
+  kind: "photo" as const, caption: `photo ${score}`, subjects: [], setting: "park", activities: [], mood: "warm", shotType: "wide", aesthetics: 4, keyMomentScore: score, tags: [], faces,
 });
 
 describe("buildWorkingSet", () => {
@@ -92,6 +101,58 @@ describe("buildWorkingSet", () => {
   it("supports all-photo projects and an empty eligible set", () => {
     expect(buildWorkingSet([shot("photo", "e1", photoAnalysis(3))]).shots[0].id).toBe("photo");
     expect(buildWorkingSet([shot("bad", "e1", null)]).shots).toEqual([]);
+  });
+});
+
+describe("resolveFocusShots", () => {
+  it("resolves a shot whose analysis carries a face with a matching characterId", () => {
+    const shots = [
+      shot("focus-shot", "e1", photoWithFaces(5, [face("char-grandpa")])),
+      shot("other-shot", "e1", photoAnalysis(4)),
+    ];
+    expect(resolveFocusShots(shots, ["char-grandpa"])).toEqual(["focus-shot"]);
+  });
+
+  it("ignores shots whose faces have no characterId or a non-matching one", () => {
+    const shots = [
+      shot("unassigned", "e1", photoWithFaces(5, [{ faceId: "f", bbox: [0, 0, 1, 1], confidence: 0.9 }])),
+      shot("wrong-char", "e1", photoWithFaces(4, [face("char-grandpa"), face("char-uncle")])),
+    ];
+    expect(resolveFocusShots(shots, ["char-grandpa"])).toEqual(["wrong-char"]);
+  });
+
+  it("never resolves video shots, which carry no faces", () => {
+    const shots = [shot("vid", "e1", videoAnalysis(5))];
+    expect(resolveFocusShots(shots, ["char-grandpa"])).toEqual([]);
+  });
+
+  it("returns nothing for an empty focus list or a matching id that names no face", () => {
+    const shots = [shot("s", "e1", photoWithFaces(5, [face("char-grandpa")]))];
+    expect(resolveFocusShots(shots, [])).toEqual([]);
+    expect(resolveFocusShots(shots, ["char-nobody"])).toEqual([]);
+  });
+});
+
+describe("buildWorkingSet — focus join", () => {
+  it("folds a focus character's shot into mustInclude so it outranks ranking", () => {
+    const shots = [
+      shot("best", "e1", photoAnalysis(5)),
+      shot("focus-shot", "e1", photoWithFaces(2, [face("char-grandpa")])),
+    ];
+    // `best` ranks higher than the focus shot; focus must force it in.
+    expect(buildWorkingSet(shots, { cap: 1, focusCharacterIds: ["char-grandpa"] }).shots.map((s) => s.id))
+      .toEqual(["best", "focus-shot"]);
+  });
+
+  it("throws MustIncludeConflict when a focus shot is also excluded", () => {
+    const shots = [shot("focus", "e1", photoWithFaces(5, [face("char-grandpa")]))];
+    expect(() => buildWorkingSet(shots, { excludedShotIds: ["focus"], focusCharacterIds: ["char-grandpa"] }))
+      .toThrow(/keep.*leave the same moment out/i);
+  });
+
+  it("degrades gracefully when a focus id matches no face", () => {
+    const shots = [shot("s", "e1", photoAnalysis(5))];
+    expect(buildWorkingSet(shots, { cap: 1, focusCharacterIds: ["char-nobody"] }).shots.map((s) => s.id)).toEqual(["s"]);
   });
 });
 

@@ -9,7 +9,7 @@ import {
 } from "./budget.js";
 import { createPlanningTools, planningToolDeclarations } from "./tools.js";
 import { validateProposal } from "./validateProposal.js";
-import { buildWorkingSet, MustIncludeConflict, type WorkingSet, type WorkingShot } from "./workingSet.js";
+import { buildWorkingSet, MustIncludeConflict, resolveFocusShots, type WorkingSet, type WorkingShot } from "./workingSet.js";
 
 export type PlanningProgress = "searching" | "inspecting" | "organizing";
 export type PlanningTools = ReturnType<typeof createPlanningTools>;
@@ -72,7 +72,7 @@ export type RunPlanDeps = {
 };
 
 export type PlanResult =
-  | { ok: true; proposal: StoryProposal; usage: PlanBudgetUsage }
+  | { ok: true; proposal: StoryProposal; usage: PlanBudgetUsage; submission?: ProposalSubmission }
   | {
     ok: false;
     code: "validation_failed";
@@ -193,7 +193,13 @@ async function withinDeadline<T>(
 export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResult> {
   const budget = new Budget(deps.budgetLimits, deps.now);
   const deadlineScheduler = deps.deadlineScheduler ?? defaultDeadlineScheduler;
-  const mustIncludeShotIds = constraintShotIds(job);
+  const mustIncludeShotIds = [
+    ...constraintShotIds(job),
+    // Focus characters are resolved to shot ids against the working set's own
+    // shots and forced into mustInclude, so a model-driven plan cannot omit a
+    // focus character's shot any more than it could omit an explicit one.
+    ...resolveFocusShots(job.shots, job.constraints.focusCharacterIds ?? []),
+  ];
   let workingSet: WorkingSet;
   try {
     workingSet = buildWorkingSet(job.shots, {
@@ -318,7 +324,7 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
         continue;
       }
       budget.assertWithinLimits();
-      return { ok: true, proposal, usage: budget.snapshot() };
+      return { ok: true, proposal, usage: budget.snapshot(), submission: output.submission };
     }
   } catch (error) {
     if (!(error instanceof BudgetExhausted)) throw error;

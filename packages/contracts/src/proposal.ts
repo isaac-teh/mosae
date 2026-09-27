@@ -42,6 +42,17 @@ export const ProposalConstraintsSchema = z.strictObject({
   deselectedMomentIds: z.array(z.string().min(1)),
   mustIncludeMomentIds: z.array(z.string().min(1)),
   feedback: z.array(z.string().min(1)),
+  /**
+   * Person ids (from the picker) whose faces should be kept in the film. They
+   * are resolved to shot ids at plan time and folded into `mustInclude` — see
+   * `directing/workingSet.ts`. Optional so existing proposals validate, and not
+   * referentially checked here: a focus id names a stored face characterId that
+   * only exists in Firestore, so validation happens against the working set at
+   * plan time rather than at proposal-parse time.
+   */
+  focusCharacterIds: z.array(z.string().min(1)).optional(),
+  /** Person ids to prefer but never force; surfaced to the planner as a hint. */
+  secondaryCharacterIds: z.array(z.string().min(1)).optional(),
 });
 
 const BaseProposalSchema = z.strictObject({

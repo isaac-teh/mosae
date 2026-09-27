@@ -65,7 +65,7 @@ function DirectFilmScreenContent({ planId, repository, route }: {
   useEffect(load, [load]);
 
   if (error) return <ErrorState error={error} retry={() => { setError(null); load(); }} />;
-  if (!options) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 4 OF 6" label="DIRECTING" progress={0.67} onBack={() => goBack()} backLabel="Go back to create" /></View>;
+  if (!options) return <View className="flex-1 bg-canvas"><StepHeader step="STEP 5 OF 7" label="DIRECTING" progress={0.71} onBack={() => goBack()} backLabel="Go back to create" /></View>;
 
   const cadence = options.cadences[cadenceIndex];
   const soundtrack = options.soundtracks[soundtrackIndex];
@@ -90,7 +90,7 @@ function DirectFilmScreenContent({ planId, repository, route }: {
     }
   };
 
-  return <View className="flex-1 bg-canvas"><StepHeader step="STEP 4 OF 6" label="DIRECTING" progress={0.67} onBack={() => goBack()} backLabel="Go back to create" />
+  return <View className="flex-1 bg-canvas"><StepHeader step="STEP 5 OF 7" label="DIRECTING" progress={0.71} onBack={() => goBack()} backLabel="Go back to create" />
     <ScrollView className="flex-1" contentContainerClassName="min-h-[986px] px-5 pb-3" keyboardShouldPersistTaps="handled">
       <View className="pt-[23px]"><Text className="font-sans-semibold text-[16px] leading-[22px] text-ink">How should we tell your story?</Text><Text className="mt-1 font-sans text-sm leading-[23px] text-ink-soft">Set the emotional tone and rhythm. Mosaé will weave{`\n`}natural pacing, organic transitions, and an heirloom{`\n`}soundtrack.</Text></View>
 

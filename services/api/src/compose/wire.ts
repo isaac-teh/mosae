@@ -3,10 +3,12 @@ import { safeParseStoryProposal, safeParseDirectionSettings, type Generation, ty
 import type { Asset } from "../store/finalizeStore.js";
 import type { ShotAnalysis } from "../domain/understanding.js";
 import { generateStructured, type GenerateOptions } from "../gemini/client.js";
-import { createGenAI, generateContentVia, recordUsageToLog } from "../gemini/wire.js";
+import { createGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
 import { publishGeneration, failGeneration } from "../store/generationStore.js";
+import { stripProposalEnvelope } from "../store/directingStore.js";
 import { runCompose, type ComposeDeps, type ComposeJob } from "./runCompose.js";
 import type { Asset as CandidateAsset } from "./buildCandidates.js";
+import type { Face } from "../domain/understanding.js";
 
 export type ComposeTask = {
   projectId: string;
@@ -102,6 +104,48 @@ export async function loadComposeCatalog(
  * `GEMINI_API_KEY` can fail a compose task but can never prevent API boot —
  * the same arrangement planning uses.
  */
+/**
+ * Build the person-anchored Ken Burns hint for a proposal.
+ *
+ * For each moment that names a focus person — one whose shot's stored analysis
+ * carries a face whose `characterId` is in the proposal's `focusCharacterIds` —
+ * resolve that face's bbox center in normalized 0–1 coordinates and key it by
+ * moment id. Only photo analyses carry faces, so video moments never qualify.
+ * A focus id that matches no face in a shot contributes nothing for that moment;
+ * the whole map is empty when there are no focus ids or no matching faces, which
+ * keeps a null-focus film byte-identical to the pre-focus output.
+ */
+async function buildFocusCenterMap(
+  db: Firestore,
+  projectId: string,
+  proposal: StoryProposal,
+): Promise<Map<string, { cx: number; cy: number }>> {
+  const focusIds = new Set(proposal.constraints.focusCharacterIds ?? []);
+  if (focusIds.size === 0) return new Map();
+
+  const project = db.collection("projects").doc(projectId);
+  const shotSnaps = await project.collection("shots").get();
+  const shots = new Map(shotSnaps.docs.map((doc) => [doc.id, doc.data() as ShotAnalysis]));
+
+  const map = new Map<string, { cx: number; cy: number }>();
+  for (const moment of proposal.moments) {
+    if (map.has(moment.id)) continue;
+    const analysis = shots.get(moment.shotId);
+    if (!analysis || analysis.kind !== "photo" || !analysis.faces) continue;
+
+    // Prefer the highest-confidence focus face so a crowded frame anchors on the
+    // clearest one, but any matching face is enough to drive motion.
+    const matches = analysis.faces.filter((face) => face.characterId && focusIds.has(face.characterId));
+    if (matches.length === 0) continue;
+
+    const face = matches.reduce((best, next) => (next.confidence > best.confidence ? next : best));
+    const [ymin, xmin, ymax, xmax] = face.bbox;
+    map.set(moment.id, { cx: (xmin + xmax) / 2, cy: (ymin + ymax) / 2 });
+  }
+
+  return map;
+}
+
 export function createCompose(config: ComposeConfig): (task: ComposeTask) => Promise<ComposeTaskResult> {
   const { db } = config;
 
@@ -132,7 +176,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
     const proposalSnap = await project.collection("storyProposals").doc(generation.proposalId).get();
     if (!proposalSnap.exists) return fail([`proposal ${generation.proposalId} not found`]);
 
-    const proposal = safeParseStoryProposal(proposalSnap.data());
+    const proposal = safeParseStoryProposal(stripProposalEnvelope(proposalSnap.data()));
     if (!proposal.ok) return fail([`invalid proposal: ${proposal.errors.join("; ")}`]);
     if (proposal.proposal.state !== "accepted") {
       return fail([`proposal ${generation.proposalId} is not accepted`]);
@@ -140,12 +184,19 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
 
     const catalog = await loadComposeCatalog(db, task.projectId, proposal.proposal);
 
+    // Person-anchored Ken Burns hint: for each moment that names a focus person
+    // (a stored face whose characterId is in the proposal's focusCharacterIds),
+    // resolve that face's bbox center. Keyed by moment id so runCompose can look
+    // it up per photo clip. A moment with no focus face contributes nothing and
+    // falls back to plain geometry; a project with no focus ids produces an
+    // empty map, which keeps the film byte-identical to the pre-focus output.
+    const focusCenter = await buildFocusCenterMap(db, task.projectId, proposal.proposal);
+
     // Constructed here, not at module load, and only when a key exists.
-    const client = !config.generateStructured && config.geminiApiKey ? createGenAI(config.geminiApiKey) : undefined;
     const call: ComposeDeps["generateStructured"] = config.generateStructured
-      ?? (client
+      ?? (geminiConfigured(config.geminiApiKey)
         ? (options) => generateStructured(options as GenerateOptions<unknown>, {
-            generateContent: generateContentVia(client),
+            generateContent: createGeminiClient(config.geminiApiKey),
             recordUsage: recordUsageToLog(db, { projectId: task.projectId }),
           })
         : async () => { throw new Error("gemini_api_key_missing"); });
@@ -166,6 +217,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       // field that carries what the user actually asked for.
       note: settings.settings.note,
       captions: settings.settings.captions,
+      focusCenter,
     };
 
     const result = await runCompose(job, {

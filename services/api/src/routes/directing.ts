@@ -17,6 +17,7 @@ import {
   reviseConstraints,
   saveIntent,
 } from "../store/directingStore.js";
+import { assignFaceCharacter, getProjectFaces } from "../store/understandStore.js";
 import { getOwnedProject, type Project } from "../store/projectStore.js";
 
 const DEFAULT_TARGET_SEC = 60;
@@ -142,6 +143,8 @@ const STATUS: Record<DirectingStoreError["code"], number> = {
   invalid_proposal: 422,
   not_found: 404,
   stale_proposal: 409,
+  invalid_face: 400,
+  invalid_assignment: 400,
 };
 
 function handleError(res: Response, error: unknown): void {
@@ -245,10 +248,14 @@ export function directingRouter(deps: {
         res.status(404).json({ error: "not_found" });
         return;
       }
+      // Every field is a partial update: an absent key keeps what the proposal
+      // already carries. The picker patches only `focusCharacterIds`, and the
+      // moment screens only the two moment lists, so neither wipes the other.
       const parsed = ProposalConstraintsSchema.safeParse({
         ...source.constraints,
-        deselectedMomentIds: req.body?.deselectedMomentIds,
-        mustIncludeMomentIds: req.body?.mustIncludeMomentIds,
+        deselectedMomentIds: req.body?.deselectedMomentIds ?? source.constraints.deselectedMomentIds,
+        mustIncludeMomentIds: req.body?.mustIncludeMomentIds ?? source.constraints.mustIncludeMomentIds,
+        focusCharacterIds: req.body?.focusCharacterIds ?? source.constraints.focusCharacterIds,
       });
       if (!parsed.success) {
         res.status(400).json({ error: "invalid_constraints" });
@@ -325,6 +332,73 @@ export function directingRouter(deps: {
       }
       const proposal = await acceptProposal(deps.db, { userId, projectId, proposalId });
       res.json({ proposal });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  // Character picker: read every photo-face in the project, grouped by shot.
+  router.get("/:projectId/characters", async (req, res) => {
+    const { projectId } = req.params;
+    try {
+      if (!(await ownedProject(res.locals.userId, projectId))) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      const shots = await getProjectFaces(deps.db, projectId);
+      res.json({
+        shots: shots.map((s) => ({
+          shotId: s.shotId,
+          assetId: s.assetId,
+          faces: (s.analysis?.faces ?? []).map((f) => ({
+            faceId: f.faceId,
+            // Normalised [ymin, xmin, ymax, xmax]; the picker crops with it.
+            bbox: f.bbox,
+            characterId: f.characterId ?? null,
+            name: f.name ?? null,
+            role: f.role ?? null,
+          })),
+        })),
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  // Character picker: assign a character to one stored face.
+  router.post("/:projectId/shots/:shotId/characters", async (req, res) => {
+    const userId: string = res.locals.userId;
+    const { projectId, shotId } = req.params;
+    try {
+      if (!(await ownedProject(userId, projectId))) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      const body = req.body ?? {};
+      const faceId = typeof body.faceId === "string" ? body.faceId.trim() : "";
+      if (!faceId) {
+        res.status(400).json({ error: "invalid_assignment" });
+        return;
+      }
+      const name = typeof body.name === "string" ? body.name.trim() : undefined;
+      // `null` means "no role", the shape the GET route above emits for an
+      // unassigned face; only a non-empty value that is not a role is invalid.
+      if (body.role !== undefined && body.role !== null && body.role !== "MAIN" && body.role !== "SUPPORTING") {
+        res.status(400).json({ error: "invalid_assignment" });
+        return;
+      }
+      const role = body.role === "MAIN" || body.role === "SUPPORTING" ? body.role : undefined;
+      if (name !== undefined && name.length === 0) {
+        res.status(400).json({ error: "invalid_assignment" });
+        return;
+      }
+      const face = await assignFaceCharacter(deps.db, {
+        userId,
+        projectId,
+        shotId,
+        assignment: { faceId, name, role },
+      });
+      res.status(201).json({ face });
     } catch (error) {
       handleError(res, error);
     }

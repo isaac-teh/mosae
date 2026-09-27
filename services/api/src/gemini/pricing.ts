@@ -22,3 +22,12 @@ export const MODELS = {
   compose: "gemini-3.1-flash-lite",
   embed: "gemini-embedding-2",
 } as const;
+
+/**
+ * Width of every stored shot vector. Firestore caps a vector field at 2048
+ * dimensions, and `gemini-embedding-2` returns 3072 by default, so embeddings
+ * are requested truncated to this width. It lives here, beside the other model
+ * constants, because both the live client and the replay recorder need it and
+ * neither may import the other.
+ */
+export const EMBED_DIMENSIONS = 1536;
