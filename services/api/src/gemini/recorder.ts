@@ -211,6 +211,15 @@ function essentials(response: unknown): { text?: string; usageMetadata?: unknown
 export function recordingGenerate(real: GenerateFn): GenerateFn {
   return async (request) => {
     const { key, masked, idMap } = normaliseRequest(request);
+    // Recording resumes rather than restarts: an exchange already on disk is
+    // served from there instead of bought again, so re-running a flow pays
+    // only for the calls that genuinely differ from last time. The key is the
+    // same one replay matches on, so anything skipped here would have replayed.
+    const existing = loadIndex().get(key);
+    if (existing) {
+      console.warn(`[gemini:record] reusing ${labelFor(request)} fixture (key ${key.slice(0, 12)})`);
+      return JSON.parse(unmaskIds(existing.response, idMap));
+    }
     const response = await real(request);
     save(
       {
@@ -305,21 +314,41 @@ const embedKey = (model: string, taskType: string, text: string): string =>
 
 export function recordingEmbed(real: EmbedFn): EmbedFn {
   return async (input) => {
-    const vectors = await real(input);
+    // One request carries many texts, and they are cached independently, so
+    // only the ones with no fixture are sent. Positions are preserved: the
+    // caller gets vectors in the order it asked for them, whatever their
+    // provenance.
+    const fixtures = loadIndex();
+    const vectors: number[][] = new Array(input.contents.length);
+    const missing: { text: string; position: number }[] = [];
+
     input.contents.forEach((text, position) => {
-      const vector = vectors[position];
-      if (!vector || vector.length === 0) return;
-      save(
-        {
-          key: embedKey(input.model, input.taskType, text),
-          kind: "embed",
-          recordedAt: new Date().toISOString(),
-          request: text,
-          response: JSON.stringify(vector),
-        },
-        "embed",
-      );
+      const hit = fixtures.get(embedKey(input.model, input.taskType, text));
+      if (hit) vectors[position] = JSON.parse(hit.response) as number[];
+      else missing.push({ text, position });
     });
+
+    if (missing.length > 0) {
+      const fresh = await real({ ...input, contents: missing.map((entry) => entry.text) });
+      missing.forEach((entry, order) => {
+        const vector = fresh[order] ?? [];
+        vectors[entry.position] = vector;
+        if (vector.length === 0) return;
+        save(
+          {
+            key: embedKey(input.model, input.taskType, entry.text),
+            kind: "embed",
+            recordedAt: new Date().toISOString(),
+            request: entry.text,
+            response: JSON.stringify(vector),
+          },
+          "embed",
+        );
+      });
+    }
+    if (missing.length < input.contents.length) {
+      console.warn(`[gemini:record] reusing ${input.contents.length - missing.length}/${input.contents.length} embed fixtures`);
+    }
     return vectors;
   };
 }
