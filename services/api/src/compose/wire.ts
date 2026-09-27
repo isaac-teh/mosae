@@ -5,6 +5,7 @@ import type { ShotAnalysis } from "../domain/understanding.js";
 import { generateStructured, type GenerateOptions } from "../gemini/client.js";
 import { createGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
 import { publishGeneration, failGeneration } from "../store/generationStore.js";
+import { enqueueRender } from "../store/enqueueRender.js";
 import { stripProposalEnvelope } from "../store/directingStore.js";
 import { runCompose, type ComposeDeps, type ComposeJob } from "./runCompose.js";
 import type { Asset as CandidateAsset } from "./buildCandidates.js";
@@ -236,6 +237,17 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       droppedPicks: result.droppedPicks,
       now: Date.now(),
     });
+
+    // Task 7's ruling: a playable film is rendered automatically. Compose writes
+    // the render task here; in production the dispatcher picks it up, so Save and
+    // auto-render share one path.
+    await enqueueRender(db, {
+      userId,
+      projectId: task.projectId,
+      generationId: task.generationId,
+      schemaVersion: generation.schemaVersion,
+    });
+
     return "composed";
   };
 }

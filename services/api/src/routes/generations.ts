@@ -2,7 +2,8 @@ import { Router, type Response } from "express";
 import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
-import { createGeneration, getGeneration, startRender, StoreError } from "../store/generationStore.js";
+import { createGeneration, getGeneration, StoreError } from "../store/generationStore.js";
+import { enqueueRender } from "../store/enqueueRender.js";
 import { newOutboxTask } from "../domain/outbox.js";
 import { safeParseDirectionSettings, type Generation } from "@mosae/contracts";
 
@@ -190,18 +191,12 @@ export function generationsRouter(deps: {
 
       // The status moves through the store, which refuses anything but a
       // playable film, so a second render cannot start on top of a running one.
-      await startRender(deps.db, { userId, projectId, generationId });
-
-      const task = newOutboxTask({
+      await enqueueRender(deps.db, {
+        userId,
         projectId,
-        subjectKind: "generation",
-        subjectId: generationId,
-        generation: String(generation.schemaVersion),
-        stage: "render",
-        now: Date.now(),
+        generationId,
+        schemaVersion: generation.schemaVersion,
       });
-      await deps.db.collection("projects").doc(projectId).collection("taskOutbox").doc(task.id).set(task);
-      await deps.dispatch?.();
 
       return res.status(202).json({ generationId, status: "rendering", sources });
     } catch (error) {
