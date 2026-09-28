@@ -303,9 +303,10 @@ describe("validateTimeline — semantic rules", () => {
 });
 
 describe("repairOnce — deterministic fixes", () => {
-  it("does not silently discard a collage when repair is needed", () => {
+  it("repairs a gap beside a collage without dropping the collage", () => {
     const timeline = makeTimeline({
       schemaVersion: 2,
+      durationSec: 8,
       videoClips: [
         {
           kind: "collage", clipId: "collage-1", startSec: 0, durationSec: 4,
@@ -319,11 +320,21 @@ describe("repairOnce — deterministic fixes", () => {
             ],
           },
         },
+        {
+          id: "cand-photo-1", source: { kind: "photo", shotId: "shot-photo-1" },
+          startSec: 6, durationSec: 2, transitionIn: { kind: "cut", durationSec: 0 },
+        },
       ],
     });
-    const result = repairOnce(timeline, [{ path: "durationSec", message: "needs repair", severity: "fixable" }], makeCtx());
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reasons.join(" ")).toContain("collage");
+    const ctx = makeCtx({ targetSec: 6 });
+    const issues = validateTimeline(timeline, ctx);
+    expect(issues.some((issue) => issue.message.includes("gap"))).toBe(true);
+    const result = repairOnce(timeline, issues, ctx);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.timeline.videoClips.map((clip) => clip.startSec)).toEqual([0, 4]);
+    expect(result.timeline.videoClips[0]).toMatchObject({ kind: "collage", clipId: "collage-1", spec: { durationSec: 4 } });
+    expect(validateTimeline(result.timeline, ctx)).toEqual([]);
   });
   it("a repairable film passes on the second pass", () => {
     // The film this repairs to is one 6s photo, so 6s is the target it is

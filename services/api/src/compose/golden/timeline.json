@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "projectId": "golden-project",
   "mode": "memory",
   "aspect": "9:16",

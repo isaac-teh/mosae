@@ -80,6 +80,11 @@ export async function loadComposeCatalog(
       catalog.set(moment.id, {
         kind: "photo",
         file: asset.fileName,
+        assetId: shot.get("assetId") as string,
+        eventId: asset.eventId ?? null,
+        localTime: asset.media?.localTime ?? null,
+        dHash: asset.quality?.dHash ?? null,
+        dupOf: asset.dupOf ?? null,
         ...(analysis?.kind === "photo"
           ? { analysis: { caption: analysis.caption }, keyMomentScore: analysis.keyMomentScore }
           : {}),
@@ -94,6 +99,11 @@ export async function loadComposeCatalog(
     catalog.set(moment.id, {
       kind: "video",
       file: asset.fileName,
+      assetId: shot.get("assetId") as string,
+      eventId: asset.eventId ?? null,
+      localTime: asset.media?.localTime ?? null,
+      dHash: asset.quality?.dHash ?? null,
+      dupOf: asset.dupOf ?? null,
       analysis: {
         shots: [{
           startSec,
@@ -271,6 +281,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
     const job: ComposeJob = {
       proposal: proposal.proposal,
       projectId: task.projectId,
+      generationId: task.generationId,
       mode: (projectSnap.get("mode") as ComposeJob["mode"] | undefined) ?? "memory",
       aspect: settings.settings.aspect,
       // null means the director chooses; phase 4 has no such choice yet, so it

@@ -1,4 +1,4 @@
-import { reflow, type AudioClip, type Caption, type ClipPlan, type Timeline, type VideoClip } from "@mosae/contracts";
+import { applyEdits, reflow, type AudioClip, type Caption, type ClipPlan, type Timeline, type VideoClip } from "@mosae/contracts";
 import type { Candidate } from "./buildCandidates.js";
 
 /** A semantic issue found during validation. */
@@ -38,6 +38,7 @@ export interface ValidationContext {
 }
 
 const TEN_PERCENT = 0.1;
+const visualId = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
 
 /** Validate a composed timeline against semantic rules. Returns issues found. */
 export function validateTimeline(
@@ -46,6 +47,15 @@ export function validateTimeline(
 ): TimelineIssue[] {
   const issues: TimelineIssue[] = [];
   const videoClips = timeline.videoClips.filter((clip): clip is VideoClip => "source" in clip);
+
+  for (const clip of timeline.videoClips) {
+    if (!("kind" in clip)) continue;
+    for (const slot of clip.spec.slots) {
+      if (!slot.shotId || !ctx.shotIds.has(slot.shotId)) {
+        issues.push({ path: `videoClips[${clip.clipId}].spec.slots[${slot.slotId}]`, message: `unknown shot ${slot.shotId ?? ""}`, severity: "fatal" });
+      }
+    }
+  }
 
   for (const clip of videoClips) {
     // Rule 1: the clip traces back to a candidate this composition offered, the
@@ -95,19 +105,19 @@ export function validateTimeline(
   // Rule 4: Clips are contiguous — no gaps, and an overlap only where the
   // INCOMING clip declares one. `transitionIn` is the transition into a clip,
   // so the boundary between N-1 and N is clip N's to declare.
-  const sortedClips = [...videoClips].sort((a, b) => a.startSec - b.startSec);
+  const sortedClips = [...timeline.videoClips].sort((a, b) => a.startSec - b.startSec);
   for (let i = 0; i < sortedClips.length - 1; i++) {
     const currentEnd = sortedClips[i].startSec + sortedClips[i].durationSec;
     const incoming = sortedClips[i + 1];
     const gap = incoming.startSec - currentEnd;
 
     if (gap > 0.05) {
-      issues.push({ path: `videoClips[${sortedClips[i].id}]→[${incoming.id}]`, message: `gap of ${gap.toFixed(2)}s between clips`, severity: "fixable" });
+      issues.push({ path: `videoClips[${visualId(sortedClips[i])}]→[${visualId(incoming)}]`, message: `gap of ${gap.toFixed(2)}s between clips`, severity: "fixable" });
     } else if (gap < -0.05) {
-      if (incoming.transitionIn.kind !== "crossfade") {
-        issues.push({ path: `videoClips[${sortedClips[i].id}]→[${incoming.id}]`, message: `overlap of ${Math.abs(gap).toFixed(2)}s without a crossfade into ${incoming.id}`, severity: "fixable" });
+      if (incoming.transitionIn?.kind !== "crossfade") {
+        issues.push({ path: `videoClips[${visualId(sortedClips[i])}]→[${visualId(incoming)}]`, message: `overlap of ${Math.abs(gap).toFixed(2)}s without a crossfade into ${visualId(incoming)}`, severity: "fixable" });
       } else if (Math.abs(gap) - incoming.transitionIn.durationSec > 0.05) {
-        issues.push({ path: `videoClips[${sortedClips[i].id}]→[${incoming.id}]`, message: `overlap of ${Math.abs(gap).toFixed(2)}s exceeds the declared crossfade of ${incoming.transitionIn.durationSec}s`, severity: "fixable" });
+        issues.push({ path: `videoClips[${visualId(sortedClips[i])}]→[${visualId(incoming)}]`, message: `overlap of ${Math.abs(gap).toFixed(2)}s exceeds the declared crossfade of ${incoming.transitionIn.durationSec}s`, severity: "fixable" });
       }
     }
   }
@@ -175,7 +185,23 @@ export function repairOnce(
   const fixableIssues = issues.filter(i => i.severity === "fixable");
   if (fixableIssues.length === 0) return { ok: true, timeline };
   if (timeline.videoClips.some((clip) => "kind" in clip)) {
-    return { ok: false, reasons: ["automatic repair of a collage timeline is unsupported"] };
+    const adjusted = structuredClone(timeline);
+    adjusted.videoClips = adjusted.videoClips.filter((clip) => {
+      if (!("source" in clip) || clip.source.kind !== "video") return true;
+      const candidate = ctx.candidates.get(clip.id);
+      return !candidate || !(clip.source.sourceInSec < (candidate.inSec ?? 0) - 0.01 || clip.source.sourceOutSec > (candidate.outSec ?? Infinity) + 0.01);
+    });
+    if (!adjusted.videoClips.length) return { ok: false, reasons: ["repair dropped every clip — no film left"] };
+    adjusted.videoClips.forEach((clip) => {
+      if (!("source" in clip) || clip.source.kind !== "photo") return;
+      const candidate = ctx.candidates.get(clip.id);
+      if (candidate?.minHoldSec != null && candidate.maxHoldSec != null) {
+        clip.durationSec = Math.max(candidate.minHoldSec, Math.min(candidate.maxHoldSec, clip.durationSec));
+      }
+    });
+    adjusted.durationSec = Math.max(adjusted.durationSec, ...adjusted.videoClips.map((clip) => clip.startSec + clip.durationSec));
+    const relaid = applyEdits(adjusted, [{ op: "move", clipId: visualId(adjusted.videoClips[0]), toIndex: 0 }]);
+    return relaid.ok ? { ok: true, timeline: relaid.timeline } : { ok: false, reasons: [relaid.error] };
   }
 
   const videoClips = timeline.videoClips.filter((clip): clip is VideoClip => "source" in clip);

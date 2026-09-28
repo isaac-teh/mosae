@@ -79,6 +79,10 @@ describe("golden composition", () => {
     expect(parsed.ok ? [] : parsed.errors).toEqual([]);
   });
 
+  it("emits timeline schema v2 even when the golden film has no collage candidates", async () => {
+    expect((await composeOrThrow()).schemaVersion).toBe(2);
+  });
+
   it("is unchanged by the wall clock", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2021-03-04T05:06:07.008Z"));
