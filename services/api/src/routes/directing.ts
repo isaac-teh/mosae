@@ -21,6 +21,7 @@ import { assignFaceCharacter, getProjectFaces } from "../store/understandStore.j
 import { getOwnedProject, type Project } from "../store/projectStore.js";
 import { photoRoles } from "../cast/prominence.js";
 import { chooseFocus } from "../cast/focus.js";
+import { leaveOutShots } from "../cast/leaveOut.js";
 import type { Cast, CastPerson } from "../cast/types.js";
 import { z } from "zod";
 import type { PhotoAnalysis } from "../domain/understanding.js";
@@ -459,6 +460,8 @@ export function directingRouter(deps: {
       const bodySchema = z.strictObject({
         people: z.array(personSchema), focus: z.array(z.string().min(1)),
         moves: z.array(z.strictObject({ faceId: z.string().min(1), personId: z.string().min(1) })).optional(),
+        /** The current plan: when given, the cast's leave-out and focus are applied to it straight away. */
+        proposalId: z.string().min(1).optional(),
       });
       const parsed = bodySchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: "invalid_cast" }); return; }
@@ -491,7 +494,7 @@ export function directingRouter(deps: {
           const base = current.people.find((person) => person.personId === personId);
           const person = peopleById.get(personId) ?? {
             ...(base ?? { personId, ageBand: input.role === "child" ? "child" : "adult", confidence: "low" }),
-            ...input, appearances: 0, subjectCount: 0, faceIds: [],
+            ...input, excluded: input.excluded ?? false, appearances: 0, subjectCount: 0, faceIds: [],
           } as CastPerson;
           person.appearances += 1;
           if (subjectsByShot[shotIndex]?.[faceIndex] === "subject") person.subjectCount += 1;
@@ -510,7 +513,7 @@ export function directingRouter(deps: {
       });
       const nextPeople = people.map((person) => peopleById.get(person.personId) ?? {
         ...current.people.find((old) => old.personId === person.personId), ...person,
-        appearances: 0, subjectCount: 0, faceIds: [],
+        excluded: person.excluded ?? false, appearances: 0, subjectCount: 0, faceIds: [],
       } as CastPerson);
       const core = nextPeople.map((person) => person.personId);
       if (focus.length === 0) focus = chooseFocus(nextPeople, core);
@@ -522,7 +525,40 @@ export function directingRouter(deps: {
       };
       batch.set(currentRef, cast);
       await batch.commit();
-      res.json({ cast });
+      if (!parsed.data.proposalId) { res.json({ cast }); return; }
+
+      // Apply the confirmed cast to the plan already on screen without asking
+      // the model again: photos now left out are deselected, photos no longer
+      // left out come back, and the reasons travel with the new version.
+      const source = await readProposal(deps.db, { userId: res.locals.userId, projectId, proposalId: parsed.data.proposalId });
+      if (!source) { res.status(404).json({ error: "not_found" }); return; }
+      const leftOut = leaveOutShots(
+        shots.map((shot, index) => ({
+          shotId: shot.shotId,
+          faces: (facesByShot[index] ?? []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null })),
+        })),
+        cast,
+        source.constraints.hiddenShotIds ?? [],
+      );
+      const momentsFor = (shotIds: Set<string>) => source.moments.filter((moment) => shotIds.has(moment.shotId)).map((moment) => moment.id);
+      const previouslyLeftOut = new Set(momentsFor(new Set((source.leftOut ?? []).map((item) => item.shotId))));
+      const nowLeftOut = momentsFor(new Set(leftOut.map((item) => item.shotId)));
+      const deselectedMomentIds = [...new Set([
+        ...source.constraints.deselectedMomentIds.filter((id) => !previouslyLeftOut.has(id)),
+        ...nowLeftOut,
+      ])];
+      const proposal = await reviseConstraints(deps.db, {
+        userId: res.locals.userId, projectId, proposalId: source.id,
+        constraints: {
+          ...source.constraints,
+          deselectedMomentIds,
+          mustIncludeMomentIds: source.constraints.mustIncludeMomentIds.filter((id) => !nowLeftOut.includes(id)),
+          focusCharacterIds: cast.focus,
+        },
+        leftOut,
+        createdAt: now(),
+      });
+      res.json({ cast, proposalId: proposal.id });
     } catch (error) {
       handleError(res, error);
     }

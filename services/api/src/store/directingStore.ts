@@ -203,6 +203,8 @@ export async function reviseConstraints(
     projectId: string;
     proposalId: string;
     constraints: ProposalConstraints;
+    /** Replaces the proposal's left-out photos when a confirmed cast changes them. */
+    leftOut?: { shotId: string; reason: string }[];
     createdAt: number;
   },
 ): Promise<StoryProposal> {
@@ -233,6 +235,7 @@ export async function reviseConstraints(
       state: "draft",
       version: nextProposalVersion(projectSnap.get("proposalVersionCounter"), source.version, source.version + 1),
       constraints: input.constraints,
+      ...(input.leftOut !== undefined ? { leftOut: input.leftOut } : {}),
     });
     if (!candidate.success) throw new DirectingStoreError("invalid_proposal");
 

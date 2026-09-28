@@ -83,3 +83,54 @@ export async function setFocusCharacters(projectId: string, proposalId: string, 
   if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Unable to save your main characters");
   return (json.proposal?.id as string) ?? proposalId;
 }
+
+export type CastRole = "parent" | "child" | "other";
+
+/** One person in the film's cast, as the director found or the user confirmed them. */
+export type CastPerson = {
+  personId: string;
+  role: CastRole;
+  name?: string;
+  excluded?: boolean;
+  appearances: number;
+  subjectCount: number;
+  faceIds: string[];
+};
+
+export type Cast = { people: CastPerson[]; core: string[]; focus: string[]; confirmed?: boolean };
+
+export type ConfirmCastInput = {
+  people: { personId: string; role: CastRole; name?: string; excluded?: boolean }[];
+  /** Empty lets the director choose the focus from who is most often the subject. */
+  focus: string[];
+  moves?: { faceId: string; personId: string }[];
+  /** The plan on screen; the cast is applied to it and a revised version comes back. */
+  proposalId?: string;
+};
+
+/** The cast the director built, or null when planning hasn't produced one yet. */
+export async function getCast(projectId: string): Promise<Cast | null> {
+  const user = await ensureSignedIn();
+  const path = "/api/projects/" + encodeURIComponent(projectId) + "/cast";
+  const res = await fetch(getCoreConfig().apiBaseUrl + path, {
+    headers: { Authorization: "Bearer " + (await user.getIdToken()) },
+  });
+  if (res.status === 404) return null;
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Unable to load who is in your film");
+  return json.cast as Cast;
+}
+
+/** Confirms the cast. With a proposalId, returns the revised plan's id to continue with. */
+export async function confirmCast(projectId: string, input: ConfirmCastInput): Promise<{ cast: Cast; proposalId?: string }> {
+  const user = await ensureSignedIn();
+  const path = "/api/projects/" + encodeURIComponent(projectId) + "/cast";
+  const res = await fetch(getCoreConfig().apiBaseUrl + path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await user.getIdToken()) },
+    body: JSON.stringify(input),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Unable to save who is in your film");
+  return json as { cast: Cast; proposalId?: string };
+}

@@ -132,6 +132,48 @@ describe("character picker routes", () => {
     } finally { await close(); }
   });
 
+  it("applies a confirmed leave-out to the current plan without a model call", async () => {
+    const projectId = await seedProject();
+    const proposalId = await seedProposal(projectId);
+    const big: [number, number, number, number] = [0.2, 0.3, 0.7, 0.7];
+    const small: [number, number, number, number] = [0.05, 0.9, 0.12, 0.97];
+    // shot-1: dad alone (left out once he is excluded). shot-2: the child with dad far behind (kept).
+    await photo(projectId, "shot-1", [{ faceId: "shot-1-0", bbox: big, confidence: 1, characterId: "dad" }]);
+    await photo(projectId, "shot-2", [
+      { faceId: "shot-2-0", bbox: big, confidence: 1, characterId: "kid" },
+      { faceId: "shot-2-1", bbox: small, confidence: 1, characterId: "dad" },
+    ]);
+    const person = (personId: string, role: string) => ({ personId, role, ageBand: role === "child" ? "child" : "adult", appearances: 1, subjectCount: 1, faceIds: [], confidence: "high" });
+    await adminDb.doc(`projects/${projectId}/cast/current`).set({ people: [person("dad", "parent"), person("kid", "child")], core: ["dad", "kid"], focus: ["kid"], source: "labelled" });
+    const { url, close } = await listen(await buildApp());
+    try {
+      const res = await fetch(`${url}/api/projects/${projectId}/cast`, {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ people: [{ personId: "dad", role: "parent", excluded: true }, { personId: "kid", role: "child" }], focus: [], proposalId }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { proposalId: string };
+      expect(body.proposalId).not.toBe(proposalId);
+      const next = (await adminDb.doc(`projects/${projectId}/storyProposals/${body.proposalId}`).get()).data()!;
+      // The seed had moment-1 deselected by the user; that choice is kept, and
+      // dad's solo photo (moment-0) is now deselected with its reason.
+      expect(next.constraints.deselectedMomentIds.sort()).toEqual([`${proposalId}-moment-0`, `${proposalId}-moment-1`]);
+      expect(next.constraints.focusCharacterIds).toEqual(["kid"]);
+      expect(next.leftOut).toEqual([{ shotId: "shot-1", reason: "Left out: someone you left out is the main subject." }]);
+
+      // Bringing dad back returns his photo; the user's own deselection stays.
+      const back = await fetch(`${url}/api/projects/${projectId}/cast`, {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ people: [{ personId: "dad", role: "parent" }, { personId: "kid", role: "child" }], focus: ["kid"], proposalId: body.proposalId }),
+      });
+      const again = (await adminDb.doc(`projects/${projectId}/storyProposals/${((await back.json()) as { proposalId: string }).proposalId}`).get()).data()!;
+      expect(again.constraints.deselectedMomentIds).toEqual([`${proposalId}-moment-1`]);
+      expect(again.leftOut).toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+
   it("rejects a focus that includes an excluded person", async () => {
     const projectId = await seedProject();
     await adminDb.doc(`projects/${projectId}/cast/current`).set({
