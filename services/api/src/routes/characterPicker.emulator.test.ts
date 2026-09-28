@@ -93,6 +93,57 @@ describe("character picker routes", () => {
     }
   });
 
+  it("gets and confirms the cast, moves a face, and recomputes empty focus", async () => {
+    const projectId = await seedProject();
+    await photo(projectId, "shot-1", [
+      { ...face("kid-face"), bbox: [0.2, 0.3, 0.7, 0.7], characterId: "kid" },
+      { ...face("dad-face"), bbox: [0.05, 0.9, 0.12, 0.97], characterId: "dad" },
+    ]);
+    await adminDb.doc(`projects/${projectId}/cast/current`).set({
+      people: [
+        { personId: "dad", role: "parent", ageBand: "adult", appearances: 1, subjectCount: 0, faceIds: ["dad-face"], confidence: "high" },
+        { personId: "mom", role: "parent", ageBand: "adult", appearances: 0, subjectCount: 0, faceIds: [], confidence: "high" },
+        { personId: "kid", role: "child", ageBand: "child", appearances: 1, subjectCount: 1, faceIds: ["kid-face"], confidence: "high" },
+      ], core: ["dad", "mom", "kid"], focus: ["kid"], source: "labelled",
+    });
+    const { url, close } = await listen(await buildApp());
+    try {
+      const get = await fetch(`${url}/api/projects/${projectId}/cast`);
+      expect(get.status).toBe(200);
+      const res = await fetch(`${url}/api/projects/${projectId}/cast`, {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          people: [
+            { personId: "dad", role: "parent", excluded: true },
+            { personId: "mom", role: "parent" },
+            { personId: "kid", role: "child" },
+          ], focus: [], moves: [{ faceId: "dad-face", personId: "mom" }],
+        }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { cast: { confirmed: boolean; focus: string[]; people: Array<{ personId: string; excluded?: boolean }> } };
+      expect(body.cast).toMatchObject({ confirmed: true, focus: ["kid"] });
+      expect(body.cast.people.find((person) => person.personId === "dad")?.excluded).toBe(true);
+      expect(((await adminDb.doc(`projects/${projectId}/shots/shot-1`).get()).get("analysis") as PhotoAnalysis).faces?.[1]?.characterId).toBe("mom");
+    } finally { await close(); }
+  });
+
+  it("rejects a focus that includes an excluded person", async () => {
+    const projectId = await seedProject();
+    await adminDb.doc(`projects/${projectId}/cast/current`).set({
+      people: [{ personId: "dad", role: "parent", ageBand: "adult", appearances: 0, subjectCount: 0, faceIds: [], confidence: "high" }],
+      core: ["dad"], focus: [], source: "labelled",
+    });
+    const { url, close } = await listen(await buildApp());
+    try {
+      const res = await fetch(`${url}/api/projects/${projectId}/cast`, {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ people: [{ personId: "dad", role: "parent", excluded: true }], focus: ["dad"] }),
+      });
+      expect(res.status).toBe(400);
+    } finally { await close(); }
+  });
+
   it("assigns a character via POST and returns the updated face", async () => {
     const projectId = await seedProject();
     await photo(projectId, "shot-1", [face("shot-1-f0")]);

@@ -128,10 +128,12 @@ describe("proposalCache", () => {
       parentProposalId: null,
       constraints: job.constraints,
       parentProposal: null,
+      leftOut: [{ shotId: "hidden-photo", reason: "Hidden by you." }],
     });
 
     expect(reassembled.id).toBe("brand-new-proposal");
     expect(reassembled.version).toBe(2);
+    expect(reassembled.leftOut).toEqual([{ shotId: "hidden-photo", reason: "Hidden by you." }]);
     // Shot references are preserved; only the minted ids changed.
     expect(reassembled.moments.map((m) => m.shotId)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
     expect(reassembled.moments[0].id).toMatch(/^brand-new-proposal-moment-0$/);

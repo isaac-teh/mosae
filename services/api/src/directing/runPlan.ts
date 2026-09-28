@@ -35,6 +35,8 @@ export type PlanJob = {
   workingSetCap?: number;
   castSummary?: string;
   daySummary?: string;
+  leftOut?: { shotId: string; reason: string }[];
+  autoExcludedShotIds?: string[];
 };
 
 export type PlanMessage = {
@@ -204,11 +206,12 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
     // focus character's shot any more than it could omit an explicit one.
     ...resolveFocusShots(job.shots, job.constraints.focusCharacterIds ?? []),
   ];
+  const excludedShotIds = [...new Set([...job.constraints.excludedShotIds, ...(job.autoExcludedShotIds ?? [])])];
   let workingSet: WorkingSet;
   try {
     workingSet = buildWorkingSet(job.shots, {
       cap: job.workingSetCap,
-      excludedShotIds: job.constraints.excludedShotIds,
+      excludedShotIds,
       mustIncludeShotIds,
     });
   } catch (error) {
@@ -298,7 +301,7 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
 
       await progress("organizing");
       const validation = validateProposal(output.submission, admissibleSet(workingSet, deps.tools), {
-        excludedShotIds: job.constraints.excludedShotIds,
+        excludedShotIds,
         mustIncludeShotIds,
       });
       if (!validation.ok) {
@@ -317,6 +320,7 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
           parentProposalId: job.parentProposalId,
           constraints: job.constraints,
           parentProposal: job.parentProposal,
+          leftOut: job.leftOut,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

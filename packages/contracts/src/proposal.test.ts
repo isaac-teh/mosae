@@ -83,4 +83,9 @@ describe("StoryProposalSchema", () => {
     expect(safeParseStoryProposal({ ...valid, recommendedCadence: "sad" }).ok).toBe(false);
     expect(safeParseStoryProposal(valid).ok).toBe(true);
   });
+
+  it("accepts an optional leftOut list while preserving older proposal shapes", () => {
+    expect(StoryProposalSchema.safeParse(valid).success).toBe(true);
+    expect(StoryProposalSchema.safeParse({ ...valid, leftOut: [{ shotId: "shot-x", reason: "Hidden by you." }] }).success).toBe(true);
+  });
 });

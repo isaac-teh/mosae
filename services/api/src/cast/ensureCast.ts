@@ -17,7 +17,8 @@ export async function ensureCast(
   opts: { labels?: LabelFile; storageBucket?: string } = {},
 ): Promise<{ cast: Cast; summary: string | null }> {
   const project = db.collection("projects").doc(projectId);
-  const [shotSnaps, assetSnaps] = await Promise.all([
+  const [storedCastSnap, shotSnaps, assetSnaps] = await Promise.all([
+    project.collection("cast").doc("current").get(),
     project.collection("shots").get(), project.collection("assets").get(),
   ]);
   const assets = new Map(assetSnaps.docs.map((doc) => [doc.id, doc.data()]));
@@ -41,6 +42,17 @@ export async function ensureCast(
       refs.set(face.faceId, { shotId: doc.id, index });
     });
     for (const interaction of analysis.interactions ?? []) interactions.push(interaction);
+  }
+
+  const storedCast = storedCastSnap.data() as Cast | undefined;
+  if (storedCast?.confirmed === true) {
+    const identities = new Map<string, string>();
+    for (const doc of shotSnaps.docs) {
+      const analysis = doc.get("analysis") as ShotAnalysis | undefined;
+      if (analysis?.kind !== "photo") continue;
+      for (const face of analysis.faces ?? []) if (face.characterId) identities.set(face.faceId, face.characterId);
+    }
+    return { cast: storedCast, summary: castSummary(storedCast, faces, identities) };
   }
 
   let labels = opts.labels;

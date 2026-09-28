@@ -64,4 +64,9 @@ describe("assembleProposal", () => {
     expect(proposal.recommendedCadence).toBe("tender");
     expect(proposal.cadenceReason).toBe("quiet sunset");
   });
+
+  it("carries left-out reasons onto the proposal", () => {
+    const proposal = assembleProposal(body, { ...context, leftOut: [{ shotId: "shot-x", reason: "Hidden by you." }] });
+    expect(proposal.leftOut).toEqual([{ shotId: "shot-x", reason: "Hidden by you." }]);
+  });
 });

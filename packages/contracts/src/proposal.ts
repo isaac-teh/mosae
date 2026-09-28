@@ -71,6 +71,7 @@ const BaseProposalSchema = z.strictObject({
   openQuestions: z.array(z.string().min(1)),
   recommendedCadence: z.enum(CADENCES.map((c) => c.id) as [CadenceId, ...CadenceId[]]).optional(),
   cadenceReason: z.string().min(1).max(200).optional(),
+  leftOut: z.array(z.strictObject({ shotId: z.string().min(1), reason: z.string().min(1) })).optional(),
 });
 
 /**

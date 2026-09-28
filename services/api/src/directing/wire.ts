@@ -16,6 +16,8 @@ import { estimateUsd, MODELS, type GenerateDeps } from "../gemini/client.js";
 import { createEmbedClient, createGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
 import { ensureCast } from "../cast/ensureCast.js";
 import { daySummary, tripDays } from "./days.js";
+import { leaveOutShots } from "../cast/leaveOut.js";
+import type { PhotoAnalysis } from "../domain/understanding.js";
 
 export const MAX_PLAN_ATTEMPTS = 3;
 export const PLAN_LEASE_MS = DEFAULT_PLAN_BUDGET_LIMITS.elapsedMs + 60_000;
@@ -148,6 +150,15 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
         if ((!constraints.focusCharacterIds || constraints.focusCharacterIds.length === 0) && ensured.cast.focus.length > 0) {
           constraints.focusCharacterIds = ensured.cast.focus;
         }
+        const leftOut = leaveOutShots(
+          shots.filter((shot) => shot.analysis?.kind === "photo").map((shot) => ({
+            shotId: shot.id,
+            faces: ((shot.analysis as PhotoAnalysis).faces ?? []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null })),
+          })),
+          ensured.cast,
+          (constraints as typeof constraints & { hiddenShotIds?: string[] }).hiddenShotIds ?? [],
+        );
+        const autoExcluded = leftOut.map((item) => item.shotId);
         const job: PlanJob = {
           id: task.jobId, projectId: task.projectId,
           proposalId: acquired.proposalId, storyIntentId: acquired.storyIntentId,
@@ -157,6 +168,8 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
             id: shot.id, day: shot.day ?? null, localTime: shot.localTime, place: shot.place ?? null,
           })))),
           parentProposal: parent?.exists ? parent.data() as StoryProposal : null,
+          leftOut,
+          autoExcludedShotIds: autoExcluded,
         };
         // Build the working set once so the cache key and validation agree on
         // exactly which catalog shots are eligible. A must-include conflict is
@@ -165,7 +178,7 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
         try {
           workingSet = buildWorkingSet(job.shots, {
             cap: job.workingSetCap,
-            excludedShotIds: job.constraints.excludedShotIds,
+            excludedShotIds: [...new Set([...job.constraints.excludedShotIds, ...autoExcluded])],
             mustIncludeMomentIds: constraintShotIds(job),
             focusCharacterIds: job.constraints.focusCharacterIds,
           });
@@ -182,7 +195,7 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
         // replay a self-correcting conversation turn-for-turn.
         if (cached && workingSet) {
           const validation = validateProposal(cached.submission, workingSet, {
-            excludedShotIds: job.constraints.excludedShotIds,
+            excludedShotIds: [...new Set([...job.constraints.excludedShotIds, ...autoExcluded])],
             mustIncludeShotIds: constraintShotIds(job),
           });
           if (validation.ok) {
@@ -195,6 +208,7 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
                 parentProposalId: job.parentProposalId,
                 constraints: job.constraints,
                 parentProposal: job.parentProposal,
+                leftOut: job.leftOut,
               });
               const cachedResult = { ok: true as const, proposal, usage: { modelTurns: 0, toolCalls: 0, elapsedMs: 0 }, submission: cached.submission };
               await ownedUpdate({ status: "publishing", completedResult: cachedResult, usage: cachedResult.usage, diagnostics: [] });
@@ -213,7 +227,7 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
           generateContent: createGeminiClient(config.geminiApiKey), recordUsage: recordUsageToLog(db, { projectId: task.projectId }),
         }, task.jobId) : { runTurn: unavailable });
         const tools = createPlanningTools({
-          projectId: task.projectId, excludedShotIds: job.constraints.excludedShotIds,
+          projectId: task.projectId, excludedShotIds: [...new Set([...job.constraints.excludedShotIds, ...autoExcluded])],
           embedContent: config.embedContent ?? (usable ? createEmbedClient(config.geminiApiKey) : unavailable),
           loadShots: async (projectId) => projectId === task.projectId ? shots : [],
           loadAsset: async (projectId, assetId) => {

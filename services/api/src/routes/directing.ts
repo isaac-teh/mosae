@@ -19,6 +19,11 @@ import {
 } from "../store/directingStore.js";
 import { assignFaceCharacter, getProjectFaces } from "../store/understandStore.js";
 import { getOwnedProject, type Project } from "../store/projectStore.js";
+import { photoRoles } from "../cast/prominence.js";
+import { chooseFocus } from "../cast/focus.js";
+import type { Cast, CastPerson } from "../cast/types.js";
+import { z } from "zod";
+import type { PhotoAnalysis } from "../domain/understanding.js";
 
 type DirectingProject = Project & { currentProposalId?: string | null };
 
@@ -358,6 +363,104 @@ export function directingRouter(deps: {
           })),
         })),
       });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  router.get("/:projectId/cast", async (req, res) => {
+    const { projectId } = req.params;
+    try {
+      if (!(await ownedProject(res.locals.userId, projectId))) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      const snap = await deps.db.doc(`projects/${projectId}/cast/current`).get();
+      if (!snap.exists) { res.status(404).json({ error: "not_found" }); return; }
+      res.json({ cast: snap.data() });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  router.put("/:projectId/cast", async (req, res) => {
+    const { projectId } = req.params;
+    try {
+      if (!(await ownedProject(res.locals.userId, projectId))) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      const personSchema = z.strictObject({
+        personId: z.string().min(1), name: z.string().optional(),
+        role: z.enum(["parent", "child", "other"]), excluded: z.boolean().optional(),
+      });
+      const bodySchema = z.strictObject({
+        people: z.array(personSchema), focus: z.array(z.string().min(1)),
+        moves: z.array(z.strictObject({ faceId: z.string().min(1), personId: z.string().min(1) })).optional(),
+      });
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) { res.status(400).json({ error: "invalid_cast" }); return; }
+      const currentRef = deps.db.doc(`projects/${projectId}/cast/current`);
+      const currentSnap = await currentRef.get();
+      if (!currentSnap.exists) { res.status(404).json({ error: "not_found" }); return; }
+      const current = currentSnap.data() as Cast;
+      const validId = (id: string) => current.people.some((person) => person.personId === id) || id.startsWith("p-");
+      const { people, moves = [] } = parsed.data;
+      let { focus } = parsed.data;
+      if ([...people.map((person) => person.personId), ...focus, ...moves.map((move) => move.personId)].some((id) => !validId(id)) ||
+          focus.some((id) => people.some((person) => person.personId === id && person.excluded)) ||
+          new Set(people.map((person) => person.personId)).size !== people.length || new Set(focus).size !== focus.length) {
+        res.status(400).json({ error: "invalid_cast" }); return;
+      }
+
+      const shots = await getProjectFaces(deps.db, projectId);
+      const faceLookup = new Map<string, { shotIndex: number; faceIndex: number }>();
+      shots.forEach((shot, shotIndex) => (shot.analysis?.faces ?? []).forEach((face, faceIndex) => faceLookup.set(face.faceId, { shotIndex, faceIndex })));
+      if (moves.some((move) => !faceLookup.has(move.faceId))) { res.status(400).json({ error: "invalid_cast" }); return; }
+      const moved = new Map(moves.map((move) => [move.faceId, move.personId]));
+      const personInputs = new Map(people.map((person) => [person.personId, person]));
+      const peopleById = new Map<string, CastPerson>();
+      const subjectsByShot = shots.map((shot) => photoRoles((shot.analysis?.faces ?? []).map((face) => face.bbox)));
+      const facesByShot: NonNullable<PhotoAnalysis["faces"]>[] = shots.map((shot, shotIndex) => (shot.analysis?.faces ?? []).map((face, faceIndex) => {
+        const personId = moved.get(face.faceId) ?? face.characterId;
+        const { characterId: _characterId, name: _name, role: _role, ...faceFields } = face;
+        const input = personId ? personInputs.get(personId) : undefined;
+        if (personId && input) {
+          const base = current.people.find((person) => person.personId === personId);
+          const person = peopleById.get(personId) ?? {
+            ...(base ?? { personId, ageBand: input.role === "child" ? "child" : "adult", confidence: "low" }),
+            ...input, appearances: 0, subjectCount: 0, faceIds: [],
+          } as CastPerson;
+          person.appearances += 1;
+          if (subjectsByShot[shotIndex]?.[faceIndex] === "subject") person.subjectCount += 1;
+          person.faceIds.push(face.faceId);
+          peopleById.set(personId, person);
+        }
+        if (!personId) return faceFields;
+        const displayName = input?.name ?? current.people.find((person) => person.personId === personId)?.name;
+        return { ...faceFields, characterId: personId, ...(displayName !== undefined ? { name: displayName } : {}), role: focus.includes(personId) ? "MAIN" as const : "SUPPORTING" as const };
+      }));
+      const batch = deps.db.batch();
+      shots.forEach((shot, index) => {
+        const analysis = shot.analysis;
+        if (!analysis) return;
+        batch.update(deps.db.doc(`projects/${projectId}/shots/${shot.shotId}`), { analysis: { ...analysis, faces: facesByShot[index] } });
+      });
+      const nextPeople = people.map((person) => peopleById.get(person.personId) ?? {
+        ...current.people.find((old) => old.personId === person.personId), ...person,
+        appearances: 0, subjectCount: 0, faceIds: [],
+      } as CastPerson);
+      const core = nextPeople.map((person) => person.personId);
+      if (focus.length === 0) focus = chooseFocus(nextPeople, core);
+      for (const shotFaces of facesByShot) for (const face of shotFaces) {
+        if (face.characterId) face.role = focus.includes(face.characterId) ? "MAIN" : "SUPPORTING";
+      }
+      const cast: Cast = {
+        people: nextPeople, core, focus, source: current.source, confirmed: true,
+      };
+      batch.set(currentRef, cast);
+      await batch.commit();
+      res.json({ cast });
     } catch (error) {
       handleError(res, error);
     }

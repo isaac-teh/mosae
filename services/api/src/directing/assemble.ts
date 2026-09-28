@@ -29,6 +29,7 @@ export type ProposalAssemblyContext = {
   constraints: ProposalConstraints;
   /** Persisted parent moments used to translate carried constraint ids. */
   parentProposal?: Pick<StoryProposal, "moments"> | null;
+  leftOut?: { shotId: string; reason: string }[];
 };
 
 function momentId(proposalId: string, index: number): string {
@@ -113,6 +114,7 @@ export function assembleProposal(body: ProposalSubmission, context: ProposalAsse
     openQuestions: body.openQuestions,
     ...(body.recommendedCadence !== undefined ? { recommendedCadence: body.recommendedCadence } : {}),
     ...(body.cadenceReason !== undefined ? { cadenceReason: body.cadenceReason } : {}),
+    ...(context.leftOut !== undefined ? { leftOut: context.leftOut } : {}),
   };
   const parsed = StoryProposalSchema.safeParse(candidate);
   if (!parsed.success) {

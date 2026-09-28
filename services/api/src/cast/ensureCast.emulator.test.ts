@@ -47,6 +47,18 @@ describe("ensureCast emulator", () => {
     expect(child).toMatchObject({ characterId: "C", role: "MAIN" });
     const named = ((await project.collection("shots").doc("shot-0").get()).data()!.analysis as PhotoAnalysis).faces![0];
     expect(named).toMatchObject({ name: "Human name", characterId: "human-assigned-id" });
+
+    const confirmed = { ...cast, confirmed: true, people: cast.people.map((person) => person.personId === "A" ? { ...person, name: "Papa" } : person) };
+    await project.collection("cast").doc("current").set(confirmed);
+    const newAnalysis: PhotoAnalysis = { kind: "photo", caption: "new upload", subjects: [], setting: "", activities: [], mood: "", shotType: "", aesthetics: 1, keyMomentScore: 1, tags: [], faces: [{ faceId: "new-face", bbox: [0.2, 0.2, 0.7, 0.7], confidence: 1 }] };
+    await project.collection("shots").doc("new-upload").set({ id: "new-upload", assetId: "asset-0", assetGeneration: 1, analysis: newAnalysis });
+    const beforeCast = (await project.collection("cast").doc("current").get()).data();
+    const beforeNewShot = (await project.collection("shots").doc("new-upload").get()).data();
+    const kept = await ensureCast(adminDb, projectId, { labels, storageBucket: process.env.FIREBASE_STORAGE_BUCKET ?? "demo-mosae.appspot.com" });
+    expect(kept.cast.people.find((person) => person.personId === "A")?.name).toBe("Papa");
+    expect((await project.collection("cast").doc("current").get()).data()).toEqual(beforeCast);
+    expect((await project.collection("shots").doc("new-upload").get()).data()).toEqual(beforeNewShot);
+    expect((beforeNewShot!.analysis as PhotoAnalysis).faces?.[0]?.characterId).toBeUndefined();
   });
 
   it("writes an empty cast and does not touch shots when there are no faces", async () => {
