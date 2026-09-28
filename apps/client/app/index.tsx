@@ -60,7 +60,7 @@ export default function Home() {
           </View>
         ) : (
           <>
-            <View accessibilityLabel="Mosaé tile mosaic" data-testid="home-mosaic" className="mt-[112px] w-fit flex-row flex-wrap gap-2">
+            <View accessibilityLabel="Mosaé tile mosaic" data-testid="home-mosaic" className="mt-[112px] w-[248px] flex-row flex-wrap gap-2">
               {mosaicColors.map((color, index) => <View key={index} data-mosaic-tile={color} className={`h-14 w-14 rounded-md ${tileClasses[color]}`} />)}
             </View>
             <View className="mt-6">
@@ -72,8 +72,8 @@ export default function Home() {
               <Text role="heading" aria-level={2} className="mb-3 font-title text-heading text-ink">Your films</Text>
               {films === null ? <Text accessibilityRole="progressbar" className="font-sans text-caption text-ink-muted">Loading your films…</Text> : (
                 <View className="flex-row items-center gap-4 rounded-md bg-surface-sunken p-3">
-                  <View data-testid="empty-films-icon" accessibilityLabel="Four tiles" className="w-fit flex-row flex-wrap gap-0.5">
-                    {["tide-tile", "tide-tile", "tide-tile", "deep-tide"].map((color, index) => <View key={index} className={`size-3 rounded-sm ${tileClasses[color]}`} />)}
+                  <View data-testid="empty-films-icon" accessibilityLabel="Four tiles" className="w-[26px] flex-row flex-wrap gap-0.5">
+                    {["tide-tile", "tide-tile", "tide-tile", "deep-tide"].map((color, index) => <View key={index} className={`size-3 rounded-[2px] ${tileClasses[color]}`} />)}
                   </View>
                   <Text className="flex-1 font-sans text-caption leading-[18px] text-ink-muted">No films yet. Your first one will live here, and it stays editable.</Text>
                 </View>
