@@ -218,7 +218,7 @@ export default function CharacterPickerScreen() {
     if (!face) return null;
     return (
       <View className="mt-3 rounded-[12px] bg-surface-sunken p-3">
-        <Text className="font-sans-semibold text-xs leading-4 text-ink">This is actually…</Text>
+        <Text className="font-sans-semibold text-xs leading-4 text-ink">Who is this really?</Text>
         <View className="mt-2 flex-row flex-wrap gap-2">
           {moveTargets(face.faceId).map((person) => (
             <Pressable key={person.personId} role="button" aria-label={`Move to ${labelFor(person, people)}`} onPress={() => moveFace(face.faceId, person.personId)} className="rounded-full bg-white px-3 py-1.5">
@@ -248,7 +248,8 @@ export default function CharacterPickerScreen() {
 
         {people.length > 0 && (
           <View className="mt-5">
-            <Text className="font-sans-semibold text-xs leading-4 uppercase tracking-[0.5px] text-ink-soft">Film centres on</Text>
+            <Text className="font-sans-semibold text-xs leading-4 uppercase tracking-[0.5px] text-ink-soft">Who&apos;s the star?</Text>
+            <Text className="mt-0.5 font-sans text-xs leading-4 text-ink-soft">Tap who the film should be mostly about. You can pick more than one.</Text>
             <View role="group" aria-label="Film centres on" className="mt-2 flex-row flex-wrap gap-2">
               {ordered.filter((person) => !person.excluded).map((person) => {
                 const on = focus.includes(person.personId);
@@ -259,7 +260,7 @@ export default function CharacterPickerScreen() {
                 );
               })}
             </View>
-            {focus.length === 0 && <Text className="mt-1 font-sans text-xs leading-4 text-ink-soft">Nobody chosen — we&apos;ll centre on whoever the photos are most about.</Text>}
+            {focus.length === 0 && <Text className="mt-1 font-sans text-xs leading-4 text-ink-soft">Nobody picked — we&apos;ll centre on whoever the photos are most about.</Text>}
           </View>
         )}
 
@@ -274,7 +275,7 @@ export default function CharacterPickerScreen() {
                 placeholder={labelFor({ ...person, name: "" }, people)}
                 placeholderTextColor="#a8321266"
                 aria-label={`Name person ${index + 1}`}
-                className="font-serif text-[18px] leading-[24px] text-ink"
+                className="rounded-[10px] border border-brand-dot bg-surface px-3 py-1.5 font-serif text-[18px] leading-[24px] text-ink"
               />
               <View role="radiogroup" aria-label={`${label}'s role`} className="mt-2 flex-row items-center gap-2">
                 {ROLES.map((role) => (
@@ -283,10 +284,11 @@ export default function CharacterPickerScreen() {
                   </Pressable>
                 ))}
               </View>
+              <Text className="mt-3 font-sans text-xs leading-4 text-ink-soft">{`Photos of ${label}. Not them? Tap the photo to move it.`}</Text>
               {cropRow(faces, label)}
               {moveSheet(faces)}
               <Pressable role="switch" aria-checked={person.excluded} aria-label={`Leave ${label} out`} onPress={() => updatePerson(person.personId, { excluded: !person.excluded })} className="mt-3 self-start rounded-full bg-surface-muted px-3 py-1.5">
-                <Text className="font-sans-semibold text-xs leading-4 text-ink">{person.excluded ? "Bring back" : "Leave out"}</Text>
+                <Text className="font-sans-semibold text-xs leading-4 text-ink">{person.excluded ? "Bring back into the film" : "Leave out of the film"}</Text>
               </Pressable>
               {person.excluded && <Text className="mt-1 font-sans text-xs leading-4 text-ink-soft">Photos where they&apos;re the main subject won&apos;t be used.</Text>}
             </View>
