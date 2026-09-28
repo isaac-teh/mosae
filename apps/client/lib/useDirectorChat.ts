@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deriveChat, getStoryRepository, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type PlanEdits, type ProjectSummary, type StoryPlan } from "@mosae/core";
+import { deriveChat, getStoryRepository, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type PlanEdits, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
 import { useRouter } from "expo-router";
@@ -7,7 +7,7 @@ import { useRouter } from "expo-router";
 const EMPTY_INPUT: ChatInput = { summary: null, intent: null, people: null, peopleConfirmed: false, plan: null, momentsConfirmed: false, conflict: null, direction: null, generation: null, notes: [] };
 const UNCLEAR = "I didn't catch that. Pick one below, or say it another way.";
 
-export function useDirectorChat(projectId: string) {
+export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository()) {
   const [input, setInput] = useState<ChatInput>(EMPTY_INPUT);
   const [summary, setSummary] = useState<ProjectSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +23,6 @@ export function useDirectorChat(projectId: string) {
   const skipPeopleForNow = useRef(false);
   const mounted = useRef(true);
   const generationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const repository = getStoryRepository();
   const router = useRouter();
   const state: ChatState = deriveChat(input);
 
@@ -86,7 +85,7 @@ export function useDirectorChat(projectId: string) {
     async confirmOccasion(text?: string) {
       if (saving) return;
       setSaving(true); setError(null);
-      const storyText = text ?? pendingInterpret?.text ?? summary?.places.join(", ") ?? "Our story";
+      const storyText = text ?? pendingInterpret?.text ?? (summary?.places.join(", ") || "Our story");
       try {
         const result = await repository.createPlan(storyText, []);
         proposalId.current = result.planId;

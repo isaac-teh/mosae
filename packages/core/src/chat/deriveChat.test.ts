@@ -81,6 +81,13 @@ describe("deriveChat state table", () => {
     expect(state.items[2]).toMatchObject({ kind: "person", personId: "p1" });
   });
 
+  it("asks names when people have detected roles but no user supplied names", () => {
+    const people = ["child", "parent", "parent"].map((role, index) => ({ personId: `p${index}`, name: null, role, skipped: false, momentCount: 30 - index, sampleShotIds: [], days: [] }));
+    const state = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null });
+    expect(state.items.map((item) => item.kind)).toEqual(["you", "person"]);
+    expect(state.items.at(-1)).toMatchObject({ kind: "person", personId: "p0" });
+  });
+
   it("shows the faces waiting copy and defaults placeholders", () => {
     const state = deriveChat({ ...base(), people: null, peopleConfirmed: false, plan: null });
     expect(state.items.at(-1)).toMatchObject({ kind: "typing", text: "Finding the faces in your trip" });

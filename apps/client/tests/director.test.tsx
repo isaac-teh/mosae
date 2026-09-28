@@ -7,10 +7,11 @@ vi.mock("react-native", () => {
   return { View: node("div"), ScrollView: node("div"), Text: node("span"), Pressable: node("button"), TextInput: node("input"), Image: ({ source, accessibilityLabel, ...props }: any) => React.createElement("img", { ...props, src: source?.uri, alt: accessibilityLabel }) };
 });
 
-const mocks = vi.hoisted(() => ({ repo: null as any, confirmCast: vi.fn(), push: vi.fn() }));
+const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, confirmCast: vi.fn(), push: vi.fn() }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-1" }), useRouter: () => ({ back: vi.fn(), push: mocks.push }) }));
 vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typeof import("@mosae/core")>()), getStoryRepository: () => mocks.repo }));
 vi.mock("@/lib/characters", () => ({ confirmCast: (...args: any[]) => mocks.confirmCast(...args) }));
+vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flowRepo }) }));
 vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: () => React.createElement("div", { "data-testid": "film-player" }) }));
 import DirectorScreen from "../app/director";
 
@@ -46,6 +47,7 @@ function setup(options: { faces?: boolean; interpret?: () => Promise<any>; creat
     interpret: vi.fn(options.interpret ?? (async () => ({ reply: "I understood the Japan trip.", change: { kind: "occasion", storyText: "Japan trip" } }))),
     getPlan: vi.fn(async () => planFixture), applyEdits: vi.fn(options.applyEdits ?? (async () => planFixture)), getDirectionOptions: vi.fn(async () => directionOptions), directFilm: vi.fn(async () => ({ filmId: "film-1" })), getFilm: vi.fn(options.getFilm ?? (async () => filmFixture)), saveFilm: vi.fn(options.saveFilm ?? (async () => ({ downloadKey: "https://film.example/first-cut.mp4" }))),
   };
+  mocks.flowRepo = mocks.repo;
   mocks.confirmCast.mockResolvedValue({ cast: { people: [] }, proposalId: "proposal-2" });
 }
 
@@ -58,6 +60,22 @@ describe("Director chat", () => {
     await click("Yes, that's our story");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Tokyo", []));
     expect(hasText("Tokyo")).toBe(true);
+  });
+
+  it("uses the repository scoped to the director route project", async () => {
+    setup();
+    mocks.flowRepo = { ...mocks.repo, getSummary: vi.fn(async () => summary()), getPeople: vi.fn(async () => people) };
+    await renderScreen();
+    await waitFor(() => expect(mocks.flowRepo.getSummary).toHaveBeenCalledWith("project-1"));
+    expect(mocks.repo.getSummary).not.toHaveBeenCalled();
+  });
+
+  it("uses a safe fallback story intent when the summary has no detected places", async () => {
+    setup();
+    mocks.repo.getSummary.mockResolvedValue({ ...summary(), places: [] });
+    await renderScreen();
+    await click("Yes, that's our story");
+    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Our story", []));
   });
 
   it("shows people processing and Skip for now while faces are still pending", async () => {

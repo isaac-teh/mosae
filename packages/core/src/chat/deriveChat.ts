@@ -60,7 +60,7 @@ export function deriveChat(input: ChatInput): ChatState {
     }
 
     const people = [...(input.people ?? [])].sort((a, b) => b.momentCount - a.momentCount).slice(0, 3);
-    const answered = (person: (typeof people)[number]) => person.skipped || Boolean(person.name || person.role);
+    const answered = (person: (typeof people)[number]) => person.skipped || Boolean(person.name);
     const firstUnanswered = people.findIndex((person) => !answered(person));
     const unanswered = firstUnanswered >= 0 ? people[firstUnanswered] : null;
     people.slice(0, firstUnanswered >= 0 ? firstUnanswered : people.length).forEach((person) => {
