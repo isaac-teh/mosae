@@ -10,6 +10,7 @@ export type WorkingShot = {
   asset?: { status?: AssetStatus };
   eventId?: string | null;
   day?: string | null;
+  localTime: string | null;
   place?: string | null;
   durationSec?: number | null;
   /** Original-media interval for a video shot; photos carry null bounds. */

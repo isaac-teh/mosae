@@ -17,7 +17,7 @@ const videoAnalysis = (quality: number, usable = true) => ({
 });
 
 const shot = (id: string, eventId: string, analysis: WorkingShot["analysis"], overrides: Partial<WorkingShot> = {}): WorkingShot => ({
-  id, assetStatus: "understood", eventId, day: "2026-05-03", place: "Park",
+  id, assetStatus: "understood", eventId, day: "2026-05-03", localTime: "2026-05-03T09:00:00", place: "Park",
   durationSec: analysis?.kind === "video" ? 3 : null, analysis, ...overrides,
 });
 

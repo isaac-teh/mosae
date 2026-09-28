@@ -5,6 +5,7 @@ import { canTransition, type AssetStatus } from "../domain/assetStatus.js";
 import { newOutboxTask } from "../domain/outbox.js";
 import type { Derivatives, MediaFacts, QualityFacts } from "../domain/media.js";
 import type { TranscriptLine } from "../domain/understanding.js";
+import type { Place } from "../understand/place.js";
 
 export type FinalizeInput = {
   bucket: string;
@@ -40,6 +41,7 @@ export type Asset = {
   createdAt: number;
   updatedAt: number;
   media?: MediaFacts;
+  place?: Place | null;
   quality?: QualityFacts;
   derivatives?: Derivatives;
   ingestedAt?: number;

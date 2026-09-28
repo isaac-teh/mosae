@@ -7,6 +7,7 @@ import { PermanentIngestError } from "./errors.js";
 import type { ObjectStore } from "./objectStore.js";
 import type { PhotoDerivatives, VideoDerivatives } from "./proxies.js";
 import type { ShotRange } from "./shots.js";
+import type { PlaceResolver } from "../understand/place.js";
 
 export type IngestTask = { projectId: string; assetId: string; generation: string; attempt?: number };
 export type IngestResult = "ingested" | "failed" | "skipped";
@@ -15,6 +16,7 @@ export type IngestDeps = {
   loadAsset(projectId: string, assetId: string): Promise<Asset | null>;
   objects: ObjectStore;
   probe(file: string, kind: MediaKind): Promise<MediaFacts>;
+  placeResolver?: PlaceResolver;
   photoDerivatives(input: string, outDir: string): Promise<PhotoDerivatives>;
   videoDerivatives(input: string, outDir: string, durationSec: number): Promise<VideoDerivatives>;
   analyze(file: string): Promise<QualityFacts>;
@@ -44,6 +46,7 @@ async function ingestOriginal(deps: IngestDeps, asset: Asset, workDir: string): 
   await deps.objects.download({ path: asset.storagePath, generation: asset.generation, destination: original });
 
   const media = await deps.probe(original, kind);
+  const place = media.gps && deps.placeResolver ? await deps.placeResolver.resolve(media.gps).catch(() => null) : null;
   const owner = { userId: asset.userId, projectId: asset.projectId, assetId: asset.id, generation: asset.generation };
   const thumbPath = buildDerivativePath(owner, "thumb.jpg");
   const uploads: { source: string; path: string; contentType: string }[] = [];
@@ -72,7 +75,7 @@ async function ingestOriginal(deps: IngestDeps, asset: Asset, workDir: string): 
 
   return await deps.commitIngested({
     projectId: asset.projectId, assetId: asset.id, generation: asset.generation,
-    media, quality, derivatives, ranges, now: deps.now(),
+    media, place, quality, derivatives, ranges, now: deps.now(),
   });
 }
 

@@ -34,6 +34,7 @@ export type PlanJob = {
   parentProposal?: Pick<StoryProposal, "moments"> | null;
   workingSetCap?: number;
   castSummary?: string;
+  daySummary?: string;
 };
 
 export type PlanMessage = {
@@ -110,6 +111,7 @@ function initialPrompt(job: PlanJob, catalog: string[]): string {
     `Intent: ${job.intent.text}`,
     `Focus: ${JSON.stringify(job.intent.focus)}`,
     ...(job.castSummary ? [`Cast: ${job.castSummary}`] : []),
+    ...(job.daySummary ? [job.daySummary] : []),
     "Keep every moment worth keeping; the film's length is chosen later.",
     "Also recommend the film's cadence (one of tender, reflective, playful, energetic, celebratory) from the photos' mood, with a short reason.",
     `Carried constraints: ${JSON.stringify(job.constraints)}`,

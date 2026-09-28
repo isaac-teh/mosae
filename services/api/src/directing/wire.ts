@@ -15,6 +15,7 @@ import { z } from "zod";
 import { estimateUsd, MODELS, type GenerateDeps } from "../gemini/client.js";
 import { createEmbedClient, createGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
 import { ensureCast } from "../cast/ensureCast.js";
+import { daySummary, tripDays } from "./days.js";
 
 export const MAX_PLAN_ATTEMPTS = 3;
 export const PLAN_LEASE_MS = DEFAULT_PLAN_BUDGET_LIMITS.elapsedMs + 60_000;
@@ -66,7 +67,8 @@ async function loadCatalog(db: Firestore, projectId: string): Promise<{ shots: P
       id: doc.id, projectId, assetId, assetStatus: asset.status,
       eventId: asset.eventId ?? null, dupOf: asset.dupOf ?? null,
       day: asset.media?.localTime?.slice(0, 10) ?? null,
-      place: analysis?.kind === "photo" ? analysis.setting : null,
+      localTime: asset.media?.localTime ?? null,
+      place: (asset as Asset & { place?: { name: string } | null }).place?.name ?? null,
       durationSec: start != null && end != null ? end - start : null,
       sourceStartSec: start ?? null, sourceEndSec: end ?? null,
       analysis: analysis ?? null, embedding: vector?.toArray() ?? null,
@@ -151,6 +153,9 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
           proposalId: acquired.proposalId, storyIntentId: acquired.storyIntentId,
           version: acquired.version, parentProposalId: acquired.parentProposalId,
           ...acquired.pinnedInputs, constraints, shots, castSummary: ensured.summary ?? undefined,
+          daySummary: daySummary(tripDays(shots.map((shot) => ({
+            id: shot.id, day: shot.day ?? null, localTime: shot.localTime, place: shot.place ?? null,
+          })))),
           parentProposal: parent?.exists ? parent.data() as StoryProposal : null,
         };
         // Build the working set once so the cache key and validation agree on

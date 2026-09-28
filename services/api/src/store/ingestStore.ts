@@ -5,6 +5,7 @@ import { newOutboxTask } from "../domain/outbox.js";
 import type { Derivatives, MediaFacts, MediaKind, QualityFacts } from "../domain/media.js";
 import type { ShotRange } from "../ingest/shots.js";
 import type { Asset } from "./finalizeStore.js";
+import type { Place } from "../understand/place.js";
 
 export const shotId = (assetId: string, index: number): string => `${assetId}_${String(index).padStart(4, "0")}`;
 
@@ -39,6 +40,7 @@ export type IngestCommit = {
   assetId: string;
   generation: string;
   media: MediaFacts;
+  place: Place | null;
   quality: QualityFacts;
   derivatives: Derivatives;
   ranges: ShotRange[];
@@ -75,6 +77,7 @@ export async function commitIngested(db: Firestore, commit: IngestCommit): Promi
     tx.update(ref, {
       status: "ingested",
       media: commit.media,
+      place: commit.place,
       quality: commit.quality,
       derivatives: commit.derivatives,
       ingestedAt: commit.now,

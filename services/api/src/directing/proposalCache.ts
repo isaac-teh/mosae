@@ -56,6 +56,7 @@ export function cacheKeyFor(job: PlanJob, workingSet?: WorkingSet): string {
     job.projectId,
     job.intent.text,
     JSON.stringify(job.intent.focus),
+    job.daySummary ?? "",
     JSON.stringify(job.constraints),
     shots.map((shot) => shot.id).join(","),
   ];

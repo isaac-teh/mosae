@@ -12,6 +12,20 @@ import { probeMedia } from "./probe.js";
 import { makePhotoDerivatives, makeVideoDerivatives } from "./proxies.js";
 import { analyzeImage } from "./quality.js";
 import { detectShots } from "./shots.js";
+import { readdir, readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { fixturePlaceResolver, googlePlaceResolver, type GeocodeResult, type PlaceResolver } from "../understand/place.js";
+
+async function loadPlaceResolver(): Promise<PlaceResolver> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (apiKey) return googlePlaceResolver(apiKey);
+  const directory = fileURLToPath(new URL("../../fixtures/places/", import.meta.url));
+  const table: Record<string, GeocodeResult[]> = {};
+  for (const file of (await readdir(directory)).filter((entry) => entry.endsWith(".json")).sort()) {
+    Object.assign(table, JSON.parse(await readFile(path.join(directory, file), "utf8")) as Record<string, GeocodeResult[]>);
+  }
+  return fixturePlaceResolver(table);
+}
 
 /**
  * Glue only: every behaviour lives in a module with its own tests, and the
@@ -24,11 +38,12 @@ export function createIngest(config: {
   settle: (projectId: string) => Promise<void>;
   dispatchDue: () => Promise<void>;
 }): (task: IngestTask) => Promise<IngestResult> {
-  return (task) => {
+  return async (task) => {
     const deps: IngestDeps = {
       loadAsset: (projectId, assetId) => loadAsset(config.db, projectId, assetId),
       objects: firebaseObjectStore(getStorage(getAdminApp()).bucket(config.bucketName)),
       probe: (file, kind) => probeMedia(file, kind),
+      placeResolver: await loadPlaceResolver(),
       photoDerivatives: (input, outDir) => makePhotoDerivatives(input, outDir),
       videoDerivatives: (input, outDir, durationSec) => makeVideoDerivatives(input, outDir, durationSec),
       analyze: analyzeImage,

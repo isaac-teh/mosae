@@ -5,6 +5,7 @@ import { validateProposal } from "./validateProposal.js";
 
 const photo = (id: string): WorkingShot => ({
   id,
+  localTime: null,
   assetStatus: "understood",
   durationSec: null,
   analysis: {
@@ -23,6 +24,7 @@ const photo = (id: string): WorkingShot => ({
 
 const video = (id: string, sourceStartSec = 10, sourceEndSec = 20): WorkingShot => ({
   id,
+  localTime: null,
   assetStatus: "understood",
   durationSec: sourceEndSec - sourceStartSec,
   sourceStartSec,

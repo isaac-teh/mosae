@@ -11,6 +11,7 @@ const photo = (id: string) => ({
   assetStatus: "understood" as const,
   eventId: "event-1",
   day: "2026-05-03",
+  localTime: "2026-05-03T09:00:00",
   place: "Park",
   durationSec: null,
   sourceStartSec: null,
@@ -73,6 +74,7 @@ describe("proposalCache", () => {
 
     // Same job -> same key (reproducible across runs for stable shot ids).
     expect(cacheKeyFor({ ...job, proposalId: "different-proposal" })).toBe(base);
+    expect(cacheKeyFor({ ...job, daySummary: "Day 1 · Park: p1" })).not.toBe(base);
 
     // A different intent text changes the key.
     const otherIntent = cacheKeyFor({ ...job, intent: { text: "End with a surprise.", focus: ["family"] } });

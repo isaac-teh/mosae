@@ -36,7 +36,7 @@ describe("shotRecords", () => {
 describe("commitIngested (emulator)", () => {
   it("records facts, derivatives and shots, and marks the asset ingested", async () => {
     const { projectId, assetId } = await seedAsset();
-    const result = await commitIngested(adminDb, { projectId, assetId, generation: "7", media: video, quality, derivatives, ranges: [{ startSec: 0, endSec: 2 }, { startSec: 2, endSec: 5 }], now: 50 });
+    const result = await commitIngested(adminDb, { projectId, assetId, generation: "7", media: video, place: null, quality, derivatives, ranges: [{ startSec: 0, endSec: 2 }, { startSec: 2, endSec: 5 }], now: 50 });
     expect(result).toBe("ingested");
     const asset = await loadAsset(adminDb, projectId, assetId);
     expect(asset).toMatchObject({ status: "ingested", media: { kind: "video" }, quality: { dHash: "0f0f0f0f0f0f0f0f" }, derivatives, ingestedAt: 50 });
@@ -45,7 +45,7 @@ describe("commitIngested (emulator)", () => {
 
   it("writes a single interval-less shot for a photo", async () => {
     const { projectId, assetId } = await seedAsset();
-    await commitIngested(adminDb, { projectId, assetId, generation: "7", media: photo, quality, derivatives, ranges: [], now: 50 });
+    await commitIngested(adminDb, { projectId, assetId, generation: "7", media: photo, place: null, quality, derivatives, ranges: [], now: 50 });
     const all = await shots(projectId);
     expect(all.size).toBe(1);
     expect(all.docs[0].data()).toMatchObject({ mediaType: "photo", sourceStartSec: null, sourceEndSec: null });
@@ -53,7 +53,7 @@ describe("commitIngested (emulator)", () => {
 
   it("is idempotent: a second commit is skipped and does not duplicate shots", async () => {
     const { projectId, assetId } = await seedAsset();
-    const commit = { projectId, assetId, generation: "7", media: video, quality, derivatives, ranges: [{ startSec: 0, endSec: 5 }], now: 50 };
+    const commit = { projectId, assetId, generation: "7", media: video, place: null, quality, derivatives, ranges: [{ startSec: 0, endSec: 5 }], now: 50 };
     expect(await commitIngested(adminDb, commit)).toBe("ingested");
     expect(await commitIngested(adminDb, { ...commit, now: 60 })).toBe("skipped");
     expect((await shots(projectId)).size).toBe(1);
@@ -62,13 +62,13 @@ describe("commitIngested (emulator)", () => {
 
   it("skips a stale task for an older upload generation", async () => {
     const { projectId, assetId } = await seedAsset("uploaded", "9");
-    expect(await commitIngested(adminDb, { projectId, assetId, generation: "7", media: photo, quality, derivatives, ranges: [], now: 50 })).toBe("skipped");
+    expect(await commitIngested(adminDb, { projectId, assetId, generation: "7", media: photo, place: null, quality, derivatives, ranges: [], now: 50 })).toBe("skipped");
     expect((await loadAsset(adminDb, projectId, assetId))?.status).toBe("uploaded");
     expect((await shots(projectId)).size).toBe(0);
   });
 
   it("skips when the asset does not exist", async () => {
-    expect(await commitIngested(adminDb, { projectId: "missing", assetId: "a1", generation: "7", media: photo, quality, derivatives, ranges: [], now: 1 })).toBe("skipped");
+    expect(await commitIngested(adminDb, { projectId: "missing", assetId: "a1", generation: "7", media: photo, place: null, quality, derivatives, ranges: [], now: 1 })).toBe("skipped");
   });
 });
 

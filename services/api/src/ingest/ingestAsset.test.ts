@@ -50,6 +50,7 @@ describe("ingestAsset", () => {
     expect(calls).toEqual(["download", "upload:proxies/u1/p1/a1/7/thumb.jpg", "upload:proxies/u1/p1/a1/7/render.jpg", "commit"]);
     expect(deps.commitIngested).toHaveBeenCalledWith({
       projectId: "p1", assetId: "a1", generation: "7", media: photoFacts, quality,
+      place: null,
       derivatives: { thumbPath: "proxies/u1/p1/a1/7/thumb.jpg", renderPath: "proxies/u1/p1/a1/7/render.jpg", proxyPath: null },
       ranges: [], now: 99,
     });
@@ -57,6 +58,25 @@ describe("ingestAsset", () => {
     expect(deps.detectShots).not.toHaveBeenCalled();
     expect(deps.settle).toHaveBeenCalledWith("p1");
     expect(deps.removeWorkDir).toHaveBeenCalledWith("/w");
+  });
+
+  it("stores GPS-derived places, leaves no-GPS place null, and tolerates resolver failures", async () => {
+    const gpsFacts = { ...photoFacts, gps: { lat: 1.404, lng: 103.793 } };
+    const place = { name: "Singapore Zoo", level: "landmark" as const };
+    const withGps = setup(baseAsset, { probe: vi.fn().mockResolvedValue(gpsFacts), placeResolver: { resolve: vi.fn().mockResolvedValue(place) } });
+    await ingestAsset(withGps.deps, task);
+    expect(withGps.deps.commitIngested).toHaveBeenCalledWith(expect.objectContaining({ place }));
+    expect(withGps.deps.placeResolver?.resolve).toHaveBeenCalledWith(gpsFacts.gps);
+
+    const withoutGps = setup(baseAsset, { placeResolver: { resolve: vi.fn().mockRejectedValue(new Error("no geocoder")) } });
+    await ingestAsset(withoutGps.deps, task);
+    expect(withoutGps.deps.commitIngested).toHaveBeenCalledWith(expect.objectContaining({ place: null }));
+    expect(withoutGps.deps.placeResolver?.resolve).not.toHaveBeenCalled();
+
+    const resolverFails = setup(baseAsset, { probe: vi.fn().mockResolvedValue(gpsFacts), placeResolver: { resolve: vi.fn().mockRejectedValue(new Error("no geocoder")) } });
+    await ingestAsset(resolverFails.deps, task);
+    expect(resolverFails.deps.commitIngested).toHaveBeenCalledWith(expect.objectContaining({ place: null }));
+    expect(resolverFails.deps.commitFailed).not.toHaveBeenCalled();
   });
 
   it("ingests a video: detects shots on the proxy and uploads the poster and proxy", async () => {

@@ -20,6 +20,7 @@ const photo = (id: string): WorkingShot => ({
   assetStatus: "understood",
   eventId: "event-1",
   day: "2026-05-03",
+  localTime: "2026-05-03T09:00:00",
   place: "Park",
   durationSec: null,
   sourceStartSec: null,
@@ -144,10 +145,11 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 describe("runPlan", () => {
-  it("includes the cast summary in the first prompt when available", async () => {
+  it("includes the cast summary and day chapters in the first prompt when available", async () => {
     const script = scripted([{ type: "submit", submission: validSubmission }]);
-    await runPlan({ ...job, castSummary: "2 parents, 1 child; focus: the child; all core together in 2 photos." }, { model: script.model, tools: tools() });
+    await runPlan({ ...job, castSummary: "2 parents, 1 child; focus: the child; all core together in 2 photos.", daySummary: "Build one chapter per day in this order.\nDay 1 · Park: p1" }, { model: script.model, tools: tools() });
     expect(script.inputs[0]?.messages[0]?.content).toContain("Cast: 2 parents");
+    expect(script.inputs[0]?.messages[0]?.content).toContain("Day 1 · Park: p1");
   });
 
   it("builds context, executes read-only tools, reports coarse progress and returns an assembled proposal", async () => {
