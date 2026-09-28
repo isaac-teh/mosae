@@ -1,0 +1,422 @@
+{
+ "people": {
+  "p-dad": {},
+  "p-mom": {},
+  "p-daughter": {}
+ },
+ "photos": {
+  "7c2897d96ac057f24ac7ead69e578b3492e25d5b5d3de1f968db80fc454fb014": [
+   {
+    "bbox": [
+     0.411,
+     0.377,
+     0.506,
+     0.457
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.383,
+     0.493,
+     0.485,
+     0.574
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   }
+  ],
+  "c0ada28670fbac1a5b81e5b310d7860dc8beef7ba7ca48b16a40f4ae28a5b91e": [
+   {
+    "bbox": [
+     0.269,
+     0.48,
+     0.413,
+     0.57
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.237,
+     0.569,
+     0.348,
+     0.644
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   }
+  ],
+  "b198d4b7bb7e2bfcf0b2fb66b452ea9bb4504cd7c57ad8f7f653ff08a7bbb8f4": [
+   {
+    "bbox": [
+     0.254,
+     0.375,
+     0.376,
+     0.436
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.356,
+     0.481,
+     0.444,
+     0.525
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.29,
+     0.597,
+     0.396,
+     0.641
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   }
+  ],
+  "2d7e1a1710f37c8ee900ad91707add768e87b55c2f818d25edeaa28695f3985d": [
+   {
+    "bbox": [
+     0.418,
+     0.353,
+     0.497,
+     0.442
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.51,
+     0.404,
+     0.574,
+     0.483
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.458,
+     0.481,
+     0.526,
+     0.563
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   }
+  ],
+  "96d0f0f5995afdcc4af2a3e984c38ec943b935d7534d9da025cbd5d57c3c592c": [
+   {
+    "bbox": [
+     0.45,
+     0.251,
+     0.518,
+     0.342
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.416,
+     0.361,
+     0.485,
+     0.428
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.363,
+     0.508,
+     0.423,
+     0.552
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   }
+  ],
+  "18d2482c7a73db8cbf123477254012de52de7a46f652c7dbc327a14bb667f3c7": [
+   {
+    "bbox": [
+     0.181,
+     0.289,
+     0.375,
+     0.395
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.323,
+     0.361,
+     0.508,
+     0.462
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.25,
+     0.438,
+     0.455,
+     0.542
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   }
+  ],
+  "0be4c987a0afb1f4ce7e8b36985f07783828337237b85a13dd04370145b383e8": [
+   {
+    "bbox": [
+     0.073,
+     0.229,
+     0.425,
+     0.462
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.256,
+     0.404,
+     0.472,
+     0.513
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.138,
+     0.485,
+     0.448,
+     0.642
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   }
+  ],
+  "cded47330bb236ed855558dd4a3298119adc62508517f033d6a5149dfb9522f2": [
+   {
+    "bbox": [
+     0.506,
+     0.326,
+     0.561,
+     0.361
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.526,
+     0.479,
+     0.574,
+     0.508
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.438,
+     0.577,
+     0.493,
+     0.61
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   }
+  ],
+  "8c5e1f863f040670d5210fe7d8ba2a384b8c61ec369e8528f06152dc15bd89e9": [
+   {
+    "bbox": [
+     0.383,
+     0.342,
+     0.458,
+     0.375
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.482,
+     0.538,
+     0.542,
+     0.566
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.426,
+     0.734,
+     0.493,
+     0.766
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   }
+  ],
+  "8eac2cadd29807a4c6a8de059b050197742329982181a19a88251fd8c2c2ee9a": [
+   {
+    "bbox": [
+     0.418,
+     0.337,
+     0.856,
+     0.513
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.514,
+     0.421,
+     0.857,
+     0.577
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.455,
+     0.511,
+     0.859,
+     0.642
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   }
+  ],
+  "406ec123fb2648c83605f4b1768e92d257765cc20a09eb649cc807f08214b97d": [
+   {
+    "bbox": [
+     0.336,
+     0.423,
+     0.417,
+     0.532
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   }
+  ],
+  "13d5e85546d92e99d31b587fafbff793a4d980857b8c8d7269ad98918280d93b": [
+   {
+    "bbox": [
+     0.395,
+     0.284,
+     0.452,
+     0.364
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.429,
+     0.513,
+     0.48,
+     0.584
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   }
+  ],
+  "061d87e82ca69588c1043ad7c6ee20eb2f716e6063344bd020ace81c77693239": [
+   {
+    "bbox": [
+     0.181,
+     0.289,
+     0.375,
+     0.395
+    ],
+    "personId": "p-dad",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.323,
+     0.361,
+     0.508,
+     0.462
+    ],
+    "personId": "p-daughter",
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.25,
+     0.438,
+     0.455,
+     0.542
+    ],
+    "personId": "p-mom",
+    "expect": "subject"
+   }
+  ],
+  "f617cb78b606d4083323a70ce13a691e419dfaee9c191f1632f859484ec59a70": [
+   {
+    "bbox": [
+     0.136,
+     0.273,
+     0.36,
+     0.441
+    ],
+    "expect": "subject"
+   },
+   {
+    "bbox": [
+     0,
+     0.405,
+     0.115,
+     0.535
+    ],
+    "expect": "background"
+   },
+   {
+    "bbox": [
+     0.025,
+     0.53,
+     0.17,
+     0.618
+    ],
+    "expect": "background"
+   },
+   {
+    "bbox": [
+     0.137,
+     0.748,
+     0.255,
+     0.82
+    ],
+    "expect": "background"
+   },
+   {
+    "bbox": [
+     0.15,
+     0.91,
+     0.268,
+     1
+    ],
+    "expect": "background"
+   }
+  ]
+ }
+}

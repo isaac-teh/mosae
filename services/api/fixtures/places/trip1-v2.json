@@ -1,0 +1,22 @@
+{
+  "1.249,103.830": [
+    { "name": "Siloso Beach", "types": ["natural_feature", "tourist_attraction"] },
+    { "name": "Sentosa", "types": ["sublocality"] },
+    { "name": "Singapore", "types": ["locality"] }
+  ],
+  "1.404,103.793": [
+    { "name": "Singapore Zoo", "types": ["zoo", "tourist_attraction"] },
+    { "name": "Mandai", "types": ["neighborhood"] },
+    { "name": "Singapore", "types": ["locality"] }
+  ],
+  "1.257,103.821": [
+    { "name": "Shangri-La Rasa Sentosa", "types": ["lodging"] },
+    { "name": "Sentosa", "types": ["sublocality"] },
+    { "name": "Singapore", "types": ["locality"] }
+  ],
+  "1.276,103.807": [
+    { "name": "Blk 88 Telok Blangah Heights", "types": ["premise", "street_address"] },
+    { "name": "Telok Blangah", "types": ["neighborhood"] },
+    { "name": "Singapore", "types": ["locality"] }
+  ]
+}
