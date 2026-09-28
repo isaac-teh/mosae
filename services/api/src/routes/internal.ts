@@ -157,17 +157,19 @@ export function internalRouter(deps: {
 
     const raw = req.header("x-cloudtasks-taskretrycount")?.trim();
     const attempt = raw !== undefined && /^\d+$/.test(raw) ? Number(raw) : 0;
+    const editRevision = /^edit-([1-9]\d*)$/.exec(generation);
+    const revision = editRevision ? Number(editRevision[1]) : undefined;
 
     try {
       if (!deps.render) throw new Error("render_not_configured");
 
       if (attempt >= MAX_RENDER_ATTEMPTS) {
-        await deps.render({ projectId, generationId: subjectId, giveUp: `exceeded ${MAX_RENDER_ATTEMPTS} render attempts` });
+        await deps.render({ projectId, generationId: subjectId, revision, giveUp: `exceeded ${MAX_RENDER_ATTEMPTS} render attempts` });
         res.sendStatus(204);
         return;
       }
 
-      const result = await deps.render({ projectId, generationId: subjectId });
+      const result = await deps.render({ projectId, generationId: subjectId, revision });
       console.log("render", workKey, result);
       // A render that gave the film back is a settled outcome recorded on the
       // generation, not a delivery failure for Cloud Tasks to repeat.

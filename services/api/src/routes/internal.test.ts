@@ -234,6 +234,13 @@ describe("internal routes", () => {
     expect(render).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1" });
   });
 
+  it("delivers an edit outbox task with its revision", async () => {
+    const render = vi.fn().mockResolvedValue("rendered");
+    const res = await request(buildApp({ render })).post("/tasks/render").send({ ...renderTask, generation: "edit-3" });
+    expect(res.status).toBe(204);
+    expect(render).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1", revision: 3 });
+  });
+
   it("rejects a malformed render task with non-generation subjectKind", async () => {
     const res = await request(buildApp()).post("/tasks/render").send({ ...renderTask, subjectKind: "asset" });
     expect(res.status).toBe(400);

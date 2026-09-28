@@ -7,6 +7,7 @@ export type FilmListItem = { projectId: string; filmId: string; title: string; m
 export type ChatInterpretRequest = { step: "occasion" | "people" | "moments" | "direction"; text: string; context: { summary?: ProjectSummary; people?: { personId: string; name: string | null; role: string | null }[] } };
 export type ChatInterpretResult = { reply: string; change: { kind: string; [key: string]: unknown } };
 export type FilmEdits = { revision: number; ops: EditOp[]; updatedAt: number | null };
+export type FilmRender = { revision: number; status: "pending" | "rendering" | "ready" | "failed"; downloadUrl?: string; outputPath?: string };
 
 export interface StoryRepository {
   listFilms(): Promise<FilmListItem[]>;
@@ -28,6 +29,8 @@ export interface StoryRepository {
   getFilm(filmId: string): Promise<Film>;
   getEdits(projectId: string, generationId: string): Promise<FilmEdits>;
   saveEdits(projectId: string, generationId: string, revision: number, ops: EditOp[]): Promise<FilmEdits>;
+  renderRevision(projectId: string, generationId: string, revision: number): Promise<{ renderId: string }>;
+  getRender(projectId: string, generationId: string, revision: number): Promise<FilmRender>;
   reviseFilm(filmId: string, request: string): Promise<Film>;
   saveFilm(filmId: string): Promise<{ downloadKey: string }>;
 }

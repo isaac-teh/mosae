@@ -219,7 +219,12 @@ export function generationsRouter(deps: {
         return res.status(404).json({ error: "not_found" });
       }
 
-      if (generation.status !== "saved" || !generation.outputPath) {
+      const editSnap = await deps.db.collection("projects").doc(projectId).collection("generations").doc(generationId).collection("edits").doc("current").get();
+      const editedPath = editSnap.exists && editSnap.get("status") === "ready" && editSnap.get("renderRevision") === editSnap.get("revision")
+        ? editSnap.get("outputPath") as string | undefined
+        : undefined;
+      const outputPath = editedPath || (generation.status === "saved" ? generation.outputPath : null);
+      if (!outputPath) {
         return res.status(400).json({ error: "render_not_complete", status: generation.status });
       }
 
@@ -234,8 +239,8 @@ export function generationsRouter(deps: {
       const store = firebaseDownloadUrlStore(bucket);
 
       try {
-        const downloadUrl = await store.signedDownloadUrl(generation.outputPath);
-        return res.json({ downloadUrl, outputPath: generation.outputPath });
+        const downloadUrl = await store.signedDownloadUrl(outputPath);
+        return res.json({ downloadUrl, outputPath });
       } catch {
         return res.status(500).json({ error: "url_generation_failed" });
       }

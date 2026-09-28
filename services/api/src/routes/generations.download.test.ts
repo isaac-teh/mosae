@@ -13,11 +13,12 @@ vi.mock("../auth/requireUser.js", () => ({
 }));
 
 // The route verifies ownership and reads the generation through this chain.
-function makeDb(generation: Record<string, unknown> | null) {
+function makeDb(generation: Record<string, unknown> | null, edits?: Record<string, unknown>) {
   const records: Record<string, Record<string, unknown>> = {
     "projects/p1": { id: "p1", userId: "owner" },
   };
   if (generation) records["projects/p1/generations/g1"] = generation;
+  if (edits) records["projects/p1/generations/g1/edits/current"] = edits;
   const ref = (key: string): unknown => ({
     collection: (name: string) => ({ doc: (id: string) => ref(`${key}/${name}/${id}`) }),
     get: async () => ({ exists: key in records, data: () => records[key], get: (field: string) => records[key]?.[field] }),
@@ -64,6 +65,24 @@ beforeEach(() => {
 });
 
 describe("GET /download — emulator branch", () => {
+  it("prefers the current edited render over the first cut", async () => {
+    const { bucket, calls } = makeBucket();
+    const app = buildApp(makeDb(generation, { revision: 3, renderRevision: 3, status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" }), { bucket, calls });
+    const res = await request(app).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
+    expect(res.status).toBe(200);
+    expect(res.body.outputPath).toBe("renders/owner/p1/g1-edit-3.mp4");
+    expect(calls[0].path).toBe("renders/owner/p1/g1-edit-3.mp4");
+  });
+
+  it("falls back to the first cut when the newest edit has no render", async () => {
+    const { bucket, calls } = makeBucket();
+    const app = buildApp(makeDb(generation, { revision: 4, renderRevision: 3, status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" }), { bucket, calls });
+    const res = await request(app).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
+    expect(res.status).toBe(200);
+    expect(res.body.outputPath).toBe("renders/owner/p1/g1.mp4");
+    expect(calls[0].path).toBe("renders/owner/p1/g1.mp4");
+  });
+
   it("returns the GCS-style emulator download URL when FIREBASE_STORAGE_EMULATOR_HOST is set", async () => {
     process.env.FIREBASE_STORAGE_EMULATOR_HOST = "127.0.0.1:9199";
     const app = buildApp(makeDb(generation), makeBucket());

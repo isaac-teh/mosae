@@ -84,6 +84,17 @@ describe("createApiStoryRepository", () => {
     expect(deps.request).toHaveBeenNthCalledWith(2, "PUT", "/api/projects/project-1/generations/gen-1/edits", { revision: 2, ops: document.ops });
   });
 
+  it("requests and reads an edited render", async () => {
+    const deps = dependencies({ request: vi.fn(async (method) => method === "POST"
+      ? { renderId: "g1-edit-3" }
+      : { revision: 3, status: "ready", downloadUrl: "https://storage.test/edit.mp4" }) });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.renderRevision("project-1", "g1", 3)).resolves.toEqual({ renderId: "g1-edit-3" });
+    await expect(repository.getRender("project-1", "g1", 3)).resolves.toMatchObject({ revision: 3, status: "ready" });
+    expect(deps.request).toHaveBeenNthCalledWith(1, "POST", "/api/projects/project-1/generations/g1/edits/3/render");
+    expect(deps.request).toHaveBeenNthCalledWith(2, "GET", "/api/projects/project-1/generations/g1/edits/3/render");
+  });
+
   it("reads summary and interprets text through the project endpoints", async () => {
     const deps = dependencies();
     vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/summary")

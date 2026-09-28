@@ -12,6 +12,7 @@ import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
 import { generationsRouter } from "./routes/generations.js";
 import { editsRouter } from "./routes/edits.js";
+import { editRenderRouter } from "./routes/editRender.js";
 import { directionOptionsRouter } from "./routes/directionOptions.js";
 import { summaryRouter } from "./routes/summary.js";
 import { chatInterpretRouter } from "./routes/chatInterpret.js";
@@ -186,6 +187,11 @@ app.use(
   generationsRouter({ db: adminDb, loadSource, storageBucket: config.storageBucket, dispatch: () => dispatchDue(adminDb, queue, Date.now()) }),
 );
 app.use("/api/projects", editsRouter({ db: adminDb }));
+app.use("/api/projects", editRenderRouter({
+  db: adminDb,
+  dispatch: () => dispatchDue(adminDb, queue, Date.now()),
+  downloadUrl: (path) => firebaseDownloadUrlStore(renderBucket()).signedDownloadUrl(path),
+}));
 app.use(
   "/api/projects",
   directionOptionsRouter({ db: adminDb }),
