@@ -13,7 +13,7 @@ describe.skipIf(!existsSync(DIR))("trip1-v2 test set", () => {
   it("has dates on every photo over 3 days, GPS on 8, and labels keyed by new bytes", async () => {
     try {
       const files = (await readdir(DIR)).filter((f) => f.endsWith(".jpg")).sort();
-      expect(files).toHaveLength(14);
+      expect(files).toHaveLength(15);
       const labels = JSON.parse(await readFile(LABELS, "utf8")) as {
         photos: Record<string, { bbox: number[]; personId?: string; expect?: string }[]>;
       };
@@ -38,6 +38,19 @@ describe.skipIf(!existsSync(DIR))("trip1-v2 test set", () => {
       }
       expect(days).toEqual(new Set(["2026-06-01", "2026-06-02", "2026-06-03"]));
       expect(withGps).toBe(8);
+      const hashFor = async (file: string) => createHash("sha256").update(await readFile(join(DIR, file))).digest("hex");
+      const photobomb = labels.photos[await hashFor("x-photobomb.jpg")];
+      expect(photobomb).toHaveLength(4);
+      expect(photobomb!.filter((face) => face.personId && face.expect === "subject")).toHaveLength(3);
+      const pastedFace = photobomb!.find((face) => !face.personId && face.expect === "background");
+      expect(pastedFace).toBeDefined();
+      expect(pastedFace!.bbox[2] - pastedFace!.bbox[0]).toBeGreaterThan(0.05);
+      expect(pastedFace!.bbox[2] - pastedFace!.bbox[0]).toBeLessThan(0.08);
+      const distant = labels.photos[await hashFor("x-distant.jpg")];
+      expect(distant).toHaveLength(1);
+      expect(distant![0]).toMatchObject({ expect: "background" });
+      expect(distant![0].personId).toBeUndefined();
+      expect(distant![0].bbox[2] - distant![0].bbox[0]).toBeLessThan(0.02);
     } finally {
       await exiftool.end();
     }

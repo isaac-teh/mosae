@@ -238,7 +238,7 @@
      0.61
     ],
     "personId": "p-dad",
-    "expect": "subject"
+    "expect": "background"
    }
   ],
   "8c5e1f863f040670d5210fe7d8ba2a384b8c61ec369e8528f06152dc15bd89e9": [
@@ -339,7 +339,7 @@
     "expect": "subject"
    }
   ],
-  "061d87e82ca69588c1043ad7c6ee20eb2f716e6063344bd020ace81c77693239": [
+  "1c311d6b766008ea2ba0678270c7d19c09251c42362626a067190ae5747392d8": [
    {
     "bbox": [
      0.181,
@@ -369,6 +369,26 @@
     ],
     "personId": "p-mom",
     "expect": "subject"
+   },
+   {
+    "bbox": [
+     0.82738,
+     0.04632,
+     0.89211,
+     0.13337
+    ],
+    "expect": "background"
+   }
+  ],
+  "9303481083e8003f8245da3ba29d38b7be0804d95fb0f1998098534c52aa8587": [
+   {
+    "bbox": [
+     0.215,
+     0.356,
+     0.226,
+     0.375
+    ],
+    "expect": "background"
    }
   ],
   "f617cb78b606d4083323a70ce13a691e419dfaee9c191f1632f859484ec59a70": [
