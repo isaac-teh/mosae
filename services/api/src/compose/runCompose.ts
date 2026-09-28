@@ -12,6 +12,7 @@ import { applyCastGuards } from "./castGuards.js";
 import type { AssembledClip } from "./assemble.js";
 import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
+import { applyArc, orderByChronology, type ClipTime } from "./chronology.js";
 
 /** Result of a compose run. */
 export type ComposeResult = {
@@ -70,6 +71,8 @@ export interface ComposeJob {
    */
   focusCenter?: Map<string, { cx: number; cy: number }>;
   cast?: { summary: string; core: string[]; focus: string[]; peopleByMoment: Map<string, Set<string>>; subjectsByMoment: Map<string, Set<string>>; namesById: Record<string, string> };
+  chapterOf?: Map<string, number>;
+  timeOf?: Map<string, ClipTime>;
 }
 
 /**
@@ -147,9 +150,16 @@ export async function runCompose(
     return { ok: false, reasons: ["every pick was dropped — no film possible"] };
   }
 
-  // Stage 4: deterministic cast coverage and story-order guards.
-  let selectedClips = assembledClips;
-  let castReasons: string[] = [];
+  // Stage 4: assemble → orderByChronology → applyArc → applyCastGuards
+  // (coverage, focus, closing-in-last-chapter, opening-from-first-chapter)
+  // → re-sort by chronology within chapters only, preserving the guard's
+  // closing clip as last and opening clip as first → fitDuration.
+  const timeOf = job.timeOf ?? new Map<string, ClipTime>();
+  const chapterOf = job.chapterOf ?? new Map<string, number>();
+  const chronological = orderByChronology(assembledClips, timeOf);
+  const arc = applyArc(chronological, timeOf);
+  let selectedClips = arc.clips;
+  let castReasons: string[] = arc.reasons;
   if (job.cast) {
     const pickedItems = new Set(assembledClips.map((clip) => clip.itemId));
     const holds = holdsFor(job.cadenceId);
@@ -157,13 +167,24 @@ export async function runCompose(
       ...candidate, order: -1, transition: "crossfade", audio: "mute", holdSec: holds.base,
     }));
     const guarded = applyCastGuards({
-      clips: assembledClips, unused, core: job.cast.core, focus: job.cast.focus,
+      clips: selectedClips, unused, core: job.cast.core, focus: job.cast.focus,
       peopleByMoment: job.cast.peopleByMoment,
       subjectsByMoment: job.cast.subjectsByMoment,
+      chapterOf,
       label: (personId) => job.cast!.namesById[personId] ?? "a family member",
     });
-    selectedClips = guarded.clips;
-    castReasons = guarded.reasons;
+    const guardedClips = guarded.clips;
+    const opener = guardedClips[0];
+    const closer = guardedClips.at(-1);
+    const sorted = orderByChronology(guardedClips, timeOf);
+    // Keep the guard-selected boundary clips pinned while restoring chronology
+    // inside each chapter (including newly swapped clips).
+    selectedClips = sorted.filter((clip) => clip !== opener && clip !== closer);
+    if (opener) selectedClips.unshift(opener);
+    if (closer && closer !== opener) selectedClips.push(closer);
+    castReasons = [...arc.reasons, ...guarded.reasons];
+  } else {
+    selectedClips = orderByChronology(selectedClips, timeOf);
   }
 
   // Stage 5: fitDuration — adjust photo holds to target duration

@@ -13,6 +13,7 @@ import type { Face } from "../domain/understanding.js";
 import { castSummary } from "../cast/castSummary.js";
 import { photoRoles } from "../cast/prominence.js";
 import type { Cast, FaceRef } from "../cast/types.js";
+import type { ClipTime } from "./chronology.js";
 
 export type ComposeTask = {
   projectId: string;
@@ -211,10 +212,23 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
     } : null;
     const peopleByMoment = new Map<string, Set<string>>();
     const subjectsByMoment = new Map<string, Set<string>>();
+    const chapterOf = new Map<string, number>();
+    const chapterCount = proposal.proposal.chapters.length;
+    proposal.proposal.chapters.forEach((chapter, index) => chapter.momentIds.forEach((id) => chapterOf.set(id, index + 1)));
+    const timeOf = new Map<string, ClipTime>();
+    const assetById = new Map((await project.collection("assets").get()).docs.map((doc) => [doc.id, doc.data() as Asset]));
     const castFaces: FaceRef[] = [];
     const shotSnaps = await project.collection("shots").get();
     const shotById = new Map(shotSnaps.docs.map((doc) => [doc.id, doc.data()]));
     for (const moment of proposal.proposal.moments) {
+      const shotDoc = shotSnaps.docs.find((doc) => doc.id === moment.shotId);
+      const asset = shotDoc ? assetById.get(shotDoc.get("assetId") as string) : undefined;
+      timeOf.set(moment.id, {
+        chapter: chapterOf.get(moment.id) ?? chapterCount + 1,
+        localTime: asset?.media?.localTime ?? null,
+        score: asset && (shotDoc?.get("analysis") as ShotAnalysis | undefined)?.kind === "photo"
+          ? ((shotDoc?.get("analysis") as Extract<ShotAnalysis, { kind: "photo" }>).keyMomentScore ?? 0) : 0,
+      });
       const analysis = shotById.get(moment.shotId)?.analysis as ShotAnalysis | undefined;
       if (analysis?.kind !== "photo") continue;
       const people = new Set<string>();
@@ -267,6 +281,8 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       note: settings.settings.note,
       captions: settings.settings.captions,
       focusCenter,
+      chapterOf,
+      timeOf,
       ...(storedCast && summary ? {
         cast: {
           summary, core: storedCast.core, focus: storedCast.focus, peopleByMoment, subjectsByMoment,
