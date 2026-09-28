@@ -141,11 +141,14 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
     let completed = acquired.completedResult;
     try {
       if (!completed) {
+        // The cast first: it writes each face's person, and the leave-out filter
+        // below reads those from the catalog. Loaded before, a first plan saw
+        // every face as a stranger and left out every family photo.
+        const ensured = await ensureCast(db, task.projectId, { storageBucket: config.storageBucket });
         const { shots, assets } = await loadCatalog(db, task.projectId);
         const parent = acquired.parentProposalId
           ? await project.collection("storyProposals").doc(acquired.parentProposalId).get()
           : null;
-        const ensured = await ensureCast(db, task.projectId, { storageBucket: config.storageBucket });
         const constraints = { ...acquired.pinnedInputs.constraints };
         if ((!constraints.focusCharacterIds || constraints.focusCharacterIds.length === 0) && ensured.cast.focus.length > 0) {
           constraints.focusCharacterIds = ensured.cast.focus;

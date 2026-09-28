@@ -217,6 +217,13 @@ if (useDevRunner) {
       await dispatchDue(adminDb, queue, Date.now());
     },
   });
+
+  // Retries are scheduled for later and a restart forgets in-flight work, but
+  // the dev runner only dispatched on new events, so both waited forever.
+  // Cloud Tasks does this in production; locally, look for due work regularly.
+  const drain = () => { void dispatchDue(adminDb, queue, Date.now()).catch((error) => console.error("dev outbox drain failed", error)); };
+  setTimeout(drain, 2_000);
+  setInterval(drain, 10_000).unref();
 }
 
 app.listen(config.port, () => {
