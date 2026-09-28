@@ -14,6 +14,7 @@ vi.mock("remotion", () => ({
     return output[index] + (output[index + 1] - output[index]) * part;
   },
   random: (key: string) => { let n = 2166136261; for (const char of key) n = Math.imul(n ^ char.charCodeAt(0), 16777619); return (n >>> 0) / 4294967296; },
+  spring: ({ frame }: { frame: number }) => Math.min(1, Math.max(0, frame / 30)),
 }));
 
 import { Collage } from "./Collage";
@@ -22,7 +23,7 @@ import { createCollageSpec } from "./fixtures";
 
 describe("CollageSpec", () => {
   it("accepts shot ID and URL slot sources, and rejects missing or competing sources", () => {
-    const spec = createCollageSpec("grid-4");
+    const spec = createCollageSpec("route-map");
     expect(CollageSpecSchema.safeParse(spec).success).toBe(true);
     expect(CollageSpecSchema.safeParse({ ...spec, slots: [{ slotId: "a" }] }).success).toBe(false);
     expect(CollageSpecSchema.safeParse({ ...spec, slots: [{ slotId: "a", shotId: "s", src: "p.svg" }] }).success).toBe(false);

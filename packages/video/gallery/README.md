@@ -1,19 +1,7 @@
 # Collage review gallery
 
-Run from the repository root:
+Start from the repository root with `npm run gallery --workspace=@mosae/video`, then open the Vite URL (usually `http://localhost:5173`). The gallery uses the curated Pexels travel photos in `poc/gemini/samples/trip`; if those photos are not present, it falls back to the included SVG sample art. It never reads `trip1`.
 
-```sh
-npm run gallery -w @mosae/video
-```
+Choose an effect in the toolbar, review each layout × motion Player, and mark it **Keep**, **Tweak** (with a note), or **Block**. Reviews save in browser local storage. **Export JSON** downloads the `docs/design/collage-review.json` shape with one verdict record per layout/motion pair.
 
-Open `http://127.0.0.1:4178`. The page previews all 48 layout × motion combinations with `@remotion/player`. Choose an effect from the selector to preview it across the gallery. Keep, tweak, and block reviews are saved in this browser's `localStorage`; **Export JSON** downloads the current decisions in `docs/design/collage-review.json` shape. A tweak asks for a short note.
-
-When `poc/gemini/samples/trip/` is present, Vite serves a curated set of its place-focused Pexels photos to the gallery. The checked-in abstract SVGs in `public/photos/` are used when that sample folder is absent. Posed family/reference portraits from `trip1` are intentionally excluded. The page makes no paid API calls. Clear the browser key `mosae-collage-review-v1` to reset reviews.
-
-Regenerate the actual `<Collage>` stills and combined contact sheet with:
-
-```sh
-node packages/video/scripts/render-collage-stills.mjs
-```
-
-This runs `npx remotion still` for each layout and for the combined sheet at frame 80. It uses the trip samples when present, and falls back to the checked-in SVG artwork when those sample photos are unavailable.
+To regenerate actual Remotion stills, the contact sheet, and three five-second examples, run `node packages/video/scripts/render-collage-stills.mjs` from the repository root. Outputs go to `docs/design/collage-library/`.

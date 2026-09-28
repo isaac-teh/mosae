@@ -7,10 +7,11 @@ export function createCollageSpec(layoutId: CollageSpec["layoutId"], overrides: 
   return {
     layoutId,
     slots: Array.from({ length: count }, (_, i) => ({ slotId: `slot-${i + 1}`, src: PLACEHOLDER_PHOTOS[i % PLACEHOLDER_PHOTOS.length] })),
-    motionId: "ken-burns",
+    motionId: "print-drop",
     effectId: null,
     seed: `mosae-${layoutId}`,
     durationSec: 3,
+    caption: { place: "Kyoto · Japan", date: "AUTUMN 2026", headline: "Postcards from Kyoto", subline: "A small collection of places" },
     ...overrides,
   };
 }

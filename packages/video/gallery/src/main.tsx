@@ -32,7 +32,7 @@ function App() {
     const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "collage-review.json"; link.click(); URL.revokeObjectURL(link.href);
   };
   return <main>
-    <header><div><p className="eyebrow">MOSAE · CREATIVE REVIEW</p><h1>Collage building blocks</h1><p className="intro">Review layout × motion combinations. Every slot uses invented placeholder artwork.</p></div><button className="export" onClick={exportJson}>Export JSON</button></header>
+    <header><div><p className="eyebrow">MOSAE · CREATIVE REVIEW</p><h1>Collage building blocks</h1><p className="intro">Review original collage compositions and motion, staged with stock travel photography.</p></div><button className="export" onClick={exportJson}>Export JSON</button></header>
     <div className="toolbar"><label>Effect <select value={effectId ?? "none"} onChange={(e) => setEffectId(e.target.value === "none" ? null : e.target.value as NonNullable<CollageSpec["effectId"]>)}><option value="none">None</option>{COLLAGE_EFFECTS.map((effect) => <option key={effect.id} value={effect.id}>{effect.label}</option>)}</select></label><span>{combos.length} combinations · {Object.keys(reviews).length} reviewed</span></div>
     <section className="gallery">{combos.map(({ layoutId, motionId }, index) => {
       const id = keyOf(layoutId, motionId); const current = reviews[id]; const spec = specs[index]; const label = `${COLLAGE_LAYOUTS.find((layout) => layout.id === layoutId)?.label} · ${motionId}`;
