@@ -71,14 +71,14 @@ describe("director chat components", () => {
     await click("Done"); expect(onDone).toHaveBeenCalledOnce();
   });
 
-  it("sends composer text and exposes the four confirmation progress tiles", async () => {
+  it("sends composer text without duplicating header confirmation progress", async () => {
     const onSend = vi.fn();
-    await render(<ChatComposer placeholder="Tell me anything about the story" onSend={onSend} confirmed={3} />);
+    await render(<ChatComposer placeholder="Tell me anything about the story" onSend={onSend} />);
     const input = host.querySelector("input") as HTMLInputElement;
     await act(async () => { input.value = "Grandma's birthday"; input.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("Send");
     expect(onSend).toHaveBeenCalledWith("Grandma's birthday");
-    expect(host.textContent).toContain("3 of 4 confirmed");
+    expect(host.textContent).not.toContain("3 of 4 confirmed");
   });
 
   it("opens a grouped moment picker and confirms the selected result", async () => {

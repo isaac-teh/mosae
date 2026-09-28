@@ -12,6 +12,14 @@ function occasionText(input: ChatInput): string {
   return `I've looked through all ${total}. It looks like ${subject}${when}${places}. Is that the story?`;
 }
 
+function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string {
+  if (person.skipped) return "Skip";
+  if (person.name && person.name !== "Family") return person.name;
+  if (person.role === "child") return "My daughter";
+  if (person.role === "parent") return "My wife";
+  return "Skip";
+}
+
 function getSetAsideCounts(input: ChatInput): { blurry: number; duplicates: number } {
   const leftOut = input.plan?.leftOut ?? [];
   return {
@@ -64,7 +72,7 @@ export function deriveChat(input: ChatInput): ChatState {
     const firstUnanswered = people.findIndex((person) => !answered(person));
     const unanswered = firstUnanswered >= 0 ? people[firstUnanswered] : null;
     people.slice(0, firstUnanswered >= 0 ? firstUnanswered : people.length).forEach((person) => {
-      add({ kind: "you", id: `person-answer-${person.personId}`, text: person.skipped ? "Skip" : person.name ?? person.role ?? "Family" });
+      add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
     });
     if (unanswered) {
       add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, days: unanswered.days });
@@ -76,7 +84,7 @@ export function deriveChat(input: ChatInput): ChatState {
 
   if (input.people?.length) {
     [...input.people].sort((a, b) => b.momentCount - a.momentCount).slice(0, 3).forEach((person) => {
-      if (person.skipped || person.name || person.role) add({ kind: "you", id: `person-answer-${person.personId}`, text: person.skipped ? "Skip" : person.name ?? person.role ?? "Family" });
+      if (person.skipped || person.name || person.role) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
     });
   }
   confirmed = 2;

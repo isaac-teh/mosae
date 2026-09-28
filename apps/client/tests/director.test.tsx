@@ -57,9 +57,18 @@ describe("Director chat", () => {
   it("shows the ready summary and starts the story intent when the occasion reply is tapped", async () => {
     setup(); await renderScreen();
     expect(hasText("I've looked through all 8")).toBe(true);
-    await click("Yes, that's our story");
-    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Tokyo", []));
-    expect(hasText("Tokyo")).toBe(true);
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip", []));
+    expect(hasText("Yes, our Japan trip")).toBe(true);
+  });
+
+  it("titles the chat from country and season, then falls back to place and Your film", async () => {
+    setup(); await renderScreen();
+    expect(host.textContent).toContain("Japan, autumn");
+    setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), country: null, season: null }); await renderScreen();
+    expect(host.textContent).toContain("Tokyo");
+    setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), country: null, season: null, places: [] }); await renderScreen();
+    expect(host.textContent).toContain("Your film");
   });
 
   it("uses the repository scoped to the director route project", async () => {
@@ -74,20 +83,20 @@ describe("Director chat", () => {
     setup();
     mocks.repo.getSummary.mockResolvedValue({ ...summary(), places: [] });
     await renderScreen();
-    await click("Yes, that's our story");
-    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Our story", []));
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip", []));
   });
 
   it("shows people processing and Skip for now while faces are still pending", async () => {
     setup({ faces: false }); await renderScreen();
-    await click("Yes, that's our story");
+    await click("Yes, our Japan trip");
     expect(hasText("Finding the faces in your trip")).toBe(true);
     expect(hasText("Skip for now")).toBe(true);
   });
 
   it("saves the selected role and name before asking about the next person", async () => {
     setup(); await renderScreen();
-    await click("Yes, that's our story");
+    await click("Yes, our Japan trip");
     await click("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", role: "child", name: "My daughter" })]) })));
     expect(hasText("One person appears in 90 moments. Who is this?")).toBe(true);
@@ -95,9 +104,34 @@ describe("Director chat", () => {
 
   it("Skip for now advances past the people step", async () => {
     setup(); await renderScreen();
-    await click("Yes, that's our story");
+    await click("Yes, our Japan trip");
     await click("Skip for now");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
+    expect(hasText("Skip")).toBe(true);
+    expect(hasText("Family")).toBe(false);
+  });
+
+  it("shows the selected role chip label in the reply", async () => {
+    setup(); await renderScreen(); await click("Yes, our Japan trip"); await click("My daughter");
+    await waitFor(() => expect(hasText("My daughter")).toBe(true));
+    expect(hasText("Family")).toBe(false);
+  });
+
+  it("shows a Mosae retry message and logs instead of rendering the API error code", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    setup({ createPlan: async () => { throw new Error("not_found"); } }); await renderScreen();
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(hasText("I couldn't do that. Try again?")).toBe(true));
+    expect(hasText("not_found")).toBe(false);
+    expect(hasText("Try again")).toBe(true);
+    expect(log).toHaveBeenCalledWith("Director chat request failed", "not_found");
+    log.mockRestore();
+  });
+
+  it("renders confirmation progress in the header only", async () => {
+    setup(); await renderScreen(); await click("Yes, our Japan trip");
+    await waitFor(() => expect(hasText("1 of 4 confirmed")).toBe(true));
+    expect(host.textContent?.match(/1 of 4 confirmed/g)).toHaveLength(1);
   });
 
   it("interprets typed text and waits for an explicit confirmation before saving", async () => {
@@ -111,20 +145,21 @@ describe("Director chat", () => {
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("our family trip", []));
   });
 
-  it("shows the unclear reply when interpretation fails and keeps the occasion reply usable", async () => {
+  it("shows the retry message when interpretation fails and keeps the occasion reply usable", async () => {
     setup({ interpret: async () => { throw new Error("offline"); } }); await renderScreen();
     const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "something"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("→");
-    await waitFor(() => expect(hasText("I didn't catch that. Pick one below, or say it another way.")).toBe(true));
-    expect(hasText("Yes, that's our story")).toBe(true);
+    await waitFor(() => expect(hasText("I couldn't do that. Try again?")).toBe(true));
+    expect(hasText("Try again")).toBe(true);
+    expect(hasText("Yes, our Japan trip")).toBe(true);
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
   });
 
   it("shows Try again after a failed save and retries the save", async () => {
     let attempts = 0;
     setup({ createPlan: async () => { if (!attempts++) throw new Error("network"); return { planId: "proposal-1" }; } }); await renderScreen();
-    await click("Yes, that's our story");
+    await click("Yes, our Japan trip");
     await waitFor(() => expect(hasText("Try again")).toBe(true));
     await click("Try again");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledTimes(2));
@@ -132,7 +167,7 @@ describe("Director chat", () => {
 
   async function openMoments(applyEdits?: (...args: any[]) => Promise<any>, getFilm?: (...args: any[]) => Promise<any>) {
     setup({ people: [], readyPlan: true, applyEdits, getFilm }); await renderScreen();
-    await click("Yes, that's our story");
+    await click("Yes, our Japan trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
   }
 

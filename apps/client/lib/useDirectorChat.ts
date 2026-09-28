@@ -6,6 +6,13 @@ import { useRouter } from "expo-router";
 
 const EMPTY_INPUT: ChatInput = { summary: null, intent: null, people: null, peopleConfirmed: false, plan: null, momentsConfirmed: false, conflict: null, direction: null, generation: null, notes: [] };
 const UNCLEAR = "I didn't catch that. Pick one below, or say it another way.";
+const REQUEST_FAILURE = "I couldn't do that. Try again?";
+
+function reportFailure(cause: unknown): string {
+  const error = cause as { code?: unknown; message?: unknown };
+  console.error("Director chat request failed", error?.code ?? error?.message ?? "unknown");
+  return REQUEST_FAILURE;
+}
 
 export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository()) {
   const [input, setInput] = useState<ChatInput>(EMPTY_INPUT);
@@ -42,7 +49,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     setSummary(nextSummary);
     const mapped = people.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
-      return { ...person, ...(edit ?? (skipPeopleForNow.current ? { name: "Family", role: "parent", skipped: false } : { skipped: false })) };
+      return { ...person, ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
     });
     setInput((current) => ({ ...current, summary: nextSummary, people: nextSummary.ready.faces ? mapped : null, peopleConfirmed: nextSummary.ready.faces && (skipPeopleForNow.current || mapped.length === 0) }));
     if (proposalId.current && nextSummary.ready.plan && !planLoad.current && !input.plan) {
@@ -56,8 +63,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
 
   useEffect(() => {
     mounted.current = true;
-    void refresh().catch((cause) => setError(cause instanceof Error ? cause.message : "Couldn't load this project."));
-    const timer = setInterval(() => { void refresh().catch(() => {}); }, 3000);
+    void refresh().catch((cause) => setError(reportFailure(cause)));
+    const timer = setInterval(() => { void refresh().catch((cause) => setError(reportFailure(cause))); }, 3000);
     return () => { mounted.current = false; clearInterval(timer); };
   }, [refresh]);
 
@@ -77,22 +84,22 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     } catch (cause) {
       if (!mounted.current) return;
       setInput((current) => ({ ...current, generation: { status: "failed", stepsDone: 0, film: null } }));
-      setError(cause instanceof Error ? cause.message : "Couldn't shape your film. Please try again.");
+      setError(reportFailure(cause));
     }
   }, [repository]);
 
   const actions = {
-    async confirmOccasion(text?: string) {
+    async confirmOccasion(answer?: string, storyTextOverride?: string) {
       if (saving) return;
       setSaving(true); setError(null);
-      const storyText = text ?? pendingInterpret?.text ?? (summary?.places.join(", ") || "Our story");
+      const storyText = storyTextOverride ?? answer ?? pendingInterpret?.text ?? (summary?.country ? `${summary.country} trip` : summary?.places[0] || "Our story");
       try {
         const result = await repository.createPlan(storyText, []);
         proposalId.current = result.planId;
-        setInput((current) => ({ ...current, intent: { text: storyText } }));
+        setInput((current) => ({ ...current, intent: { text: answer ?? storyText } }));
         setPendingInterpret(null);
         await refresh();
-      } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't save this. Please try again."); }
+      } catch (cause) { setError(reportFailure(cause)); }
       finally { setSaving(false); }
     },
     async setPerson(personId: string, role: string, name?: string) {
@@ -105,7 +112,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         await confirmCast(projectId, { people: updated.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(proposalId.current ? { proposalId: proposalId.current } : {}) });
         setInput((current) => ({ ...current, people: updated, peopleConfirmed: updated.every((person) => person.name || person.role || person.skipped) }));
         setError(null);
-      } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't save this. Please try again."); }
+      } catch (cause) { setError(reportFailure(cause)); }
     },
     async skipPeople() {
       skipPeopleForNow.current = true;
@@ -141,7 +148,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           const message = reason.code === "stale_proposal" ? "Your plan changed while you were picking moments. Keep these choices and try again?" : reason.message ?? "These moment choices conflict. Which should stay in the film?";
           setInput((current) => ({ ...current, momentsConfirmed: false, conflict: { shotIds: Object.entries(momentState).filter(([, value]) => value === "keep" || value === "leave").map(([id]) => id), message } }));
           setError(null);
-        } else setError(reason.message ?? "Couldn't save your moments. Please try again.");
+        } else setError(reportFailure(cause));
       } finally { setSaving(false); }
     },
     openPicker() { setPickerOpen(true); },
@@ -180,7 +187,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (mounted.current) { setInput((current) => ({ ...current, generation: { status: "running", stepsDone: 0, film: null } })); void pollFilm(filmId); }
       } catch (cause) {
         setInput((current) => ({ ...current, generation: { status: "failed", stepsDone: 0, film: null } }));
-        setError(cause instanceof Error ? cause.message : "Couldn't start shaping your film. Please try again.");
+        setError(reportFailure(cause));
       }
       finally { setSaving(false); }
     },
@@ -191,7 +198,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       try {
         await repository.saveFilm(film.filmId);
         router.push({ pathname: "/save-film", params: { filmId: film.filmId, directorChat: "true" } } as any);
-      } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't save your film. Please try again."); }
+      } catch (cause) { setError(reportFailure(cause)); }
       finally { setSaving(false); }
     },
     askForChange(text: string) {
@@ -205,7 +212,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const result = await repository.interpret(projectId, { step, text, context: { summary, people: (input.people ?? []).map(({ personId, name, role }) => ({ personId, name, role })) } });
         if (result.change.kind === "unclear") { setPendingInterpret({ reply: result.reply || UNCLEAR, text }); return; }
         setPendingInterpret({ reply: result.reply, text });
-      } catch { setPendingInterpret({ reply: UNCLEAR, text }); }
+      } catch (cause) { setError(reportFailure(cause)); }
     },
     confirmInterpret() { if (pendingInterpret) void actions.confirmOccasion(pendingInterpret.text); },
   };

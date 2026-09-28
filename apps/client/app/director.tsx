@@ -7,6 +7,19 @@ import { Button } from "@/components/ds";
 import { useDirectorChat } from "@/lib/useDirectorChat";
 import { useStoryFlow } from "@/lib/storyFlow";
 
+function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
+  if (!summary) return "Your film";
+  const season = summary.season?.toLowerCase() ?? "";
+  const seasonName = /spring|summer|autumn|fall|winter/.exec(season)?.[0]?.replace("fall", "autumn")
+    ?? (/(january|february)/.test(season) ? "winter"
+      : /march|april|may/.test(season) ? "spring"
+        : /june|july|august/.test(season) ? "summer"
+          : /september|october|november/.test(season) ? "autumn"
+            : /december/.test(season) ? "winter" : null);
+  if (summary.country && seasonName) return `${summary.country}, ${seasonName}`;
+  return summary.places[0] || "Your film";
+}
+
 export default function DirectorScreen() {
   const params = useLocalSearchParams<{ projectId?: string }>();
   const projectId = params.projectId ?? "";
@@ -37,7 +50,7 @@ export default function DirectorScreen() {
   }, [plan]);
 
   return <View className="flex-1 bg-surface">
-    <ChatHeader title="Your story" confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => router.back()} />
+    <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => router.back()} />
     <ScrollView className="flex-1 px-5" contentContainerClassName="gap-5 py-6" keyboardShouldPersistTaps="handled">
       {state.items.map((item) => {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => actions.resolveConflict(choice as "keep" | "leave")} />;
@@ -63,7 +76,12 @@ export default function DirectorScreen() {
           <View className="gap-2"><Text className="font-sans-semibold text-button text-ink">How I directed it</Text>{item.film.reasons.slice(0, 3).map((reason, index) => <Text key={`${item.id}-reason-${index}`} className="font-sans text-body text-ink">• {reason}</Text>)}</View>
           <View className="flex-row gap-2"><Button label="Open in editor" variant="secondary" onPress={() => router.push({ pathname: "/review-moments", params: { planId: item.film.planId } } as any)} /><Button label="Save film" disabled={saving} onPress={() => void actions.saveFilm()} /></View>
         </View>;
-        if (item.kind === "occasion") return <ChatProposal key={item.id} question="Is that the story?" replies={[{ id: "yes", label: "Yes, that's our story" }]} onReply={() => void actions.confirmOccasion()} />;
+        if (item.kind === "occasion") {
+          const country = projectSummary?.country;
+          const answer = country ? `Yes, our ${country} trip` : "Yes, that's our story";
+          const storyText = country ? `${country} trip` : projectSummary?.places[0] ?? "Our story";
+          return <ChatProposal key={item.id} question="Is that the story?" replies={[{ id: "yes", label: answer }]} onReply={() => void actions.confirmOccasion(answer, storyText)} />;
+        }
         if (item.kind === "person") return <View key={item.id} className="gap-3">
           <ChatPersonQuestion momentCount={item.momentCount} sampleUris={[]} days={item.days} chips={["My daughter", "My wife", "Me", "Type a name"]} onPick={(role) => void actions.setPerson(item.personId, role)} onTypeName={() => setNamingPerson(item.personId)} onSkip={() => void actions.setPerson(item.personId, "Skip")} />
           {namingPerson === item.personId && <View className="flex-row gap-2"><TextInput accessibilityLabel="Person name" value={name} onChangeText={setName} className="min-h-11 flex-1 rounded-md border border-line-strong px-3 font-sans text-ink" /><Pressable role="button" onPress={() => { if (name.trim()) void actions.setPerson(item.personId, "Type a name", name.trim()); setName(""); setNamingPerson(null); }} className="min-h-11 justify-center px-3"><Text className="font-sans-semibold text-action">Save name</Text></Pressable></View>}
@@ -77,6 +95,6 @@ export default function DirectorScreen() {
       {error && <View className="gap-2"><ChatMessage from="mosae" text={error} /><Pressable role="button" onPress={() => { retry(); if (state.step === "occasion") void actions.confirmOccasion(); }} className="min-h-11 self-start justify-center"><Text className="font-sans-semibold text-action">Try again</Text></Pressable></View>}
     </ScrollView>
     {pickerOpen && <MomentPickerSheet days={pickerDays} selected={pickerSelection} onToggle={(shotId) => setPickerSelection((current) => current.includes(shotId) ? current.filter((id) => id !== shotId) : [...current, shotId])} onCancel={() => { setPickerSelection([]); actions.confirmPicker([]); }} onConfirm={() => void actions.confirmPicker(pickerSelection)} />}
-    {projectSummary && <ChatComposer placeholder={state.placeholder} confirmed={state.confirmed} disabled={saving} onSend={(text) => state.step === "ready" ? actions.askForChange(text) : void actions.send(text)} />}
+    {projectSummary && <ChatComposer placeholder={state.placeholder} disabled={saving} onSend={(text) => state.step === "ready" ? actions.askForChange(text) : void actions.send(text)} />}
   </View>;
 }
