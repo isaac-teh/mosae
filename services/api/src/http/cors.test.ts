@@ -19,7 +19,7 @@ describe("apiCors", () => {
   it("answers allowed preflights", async () => {
     const res = await request(app()).options("/api/ping").set("Origin", "https://web.example");
     expect(res.status).toBe(204);
-    expect(res.headers["access-control-allow-methods"]).toBe("GET, POST, PATCH, OPTIONS");
+    expect(res.headers["access-control-allow-methods"]).toBe("GET, POST, PUT, PATCH, OPTIONS");
   });
   /**
    * Proposal constraints are revised with PATCH, by both the moment screens and
@@ -29,6 +29,11 @@ describe("apiCors", () => {
   it("permits the PATCH used to revise proposal constraints", async () => {
     const res = await request(app()).options("/api/ping").set("Origin", "https://web.example");
     expect(res.headers["access-control-allow-methods"]).toContain("PATCH");
+  });
+  /** The Character Picker confirms the cast with PUT; the same silent failure applies. */
+  it("permits the PUT used to confirm the cast", async () => {
+    const res = await request(app()).options("/api/ping").set("Origin", "https://web.example");
+    expect(res.headers["access-control-allow-methods"]).toContain("PUT");
   });
   it("allows localhost only outside production and never applies to events", async () => {
     expect((await request(app()).get("/api/ping").set("Origin", "http://localhost:3100")).headers["access-control-allow-origin"]).toBe("http://localhost:3100");
