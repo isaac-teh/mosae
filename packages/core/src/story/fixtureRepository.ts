@@ -219,6 +219,9 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
   }
 
   return {
+    getSummary: async () => ({ total: 0, photos: 0, clips: 0, days: 0, dateRange: null, places: [], country: null, season: null, processed: { ingested: 0, understood: 0, faces: 0 }, ready: { summary: false, faces: false, plan: false } }),
+    interpret: async () => ({ reply: "I didn't catch that. Pick one below, or say it another way.", change: { kind: "unclear" } }),
+    getPeople: async () => [],
     createPlan: async (storyText: string, mediaRefs: string[]) => {
       return delayed(() => ({ planId: PLAN_ID }));
     },

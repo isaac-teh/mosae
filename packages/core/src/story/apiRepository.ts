@@ -3,7 +3,8 @@ import { ensureSignedIn } from "../auth";
 import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
 import { getFirestoreClient } from "../firebase";
-import type { StoryRepository } from "./repository";
+import type { ChatInterpretRequest, DirectorPerson, StoryRepository } from "./repository";
+import type { ProjectSummary } from "../chat/types";
 import type { DirectionOptions, Film } from "./types";
 import {
   projectProposal,
@@ -264,6 +265,43 @@ export function createApiStoryRepository(
   };
 
   return {
+    getSummary: async (id) => await deps.request("GET", `/api/projects/${encodeURIComponent(id)}/summary`) as ProjectSummary,
+    interpret: async (id, req) => await deps.request("POST", `/api/projects/${encodeURIComponent(id)}/chat/interpret`, req) as { reply: string; change: { kind: string; [key: string]: unknown } },
+    getPeople: async (id) => {
+      const root = `projects/${id}`;
+      const [charactersValue, castValue, shotsValue, assetsValue, eventsValue] = await Promise.all([
+        deps.request("GET", `/api/projects/${encodeURIComponent(id)}/characters`),
+        deps.request("GET", `/api/projects/${encodeURIComponent(id)}/cast`).catch(() => null),
+        deps.listenCollection(`${root}/shots`), deps.listenCollection(`${root}/assets`), deps.listenCollection(`${root}/events`),
+      ]);
+      const characters = record(charactersValue, "characters response");
+      const cast = castValue ? record(castValue, "cast response").cast as RecordData | undefined : undefined;
+      const castPeople = cast && Array.isArray(cast.people) ? cast.people as RecordData[] : [];
+      const names = new Map(castPeople.map((person) => [String(person.personId), person]));
+      const assets = new Map(assetsValue.map((value) => { const asset = record(value, "asset"); return [String(asset.id), asset] as const; }));
+      const events = new Map(eventsValue.map((value) => { const event = record(value, "event"); return [String(event.id), event] as const; }));
+      const groups = new Map<string, { shots: Set<string>; days: Set<number> }>();
+      const shots = Array.isArray(characters.shots) ? characters.shots as RecordData[] : [];
+      for (const shotValue of shots) {
+        const shot = record(shotValue, "character shot");
+        const shotId = String(shot.shotId);
+        for (const faceValue of Array.isArray(shot.faces) ? shot.faces : []) {
+          const face = record(faceValue, "face");
+          if (typeof face.characterId !== "string" || !face.characterId) continue;
+          const group = groups.get(face.characterId) ?? { shots: new Set<string>(), days: new Set<number>() };
+          group.shots.add(shotId);
+          const asset = assets.get(String(shot.assetId));
+          const event = asset && events.get(String(asset.eventId));
+          const day = /day\s+(\d+)/i.exec(String(event?.label ?? ""));
+          if (day) group.days.add(Number(day[1]));
+          groups.set(face.characterId, group);
+        }
+      }
+      return [...groups.entries()].map(([personId, group]) => {
+        const person = names.get(personId);
+        return { personId, name: typeof person?.name === "string" ? person.name : null, role: typeof person?.role === "string" ? person.role : null, momentCount: group.shots.size, sampleShotIds: [...group.shots].slice(0, 4), days: [...group.days].sort((a, b) => a - b) } satisfies DirectorPerson;
+      }).sort((a, b) => b.momentCount - a.momentCount);
+    },
     createPlan: async (storyText, _mediaRefs) => {
       const response = record(await deps.request("POST", `/api/projects/${encodeURIComponent(projectId)}/story-intents`, {
         text: storyText,

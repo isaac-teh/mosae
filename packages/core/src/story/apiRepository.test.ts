@@ -67,6 +67,28 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
 }
 
 describe("createApiStoryRepository", () => {
+  it("reads summary and interprets text through the project endpoints", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/summary")
+      ? { total: 4, ready: { summary: true, faces: false, plan: false } }
+      : { reply: "A family trip.", change: { kind: "occasion", storyText: "A family trip" } });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.getSummary("project-1")).resolves.toMatchObject({ total: 4 });
+    await expect(repository.interpret("project-1", { step: "occasion", text: "our trip", context: {} })).resolves.toMatchObject({ change: { kind: "occasion" } });
+    expect(deps.request).toHaveBeenNthCalledWith(1, "GET", "/api/projects/project-1/summary");
+    expect(deps.request).toHaveBeenNthCalledWith(2, "POST", "/api/projects/project-1/chat/interpret", { step: "occasion", text: "our trip", context: {} });
+  });
+
+  it("groups repeated faces by character and counts distinct shots", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
+      { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "face-1", characterId: "char-1" }, { faceId: "face-2", characterId: "char-1" }] },
+      { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "face-3", characterId: "char-1" }] },
+    ] } : { cast: { people: [{ personId: "char-1", name: "Mia", role: "child" }] } });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.getPeople("project-1")).resolves.toEqual([{ personId: "char-1", name: "Mia", role: "child", momentCount: 2, sampleShotIds: ["shot-1", "shot-2"], days: [1] }]);
+  });
+
   it("uses Firestore snapshots and authenticated thumbnail API URLs in its default read adapter", async () => {
     const fetchMock = vi.fn(async (url: string, options: RequestInit) => {
       if (options.method !== "GET" || (options.headers as Record<string, string>).Authorization !== "Bearer owner-token") {
