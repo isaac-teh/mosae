@@ -24,6 +24,11 @@ import { chooseFocus } from "../cast/focus.js";
 import type { Cast, CastPerson } from "../cast/types.js";
 import { z } from "zod";
 import type { PhotoAnalysis } from "../domain/understanding.js";
+import { buildDerivativePath } from "../domain/ids.js";
+import { getStorage } from "firebase-admin/storage";
+import { getAdminApp } from "../firebase/admin.js";
+import { firebaseThumbnailUrlStore } from "../ingest/objectStore.js";
+import type { ThumbnailUrlStore } from "../ingest/objectStore.js";
 
 type DirectingProject = Project & { currentProposalId?: string | null };
 
@@ -175,13 +180,14 @@ export function directingRouter(deps: {
   newId?: () => string;
   auth?: RequestHandler;
   queuePlan?: QueuePlan;
+  thumbnails?: ThumbnailUrlStore;
 }): Router {
   const now = deps.now ?? Date.now;
   const newId = deps.newId ?? (() => deps.db.collection("_ids").doc().id);
   const queuePlan: QueuePlan = deps.queuePlan ?? ((input) => createPlanJob(deps.db, input));
   const router = Router();
   router.use(deps.auth ?? requireUser());
-  for (const name of ["projectId", "proposalId"]) {
+  for (const name of ["projectId", "proposalId", "momentId"]) {
     router.param(name, (_req, res, next, value: string) => {
       if (!isValidId(value)) {
         res.status(404).json({ error: "not_found" });
@@ -258,7 +264,14 @@ export function directingRouter(deps: {
         ...source.constraints,
         deselectedMomentIds: req.body?.deselectedMomentIds ?? source.constraints.deselectedMomentIds,
         mustIncludeMomentIds: req.body?.mustIncludeMomentIds ?? source.constraints.mustIncludeMomentIds,
-        focusCharacterIds: req.body?.focusCharacterIds ?? source.constraints.focusCharacterIds,
+        ...((req.body?.focusCharacterIds ?? source.constraints.focusCharacterIds) !== undefined
+          ? { focusCharacterIds: req.body?.focusCharacterIds ?? source.constraints.focusCharacterIds } : {}),
+        ...((req.body?.hiddenShotIds ?? source.constraints.hiddenShotIds) !== undefined
+          ? { hiddenShotIds: req.body?.hiddenShotIds ?? source.constraints.hiddenShotIds } : {}),
+        ...((req.body?.momentOrder ?? source.constraints.momentOrder) !== undefined
+          ? { momentOrder: req.body?.momentOrder ?? source.constraints.momentOrder } : {}),
+        ...((req.body?.photoSwaps ?? source.constraints.photoSwaps) !== undefined
+          ? { photoSwaps: req.body?.photoSwaps ?? source.constraints.photoSwaps } : {}),
       });
       if (!parsed.success) {
         res.status(400).json({ error: "invalid_constraints" });
@@ -272,6 +285,55 @@ export function directingRouter(deps: {
         createdAt: now(),
       });
       res.status(201).json({ proposal });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  router.get("/:projectId/proposals/:proposalId/moments/:momentId/alternatives", async (req, res) => {
+    const userId: string = res.locals.userId;
+    const { projectId, proposalId, momentId } = req.params;
+    try {
+      if (!(await ownedProject(userId, projectId))) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      const proposal = await readProposal(deps.db, { userId, projectId, proposalId });
+      const moment = proposal?.moments.find((candidate) => candidate.id === momentId);
+      if (!proposal || !moment) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      const project = deps.db.collection("projects").doc(projectId);
+      const [baseShot, shotSnaps, assetSnaps] = await Promise.all([
+        project.collection("shots").doc(moment.shotId).get(),
+        project.collection("shots").get(),
+        project.collection("assets").get(),
+      ]);
+      if (!baseShot.exists) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      const assets = new Map(assetSnaps.docs.map((doc) => [doc.id, doc.data()]));
+      const baseAsset = assets.get(baseShot.get("assetId") as string);
+      const eventId = baseAsset?.eventId;
+      if (typeof eventId !== "string" || !eventId) {
+        res.json({ shots: [] });
+        return;
+      }
+      const urlStore = deps.thumbnails ?? firebaseThumbnailUrlStore(getStorage(getAdminApp()).bucket());
+      const shots = [];
+      for (const shot of shotSnaps.docs) {
+        if (shot.id === moment.shotId) continue;
+        const asset = assets.get(shot.get("assetId") as string);
+        if (!asset || asset.generation !== shot.get("assetGeneration") || asset.eventId !== eventId) continue;
+        const path = asset.derivatives?.thumbPath;
+        const generation = typeof path === "string" ? path.split("/")[4] : undefined;
+        if (!generation || path !== buildDerivativePath({ userId, projectId, assetId: asset.id, generation }, "thumb.jpg")) continue;
+        const thumbUrl = await urlStore.signedReadUrl(path, now() + 5 * 60 * 1000);
+        shots.push({ shotId: shot.id, thumbUrl });
+      }
+      res.json({ shots });
     } catch (error) {
       handleError(res, error);
     }

@@ -3,6 +3,7 @@ import type { RequestHandler } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { adminDb } from "../firebase/admin.js";
 import type { PhotoAnalysis } from "../domain/understanding.js";
+import { buildDerivativePath } from "../domain/ids.js";
 
 const USER_ID = "character-picker-owner";
 const auth: RequestHandler = (_req, res, next) => {
@@ -29,7 +30,10 @@ function photo(projectId: string, shotId: string, faces: PhotoAnalysis["faces"])
 async function buildApp() {
   const app = express();
   app.use(express.json());
-  app.use("/api/projects", (await import("./directing.js")).directingRouter({ db: adminDb, now: () => 42, newId: () => "intent-new", auth, queuePlan: vi.fn() }));
+  app.use("/api/projects", (await import("./directing.js")).directingRouter({
+    db: adminDb, now: () => 42, newId: () => "intent-new", auth, queuePlan: vi.fn(),
+    thumbnails: { signedReadUrl: async (path) => `signed:${path}` },
+  }));
   return app;
 }
 
@@ -61,7 +65,7 @@ async function seedProposal(projectId: string) {
       { id: `${id}-moment-1`, shotId: "shot-2", kind: "photo", title: "Lunch", description: "Around the table.", rationale: "Brings everyone together." },
     ],
     chapters: [{ id: `${id}-chapter-0`, title: "The Day", summary: "Start to finish.", momentIds: [`${id}-moment-0`, `${id}-moment-1`] }],
-    constraints: { excludedShotIds: [], deselectedMomentIds: [`${id}-moment-1`], mustIncludeMomentIds: [], feedback: [] },
+    constraints: { excludedShotIds: [], deselectedMomentIds: [`${id}-moment-1`], mustIncludeMomentIds: [], feedback: [], hiddenShotIds: [], momentOrder: [], photoSwaps: {} },
     openQuestions: [],
     jobId: "job-1",
     createdAt: 1,
@@ -274,6 +278,40 @@ describe("character picker routes", () => {
         deselectedMomentIds: [`${proposalId}-moment-1`],
         mustIncludeMomentIds: [],
       });
+    } finally {
+      await close();
+    }
+  });
+
+  it("patches review edits, restores old constraints on undo, and lists same-event alternatives", async () => {
+    const projectId = await seedProject();
+    const proposalId = await seedProposal(projectId);
+    const assets = adminDb.collection(`projects/${projectId}/assets`);
+    await assets.doc("shot-1").set({ id: "shot-1", generation: "1", eventId: "burst-a" });
+    await assets.doc("shot-2").set({ id: "shot-2", generation: "1", eventId: "burst-b" });
+    const thumbPath = buildDerivativePath({ userId: USER_ID, projectId, assetId: "shot-9", generation: "1" }, "thumb.jpg");
+    await assets.doc("shot-9").set({ id: "shot-9", generation: "1", eventId: "burst-a", derivatives: { thumbPath } });
+    await adminDb.doc(`projects/${projectId}/shots/shot-1`).set({ id: "shot-1", assetId: "shot-1", assetGeneration: "1" });
+    await adminDb.doc(`projects/${projectId}/shots/shot-9`).set({ id: "shot-9", assetId: "shot-9", assetGeneration: "1" });
+
+    const { url, close } = await listen(await buildApp());
+    try {
+      const patch = async (id: string, body: unknown) => fetch(`${url}/api/projects/${projectId}/proposals/${id}/constraints`, {
+        method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+      });
+      const editedResponse = await patch(proposalId, { hiddenShotIds: ["shot-1"] });
+      expect(editedResponse.status).toBe(201);
+      const edited = (await editedResponse.json() as { proposal: { id: string; constraints: Record<string, unknown> } }).proposal;
+      expect(edited.constraints).toMatchObject({ hiddenShotIds: ["shot-1"], deselectedMomentIds: [`${proposalId}-moment-1`] });
+      const undoneResponse = await patch(edited.id, { hiddenShotIds: [], momentOrder: [], photoSwaps: {}, deselectedMomentIds: [`${proposalId}-moment-1`], mustIncludeMomentIds: [] });
+      expect(undoneResponse.status).toBe(201);
+      const undone = (await undoneResponse.json() as { proposal: { constraints: Record<string, unknown> } }).proposal;
+      expect(undone.constraints).toMatchObject({ hiddenShotIds: [], deselectedMomentIds: [`${proposalId}-moment-1`], mustIncludeMomentIds: [] });
+      expect(undone.constraints).toEqual({ excludedShotIds: [], deselectedMomentIds: [`${proposalId}-moment-1`], mustIncludeMomentIds: [], feedback: [], hiddenShotIds: [], momentOrder: [], photoSwaps: {} });
+
+      const alternatives = await fetch(`${url}/api/projects/${projectId}/proposals/${proposalId}/moments/${proposalId}-moment-0/alternatives`);
+      expect(alternatives.status).toBe(200);
+      expect(await alternatives.json()).toEqual({ shots: [{ shotId: "shot-9", thumbUrl: `signed:${thumbPath}` }] });
     } finally {
       await close();
     }

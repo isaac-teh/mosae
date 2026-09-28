@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   const hashes = await projectPhotoHashes(deps, projectId);
   const storageByAsset = new Map<string, string>();
   for (const asset of await deps.listAssets(projectId)) {
-    storageByAsset.set(asset.id, asset.storagePath);
+    if (asset.storagePath) storageByAsset.set(asset.id, asset.storagePath);
   }
 
   // Read every shot in the project.

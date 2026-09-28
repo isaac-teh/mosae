@@ -11,7 +11,7 @@ export function sha256Hex(bytes: Buffer): string {
 
 export interface PhotoDeps {
   /** Every photo asset in the project (id + storage path). */
-  listAssets(projectId: string): Promise<{ id: string; storagePath: string }[]>;
+  listAssets(projectId: string): Promise<{ id: string; storagePath?: string | null }[]>;
   /** The raw bytes stored at a bucket path. */
   readBytes(storagePath: string): Promise<Buffer>;
 }
@@ -28,6 +28,7 @@ export async function projectPhotoHashes(
   const assets = await deps.listAssets(projectId);
 
   for (const asset of assets) {
+    if (!asset.storagePath) continue;
     const bytes = await deps.readBytes(asset.storagePath);
     hashes.set(asset.id, sha256Hex(bytes));
   }
@@ -67,7 +68,8 @@ export function firestorePhotoHashDeps(
           if (asset.mediaType === undefined || asset.mediaType === null) return true;
           return asset.mediaType === "photo";
         })
-        .map((asset) => ({ id: asset.id, storagePath: asset.storagePath }));
+        .filter((asset) => typeof asset.storagePath === "string" && asset.storagePath.length > 0)
+        .map((asset) => ({ id: asset.id, storagePath: asset.storagePath! }));
     },
     async readBytes(storagePath) {
       const [bytes] = await bucket.file(storagePath).download();

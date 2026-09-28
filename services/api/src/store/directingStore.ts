@@ -22,6 +22,13 @@ export class DirectingStoreError extends Error {
   }
 }
 
+function omitUndefinedConstraints<T extends { constraints: Record<string, unknown> }>(proposal: T): T {
+  return {
+    ...proposal,
+    constraints: Object.fromEntries(Object.entries(proposal.constraints).filter(([, value]) => value !== undefined)),
+  } as T;
+}
+
 /** Lowercase, trim, collapse whitespace to dashes. Pure helper for the
  *  name-derived characterId scheme (see assignFaceCharacter). */
 export function slugName(name: string): string {
@@ -173,7 +180,7 @@ export async function saveProposal(
     }
 
     if (!destinationSnap.exists) {
-      transaction.set(destination, { ...proposal, jobId: input.jobId, createdAt: input.createdAt });
+      transaction.set(destination, { ...omitUndefinedConstraints(proposal), jobId: input.jobId, createdAt: input.createdAt });
     }
     if (publish) {
       transaction.update(project, {
@@ -229,12 +236,13 @@ export async function reviseConstraints(
     });
     if (!candidate.success) throw new DirectingStoreError("invalid_proposal");
 
-    transaction.set(destination, { ...candidate.data, jobId: null, createdAt: input.createdAt });
+    const cleanProposal = omitUndefinedConstraints(candidate.data);
+    transaction.set(destination, { ...cleanProposal, jobId: null, createdAt: input.createdAt });
     transaction.update(project, {
       currentProposalId: destination.id,
       proposalVersionCounter: candidate.data.version,
     });
-    return candidate.data;
+    return cleanProposal;
   });
 }
 

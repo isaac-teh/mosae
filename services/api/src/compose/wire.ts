@@ -57,13 +57,17 @@ export async function loadComposeCatalog(
   const shots = new Map(shotSnaps.docs.map((doc) => [doc.id, doc]));
 
   const deselected = new Set(proposal.constraints.deselectedMomentIds);
+  const hidden = new Set(proposal.constraints.hiddenShotIds ?? []);
   const catalog = new Map<string, CandidateAsset>();
 
   for (const moment of proposal.moments) {
     // A film may not contain media the user deselected, so it is never offered.
     if (deselected.has(moment.id)) continue;
 
-    const shot = shots.get(moment.shotId);
+    if (hidden.has(moment.shotId)) continue;
+    const swapped = proposal.constraints.photoSwaps?.[moment.id];
+    const shotId = swapped && !hidden.has(swapped) && shots.has(swapped) ? swapped : moment.shotId;
+    const shot = shots.get(shotId);
     if (!shot) continue;
     const asset = assets.get(shot.get("assetId") as string);
     // Analysis from a superseded asset generation is not eligible, exactly as

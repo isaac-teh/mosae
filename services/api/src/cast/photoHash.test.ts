@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Firestore } from "firebase-admin/firestore";
 import type { getStorage } from "firebase-admin/storage";
 import { projectPhotoHashes, sha256Hex } from "./photoHash.js";
@@ -36,6 +36,12 @@ describe("sha256Hex", () => {
 });
 
 describe("projectPhotoHashes", () => {
+  it("skips assets without a storage path", async () => {
+    const readBytes = vi.fn(async () => Buffer.from("photo"));
+    const hashes = await projectPhotoHashes({ listAssets: async () => [{ id: "no-path" }], readBytes }, "p1");
+    expect(hashes.size).toBe(0);
+    expect(readBytes).not.toHaveBeenCalled();
+  });
   it("gives two correct hashes for two assets", async () => {
     const bytesA = Buffer.from("photo-a-bytes");
     const bytesB = Buffer.from("photo-b-bytes-different");

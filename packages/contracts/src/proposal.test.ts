@@ -26,6 +26,12 @@ describe("StoryProposalSchema", () => {
     if (result.ok) expect(result.proposal.moments).toHaveLength(2);
   });
 
+  it("accepts review edit constraints while retaining legacy proposal parsing", () => {
+    expect(StoryProposalSchema.safeParse(valid).success).toBe(true);
+    const edited = { ...valid, constraints: { ...valid.constraints, hiddenShotIds: ["s1"], momentOrder: ["m2", "m1"], photoSwaps: { m1: "s9" } } };
+    expect(StoryProposalSchema.safeParse(edited).success).toBe(true);
+  });
+
   it("rejects a photo moment carrying a preview range", () => {
     const leaky = { ...valid, moments: [{ ...valid.moments[1], previewInSec: 1, previewOutSec: 2 }] };
     expect(safeParseStoryProposal(leaky).ok).toBe(false);

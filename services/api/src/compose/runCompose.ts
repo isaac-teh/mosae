@@ -14,6 +14,19 @@ import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
 import { applyArc, orderByChronology, type ClipTime } from "./chronology.js";
 
+export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
+  if (!momentOrder?.length) return clips;
+  const rank = new Map(momentOrder.map((id, i) => [id, i]));
+  const out = [...clips];
+  const chapters = [...new Set(clips.map((c) => chapterOf.get(c.itemId) ?? 0))];
+  for (const chapter of chapters) {
+    const slots = out.map((c, i) => ({ c, i })).filter(({ c }) => (chapterOf.get(c.itemId) ?? 0) === chapter);
+    const sorted = [...slots].sort((a, b) => (rank.get(a.c.itemId) ?? Infinity) - (rank.get(b.c.itemId) ?? Infinity) || a.i - b.i);
+    slots.forEach(({ i }, k) => { out[i] = sorted[k]!.c; });
+  }
+  return out;
+}
+
 /** Result of a compose run. */
 export type ComposeResult = {
   ok: true;
@@ -91,7 +104,11 @@ export async function runCompose(
   // proposal's chapters name. A Timeline names shots, so the two are joined
   // here rather than letting a moment id reach `source.shotId`, where
   // `resolveSources` would try to resolve it to a file and fail.
-  const shotIdByMoment = new Map(job.proposal.moments.map((moment) => [moment.id, moment.shotId]));
+  const hiddenShotIds = new Set(job.proposal.constraints.hiddenShotIds ?? []);
+  const shotIdByMoment = new Map(job.proposal.moments.map((moment) => {
+    const swapped = job.proposal.constraints.photoSwaps?.[moment.id];
+    return [moment.id, swapped && !hiddenShotIds.has(swapped) ? swapped : moment.shotId] as const;
+  }));
 
   // Stage 1: buildCandidates — every legal clip per chapter
   const chapterInputs = job.proposal.chapters.map((ch, index) => ({
@@ -160,6 +177,7 @@ export async function runCompose(
   const arc = applyArc(chronological, timeOf);
   let selectedClips = arc.clips;
   let castReasons: string[] = arc.reasons;
+  const guardPinned = new Set<string>();
   if (job.cast) {
     const pickedItems = new Set(assembledClips.map((clip) => clip.itemId));
     const holds = holdsFor(job.cadenceId);
@@ -176,6 +194,8 @@ export async function runCompose(
     const guardedClips = guarded.clips;
     const opener = guarded.opened ? guardedClips[0] : undefined;
     const closer = guarded.closed ? guardedClips.at(-1) : undefined;
+    if (opener) guardPinned.add(opener.itemId);
+    if (closer) guardPinned.add(closer.itemId);
     // Keep the guarded boundary clips in the arc input so a pinned last
     // chapter still gives applyArc the chapter context needed for the earlier
     // chapter peaks; re-pin them after the arc is restored.
@@ -184,6 +204,16 @@ export async function runCompose(
     if (opener) selectedClips.unshift(opener);
     if (closer && closer !== opener) selectedClips.push(closer);
     castReasons = [...arc.reasons, ...guarded.reasons];
+  }
+
+  // User ordering is final within each chapter, while guarded opener and
+  // closer clips stay pinned at the boundaries they established.
+  if (job.proposal.constraints.momentOrder?.length) {
+    const pinned = guardPinned;
+    const movable = selectedClips.filter((clip) => !pinned.has(clip.itemId));
+    const ordered = applyUserOrder(movable, job.proposal.constraints.momentOrder, chapterOf);
+    let cursor = 0;
+    selectedClips = selectedClips.map((clip) => pinned.has(clip.itemId) ? clip : ordered[cursor++]!);
   }
 
   // Stage 5: fitDuration — adjust photo holds to target duration

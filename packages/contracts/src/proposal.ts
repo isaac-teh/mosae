@@ -54,6 +54,12 @@ export const ProposalConstraintsSchema = z.strictObject({
   focusCharacterIds: z.array(z.string().min(1)).optional(),
   /** Person ids to prefer but never force; surfaced to the planner as a hint. */
   secondaryCharacterIds: z.array(z.string().min(1)).optional(),
+  /** Shot ids hidden from the composed film. */
+  hiddenShotIds: z.array(z.string().min(1)).optional(),
+  /** Moment ids in the user's preferred within-chapter order. */
+  momentOrder: z.array(z.string().min(1)).optional(),
+  /** Moment id to replacement shot id. */
+  photoSwaps: z.record(z.string().min(1), z.string().min(1)).optional(),
 });
 
 const BaseProposalSchema = z.strictObject({

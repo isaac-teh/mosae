@@ -1,6 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
-import { runCompose, type ComposeJob, type ComposeDeps } from "./runCompose.js";
+import { runCompose, applyUserOrder, type ComposeJob, type ComposeDeps } from "./runCompose.js";
 import { safeParseTimeline } from "@mosae/contracts";
+
+describe("applyUserOrder", () => {
+  const clips = ["m1", "m2", "m3"].map((itemId) => ({ itemId }));
+  const chapterOf = new Map([["m1", 1], ["m2", 1], ["m3", 2]]);
+  it("reorders within a chapter only", () => {
+    expect(applyUserOrder(clips, ["m2", "m1", "m3"], chapterOf).map((c) => c.itemId)).toEqual(["m2", "m1", "m3"]);
+    expect(applyUserOrder(clips, ["m3", "m1", "m2"], chapterOf).map((c) => c.itemId)).toEqual(["m1", "m2", "m3"]);
+  });
+  it("no order leaves clips unchanged", () => expect(applyUserOrder(clips, undefined, chapterOf)).toEqual(clips));
+});
 
 // --- Helpers to build minimal test fixtures ---
 
