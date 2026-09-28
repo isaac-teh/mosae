@@ -1,3 +1,62 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --color-deep-tide: 20 40 58;
+  --color-tide-tile: 111 139 166;
+  --color-paper: 250 250 247;
+  --color-slate: 74 88 102;
+  --color-persimmon: 232 106 69;
+  --color-surface: 250 250 247;
+  --color-surface-raised: 255 255 255;
+  --color-surface-sunken: 239 242 244;
+  --color-ink: 20 40 58;
+  --color-ink-muted: 74 88 102;
+  --color-line: 227 231 235;
+  --color-line-strong: 125 139 152;
+  --color-action: 20 40 58;
+  --color-on-action: 255 255 255;
+  --color-action-hover: 36 69 99;
+  --color-action-pressed: 11 24 36;
+  --color-ink-tint: 20 40 58;
+  --color-ink-tint-opacity: 0.07;
+  --color-bubble-you: 223 231 239;
+  --color-accent: 232 106 69;
+  --color-on-accent: 20 40 58;
+  --color-tile: 111 139 166;
+  --color-positive: 47 122 86;
+  --color-critical: 179 38 30;
+  --color-focus-ring: 20 40 58;
+  --color-screen: 11 14 18;
+  --color-on-screen: 242 244 246;
+  --color-on-screen-muted: 167 180 193;
+  --color-scrim: 11 14 18;
+}
+
+.dark {
+  --color-surface: 15 27 39;
+  --color-surface-raised: 23 38 54;
+  --color-surface-sunken: 10 19 28;
+  --color-ink: 238 241 244;
+  --color-ink-muted: 167 180 193;
+  --color-line: 36 54 70;
+  --color-line-strong: 110 130 150;
+  --color-action: 250 250 247;
+  --color-on-action: 20 40 58;
+  --color-action-hover: 227 232 238;
+  --color-action-pressed: 205 213 222;
+  --color-ink-tint: 238 241 244;
+  --color-ink-tint-opacity: 0.1;
+  --color-bubble-you: 34 56 77;
+  --color-accent: 240 127 92;
+  --color-on-accent: 20 40 58;
+  --color-tile: 111 139 166;
+  --color-positive: 111 207 151;
+  --color-critical: 242 184 181;
+  --color-focus-ring: 250 250 247;
+  --color-screen: 11 14 18;
+  --color-on-screen: 242 244 246;
+  --color-on-screen-muted: 167 180 193;
+  --color-scrim: 11 14 18;
+}
