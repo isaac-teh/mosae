@@ -1,4 +1,4 @@
-import Svg, { G, Path } from "react-native-svg";
+import Svg, { Circle, G, Path } from "react-native-svg";
 
 type IconSpec = {
   width: number;
@@ -80,3 +80,13 @@ export const SparklesIcon = icon({
   fill: "white",
   d: "M15 6.66667L13.9583 4.375L11.6667 3.33333L13.9583 2.29167L15 0L16.0417 2.29167L18.3333 3.33333L16.0417 4.375L15 6.66667V6.66667M15 18.3333L13.9583 16.0417L11.6667 15L13.9583 13.9583L15 11.6667L16.0417 13.9583L18.3333 15L16.0417 16.0417L15 18.3333V18.3333M6.66667 15.8333L4.58333 11.25L0 9.16667L4.58333 7.08333L6.66667 2.5L8.75 7.08333L13.3333 9.16667L8.75 11.25L6.66667 15.8333V15.8333M6.66667 11.7917L7.5 10L9.29167 9.16667L7.5 8.33333L6.66667 6.54167L5.83333 8.33333L4.04167 9.16667L5.83333 10L6.66667 11.7917V11.7917M6.66667 9.16667V9.16667V9.16667V9.16667V9.16667V9.16667V9.16667V9.16667V9.16667V9.16667",
 });
+
+export function SettingsIcon() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" accessibilityLabel="Settings">
+      <Path d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2m14.51-6.01-1.42 1.42M7.41 16.59l-1.42 1.42m12.02 0-1.42-1.42M7.41 7.41 5.99 5.99" stroke="rgb(var(--color-ink))" strokeWidth={1.7} strokeLinecap="round" />
+      <Circle cx={12} cy={12} r={6.5} stroke="rgb(var(--color-ink))" strokeWidth={1.7} />
+      <Circle cx={12} cy={12} r={2.25} stroke="rgb(var(--color-ink))" strokeWidth={1.7} />
+    </Svg>
+  );
+}
