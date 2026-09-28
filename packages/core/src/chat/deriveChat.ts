@@ -59,11 +59,12 @@ export function deriveChat(input: ChatInput): ChatState {
       return { items, step, confirmed, placeholder };
     }
 
-    const people = input.people ?? [];
-    const firstUnanswered = people.findIndex((person) => !person.name);
+    const people = [...(input.people ?? [])].sort((a, b) => b.momentCount - a.momentCount).slice(0, 3);
+    const answered = (person: (typeof people)[number]) => person.skipped || Boolean(person.name || person.role);
+    const firstUnanswered = people.findIndex((person) => !answered(person));
     const unanswered = firstUnanswered >= 0 ? people[firstUnanswered] : null;
     people.slice(0, firstUnanswered >= 0 ? firstUnanswered : people.length).forEach((person) => {
-      add({ kind: "you", id: `person-answer-${person.personId}`, text: person.name ?? person.role ?? "Family" });
+      add({ kind: "you", id: `person-answer-${person.personId}`, text: person.skipped ? "Skip" : person.name ?? person.role ?? "Family" });
     });
     if (unanswered) {
       add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, days: unanswered.days });
@@ -74,8 +75,8 @@ export function deriveChat(input: ChatInput): ChatState {
   }
 
   if (input.people?.length) {
-    input.people.forEach((person) => {
-      if (person.name) add({ kind: "you", id: `person-answer-${person.personId}`, text: person.name });
+    [...input.people].sort((a, b) => b.momentCount - a.momentCount).slice(0, 3).forEach((person) => {
+      if (person.skipped || person.name || person.role) add({ kind: "you", id: `person-answer-${person.personId}`, text: person.skipped ? "Skip" : person.name ?? person.role ?? "Family" });
     });
   }
   confirmed = 2;

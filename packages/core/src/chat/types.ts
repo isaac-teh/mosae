@@ -16,7 +16,7 @@ export type ProjectSummary = {
 export type ChatInput = {
   summary: ProjectSummary | null;
   intent: { text: string } | null;
-  people: { personId: string; name: string | null; role: string | null; momentCount: number; sampleShotIds: string[]; days: number[] }[] | null;
+  people: { personId: string; name: string | null; role: string | null; skipped: boolean; momentCount: number; sampleShotIds: string[]; days: number[] }[] | null;
   peopleConfirmed: boolean;
   plan: StoryPlan | null;
   momentsConfirmed: boolean;
