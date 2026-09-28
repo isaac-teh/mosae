@@ -131,6 +131,19 @@ describe("Character Picker", () => {
     expect(body.people.map((person: { personId: string }) => person.personId)).toContain("p-new-3");
   });
 
+  it("numbers unnamed people who share a role so they can be told apart", async () => {
+    boundary.getCast.mockResolvedValueOnce({
+      people: [
+        { personId: "p-dad", role: "parent", appearances: 2, subjectCount: 2, faceIds: [] },
+        { personId: "p-mom", role: "parent", appearances: 2, subjectCount: 2, faceIds: [] },
+      ],
+      core: ["p-dad", "p-mom"], focus: [],
+    });
+    await render(); await flush();
+    expect(buttonByAriaLabel("Centre the film on Parent 1")).not.toBeNull();
+    expect(buttonByAriaLabel("Centre the film on Parent 2")).not.toBeNull();
+  });
+
   it("skips without saving and keeps the plan it was given", async () => {
     await render(); await flush();
     await clickByAriaLabel("Skip");

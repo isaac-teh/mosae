@@ -17,6 +17,17 @@ const ROLE_LABEL: Record<CastRole, string> = { parent: "Parent", child: "Child",
 const DEFAULT_NAME: Record<CastRole, string> = { parent: "A parent", child: "Your child", other: "Someone" };
 
 /**
+ * An unnamed person's label. When two people share a role, they're numbered so
+ * the chips and cards can be told apart ("Parent 1", "Parent 2").
+ */
+function labelFor(person: { personId: string; role: CastRole; name: string }, everyone: { personId: string; role: CastRole }[]): string {
+  if (person.name.trim()) return person.name.trim();
+  const sameRole = everyone.filter((other) => other.role === person.role);
+  if (sameRole.length < 2) return DEFAULT_NAME[person.role];
+  return `${ROLE_LABEL[person.role]} ${sameRole.findIndex((other) => other.personId === person.personId) + 1}`;
+}
+
+/**
  * Shows one face by scaling its shot's image so the stored box fills a fixed
  * square, then offsetting it so the box lands in view. Cropping this way needs
  * no server-side face images: the thumbnail the app already signs is enough.
@@ -210,8 +221,8 @@ export default function CharacterPickerScreen() {
         <Text className="font-sans-semibold text-xs leading-4 text-ink">This is actually…</Text>
         <View className="mt-2 flex-row flex-wrap gap-2">
           {moveTargets(face.faceId).map((person) => (
-            <Pressable key={person.personId} role="button" aria-label={`Move to ${person.name || DEFAULT_NAME[person.role]}`} onPress={() => moveFace(face.faceId, person.personId)} className="rounded-full bg-white px-3 py-1.5">
-              <Text className="font-sans-medium text-xs leading-4 text-ink">{person.name || DEFAULT_NAME[person.role]}</Text>
+            <Pressable key={person.personId} role="button" aria-label={`Move to ${labelFor(person, people)}`} onPress={() => moveFace(face.faceId, person.personId)} className="rounded-full bg-white px-3 py-1.5">
+              <Text className="font-sans-medium text-xs leading-4 text-ink">{labelFor(person, people)}</Text>
             </Pressable>
           ))}
           <Pressable role="button" aria-label="Move to a new person" onPress={() => moveFace(face.faceId, "new")} className="rounded-full bg-white px-3 py-1.5">
@@ -242,8 +253,8 @@ export default function CharacterPickerScreen() {
               {ordered.filter((person) => !person.excluded).map((person) => {
                 const on = focus.includes(person.personId);
                 return (
-                  <Pressable key={person.personId} role="checkbox" aria-checked={on} aria-label={`Centre the film on ${person.name || DEFAULT_NAME[person.role]}`} onPress={() => toggleFocus(person.personId)} className={`rounded-full px-3 py-1.5 ${on ? "bg-brand" : "bg-surface-sunken"}`}>
-                    <Text className={`font-sans-semibold text-xs leading-4 ${on ? "text-white" : "text-ink-soft"}`}>{person.name || DEFAULT_NAME[person.role]}</Text>
+                  <Pressable key={person.personId} role="checkbox" aria-checked={on} aria-label={`Centre the film on ${labelFor(person, people)}`} onPress={() => toggleFocus(person.personId)} className={`rounded-full px-3 py-1.5 ${on ? "bg-brand" : "bg-surface-sunken"}`}>
+                    <Text className={`font-sans-semibold text-xs leading-4 ${on ? "text-white" : "text-ink-soft"}`}>{labelFor(person, people)}</Text>
                   </Pressable>
                 );
               })}
@@ -254,13 +265,13 @@ export default function CharacterPickerScreen() {
 
         {ordered.map((person, index) => {
           const faces = facesOf(person.personId);
-          const label = person.name || DEFAULT_NAME[person.role];
+          const label = labelFor(person, people);
           return (
             <View key={person.personId} className={`mt-4 rounded-[16px] bg-white p-4 shadow-[0px_1px_1px_rgba(0,0,0,0.05)] ${person.excluded ? "opacity-50" : ""}`}>
               <TextInput
                 value={person.name}
                 onChangeText={(name) => updatePerson(person.personId, { name })}
-                placeholder={DEFAULT_NAME[person.role]}
+                placeholder={labelFor({ ...person, name: "" }, people)}
                 placeholderTextColor="#a8321266"
                 aria-label={`Name person ${index + 1}`}
                 className="font-serif text-[18px] leading-[24px] text-ink"
