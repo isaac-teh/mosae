@@ -22,18 +22,24 @@ import {
  * One moment on the live Review: its photo, why it was chosen, and the edits.
  * Hidden photos stay listed (dimmed) so they can be brought back.
  */
-function ReviewMoment({ moment, first, last, busy, onToggleSelected, onSwap, onMove, onHide }: {
-  moment: Moment; first: boolean; last: boolean; busy: boolean;
+function ReviewMoment({ moment, first, last, busy, highlight, onToggleSelected, onSwap, onMove, onHide }: {
+  moment: Moment; first: boolean; last: boolean; busy: boolean; highlight: boolean;
   onToggleSelected: () => void; onSwap: () => void; onMove: (delta: -1 | 1) => void; onHide?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const anchorId = `moment-${moment.id}`;
+  // After a move, bring the moved photo into view so the eye follows it.
+  useEffect(() => {
+    if (!highlight || typeof document === "undefined") return;
+    document.getElementById(anchorId)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, [highlight, anchorId]);
   const action = (label: string, aria: string, onPress: () => void, disabled = false) => (
     <Pressable role="button" aria-label={aria} disabled={busy || disabled} onPress={() => { setOpen(false); onPress(); }} className={`rounded-full bg-surface-sunken px-3 py-1.5 ${disabled ? "opacity-40" : ""}`}>
       <Text className="font-sans-semibold text-xs leading-4 text-ink">{label}</Text>
     </Pressable>
   );
   return (
-    <View className="mt-3">
+    <View nativeID={anchorId} className={`mt-3 rounded-[26px] ${highlight ? "border-2 border-brand" : "border-2 border-transparent"}`}>
       <MomentCard moment={moment} size="hero" onToggleSelected={onToggleSelected} />
       <View className="mt-1.5 flex-row items-start gap-2 px-1">
         <Text className="flex-1 font-sans text-xs leading-4 text-ink-soft">
@@ -66,6 +72,13 @@ export default function ReviewMomentsScreen() {
   const [undoCount, setUndoCount] = useState(0);
   const [swapping, setSwapping] = useState<{ moment: Moment; shots: AlternativeShot[] | null } | null>(null);
   const [showLeftOut, setShowLeftOut] = useState(false);
+  // The moment just moved, outlined briefly so it is clear where it went.
+  const [justMoved, setJustMoved] = useState<string | null>(null);
+  useEffect(() => {
+    if (!justMoved) return;
+    const timer = setTimeout(() => setJustMoved(null), 1600);
+    return () => clearTimeout(timer);
+  }, [justMoved]);
   // Every edit is a new plan version. Point the URL at it, so a reload or a
   // shared link opens what is on screen rather than the version before the edit.
   const shownPlanId = plan?.planId;
@@ -104,13 +117,14 @@ export default function ReviewMomentsScreen() {
   const momentsById = new Map(plan.moments.map((moment) => [moment.id, moment]));
 
   /** Applies one Review edit as a new plan version, remembering the old edits for undo. */
-  function edit(change: (current: PlanEdits) => PlanEdits) {
+  function edit(change: (current: PlanEdits) => PlanEdits, onDone?: () => void) {
     if (!edits) return;
     const before = edits;
     void mutate((id) => repository.applyEdits(id, change(structuredClone(before)))).then((ok) => {
       if (!ok) return;
       undoStack.current.push(before);
       setUndoCount(undoStack.current.length);
+      onDone?.();
     });
   }
   function undo() {
@@ -146,7 +160,7 @@ export default function ReviewMomentsScreen() {
     // Keep every other chapter's order as it was; replace this chapter's run.
     const rest = next.momentOrder.filter((id) => !chapterMomentIds.includes(id));
     return { ...next, momentOrder: [...rest, ...order] };
-  });
+  }, () => setJustMoved(momentId));
   async function openSwap(moment: Moment) {
     setSwapping({ moment, shots: null });
     try {
@@ -183,7 +197,9 @@ export default function ReviewMomentsScreen() {
       </View>
 
       {/* Content starts at y=84 (80pt + 4pt heading margin) */}
-      <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
+      {/* No scroll anchoring: it pinned the tapped card in place on a move, so the
+          other photos slid past it and the move looked reversed. */}
+      <ScrollView className="flex-1" keyboardShouldPersistTaps="handled" style={{ overflowAnchor: "none" } as object}>
         <View className="px-5 pb-[112px] pt-[84px]">
           {/* Intro heading - Plus Jakarta Sans SemiBold 14px leading 17.5px tracking -0.35px */}
           <Text className="font-sans-semibold text-[14px] leading-[17.5px] tracking-[-0.35px] text-ink">
@@ -231,6 +247,7 @@ export default function ReviewMomentsScreen() {
                           first={position === 0}
                           last={position === chapter.momentIds.length - 1}
                           busy={updating}
+                          highlight={justMoved === moment.id}
                           onToggleSelected={() => toggleSelected(moment)}
                           onSwap={() => void openSwap(moment)}
                           onMove={(delta) => move(chapter.momentIds, moment.id, delta)}
