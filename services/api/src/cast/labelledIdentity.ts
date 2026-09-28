@@ -2,7 +2,8 @@ import type { FaceRef, IdentityResolver } from "./types.js";
 
 export type LabelFile = {
   people: Record<string, object>;
-  photos: Record<string, { bbox: [number, number, number, number]; personId: string }[]>;
+  /** A box without `personId` is a stranger: it claims the face but names nobody. */
+  photos: Record<string, { bbox: [number, number, number, number]; personId?: string }[]>;
 };
 
 export function iou(
@@ -52,7 +53,7 @@ export function labelledIdentity(labels: LabelFile): IdentityResolver {
         const pairs: {
           faceId: string;
           labelIdx: number;
-          personId: string;
+          personId: string | undefined;
           score: number;
         }[] = [];
 
@@ -82,7 +83,7 @@ export function labelledIdentity(labels: LabelFile): IdentityResolver {
           }
           usedFaces.add(pair.faceId);
           usedLabels.add(pair.labelIdx);
-          result.set(pair.faceId, pair.personId);
+          if (pair.personId) result.set(pair.faceId, pair.personId);
         }
       }
 

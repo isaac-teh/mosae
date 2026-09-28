@@ -56,3 +56,16 @@ describe("labelledIdentity", () => {
     expect(labelsCover(labels, ["x", "y", "z"])).toBe(false);
   });
 });
+
+describe("labelledIdentity — strangers", () => {
+  it("leaves a face matched to a box without personId unplaced, and never assigns it to someone else", () => {
+    const resolver = labelledIdentity({
+      people: { "p-kid": {} },
+      photos: { h: [{ bbox: [0.1, 0.1, 0.5, 0.5] }, { bbox: [0.1, 0.12, 0.5, 0.52], personId: "p-kid" }] },
+    });
+    const out = resolver.resolve([
+      { faceId: "stranger", shotId: "s", photoHash: "h", bbox: [0.1, 0.1, 0.5, 0.5] },
+    ]);
+    expect(out.has("stranger")).toBe(false);
+  });
+});
