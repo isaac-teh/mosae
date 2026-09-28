@@ -24,5 +24,11 @@ export function daySummary(days: TripDay[]): string {
   const lines = days.map((day) => day.date === null
     ? `Undated: ${day.shotIds.join(", ")}`
     : `Day ${day.index}${day.place ? ` · ${day.place}` : ""}: ${day.shotIds.join(", ")}`);
-  return `Build one chapter per day in this order, titled as given; undated photos go last.\n${lines.join("\n")}`;
+  const undated = days.some((day) => day.date === null);
+  // Say "undated" only when there are undated photos: mentioning it anyway led
+  // the planner to invent an "Undated" chapter and move a dated photo into it.
+  return [
+    `Use exactly these chapters, one per day, in this order and with these titles. Don't add, merge or rename chapters; keep each photo in its own day. A day may hold a single moment.${undated ? " The undated photos form the last chapter." : ""}`,
+    ...lines,
+  ].join("\n");
 }

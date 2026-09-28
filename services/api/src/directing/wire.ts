@@ -167,9 +167,11 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
           proposalId: acquired.proposalId, storyIntentId: acquired.storyIntentId,
           version: acquired.version, parentProposalId: acquired.parentProposalId,
           ...acquired.pinnedInputs, constraints, shots, castSummary: ensured.summary ?? undefined,
-          daySummary: daySummary(tripDays(shots.map((shot) => ({
-            id: shot.id, day: shot.day ?? null, localTime: shot.localTime, place: shot.place ?? null,
-          })))),
+          // Only the photos the planner is actually given, so the day list and
+          // the working set name the same shots.
+          daySummary: daySummary(tripDays(shots
+            .filter((shot) => !autoExcluded.includes(shot.id) && !constraints.excludedShotIds.includes(shot.id))
+            .map((shot) => ({ id: shot.id, day: shot.day ?? null, localTime: shot.localTime, place: shot.place ?? null })))),
           parentProposal: parent?.exists ? parent.data() as StoryProposal : null,
           leftOut,
           autoExcludedShotIds: autoExcluded,
@@ -198,6 +200,7 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
         // replay a self-correcting conversation turn-for-turn.
         if (cached && workingSet) {
           const validation = validateProposal(cached.submission, workingSet, {
+            dayChapters: Boolean(job.daySummary),
             excludedShotIds: [...new Set([...job.constraints.excludedShotIds, ...autoExcluded])],
             mustIncludeShotIds: constraintShotIds(job),
           });

@@ -26,6 +26,14 @@ describe("daySummary", () => {
     const text = daySummary(tripDays([s("a", "2026-06-01T09:00:00", "Singapore Zoo"), s("u", null, null)]));
     expect(text).toContain("Day 1 · Singapore Zoo: a");
     expect(text).toContain("Undated: u");
-    expect(text).toContain("one chapter per day");
+    expect(text).toContain("one per day");
+    expect(text).toContain("The undated photos form the last chapter.");
+  });
+});
+
+describe("daySummary without undated photos", () => {
+  it("never mentions undated photos, so the planner doesn't invent that chapter", () => {
+    const text = daySummary(tripDays([{ id: "a", day: "2026-06-01", localTime: "2026-06-01T09:00:00", place: null }]));
+    expect(text.toLowerCase()).not.toContain("undated");
   });
 });

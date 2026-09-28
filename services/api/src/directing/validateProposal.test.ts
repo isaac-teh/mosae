@@ -134,6 +134,14 @@ describe("validateProposal", () => {
     ]));
   });
 
+  it("allows a one-moment chapter when chapters are trip days", () => {
+    const proposal = {
+      ...validProposal,
+      chapters: [{ title: "Day 3 · Hotel", summary: "", momentIds: ["p1"] }, validProposal.chapters[1]],
+    };
+    expect(diagnostics(validateProposal(proposal, workingSet, { ...options, dayChapters: true })).filter((d) => d.startsWith("chapter_minimum_distinct"))).toEqual([]);
+  });
+
   it("proposal_minimum_distinct rejects a story built from too few files", () => {
     const proposal: ProposalSubmission = {
       ...validProposal,

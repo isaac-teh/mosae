@@ -303,6 +303,7 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
       const validation = validateProposal(output.submission, admissibleSet(workingSet, deps.tools), {
         excludedShotIds,
         mustIncludeShotIds,
+        dayChapters: Boolean(job.daySummary),
       });
       if (!validation.ok) {
         const failure = repairOrFailure(output, validation.diagnostics);

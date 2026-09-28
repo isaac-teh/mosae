@@ -4,6 +4,8 @@ import type { WorkingSet, WorkingShot } from "./workingSet.js";
 export type ProposalValidationOptions = {
   excludedShotIds?: string[];
   mustIncludeShotIds?: string[];
+  /** Chapters are trip days, so a one-moment chapter is allowed. */
+  dayChapters?: boolean;
 };
 
 export type ProposalValidationResult =
@@ -63,11 +65,14 @@ function validateMustIncludeShots({ proposal, options }: RuleContext): string[] 
   return [`must_include_shots: required shot ids ${listed(missing)} are missing; add a moment for every named shot and place each in a chapter.`];
 }
 
-function validateChapterMinimumDistinct({ proposal }: RuleContext): string[] {
+function validateChapterMinimumDistinct({ proposal, options }: RuleContext): string[] {
+  // Chapters that are trip days may hold a single moment: a day with one good
+  // photo is still a day. Free-form chapters keep the two-moment floor.
+  const minimum = options.dayChapters ? 1 : 2;
   return proposal.chapters.flatMap((chapter, index) => {
     const distinct = new Set(chapter.momentIds);
-    if (distinct.size >= 2) return [];
-    return [`chapter_minimum_distinct: chapter ${index + 1} (${chapter.title}) has only ${distinct.size} distinct moment (${listed(distinct) || "none"}); give it at least 2 distinct moments.`];
+    if (distinct.size >= minimum) return [];
+    return [`chapter_minimum_distinct: chapter ${index + 1} (${chapter.title}) has only ${distinct.size} distinct moment (${listed(distinct) || "none"}); give it at least ${minimum} distinct moments.`];
   });
 }
 
