@@ -12,6 +12,7 @@ import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
 import { generationsRouter } from "./routes/generations.js";
 import { directionOptionsRouter } from "./routes/directionOptions.js";
+import { summaryRouter } from "./routes/summary.js";
 import {
   CloudTasksQueue,
   InMemoryTaskQueue,
@@ -181,6 +182,10 @@ app.use(
 app.use(
   "/api/projects",
   directionOptionsRouter({ db: adminDb }),
+);
+app.use(
+  "/api/projects",
+  summaryRouter({ db: adminDb }),
 );
 app.use(
   "/events",
