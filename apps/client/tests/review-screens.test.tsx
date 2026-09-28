@@ -155,7 +155,7 @@ describe("review screens", () => {
   });
   it("repeats hero / paired half / hero rows without dropping the final half row", async () => {
     await render(ReviewMomentsScreen);
-    const cards = [...host.querySelectorAll('[role="checkbox"]')].map(checkbox => checkbox.closest(".bg-white")!);
+    const cards = [...host.querySelectorAll('[role="checkbox"]')].map(checkbox => checkbox.closest(".bg-surface-raised")!);
     expect(cards.map(card => card.classList.contains("w-full"))).toEqual([true, false, false, true, true, false, false]);
     expect(cards[1].parentElement).toBe(cards[2].parentElement);
     expect(cards[5].parentElement).toBe(cards[6].parentElement);

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { type Href, useRouter } from "expo-router";
 import { formatDuration, getPendingMedia, mediaId, uploadMedia, type UploadProgress } from "@mosae/core";
-import { StepProgress } from "@/components/StepProgress";
+import { JourneySteps, MomentTile } from "@/components/ds";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
 import { MediaThumb } from "@/components/MediaThumb";
 import { ArrowRightIcon, CheckIcon, ChevronDownIcon, PlayIcon } from "@/components/icons";
@@ -75,15 +75,15 @@ export default function PickMemoryScreen() {
       : `${selected.length} selected`);
 
   return (
-    <View className="flex-1 bg-canvas">
+    <View className="flex-1 bg-surface">
       <MediaPicker ref={pickerRef} onFiles={addFiles} />
       <ScrollView className="flex-1" contentContainerClassName="pb-28" stickyHeaderIndices={[0]}>
-        <View className="z-30 bg-canvas/85 shadow-[0_1px_8px_rgba(54,49,44,0.04)] backdrop-blur-md">
+        <View className="z-30 bg-surface/85 shadow-[0_1px_8px_rgba(54,49,44,0.04)] backdrop-blur-md">
           <View className="h-14 flex-row items-center justify-between pl-5 pr-4">
             <Pressable role="button" onPress={() => router.push("/")}>
-              <Text className="font-sans-medium text-sm leading-[22px] text-brand">Cancel</Text>
+              <Text className="font-sans-medium text-label leading-[22px] text-action">Cancel</Text>
             </Pressable>
-            <Text role="heading" aria-level={1} className="font-sans-bold text-sm tracking-[-0.35px] text-ink">
+            <Text role="heading" aria-level={1} className="font-sans-semibold text-button tracking-[-0.35px] text-ink">
               Camera Roll
             </Text>
             <Pressable
@@ -92,20 +92,20 @@ export default function PickMemoryScreen() {
               onPress={() => setItems((prev) => prev.map((p) => ({ ...p, selected: false })))}
               className="disabled:opacity-40"
             >
-              <Text className="font-sans-semibold text-xs text-brand">Deselect</Text>
+              <Text className="font-sans-semibold text-caption text-action">Deselect</Text>
             </Pressable>
           </View>
-          <StepProgress value={1 / 3} />
+          <JourneySteps current={1} compact />
         </View>
 
         <View className="flex-row justify-center px-4 pb-2.5 pt-3.5">
           <Pressable
             role="button"
             onPress={() => pickerRef.current?.open()}
-            className="flex-row items-center gap-1 rounded-full border border-line bg-surface-muted px-[13px] py-[5px]"
+            className="flex-row items-center gap-1 rounded-full border border-line bg-surface-sunken px-[13px] py-[5px]"
           >
-            <Text className="font-sans-semibold text-xs text-ink">{items.length ? "Your Memories" : "Add Memories"}</Text>
-            {items.length > 0 && <Text className="font-sans text-[11px] leading-[14px] text-ink-soft">({items.length})</Text>}
+            <Text className="font-sans-semibold text-caption text-ink">{items.length ? "Your Memories" : "Add Memories"}</Text>
+            {items.length > 0 && <Text className="font-sans text-[11px] leading-[14px] text-ink-muted">({items.length})</Text>}
             <ChevronDownIcon />
           </Pressable>
         </View>
@@ -114,55 +114,45 @@ export default function PickMemoryScreen() {
           <Pressable
             role="button"
             onPress={() => pickerRef.current?.open()}
-            className="mx-4 mt-2 h-[260px] items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-dot bg-surface-muted"
+            className="mx-4 mt-2 h-[260px] items-center justify-center gap-2 rounded-2xl border border-dashed border-line-strong bg-surface-sunken"
           >
-            <Text className="text-center font-sans-semibold text-sm text-ink">Pick photos & videos</Text>
-            <Text className="max-w-[240px] text-center font-sans text-xs leading-[18px] text-ink-soft">
+            <Text className="text-center font-sans-semibold text-button text-ink">Pick photos & videos</Text>
+            <Text className="max-w-[240px] text-center font-sans text-caption leading-[18px] text-ink-muted">
               Choose the moments from your trip, celebration, or everyday life.
             </Text>
           </Pressable>
         ) : (
           <View className="flex-row flex-wrap gap-0.5">
             {items.map((item) => (
-              <Pressable
-                role="button"
+              <MomentTile
                 key={item.id}
-                aria-label={item.file.name}
-                aria-pressed={item.selected}
+                label={item.file.name}
+                role="checkbox"
+                selected={item.selected}
+                clip={item.isVideo}
+                duration={item.duration}
+                showCaption={false}
                 onPress={() => toggle(item.id)}
-                className="relative aspect-square w-[calc((100%-4px)/3)] overflow-hidden bg-surface-sunken"
+                className="w-[calc((100%-4px)/3)] max-w-none"
               >
-                <MediaThumb file={item.file} isVideo={item.isVideo} onDuration={(s) => setDuration(item.id, s)} />
-
-                {!item.selected && <View className="absolute inset-0 bg-canvas/40" />}
-
-                {item.isVideo && item.duration && (
-                  <View className="absolute bottom-1.5 left-1.5 flex-row items-center gap-0.5 rounded-2xl bg-[rgba(49,48,45,0.75)] px-1.5 py-0.5 backdrop-blur-[2px]">
-                    <PlayIcon />
-                    <Text className="font-sans text-[10px] leading-[14px] text-white">{item.duration}</Text>
-                  </View>
-                )}
-
-                {item.selected ? (
-                  <View className="absolute bottom-1.5 right-1.5 size-5 items-center justify-center rounded-full bg-brand shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)]">
-                    <CheckIcon />
-                  </View>
-                ) : (
-                  <View className="absolute bottom-1.5 right-1.5 size-5 rounded-full border-2 border-white/90 bg-black/10" />
-                )}
-              </Pressable>
+                <View className="absolute inset-0">
+                  <MediaThumb file={item.file} isVideo={item.isVideo} onDuration={(seconds) => setDuration(item.id, seconds)} />
+                </View>
+                {!item.selected ? <View className="absolute inset-0 bg-surface/40" /> : null}
+                {item.isVideo ? <View className="absolute bottom-1.5 left-1.5 rounded-pill bg-scrim/60 p-1"><PlayIcon /></View> : null}
+              </MomentTile>
             ))}
           </View>
         )}
       </ScrollView>
 
-      <View className="absolute inset-x-0 bottom-8 z-30 px-5">
-        <View className="flex-row items-center justify-between rounded-full border border-line bg-canvas/90 p-[11px] shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] backdrop-blur-md">
+      <View className="absolute inset-x-0 bottom-8 z-30 px-4">
+        <View className="flex-row items-center justify-between rounded-full border border-line bg-surface/90 p-[11px] shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)] backdrop-blur-md">
           <View className="min-w-0 flex-1 pl-3 pr-2">
-            <Text numberOfLines={1} className="font-sans-semibold text-xs text-ink">
+            <Text numberOfLines={1} className="font-sans-semibold text-caption text-ink">
               {status}
             </Text>
-            <Text numberOfLines={1} className="font-sans text-xs leading-[18px] text-ink-soft">
+            <Text numberOfLines={1} className="font-sans text-caption leading-[18px] text-ink-muted">
               {photoCount} {photoCount === 1 ? "photo" : "photos"}, {videoCount} {videoCount === 1 ? "video" : "videos"}
             </Text>
           </View>
@@ -170,9 +160,9 @@ export default function PickMemoryScreen() {
             role="button"
             disabled={!anySelected || uploading}
             onPress={handleNext}
-            className="flex-row items-center gap-1.5 rounded-full bg-brand px-6 py-3 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] disabled:opacity-50"
+            className="flex-row items-center gap-1.5 rounded-full bg-action px-6 py-3 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] disabled:opacity-50"
           >
-            <Text className="font-sans-semibold text-sm text-white">Next</Text>
+            <Text className="font-sans-semibold text-button text-on-action">Next</Text>
             <ArrowRightIcon />
           </Pressable>
         </View>

@@ -1,0 +1,40 @@
+import type { ReactNode } from "react";
+import { Pressable, Text, View } from "react-native";
+
+type ButtonProps = {
+  label: string;
+  onPress?: () => void;
+  variant?: "primary" | "secondary" | "quiet" | "on-media";
+  size?: "md" | "sm";
+  disabled?: boolean;
+  loading?: boolean;
+  leadingIcon?: ReactNode;
+};
+
+const variantClasses = {
+  primary: "bg-action border-action",
+  secondary: "bg-transparent border-line-strong",
+  quiet: "bg-transparent border-transparent underline",
+  "on-media": "bg-scrim/60 border-line",
+};
+const labelClasses = { primary: "text-on-action", secondary: "text-ink", quiet: "text-ink", "on-media": "text-on-screen" };
+
+export function Button({ label, onPress, variant = "primary", size = "md", disabled = false, loading = false, leadingIcon }: ButtonProps) {
+  const inactive = disabled || loading;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: inactive }}
+      role="button"
+      aria-label={label}
+      aria-disabled={inactive}
+      disabled={inactive}
+      onPress={onPress}
+      className={`flex-row items-center justify-center gap-2 rounded-md border focus:ring-2 focus:ring-focus-ring focus:ring-offset-2 ${variantClasses[variant]} ${size === "md" ? "min-h-12 px-6" : "min-h-11 px-4"} ${inactive ? "opacity-[0.38]" : ""}`}
+    >
+      {loading ? <View className="h-6 w-6 flex-row items-center justify-center gap-0.5" accessibilityLabel="Loading"><View className="h-1.5 w-1.5 rounded-sm bg-current" /><View className="h-1.5 w-1.5 rounded-sm bg-current" /><View className="h-1.5 w-1.5 rounded-sm bg-current" /></View> : leadingIcon}
+      <Text className={`${size === "md" ? "text-button" : "text-label"} font-sans-semibold ${labelClasses[variant]} ${variant === "quiet" ? "underline" : ""}`}>{label}</Text>
+    </Pressable>
+  );
+}

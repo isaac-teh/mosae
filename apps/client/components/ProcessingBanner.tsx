@@ -7,10 +7,10 @@ import { Text, View } from "react-native";
  */
 export function ProcessingBanner({ progress }: { progress: ProjectProgress | null }) {
   if (!progress) return null;
-  const tone = progress.status === "failed" ? "bg-brand-tint" : "bg-surface-sunken";
+  const tone = progress.status === "failed" ? "bg-ink-tint" : "bg-surface-sunken";
   return (
     <View role="status" aria-live="polite" className={`mt-4 rounded-2xl px-4 py-3 ${tone}`}>
-      <Text className="font-sans text-xs leading-[18px] text-ink-soft">{describeProgress(progress)}</Text>
+      <Text className="font-sans text-caption leading-[18px] text-ink-muted">{describeProgress(progress)}</Text>
     </View>
   );
 }

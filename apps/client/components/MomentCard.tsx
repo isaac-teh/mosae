@@ -44,11 +44,11 @@ export function MomentCard({
 
   return (
     <View
-      className={`${isHero ? "w-full" : "flex-1 min-w-0"} bg-white rounded-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.05)]`}
+      className={`${isHero ? "w-full" : "flex-1 min-w-0"} bg-surface-raised rounded-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.05)]`}
       style={{ padding }}
     >
       {/* Photo area - grey background with rounded corners */}
-      <View className="relative rounded-[16px] bg-[#f0ede9] overflow-hidden">
+      <View className="relative rounded-[16px] bg-surface-sunken overflow-hidden">
         <View style={{ height }} className="w-full">
           <View className="absolute inset-0 overflow-hidden pointer-events-none">
             <Image
@@ -75,7 +75,7 @@ export function MomentCard({
             aria-checked={selected as boolean}
             aria-label={`Select ${moment.title}`}
             onPress={onToggleSelected}
-            className={`absolute ${badgeSize} rounded-full bg-brand items-center justify-center ${
+            className={`absolute ${badgeSize} rounded-full bg-action items-center justify-center ${
               isHero ? "top-[12px] right-[12px]" : "top-[10px] right-[10px]"
             }`}
           >
@@ -88,7 +88,7 @@ export function MomentCard({
 
           {/* Tag chip */}
           <View
-            className={`absolute flex-row items-center rounded-full bg-[rgba(255,255,255,0.9)] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-[6px] ${isHero ? "gap-[6px]" : "gap-1"}`}
+            className={`absolute flex-row items-center rounded-full bg-surface-raised/90 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-[6px] ${isHero ? "gap-[6px]" : "gap-1"}`}
             style={{
               bottom: bottomOffset,
               left: leftOffset,
@@ -96,8 +96,8 @@ export function MomentCard({
               paddingVertical: tagPaddingY,
             }}
           >
-            <Text className="font-serif text-[12px]">{moment.tag.emoji}</Text>
-            <Text className={`font-sans-semibold ${tagFontSize} text-[#1c1c19] whitespace-nowrap`}>
+            <Text className="font-sans text-[12px]">{moment.tag.emoji}</Text>
+            <Text className={`font-sans-semibold ${tagFontSize} text-ink whitespace-nowrap`}>
               {moment.tag.label}
             </Text>
           </View>
@@ -105,8 +105,8 @@ export function MomentCard({
           {/* Video play overlay for video moments */}
           {moment.kind === "video" && (
             <View className="absolute inset-0 items-center justify-center">
-              <View className="backdrop-blur-[6px] bg-[rgba(252,249,244,0.85)] rounded-full items-center justify-center" style={{ width: 44, height: 44 }}>
-                <Text className="text-white text-lg">▶</Text>
+              <View className="backdrop-blur-[6px] bg-surface/85 rounded-full items-center justify-center" style={{ width: 44, height: 44 }}>
+                <Text className="text-on-screen text-lg">▶</Text>
               </View>
             </View>
           )}
@@ -116,10 +116,10 @@ export function MomentCard({
       {/* Title/meta row - on white card background (not grey) */}
       <View className="flex-row items-center justify-between" style={{ paddingTop: titlePt, paddingBottom: titlePb, paddingHorizontal: titlePx }}>
         <View className="flex-1 min-w-0">
-          <Text numberOfLines={1} className={`${titleSize} font-serif text-[#1c1c19] ${isHero ? "leading-[26px]" : "leading-[18.75px]"}`}>
+          <Text numberOfLines={1} className={`${titleSize} font-sans text-ink ${isHero ? "leading-[26px]" : "leading-[18.75px]"}`}>
             {moment.title}
           </Text>
-          <Text numberOfLines={isHero ? 1 : 2} className={`font-sans ${metaSize} text-[#59413b] ${isHero ? "leading-[18px]" : "leading-[22px]"}`}>
+          <Text numberOfLines={isHero ? 1 : 2} className={`font-sans ${metaSize} text-ink-muted ${isHero ? "leading-[18px]" : "leading-[22px]"}`}>
             {moment.meta}
           </Text>
         </View>
@@ -135,8 +135,8 @@ export function MomentCard({
           </Pressable>
         )}
         {moment.badge && isHero && (
-          <View className="ml-2 rounded-full bg-[rgba(255,221,184,0.5)] px-2 py-0.5">
-            <Text className="font-sans-semibold text-[11px] leading-[14px] text-[#855300] whitespace-nowrap">
+          <View className="ml-2 rounded-full bg-accent/20 px-2 py-0.5">
+            <Text className="font-sans-semibold text-[11px] leading-[14px] text-accent whitespace-nowrap">
               {moment.badge}
             </Text>
           </View>
