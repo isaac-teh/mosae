@@ -1,4 +1,5 @@
 import { Router, type RequestHandler } from "express";
+import { loadLibrary, soundtrackCatalog } from "../music/library.js";
 import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
@@ -19,6 +20,7 @@ export function directionOptionsRouter(deps: {
 }): Router {
   const router = Router();
   router.use(deps.auth ?? requireUser());
+  const library = loadLibrary();
 
   for (const name of ["projectId", "proposalId"]) {
     router.param(name, (_req, res, next, value: string) => {
@@ -97,7 +99,7 @@ export function directionOptionsRouter(deps: {
         note,
         rewrites: [],
         cadences: CADENCES.map(({ id, name, description }) => ({ id, name, description })),
-        soundtracks: [],
+        soundtracks: soundtrackCatalog(library, recommendedCadence),
         durations,
         recommendedDuration,
         recommendedCadence,

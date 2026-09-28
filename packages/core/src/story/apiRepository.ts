@@ -357,7 +357,7 @@ export function createApiStoryRepository(
         .catch((error: unknown) => { if ((error as { status?: number }).status !== 409) throw error; });
       const settings = {
         schemaVersion: 1, id: newId(), projectId, version: 1, note: direction.note,
-        cadenceId: direction.cadenceId, soundtrackId: null, durationId: direction.durationId,
+        cadenceId: direction.cadenceId, soundtrackId: direction.soundtrackId, durationId: direction.durationId,
         aspect: "9:16", captions: false,
       };
       return { filmId: await postGeneration({ proposalId: planId, settings }) };

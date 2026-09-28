@@ -73,7 +73,8 @@ export default function CharacterPickerScreen() {
   const router = useRouter();
   const { planId, projectId } = useLocalSearchParams<{ planId?: string; projectId?: string }>();
   const { route } = useStoryFlow();
-  const goBack = useStepBack(route("/tell-story") as Href);
+  // Opened from Review, so back returns there with the plan on screen.
+  const goBack = useStepBack(route("/review-moments", { planId }) as Href);
 
   const [characters, setCharacters] = useState<ProjectCharacters | null>(null);
   const [cast, setCast] = useState<Cast | null>(null);

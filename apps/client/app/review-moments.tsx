@@ -227,6 +227,15 @@ export default function ReviewMomentsScreen() {
             {mutationError && <Text role="alert" className="mb-3 text-sm text-brand">{mutationError}</Text>}
             {edits && plan.chapters.length > 0 ? (
               <>
+                {/* The Character Picker: check who the film is about, fix faces,
+                    or leave someone out. It returns here with the revised plan. */}
+                <Pressable role="button" aria-label="Who's in your film?" onPress={() => { void router.navigate(route("/character-picker", { planId: plan.planId }) as any); }} className="mb-4 flex-row items-center justify-between rounded-[16px] bg-white px-4 py-3 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
+                  <View className="flex-1">
+                    <Text className="font-sans-semibold text-sm leading-5 text-ink">Who&apos;s in your film?</Text>
+                    <Text className="mt-0.5 font-sans text-xs leading-4 text-ink-soft">Check the people we found, fix a face, or leave someone out.</Text>
+                  </View>
+                  <Text className="font-sans-semibold text-xs leading-4 text-brand">Edit</Text>
+                </Pressable>
                 <View className="mb-3 flex-row items-center justify-between">
                   <Text className="font-sans text-xs leading-4 text-ink-soft">Tap ⋯ on a moment to swap, move or hide it.</Text>
                   <Pressable role="button" aria-label="Undo" disabled={undoCount === 0 || updating} onPress={undo} className={`rounded-full px-3 py-1.5 ${undoCount === 0 ? "bg-surface-sunken opacity-50" : "bg-surface-pill"}`}>

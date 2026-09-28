@@ -429,6 +429,23 @@ describe("runPlan", () => {
     if (!result.ok) expect(result.diagnostics.join("\n")).toMatch(/working_set_membership.*invented/);
   });
 
+  it("leaves out a focus person's photo that the leave-out rules removed, instead of conflicting", async () => {
+    const withFace = (shot: PlanJob["shots"][number]): PlanJob["shots"][number] => ({
+      ...shot,
+      analysis: { ...(shot.analysis as object), faces: [{ faceId: `${shot.id}-0`, bbox: [0.2, 0.3, 0.7, 0.7], confidence: 1, characterId: "kid" }] } as PlanJob["shots"][number]["analysis"],
+    });
+    const focused: PlanJob = {
+      ...job,
+      shots: job.shots.map((shot) => (shot.id === "p3" ? withFace(shot) : shot)),
+      constraints: { ...constraints, mustIncludeMomentIds: [], focusCharacterIds: ["kid"] },
+      autoExcludedShotIds: ["p3"],
+    };
+    const model = { runTurn: async () => { throw new Error("stop after the working set"); } };
+    const result = await runPlan(focused, { model, tools: tools() }).catch((error: Error) => error);
+    // Reaching the model means the working set was built: no constraints conflict.
+    expect(result).not.toMatchObject({ code: "constraints_conflict" });
+  });
+
   it("fails readably before any model turn when the constraints contradict each other", async () => {
     const conflicted: PlanJob = {
       ...job,

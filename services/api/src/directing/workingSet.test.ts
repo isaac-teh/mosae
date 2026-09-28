@@ -144,9 +144,16 @@ describe("buildWorkingSet — focus join", () => {
       .toEqual(["best", "focus-shot"]);
   });
 
-  it("throws MustIncludeConflict when a focus shot is also excluded", () => {
-    const shots = [shot("focus", "e1", photoWithFaces(5, [face("char-grandpa")]))];
-    expect(() => buildWorkingSet(shots, { excludedShotIds: ["focus"], focusCharacterIds: ["char-grandpa"] }))
+  // The focus is a preference: a photo the leave-out rules removed (a stranger as
+  // prominent as the family, a hidden photo) stays out even when the star is in it.
+  it("leaves an excluded focus shot out instead of conflicting", () => {
+    const shots = [shot("focus", "e1", photoWithFaces(5, [face("char-grandpa")])), shot("other", "e2", photoWithFaces(3, []))];
+    expect(buildWorkingSet(shots, { excludedShotIds: ["focus"], focusCharacterIds: ["char-grandpa"] }).shots.map((s) => s.id)).toEqual(["other"]);
+  });
+
+  it("still reports a conflict when the user's own must-include is excluded", () => {
+    const shots = [shot("pick", "e1", photoWithFaces(5, []))];
+    expect(() => buildWorkingSet(shots, { excludedShotIds: ["pick"], mustIncludeMomentIds: ["pick"] }))
       .toThrow(/keep.*leave the same moment out/i);
   });
 

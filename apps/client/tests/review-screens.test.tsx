@@ -417,6 +417,12 @@ describe("live review edits", () => {
     expect(boundary.setParams).toHaveBeenCalledWith({ planId: "v1" });
   });
 
+  it("opens the Character Picker for the plan on screen", async () => {
+    await render(ReviewMomentsScreen);
+    await click("Who's in your film?");
+    expect(boundary.navigate).toHaveBeenCalledWith(expect.stringContaining("/character-picker?planId=initial"));
+  });
+
   it("can't move the first moment of a day up", async () => {
     await render(ReviewMomentsScreen);
     await click("More for Memory 0");

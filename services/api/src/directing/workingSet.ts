@@ -114,7 +114,9 @@ export function buildWorkingSet(shots: WorkingShot[], options: WorkingSetOptions
   // shots, then folded into mustInclude so they behave exactly like any other
   // explicit choice. Resolving here (rather than at plan time) keeps the join
   // in one place and lets a focus id that names no face contribute nothing.
-  const focusShotIds = resolveFocusShots(shots, options.focusCharacterIds ?? []);
+  // A focus photo that is left out stops being required: the focus is a
+  // preference, and must never force back a photo the leave-out rules removed.
+  const focusShotIds = resolveFocusShots(shots, options.focusCharacterIds ?? []).filter((id) => !excluded.has(id));
   const mustIncludeMomentIds = [...new Set([...(options.mustIncludeMomentIds ?? []), ...focusShotIds])];
 
   const candidates = shots

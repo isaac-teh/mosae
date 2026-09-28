@@ -104,7 +104,9 @@ describe("direction-options route", () => {
     expect(res.body.recommendedCadence).toBe("playful");
     expect(res.body.cadenceReason).toBe("The kids were laughing all day");
     expect(res.body.cadences).toHaveLength(5);
-    expect(res.body.soundtracks).toEqual([]);
+    // The library, with the track for the suggested cadence first.
+    expect(res.body.soundtracks.length).toBeGreaterThanOrEqual(5);
+    expect(res.body.soundtracks[0]).toMatchObject({ id: "lyria-playful", name: "Sandcastle Days" });
     expect(res.body.durations).toHaveLength(5);
     // note comes from the story intent text
     expect(res.body.note).toBe("A summer trip with the family");

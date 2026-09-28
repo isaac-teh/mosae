@@ -347,6 +347,20 @@ describe("film adapters", () => {
     expect(calls[1][2]).toMatchObject({ proposalId: "proposal-1", settings: { projectId: "project-1", note: "warm", cadenceId: "playful", durationId: "30s", soundtrackId: null, schemaVersion: 1, version: 1 } });
   });
 
+  it("sends the chosen soundtrack — accepts the plan, then posts a generation and returns its id as the film id", async () => {
+    const deps = dependencies({
+      request: vi.fn(async (_method: string, path: string) => (path.endsWith("/generations") ? { generation: { id: "gen-9" } } : {})),
+    });
+    const result = await createApiStoryRepository({ projectId: "project-1" }, deps)
+      .directFilm("proposal-1", { note: "warm", cadenceId: "playful", soundtrackId: "lyria-playful", durationId: "30s" });
+    expect(result).toEqual({ filmId: "gen-9" });
+    const calls = vi.mocked(deps.request).mock.calls;
+    expect(calls[0]).toEqual(["POST", "/api/projects/project-1/proposals/proposal-1/accept"]);
+    expect(calls[1][0]).toBe("POST");
+    expect(calls[1][1]).toBe("/api/projects/project-1/generations");
+    expect(calls[1][2]).toMatchObject({ proposalId: "proposal-1", settings: { projectId: "project-1", note: "warm", cadenceId: "playful", durationId: "30s", soundtrackId: "lyria-playful", schemaVersion: 1, version: 1 } });
+  });
+
   it("still directs the film when the plan was already accepted", async () => {
     const deps = dependencies({
       request: vi.fn(async (_method: string, path: string) => {

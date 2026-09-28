@@ -37,4 +37,8 @@ describe("leaveOutShots", () => {
   it("never leaves out a photo because its faces weren't recognised", () => {
     expect(leaveOutShots([{ shotId: "missed", faces: [{ bbox: BIG, personId: null }, { bbox: BIG, personId: null }] }], cast(), [])).toEqual([]);
   });
+  it("leaves out a family photo when a known stranger is as prominent as the family", () => {
+    expect(leaveOutShots([{ shotId: "crowded", faces: [{ bbox: BIG, personId: "kid" }, { bbox: BIG, personId: null, stranger: true }] }], cast(), []))
+      .toEqual([{ shotId: "crowded", reason: "Left out: someone outside the family is as prominent as the family." }]);
+  });
 });

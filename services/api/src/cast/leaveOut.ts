@@ -25,7 +25,12 @@ export function leaveOutShots(shots: LeaveOutShot[], cast: Cast, hiddenShotIds: 
     // Only a face known to be someone else counts. An unrecognised face may be
     // family the recogniser missed, and a missed match must never drop a photo.
     const strangerSubject = subjects.some((face) => face.stranger || (face.personId !== null && !inCast.has(face.personId)));
-    if (!castSubject && strangerSubject) out.push({ shotId: shot.shotId, reason: "Left out: someone outside the family is the main subject." });
+    if (!strangerSubject) continue;
+    // A stranger as prominent as the family spoils the photo even with the
+    // family in it; only a small background stranger (a photobomber) is kept.
+    out.push({ shotId: shot.shotId, reason: castSubject
+      ? "Left out: someone outside the family is as prominent as the family."
+      : "Left out: someone outside the family is the main subject." });
   }
   return out;
 }

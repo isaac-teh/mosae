@@ -1,4 +1,5 @@
 import express from "express";
+import { ensureLibraryUploaded, loadLibrary, soundtrackPath } from "./music/library.js";
 import { adminDb } from "./firebase/admin.js";
 import { loadConfig } from "./config.js";
 import { requireServiceCaller } from "./auth/requireServiceCaller.js";
@@ -78,6 +79,13 @@ const compose = createCompose({
 
 // A Timeline names shots; files hang off assets, so the shot is the hop in
 // between. The same lookup the generations route uses.
+// The soundtrack library. Its tracks are copied into the bucket at start, so
+// the render service can fetch them like any other media.
+const musicLibrary = loadLibrary();
+void ensureLibraryUploaded(getStorage(getAdminApp()).bucket(config.storageBucket), musicLibrary)
+  .then((count) => { if (count) console.log(`uploaded ${count} soundtrack(s) to the bucket`); })
+  .catch((error) => console.error("soundtrack library upload failed", error));
+
 const loadSource = async (projectId: string, shotId: string) => {
   const project = adminDb.collection("projects").doc(projectId);
   const shot = await project.collection("shots").doc(shotId).get();
@@ -90,7 +98,7 @@ const renderBucket = () => getStorage(getAdminApp()).bucket(config.storageBucket
 const render = createRender({
   db: adminDb,
   renderServiceUrl: config.renderServiceUrl,
-  sources: { loadAsset: loadSource },
+  sources: { loadAsset: loadSource, loadSoundtrack: async (soundtrackId) => soundtrackPath(musicLibrary, soundtrackId) },
   // The render service is handed URLs it can fetch and one it can PUT to, so
   // it needs no storage credentials of its own. On the storage emulator there
   // are no credentials to sign with at all: reads use the emulator's direct

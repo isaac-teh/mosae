@@ -201,14 +201,15 @@ async function withinDeadline<T>(
 export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResult> {
   const budget = new Budget(deps.budgetLimits, deps.now);
   const deadlineScheduler = deps.deadlineScheduler ?? defaultDeadlineScheduler;
+  const excludedShotIds = [...new Set([...job.constraints.excludedShotIds, ...(job.autoExcludedShotIds ?? [])])];
   const mustIncludeShotIds = [
     ...constraintShotIds(job),
     // Focus characters are resolved to shot ids against the working set's own
     // shots and forced into mustInclude, so a model-driven plan cannot omit a
-    // focus character's shot any more than it could omit an explicit one.
-    ...resolveFocusShots(job.shots, job.constraints.focusCharacterIds ?? []),
+    // focus character's shot any more than it could omit an explicit one —
+    // except a photo already left out: the focus never forces one back.
+    ...resolveFocusShots(job.shots, job.constraints.focusCharacterIds ?? []).filter((id) => !excludedShotIds.includes(id)),
   ];
-  const excludedShotIds = [...new Set([...job.constraints.excludedShotIds, ...(job.autoExcludedShotIds ?? [])])];
   let workingSet: WorkingSet;
   try {
     workingSet = buildWorkingSet(job.shots, {
