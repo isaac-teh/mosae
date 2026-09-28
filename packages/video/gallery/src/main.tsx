@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Player } from "@remotion/player";
-import { Collage, COLLAGE_EFFECTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, createCollageSpec, type CollageSpec } from "@mosae/video/collage";
+import { Collage, COLLAGE_EFFECTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, createCollageSpec, PLACEHOLDER_PHOTOS, type CollageSpec } from "@mosae/video/collage";
 import "./style.css";
 
 type Verdict = "keep" | "tweak" | "block";
 type Review = { verdict: Verdict; note: string };
 type ReviewMap = Record<string, Review>;
 const KEY = "mosae-collage-review-v1";
-const photos = ["/photos/photo-a.svg", "/photos/photo-b.svg", "/photos/photo-c.svg", "/photos/photo-d.svg"];
+declare const __COLLAGE_TRIP_PHOTOS__: string[];
+const photos = __COLLAGE_TRIP_PHOTOS__.length ? __COLLAGE_TRIP_PHOTOS__ : PLACEHOLDER_PHOTOS;
 const combos = COLLAGE_LAYOUTS.flatMap((layout) => COLLAGE_MOTIONS.map((motion) => ({ layoutId: layout.id, motionId: motion.id })));
 const keyOf = (layoutId: string, motionId: string) => `${layoutId}::${motionId}`;
 
