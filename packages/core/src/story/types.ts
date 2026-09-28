@@ -78,7 +78,7 @@ export type CreateOption = "film" | "album" | "share" | "apple-photos";
 
 export type Cadence = { id: string; name: string; description: string };
 export type Soundtrack = { id: string; name: string; description: string };
-export type DurationChoice = { id: "30s" | "1m" | "2m" | "3m" | "5m"; label: string; caption: string; seconds: number };
+export type DurationChoice = { id: "30s" | "1m" | "2m" | "3m" | "4m" | "5m"; label: string; caption: string; seconds: number };
 
 export type DirectionOptions = {
   note: string;

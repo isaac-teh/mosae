@@ -17,7 +17,7 @@ export const CADENCES = [
   { id: "celebratory", name: "Celebratory", description: "Bright and buoyant, built around the peaks." },
 ] as const;
 
-export const DURATION_SECONDS = { "30s": 30, "1m": 60, "2m": 120, "3m": 180, "5m": 300 } as const;
+export const DURATION_SECONDS = { "30s": 30, "1m": 60, "2m": 120, "3m": 180, "4m": 240, "5m": 300 } as const;
 
 const cadenceIds = CADENCES.map((cadence) => cadence.id) as [string, ...string[]];
 const durationIds = Object.keys(DURATION_SECONDS) as [string, ...string[]];
@@ -65,4 +65,3 @@ export function recommendDuration(usablePhotoCount: number): DurationId {
   for (const [id, tierSec] of tiers) if (tierSec <= seconds) pick = id;
   return pick;
 }
-
