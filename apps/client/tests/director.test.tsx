@@ -33,7 +33,7 @@ const planFixture = {
   moments: Array.from({ length: 6 }, (_, index) => ({ id: `moment-${index + 1}`, shotId: `shot-${index + 1}`, title: `Moment ${index + 1}`, meta: "Day 1", tag: { emoji: "", label: "" }, imageKey: `https://image/${index + 1}`, kind: "photo" as const, selected: true, favorite: false })),
   chapters: [], otherPhotoCount: 459, albumName: "", suggestions: [], estimatedFilmLabel: "", totalMomentCount: 327,
   leftOut: [{ shotId: "set-aside-blur", thumbnailUrl: "https://image/blur", reason: "Blurry" }, ...Array.from({ length: 120 }, (_, index) => ({ shotId: `dup-${index}`, thumbnailUrl: "", reason: "Near duplicate" }))],
-  edits: { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], momentOrder: [], photoSwaps: {} },
+  edits: { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], excludedShotIds: ["previously-excluded", "dup-0"], momentOrder: [], photoSwaps: {} },
 } as any;
 const directionOptions = { note: "Warm, intimate story", rewrites: [], cadences: [{ id: "reflective", name: "Gentle", description: "Unhurried" }, { id: "playful", name: "Lively", description: "Energetic" }], soundtracks: [], durations: [{ id: "1m", label: "1 min", caption: "Short", seconds: 60 }, { id: "2m", label: "2 min", caption: "Balanced", seconds: 120 }, { id: "4m", label: "4 min", caption: "Long", seconds: 240 }], recommendedDuration: "2m", recommendedCadence: "reflective", cadenceReason: "The photos feel calm" };
 function setup(options: { faces?: boolean; interpret?: () => Promise<any>; createPlan?: () => Promise<any>; people?: any[]; readyPlan?: boolean; applyEdits?: (...args: any[]) => Promise<any> } = {}) {
@@ -130,7 +130,16 @@ describe("Director chat", () => {
     await click("Moment dup-0"); await click("Moment dup-0");
     await click("Done");
     await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledTimes(1));
-    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["set-aside-blur"], excludedShotIds: ["dup-0"] }));
+    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["set-aside-blur"], excludedShotIds: ["previously-excluded", "dup-0"] }));
+  });
+
+  it("preserves earlier exclusions and removes a prior exclusion when that tile is marked Keep", async () => {
+    await openMoments();
+    await click("Moment dup-0");
+    await click("Moment dup-1"); await click("Moment dup-1");
+    await click("Done");
+    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledTimes(1));
+    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["dup-0"], excludedShotIds: ["previously-excluded", "dup-1"] }));
   });
 
   it("opens the all-moments picker and submits the selected ids", async () => {

@@ -109,7 +109,8 @@ export function useDirectorChat(projectId: string) {
       setSaving(true); setError(null);
       try {
         const mustIncludeMomentIds = [...new Set([...Object.entries(momentState).filter(([, value]) => value === "keep").map(([id]) => id)])];
-        const excludedShotIds = Object.entries(momentState).filter(([, value]) => value === "leave").map(([id]) => id);
+        const keptShotIds = new Set(mustIncludeMomentIds);
+        const excludedShotIds = [...new Set([...(input.plan.edits?.excludedShotIds ?? []), ...Object.entries(momentState).filter(([, value]) => value === "leave").map(([id]) => id)])].filter((id) => !keptShotIds.has(id));
         const edits = { ...(input.plan.edits ?? { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], momentOrder: [], photoSwaps: {} }), mustIncludeMomentIds, excludedShotIds } as PlanEdits;
         const updated = await repository.applyEdits(input.plan.planId, edits);
         setInput((current) => ({ ...current, plan: updated, momentsConfirmed: true, conflict: null }));
