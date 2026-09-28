@@ -6,6 +6,7 @@ export type GuardInput = {
   core: string[];
   focus: string[];
   peopleByMoment: Map<string, Set<string>>;
+  subjectsByMoment: Map<string, Set<string>>;
   label: (personId: string) => string;
 };
 
@@ -37,17 +38,18 @@ export function applyCastGuards(input: GuardInput): { clips: AssembledClip[]; re
     reasons.push(`Added a photo of ${input.label(person)} so everyone in the family is in the film.`);
   }
 
-  // Focus share counts only clips that contain a person.
+  // Focus share counts only clips where a focus person is a subject.
   let swaps = 0;
   let focused = false;
   while (swaps < clips.length) {
     const peopleClips = clips.filter((clip) => castOn(clip).size > 0);
-    const focusClips = peopleClips.filter((clip) => [...castOn(clip)].some((id) => input.focus.includes(id)));
+    const subjectsOn = (clip: AssembledClip) => input.subjectsByMoment.get(clip.itemId) ?? new Set<string>();
+    const focusClips = peopleClips.filter((clip) => [...subjectsOn(clip)].some((id) => input.focus.includes(id)));
     if (peopleClips.length === 0 || focusClips.length / peopleClips.length >= 0.5) break;
-    const addIndex = unused.findIndex((clip) => [...castOn(clip)].some((id) => input.focus.includes(id)));
+    const addIndex = unused.findIndex((clip) => [...subjectsOn(clip)].some((id) => input.focus.includes(id)));
     if (addIndex < 0) break;
     const currentCounts = counts();
-    const removeIndex = clips.findIndex((clip) => castOn(clip).size > 0 && ![...castOn(clip)].some((id) => input.focus.includes(id))
+    const removeIndex = clips.findIndex((clip) => castOn(clip).size > 0 && ![...subjectsOn(clip)].some((id) => input.focus.includes(id))
       && [...castOn(clip)].every((id) => !input.core.includes(id) || (currentCounts.get(id) ?? 0) > 1));
     if (removeIndex < 0) break;
     const [added] = unused.splice(addIndex, 1);

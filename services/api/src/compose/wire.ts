@@ -11,6 +11,7 @@ import { runCompose, type ComposeDeps, type ComposeJob } from "./runCompose.js";
 import type { Asset as CandidateAsset } from "./buildCandidates.js";
 import type { Face } from "../domain/understanding.js";
 import { castSummary } from "../cast/castSummary.js";
+import { photoRoles } from "../cast/prominence.js";
 import type { Cast, FaceRef } from "../cast/types.js";
 
 export type ComposeTask = {
@@ -202,8 +203,14 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
     const focusCenter = await buildFocusCenterMap(db, task.projectId, proposal.proposal);
 
     const castSnap = await project.collection("cast").doc("current").get();
-    const storedCast = castSnap.exists ? castSnap.data() as Cast : null;
+    const stored = castSnap.exists ? castSnap.data() as Cast : null;
+    // Existing v1 Firestore casts predate subjectCount.
+    const storedCast = stored ? {
+      ...stored,
+      people: stored.people.map((person) => ({ ...person, subjectCount: person.subjectCount ?? 0 })),
+    } : null;
     const peopleByMoment = new Map<string, Set<string>>();
+    const subjectsByMoment = new Map<string, Set<string>>();
     const castFaces: FaceRef[] = [];
     const shotSnaps = await project.collection("shots").get();
     const shotById = new Map(shotSnaps.docs.map((doc) => [doc.id, doc.data()]));
@@ -211,12 +218,21 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       const analysis = shotById.get(moment.shotId)?.analysis as ShotAnalysis | undefined;
       if (analysis?.kind !== "photo") continue;
       const people = new Set<string>();
-      for (const face of analysis.faces ?? []) {
-        if (!face.characterId || face.prominence === "background") continue;
+      const subjects = new Set<string>();
+      const faces = analysis.faces ?? [];
+      const roles = photoRoles(faces.map((face) => face.bbox));
+      const excluded = new Set((storedCast?.people ?? []).filter((person) => person.excluded).map((person) => person.personId));
+      for (const [index, face] of faces.entries()) {
+        if (!face.characterId || excluded.has(face.characterId)) continue;
+        if (roles[index] === "subject") subjects.add(face.characterId);
+        // Preserve v1 coverage semantics: peopleByMoment continues to ignore
+        // faces Gemini labeled background, independently of bbox-based subjects.
+        if (face.prominence === "background") continue;
         people.add(face.characterId);
         castFaces.push({ faceId: face.faceId, shotId: moment.shotId, photoHash: "", bbox: face.bbox, ageBand: face.ageBand, prominence: face.prominence });
       }
       peopleByMoment.set(moment.id, people);
+      subjectsByMoment.set(moment.id, subjects);
     }
     const identities = new Map(castFaces.flatMap((face) => {
       const analysis = shotById.get(face.shotId)?.analysis as ShotAnalysis | undefined;
@@ -253,7 +269,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       focusCenter,
       ...(storedCast && summary ? {
         cast: {
-          summary, core: storedCast.core, focus: storedCast.focus, peopleByMoment,
+          summary, core: storedCast.core, focus: storedCast.focus, peopleByMoment, subjectsByMoment,
           namesById: Object.fromEntries(storedCast.people.map((person) => [person.personId, person.role === "child" ? "your child" : person.role === "parent" ? "a parent" : "a family member"])),
         },
       } : {}),

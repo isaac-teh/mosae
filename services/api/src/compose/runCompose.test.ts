@@ -153,7 +153,7 @@ describe("runCompose — Gemini mock", () => {
         { candidateId: "photo1#still@c1", transition: "crossfade" as const, audio: "duck" as const, holdSec: 4 },
       ], musicCues: [],
     });
-    await runCompose(makeJob({ cast: { summary: "2 parents, 1 child", core: [], focus: [], peopleByMoment: new Map(), namesById: {} } }), makeDeps({ generateStructured: mockGenerate }));
+    await runCompose(makeJob({ cast: { summary: "2 parents, 1 child", core: [], focus: [], peopleByMoment: new Map(), subjectsByMoment: new Map(), namesById: {} } }), makeDeps({ generateStructured: mockGenerate }));
     expect(mockGenerate.mock.calls[0]?.[0]).toMatchObject({ contents: expect.stringContaining("Cast: 2 parents") });
   });
 

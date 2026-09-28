@@ -69,7 +69,7 @@ export interface ComposeJob {
    * keeps a null-focus film byte-identical to the pre-focus output.
    */
   focusCenter?: Map<string, { cx: number; cy: number }>;
-  cast?: { summary: string; core: string[]; focus: string[]; peopleByMoment: Map<string, Set<string>>; namesById: Record<string, string> };
+  cast?: { summary: string; core: string[]; focus: string[]; peopleByMoment: Map<string, Set<string>>; subjectsByMoment: Map<string, Set<string>>; namesById: Record<string, string> };
 }
 
 /**
@@ -159,6 +159,7 @@ export async function runCompose(
     const guarded = applyCastGuards({
       clips: assembledClips, unused, core: job.cast.core, focus: job.cast.focus,
       peopleByMoment: job.cast.peopleByMoment,
+      subjectsByMoment: job.cast.subjectsByMoment,
       label: (personId) => job.cast!.namesById[personId] ?? "a family member",
     });
     selectedClips = guarded.clips;

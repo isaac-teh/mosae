@@ -1,4 +1,6 @@
 import type { AgeBand, Cast, CastPerson, FaceRef, Interaction } from "./types.js";
+import { photoRoles } from "./prominence.js";
+import { chooseFocus } from "./focus.js";
 
 const AGE_ORDER: Record<AgeBand, number> = {
   child: 0,
@@ -14,6 +16,24 @@ export function buildCast(input: {
   source: Cast["source"];
 }): Cast {
   const { faces, identities, interactions, source } = input;
+
+  const subjectShotsByPerson = new Map<string, Set<string>>();
+  const facesByShot = new Map<string, FaceRef[]>();
+  for (const face of faces) {
+    const shotFaces = facesByShot.get(face.shotId) ?? [];
+    shotFaces.push(face);
+    facesByShot.set(face.shotId, shotFaces);
+  }
+  for (const [shotId, shotFaces] of facesByShot) {
+    const roles = photoRoles(shotFaces.map((face) => face.bbox));
+    shotFaces.forEach((face, index) => {
+      const personId = identities.get(face.faceId);
+      if (roles[index] !== "subject" || !personId) return;
+      const shots = subjectShotsByPerson.get(personId) ?? new Set<string>();
+      shots.add(shotId);
+      subjectShotsByPerson.set(personId, shots);
+    });
+  }
 
   // 1. Ignore faces with prominence === "background" and faces absent from identities.
   const keptFaces = faces.filter(
@@ -166,6 +186,7 @@ export function buildCast(input: {
 
     people.push({
       personId: info.personId,
+      subjectCount: subjectShotsByPerson.get(info.personId)?.size ?? 0,
       ageBand: info.ageBand,
       role,
       appearances: info.appearances,
@@ -179,7 +200,7 @@ export function buildCast(input: {
     .filter((p) => coreSet.has(p.personId) && p.role === "child")
     .map((p) => p.personId);
 
-  const focus = coreChildren.length > 0 ? coreChildren : core;
+  const focus = chooseFocus(people, core);
 
   // 7. Interaction boost:
   // An interaction whose kind matches /carry|hold|hug/ between a core adult and a core child is evidence of a parent.

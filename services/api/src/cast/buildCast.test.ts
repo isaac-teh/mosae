@@ -138,7 +138,7 @@ describe("buildCast and castSummary", () => {
     expect(castSummary(cast, [], new Map())).toBeNull();
   });
 
-  it("5. Adults only: A and B -> focus [A, B]", () => {
+  it("5. Adults only: focus the more prominent cast member", () => {
     const faces = [
       f("f1", "s1", "adult"),
       f("f2", "s1", "senior"),
@@ -160,8 +160,7 @@ describe("buildCast and castSummary", () => {
     });
 
     expect(cast.core).toEqual(expect.arrayContaining(["A", "B"]));
-    expect(cast.focus).toEqual(expect.arrayContaining(["A", "B"]));
-    expect(cast.focus).toHaveLength(2);
+    expect(cast.focus).toEqual(["A"]);
 
     const summary = castSummary(cast, faces, identities);
     expect(summary).toContain("focus: the family");
@@ -321,5 +320,22 @@ describe("buildCast and castSummary", () => {
     expect(cast.core).toContain("B");
     expect(cast.core).not.toContain("C");
     expect(cast.people.find((p) => p.personId === "C")?.role).toBe("other");
+  });
+
+  it("focuses the child who is the subject across photos, not the child with small edge faces", () => {
+    const faces: FaceRef[] = [];
+    const identities = new Map<string, string>();
+    for (let i = 1; i <= 6; i++) {
+      const a = `a${i}`;
+      const b = `b${i}`;
+      faces.push({ ...f(a, `s${i}`, "child"), bbox: [0.1, 0.1, 0.9, 0.9] });
+      faces.push({ ...f(b, `s${i}`, "child"), bbox: [0.1, 0.85, 0.12, 0.87] });
+      identities.set(a, "A");
+      identities.set(b, "B");
+    }
+    const cast = buildCast({ faces, identities, interactions: [], source: "labelled" });
+    expect(cast.focus).toEqual(["A"]);
+    expect(cast.people.find((person) => person.personId === "A")?.subjectCount).toBe(6);
+    expect(cast.people.find((person) => person.personId === "B")?.subjectCount).toBe(0);
   });
 });

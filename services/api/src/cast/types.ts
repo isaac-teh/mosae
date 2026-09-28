@@ -19,6 +19,9 @@ export interface IdentityResolver {
 
 export type CastPerson = {
   personId: string;
+  subjectCount: number;
+  name?: string;
+  excluded?: boolean;
   ageBand: AgeBand;
   role: "parent" | "child" | "other";
   appearances: number;
@@ -31,4 +34,5 @@ export type Cast = {
   core: string[];
   focus: string[];
   source: IdentityResolver["source"] | "none";
+  confirmed?: boolean;
 };
