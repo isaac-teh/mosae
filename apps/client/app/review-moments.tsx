@@ -1,5 +1,7 @@
 // Figma: "Review Selected Moments" (1:384)
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import type { AlternativeShot, Moment, PlanEdits } from "@mosae/core";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
@@ -16,12 +18,54 @@ import {
   ContinueArrowIcon,
 } from "@/components/sceneIcons";
 
+/**
+ * One moment on the live Review: its photo, why it was chosen, and the edits.
+ * Hidden photos stay listed (dimmed) so they can be brought back.
+ */
+function ReviewMoment({ moment, first, last, busy, onToggleSelected, onSwap, onMove, onHide }: {
+  moment: Moment; first: boolean; last: boolean; busy: boolean;
+  onToggleSelected: () => void; onSwap: () => void; onMove: (delta: -1 | 1) => void; onHide?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const action = (label: string, aria: string, onPress: () => void, disabled = false) => (
+    <Pressable role="button" aria-label={aria} disabled={busy || disabled} onPress={() => { setOpen(false); onPress(); }} className={`rounded-full bg-surface-sunken px-3 py-1.5 ${disabled ? "opacity-40" : ""}`}>
+      <Text className="font-sans-semibold text-xs leading-4 text-ink">{label}</Text>
+    </Pressable>
+  );
+  return (
+    <View className="mt-3">
+      <MomentCard moment={moment} size="hero" onToggleSelected={onToggleSelected} />
+      <View className="mt-1.5 flex-row items-start gap-2 px-1">
+        <Text className="flex-1 font-sans text-xs leading-4 text-ink-soft">
+          {moment.hidden ? "Hidden by you." : moment.reason ?? ""}
+        </Text>
+        <Pressable role="button" aria-label={`More for ${moment.title}`} aria-expanded={open} onPress={() => setOpen((value) => !value)} className="rounded-full px-2">
+          <Text className="font-sans-semibold text-base leading-4 text-ink-soft">⋯</Text>
+        </Pressable>
+      </View>
+      {open && (
+        <View className="mt-2 flex-row flex-wrap gap-2 px-1">
+          {action("Swap photo", `Swap photo for ${moment.title}`, onSwap, !!moment.hidden)}
+          {action("Move up", `Move ${moment.title} up`, () => onMove(-1), first)}
+          {action("Move down", `Move ${moment.title} down`, () => onMove(1), last)}
+          {onHide && action(moment.hidden ? "Show photo" : "Hide photo", `${moment.hidden ? "Show" : "Hide"} ${moment.title}`, onHide)}
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function ReviewMomentsScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
   const { repository, route } = useStoryFlow();
   const goBack = useStepBack(route("/tell-story") as Href);
   const { plan, error, mutationError, updating, mutate } = useStoryPlan(planId, repository);
+  // Each edit pushes the edits it replaced; undo sends the last one back.
+  const undoStack = useRef<PlanEdits[]>([]);
+  const [undoCount, setUndoCount] = useState(0);
+  const [swapping, setSwapping] = useState<{ moment: Moment; shots: AlternativeShot[] | null } | null>(null);
+  const [showLeftOut, setShowLeftOut] = useState(false);
 
   if (error) {
     return (
@@ -50,6 +94,66 @@ export default function ReviewMomentsScreen() {
   }
 
   const archivalText = plan.archivalMatch.join(" \u2022 ");
+  const edits = plan.edits;
+  const momentsById = new Map(plan.moments.map((moment) => [moment.id, moment]));
+
+  /** Applies one Review edit as a new plan version, remembering the old edits for undo. */
+  function edit(change: (current: PlanEdits) => PlanEdits) {
+    if (!edits) return;
+    const before = edits;
+    void mutate((id) => repository.applyEdits(id, change(structuredClone(before)))).then((ok) => {
+      if (!ok) return;
+      undoStack.current.push(before);
+      setUndoCount(undoStack.current.length);
+    });
+  }
+  function undo() {
+    const previous = undoStack.current.at(-1);
+    if (!previous) return;
+    void mutate((id) => repository.applyEdits(id, previous)).then((ok) => {
+      if (!ok) return;
+      undoStack.current.pop();
+      setUndoCount(undoStack.current.length);
+    });
+  }
+  const toggleSelected = (moment: Moment) => {
+    if (!edits) { void mutate((id) => repository.setMomentSelected(id, moment.id, !moment.selected)); return; }
+    edit((next) => {
+      const deselected = new Set(next.deselectedMomentIds);
+      if (moment.selected) deselected.add(moment.id);
+      else deselected.delete(moment.id);
+      // Deselecting a must-include moment would contradict itself, so it stops being one.
+      const mustIncludeMomentIds = moment.selected ? next.mustIncludeMomentIds.filter((id) => id !== moment.id) : next.mustIncludeMomentIds;
+      return { ...next, deselectedMomentIds: [...deselected], mustIncludeMomentIds };
+    });
+  };
+  const toggleHidden = (moment: Moment, shotId: string) => edit((next) => ({
+    ...next,
+    hiddenShotIds: moment.hidden ? next.hiddenShotIds.filter((id) => id !== shotId) : [...next.hiddenShotIds, shotId],
+  }));
+  const move = (chapterMomentIds: string[], momentId: string, delta: -1 | 1) => edit((next) => {
+    const order = [...chapterMomentIds];
+    const from = order.indexOf(momentId);
+    const to = from + delta;
+    if (to < 0 || to >= order.length) return next;
+    [order[from], order[to]] = [order[to]!, order[from]!];
+    // Keep every other chapter's order as it was; replace this chapter's run.
+    const rest = next.momentOrder.filter((id) => !chapterMomentIds.includes(id));
+    return { ...next, momentOrder: [...rest, ...order] };
+  });
+  async function openSwap(moment: Moment) {
+    setSwapping({ moment, shots: null });
+    try {
+      const shots = await repository.getAlternatives(plan!.planId, moment.id);
+      setSwapping((current) => (current?.moment.id === moment.id ? { moment, shots } : current));
+    } catch {
+      setSwapping((current) => (current?.moment.id === moment.id ? { moment, shots: [] } : current));
+    }
+  }
+  const swapTo = (moment: Moment, shotId: string) => {
+    setSwapping(null);
+    edit((next) => ({ ...next, photoSwaps: { ...next.photoSwaps, [moment.id]: shotId } }));
+  };
 
   function navigateToPickMemory() {
     void router.navigate("/pick-memory");
@@ -99,7 +203,53 @@ export default function ReviewMomentsScreen() {
           {/* Cards - 16px gap between each card section */}
           <View className="mt-4">
             {mutationError && <Text role="alert" className="mb-3 text-sm text-brand">{mutationError}</Text>}
-            {momentRows(plan.moments).map((row, index) => (
+            {edits && plan.chapters.length > 0 ? (
+              <>
+                <View className="mb-3 flex-row items-center justify-between">
+                  <Text className="font-sans text-xs leading-4 text-ink-soft">Tap ⋯ on a moment to swap, move or hide it.</Text>
+                  <Pressable role="button" aria-label="Undo" disabled={undoCount === 0 || updating} onPress={undo} className={`rounded-full px-3 py-1.5 ${undoCount === 0 ? "bg-surface-sunken opacity-50" : "bg-surface-pill"}`}>
+                    <Text className="font-sans-semibold text-xs leading-4 text-ink">Undo</Text>
+                  </Pressable>
+                </View>
+                {plan.chapters.map((chapter, chapterIndex) => (
+                  <View key={chapter.id} className={chapterIndex ? "mt-6" : ""}>
+                    <Text className="font-serif text-[20px] leading-[26px] text-ink">{chapter.title}</Text>
+                    {chapter.subtitle ? <Text className="mt-0.5 font-sans text-xs leading-4 text-ink-soft">{chapter.subtitle}</Text> : null}
+                    {chapter.momentIds.map((momentId, position) => {
+                      const moment = momentsById.get(momentId);
+                      if (!moment) return null;
+                      return (
+                        <ReviewMoment
+                          key={moment.id}
+                          moment={moment}
+                          first={position === 0}
+                          last={position === chapter.momentIds.length - 1}
+                          busy={updating}
+                          onToggleSelected={() => toggleSelected(moment)}
+                          onSwap={() => void openSwap(moment)}
+                          onMove={(delta) => move(chapter.momentIds, moment.id, delta)}
+                          onHide={moment.shotId ? () => toggleHidden(moment, moment.shotId!) : undefined}
+                        />
+                      );
+                    })}
+                  </View>
+                ))}
+                {(plan.leftOut?.length ?? 0) > 0 && (
+                  <View className="mt-6 rounded-[16px] bg-white p-4 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
+                    <Pressable role="button" aria-expanded={showLeftOut} aria-label={`Left out (${plan.leftOut!.length})`} onPress={() => setShowLeftOut((open) => !open)} className="flex-row items-center justify-between">
+                      <Text className="font-sans-semibold text-sm leading-5 text-ink">{`Left out (${plan.leftOut!.length})`}</Text>
+                      <Text className="font-sans text-xs leading-4 text-ink-soft">{showLeftOut ? "Hide" : "Show why"}</Text>
+                    </Pressable>
+                    {showLeftOut && plan.leftOut!.map((item) => (
+                      <View key={item.shotId} className="mt-3 flex-row items-center gap-3">
+                        {item.thumbnailUrl ? <Image source={{ uri: item.thumbnailUrl }} accessibilityIgnoresInvertColors style={{ width: 48, height: 48, borderRadius: 8 }} /> : <View style={{ width: 48, height: 48 }} className="rounded-[8px] bg-surface-sunken" />}
+                        <Text className="flex-1 font-sans text-xs leading-4 text-ink-soft">{item.reason}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </>
+            ) : momentRows(plan.moments).map((row, index) => (
               <View key={row.moments[0].id} className={`${index ? "mt-4" : ""} ${row.size === "half" ? "flex-row gap-2" : ""}`}>
                 {row.moments.map((moment) => (
                   <MomentCard
@@ -169,6 +319,32 @@ export default function ReviewMomentsScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {swapping && (
+        <View className="absolute inset-0 z-40 items-center justify-center px-5">
+          <Pressable role="button" aria-label="Close" onPress={() => setSwapping(null)} className="absolute inset-0 bg-black/40" />
+          <View role="dialog" aria-label="Swap photo" className="w-full max-w-[420px] rounded-[20px] bg-white p-5">
+            <Text className="font-serif text-[20px] leading-[26px] text-ink">Swap photo</Text>
+            <Text className="mt-1 font-sans text-xs leading-4 text-ink-soft">Other shots from the same moment.</Text>
+            {swapping.shots === null ? (
+              <Text className="mt-4 font-sans text-sm leading-5 text-ink-soft">Looking…</Text>
+            ) : swapping.shots.length === 0 ? (
+              <Text className="mt-4 font-sans text-sm leading-5 text-ink-soft">No other shots of this moment.</Text>
+            ) : (
+              <View className="mt-4 flex-row flex-wrap gap-2">
+                {swapping.shots.map((shot, index) => (
+                  <Pressable key={shot.shotId} role="button" aria-label={`Use other shot ${index + 1}`} onPress={() => swapTo(swapping.moment, shot.shotId)}>
+                    <Image source={{ uri: shot.thumbnailUrl }} accessibilityIgnoresInvertColors style={{ width: 96, height: 96, borderRadius: 12 }} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            <Pressable role="button" aria-label="Cancel" onPress={() => setSwapping(null)} className="mt-4 items-center py-2">
+              <Text className="font-sans-medium text-sm leading-5 text-ink-soft">Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* Bottom nav - absolute at bottom */}
       <BottomTabBar active="gallery" />

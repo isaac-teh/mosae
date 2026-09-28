@@ -154,7 +154,11 @@ app.use(
 );
 app.use(
   "/api/projects",
-  directingRouter({ db: adminDb, queuePlan }),
+  // The admin app has no default bucket, so the swap-photo alternatives must be
+  // signed against the configured one, exactly as the thumbnail route is.
+  directingRouter({ db: adminDb, queuePlan, thumbnails: {
+    signedReadUrl: (path, expiresAt) => firebaseThumbnailUrlStore(getStorage(getAdminApp()).bucket(config.storageBucket)).signedReadUrl(path, expiresAt),
+  } }),
 );
 app.use(
   "/api/projects",

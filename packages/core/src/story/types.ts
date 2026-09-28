@@ -10,7 +10,33 @@ export type Moment = {
   badge?: string;
   selected: boolean;
   favorite: boolean;
+  /** The moment's own shot (before any swap), for hiding it. Live plans only. */
+  shotId?: string;
+  /** Why the director chose this moment, shown on Review. */
+  reason?: string;
+  /** The user hid this moment's photo; it stays off until un-hidden. */
+  hidden?: boolean;
 };
+
+/**
+ * The user's Review edits, sent whole on every change. Undo re-sends the
+ * previous value, so there is no separate undo call.
+ */
+export type PlanEdits = {
+  deselectedMomentIds: string[];
+  mustIncludeMomentIds: string[];
+  hiddenShotIds: string[];
+  /** Moment ids in the user's order; only moves within a chapter are honoured. */
+  momentOrder: string[];
+  /** momentId → the shot shown instead. */
+  photoSwaps: Record<string, string>;
+};
+
+/** A photo kept out of the plan, and why. */
+export type LeftOutPhoto = { shotId: string; thumbnailUrl: string; reason: string };
+
+/** Another shot of the same moment the user can swap in. */
+export type AlternativeShot = { shotId: string; thumbnailUrl: string };
 
 export type Chapter = {
   id: string;
@@ -42,6 +68,10 @@ export type StoryPlan = {
   /** Fixture summaries can represent more captures than their sample cards. */
   totalMomentCount?: number;
   timelineOtherPhotoCount?: number;
+  /** Photos the director or the user kept out, with reasons. */
+  leftOut?: LeftOutPhoto[];
+  /** The edits behind this version, for the next edit and for undo. */
+  edits?: PlanEdits;
 };
 
 export type CreateOption = "film" | "album" | "share" | "apple-photos";

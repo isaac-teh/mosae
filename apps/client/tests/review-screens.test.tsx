@@ -376,3 +376,62 @@ describe("downstream story screens", () => {
     expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-poster")).toBe("poster-b-save");
   });
 });
+
+describe("live review edits", () => {
+  const emptyEdits = { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], momentOrder: [], photoSwaps: {} };
+  beforeEach(() => {
+    plan.moments = plan.moments.slice(0, 3).map((moment, i) => ({ ...moment, shotId: `shot-${i}`, reason: `Reason ${i}`, selected: true }));
+    plan.chapters = [
+      { id: "d1", dayLabel: "Day 1", title: "Day 1 · Siloso Beach", subtitle: "", badge: { label: "Chapter 1", tone: "neutral" }, dotColor: "#123456", momentIds: ["real-0", "real-1"] },
+      { id: "d2", dayLabel: "Day 2", title: "Day 2 · Singapore Zoo", subtitle: "", badge: { label: "Chapter 2", tone: "neutral" }, dotColor: "#123456", momentIds: ["real-2"] },
+    ];
+    plan.edits = structuredClone(emptyEdits);
+    plan.leftOut = [{ shotId: "shot-x", thumbnailUrl: "thumb:x", reason: "Left out: someone outside the family is the main subject." }];
+    let version = 0;
+    boundary.repository.applyEdits = vi.fn(async (_id: string, edits: typeof emptyEdits) => ({ ...structuredClone(plan), planId: `v${++version}`, edits: structuredClone(edits) }));
+    boundary.repository.getAlternatives = vi.fn(async () => [{ shotId: "shot-alt", thumbnailUrl: "thumb:alt" }]);
+  });
+
+  it("groups moments by day and shows why each was chosen", async () => {
+    await render(ReviewMomentsScreen);
+    expect(host.textContent).toContain("Day 1 · Siloso Beach");
+    expect(host.textContent).toContain("Day 2 · Singapore Zoo");
+    expect(host.textContent).toContain("Reason 0");
+    await click("Left out (1)");
+    expect(host.textContent).toContain("someone outside the family is the main subject");
+  });
+
+  it("moves a moment within its day, then undoes it", async () => {
+    await render(ReviewMomentsScreen);
+    await click("More for Memory 0");
+    await click("Move Memory 0 down");
+    expect(boundary.repository.applyEdits).toHaveBeenLastCalledWith("initial", { ...emptyEdits, momentOrder: ["real-1", "real-0"] });
+    await click("Undo");
+    expect(boundary.repository.applyEdits).toHaveBeenLastCalledWith("v1", emptyEdits);
+  });
+
+  it("can't move the first moment of a day up", async () => {
+    await render(ReviewMomentsScreen);
+    await click("More for Memory 0");
+    expect((host.querySelector('[aria-label="Move Memory 0 up"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("swaps a photo for another shot of the same moment", async () => {
+    await render(ReviewMomentsScreen);
+    await click("More for Memory 1");
+    await click("Swap photo for Memory 1");
+    expect(boundary.repository.getAlternatives).toHaveBeenCalledWith("initial", "real-1");
+    await click("Use other shot 1");
+    expect(boundary.repository.applyEdits).toHaveBeenLastCalledWith("initial", { ...emptyEdits, photoSwaps: { "real-1": "shot-alt" } });
+  });
+
+  it("hides a photo by its shot and deselects through edits so undo covers it", async () => {
+    await render(ReviewMomentsScreen);
+    await click("More for Memory 2");
+    await click("Hide Memory 2");
+    expect(boundary.repository.applyEdits).toHaveBeenLastCalledWith("initial", { ...emptyEdits, hiddenShotIds: ["shot-2"] });
+    await click("Select Memory 0");
+    expect(boundary.repository.applyEdits).toHaveBeenLastCalledWith("v1", { ...emptyEdits, hiddenShotIds: ["shot-2"], deselectedMomentIds: ["real-0"] });
+    expect(boundary.repository.setMomentSelected).not.toHaveBeenCalled();
+  });
+});

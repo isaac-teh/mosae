@@ -3,6 +3,7 @@ import type {
   Chapter,
   CreateOption,
   Direction,
+  PlanEdits,
   DirectionOptions,
   Film,
   Moment,
@@ -233,6 +234,25 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
       if (moment) moment.selected = selected;
       return structuredClone(planState);
     },
+
+    applyEdits: async (planId: string, edits: PlanEdits) => {
+      if (planId !== PLAN_ID) throw new Error(`Unknown plan ${planId}`);
+      const deselected = new Set(edits.deselectedMomentIds);
+      const rank = new Map(edits.momentOrder.map((id, index) => [id, index]));
+      planState = {
+        ...planState,
+        edits: structuredClone(edits),
+        moments: planState.moments.map((moment) => ({ ...moment, selected: !deselected.has(moment.id) })),
+        chapters: planState.chapters.map((chapter) => ({
+          ...chapter,
+          momentIds: [...chapter.momentIds].sort((a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity)),
+        })),
+      };
+      return delayed(() => structuredClone(planState));
+    },
+
+    // Fixture moments have no burst siblings to swap in.
+    getAlternatives: async () => [],
 
     setMomentFavorite: async (planId: string, momentId: string, favorite: boolean) => {
       if (planId !== PLAN_ID) throw new Error(`Unknown plan ${planId}`);

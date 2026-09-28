@@ -184,7 +184,12 @@ async function loadSources(deps: ApiStoryRepositoryDeps, projectId: string, prop
     const event = record(value, "event");
     return [stringField(event.id, "event id"), event] as const;
   }));
-  const neededShotIds = new Set(proposalRecord.moments.map((moment) => moment.shotId));
+  // Swapped-in photos and left-out photos are shown too, so they need thumbnails.
+  const neededShotIds = new Set([
+    ...proposalRecord.moments.map((moment) => moment.shotId),
+    ...Object.values(proposalRecord.constraints.photoSwaps ?? {}),
+    ...(proposalRecord.leftOut ?? []).map((item) => item.shotId),
+  ]);
   const shots = await Promise.all(shotValues.flatMap((value) => {
     const shot = record(value, "shot");
     const id = stringField(shot.id, "shot id");
@@ -285,6 +290,26 @@ export function createApiStoryRepository(
       ), "constraint response");
       const revised = record(response.proposal, "revised proposal") as ProposalProjectionSource;
       return render({ ...source, proposal: revised });
+    },
+    applyEdits: async (planId, edits) => {
+      const source = await loadSources(deps, projectId, planId);
+      const response = record(await deps.request(
+        "PATCH",
+        `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/constraints`,
+        edits,
+      ), "constraint response");
+      const revised = record(response.proposal, "revised proposal") as ProposalProjectionSource;
+      // A swap can bring in a shot the old version never showed; reload so it has a thumbnail.
+      const needsReload = Object.values(edits.photoSwaps).some((shotId) => !source.shots.some((shot) => shot.id === shotId));
+      return render(needsReload ? await loadSources(deps, projectId, revised.id) : { ...source, proposal: revised });
+    },
+    getAlternatives: async (planId, momentId) => {
+      const response = record(await deps.request(
+        "GET",
+        `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/moments/${encodeURIComponent(momentId)}/alternatives`,
+      ), "alternatives response");
+      const shots = Array.isArray(response.shots) ? response.shots as RecordData[] : [];
+      return shots.map((shot) => ({ shotId: stringField(shot.shotId, "shot id"), thumbnailUrl: typeof shot.thumbUrl === "string" ? shot.thumbUrl : "" }));
     },
     setMomentFavorite: async (planId, momentId, favorite) => {
       const source = await loadSources(deps, projectId, planId);

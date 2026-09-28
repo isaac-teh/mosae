@@ -1,4 +1,4 @@
-import type { StoryPlan } from "./types";
+import type { PlanEdits, StoryPlan } from "./types";
 
 export type ProposalProjectionSource = {
   id: string;
@@ -17,8 +17,23 @@ export type ProposalProjectionSource = {
   constraints: {
     deselectedMomentIds: string[];
     mustIncludeMomentIds?: string[];
+    hiddenShotIds?: string[];
+    momentOrder?: string[];
+    photoSwaps?: Record<string, string>;
   };
+  leftOut?: Array<{ shotId: string; reason: string }>;
 };
+
+/** The edits a proposal carries, with every optional list filled in. */
+export function editsOf(proposal: ProposalProjectionSource): PlanEdits {
+  return {
+    deselectedMomentIds: [...proposal.constraints.deselectedMomentIds],
+    mustIncludeMomentIds: [...(proposal.constraints.mustIncludeMomentIds ?? [])],
+    hiddenShotIds: [...(proposal.constraints.hiddenShotIds ?? [])],
+    momentOrder: [...(proposal.constraints.momentOrder ?? [])],
+    photoSwaps: { ...(proposal.constraints.photoSwaps ?? {}) },
+  };
+}
 
 export type ProjectProjectionSource = {
   id: string;
@@ -68,9 +83,18 @@ export function projectProposal(
   options: ProposalProjectionOptions = {},
 ): StoryPlan {
   const shotsById = new Map(shots.map((shot) => [shot.id, shot]));
-  const deselected = new Set(proposal.constraints.deselectedMomentIds);
+  const edits = editsOf(proposal);
+  const hidden = new Set(edits.hiddenShotIds);
+  // A hidden photo takes its moment out of the film until it is un-hidden.
+  const deselected = new Set([
+    ...edits.deselectedMomentIds,
+    ...proposal.moments.filter((moment) => hidden.has(moment.shotId)).map((moment) => moment.id),
+  ]);
   const moments = proposal.moments.map((moment) => {
-    const shot = shotsById.get(moment.shotId);
+    // A swap to a shot that is hidden or unknown falls back to the original, as compose does.
+    const swapped = edits.photoSwaps[moment.id];
+    const shownId = swapped && !hidden.has(swapped) && shotsById.has(swapped) ? swapped : moment.shotId;
+    const shot = shotsById.get(shownId);
     if (!shot) throw new Error(`Missing shot ${moment.shotId} for moment ${moment.id}`);
     return {
       id: moment.id,
@@ -82,6 +106,9 @@ export function projectProposal(
       durationLabel: moment.kind === "video" ? `${Math.round(momentSeconds(moment))} sec` : undefined,
       selected: !deselected.has(moment.id),
       favorite: false,
+      shotId: moment.shotId,
+      ...(moment.rationale ? { reason: moment.rationale } : {}),
+      ...(hidden.has(moment.shotId) ? { hidden: true } : {}),
     };
   });
 
@@ -96,7 +123,7 @@ export function projectProposal(
       subtitle: chapter.summary || `${chapter.momentIds.length} ${chapter.momentIds.length === 1 ? "moment" : "moments"}`,
       badge: { label: `Chapter ${index + 1}`, tone: "neutral" as const },
       dotColor: CHAPTER_COLORS[index % CHAPTER_COLORS.length],
-      momentIds: [...chapter.momentIds],
+      momentIds: orderWithin(chapter.momentIds, edits.momentOrder),
     };
   });
 
@@ -127,5 +154,18 @@ export function projectProposal(
     albumName: project.title ?? "Memories",
     suggestions: [],
     estimatedFilmLabel: durationLabel(selectedSeconds),
+    leftOut: (proposal.leftOut ?? []).map((item) => ({
+      shotId: item.shotId, reason: item.reason, thumbnailUrl: shotsById.get(item.shotId)?.thumbnailUrl ?? "",
+    })),
+    edits,
   };
+}
+
+/** A chapter's moments in the user's order; ones the order doesn't mention keep their place after it. */
+function orderWithin(momentIds: string[], order: string[]): string[] {
+  if (order.length === 0) return [...momentIds];
+  const rank = new Map(order.map((id, index) => [id, index]));
+  return momentIds.map((id, index) => ({ id, index }))
+    .sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity) || a.index - b.index)
+    .map(({ id }) => id);
 }

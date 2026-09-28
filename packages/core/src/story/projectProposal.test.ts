@@ -90,3 +90,40 @@ describe("projectProposal", () => {
     expect(projectProposal(proposal, project, shots, { totalShotCount: 12 }).otherPhotoCount).toBe(9);
   });
 });
+
+describe("projectProposal — Review edits", () => {
+  const base = {
+    id: "p1", title: "Trip",
+    moments: [
+      { id: "m1", shotId: "s1", kind: "photo" as const, title: "One", description: "", rationale: "Opens the day." },
+      { id: "m2", shotId: "s2", kind: "photo" as const, title: "Two", description: "", rationale: "" },
+      { id: "m3", shotId: "s3", kind: "photo" as const, title: "Three", description: "", rationale: "Best moment." },
+    ],
+    chapters: [{ id: "c1", title: "Day 1", summary: "", momentIds: ["m1", "m2"] }, { id: "c2", title: "Day 2", summary: "", momentIds: ["m3"] }],
+    constraints: { deselectedMomentIds: [] as string[] },
+  };
+  const shots = ["s1", "s2", "s3", "s9", "sx"].map((id) => ({ id, kind: "photo" as const, thumbnailUrl: `thumb:${id}`, eventLabel: "Day" }));
+  const project = { id: "proj" };
+
+  it("carries each moment's reason and fills in empty edits", () => {
+    const plan = projectProposal(base, project, shots);
+    expect(plan.moments.map((m) => m.reason)).toEqual(["Opens the day.", undefined, "Best moment."]);
+    expect(plan.edits).toEqual({ deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], momentOrder: [], photoSwaps: {} });
+  });
+
+  it("shows a swapped photo, ignores a swap to a hidden shot, and takes hidden photos out", () => {
+    const plan = projectProposal({ ...base, constraints: { deselectedMomentIds: [], hiddenShotIds: ["s9", "s2"], photoSwaps: { m1: "s9", m3: "sx" } } }, project, shots);
+    expect(plan.moments.map((m) => m.imageKey)).toEqual(["thumb:s1", "thumb:s2", "thumb:sx"]);
+    expect(plan.moments.map((m) => [m.selected, m.hidden ?? false])).toEqual([[true, false], [false, true], [true, false]]);
+  });
+
+  it("orders moments within their chapter only", () => {
+    const plan = projectProposal({ ...base, constraints: { deselectedMomentIds: [], momentOrder: ["m3", "m2", "m1"] } }, project, shots);
+    expect(plan.chapters.map((c) => c.momentIds)).toEqual([["m2", "m1"], ["m3"]]);
+  });
+
+  it("lists left-out photos with their thumbnails and reasons", () => {
+    const plan = projectProposal({ ...base, leftOut: [{ shotId: "sx", reason: "Hidden by you." }] }, project, shots);
+    expect(plan.leftOut).toEqual([{ shotId: "sx", thumbnailUrl: "thumb:sx", reason: "Hidden by you." }]);
+  });
+});
