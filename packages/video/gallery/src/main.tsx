@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Player } from "@remotion/player";
-import { Collage, COLLAGE_EFFECTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, createCollageSpec, PLACEHOLDER_PHOTOS, type CollageSpec } from "@mosae/video/collage";
+import { ALLOWED_COMBOS, Collage, COLLAGE_EFFECTS, COLLAGE_LAYOUTS, createCollageSpec, PLACEHOLDER_PHOTOS, type CollageSpec } from "@mosae/video/collage";
 import "./style.css";
 
 type Verdict = "keep" | "tweak" | "block";
@@ -10,13 +10,17 @@ type ReviewMap = Record<string, Review>;
 const KEY = "mosae-collage-review-v1";
 declare const __COLLAGE_TRIP_PHOTOS__: string[];
 const photos = __COLLAGE_TRIP_PHOTOS__.length ? __COLLAGE_TRIP_PHOTOS__ : PLACEHOLDER_PHOTOS;
-const combos = COLLAGE_LAYOUTS.flatMap((layout) => COLLAGE_MOTIONS.map((motion) => ({ layoutId: layout.id, motionId: motion.id })));
+const combos = ALLOWED_COMBOS;
 const keyOf = (layoutId: string, motionId: string) => `${layoutId}::${motionId}`;
 
 function App() {
   const [effectId, setEffectId] = useState<CollageSpec["effectId"]>(null);
   const [reviews, setReviews] = useState<ReviewMap>(() => {
-    try { return JSON.parse(localStorage.getItem(KEY) ?? "{}"); } catch { return {}; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}") as ReviewMap;
+      const allowedKeys = new Set(combos.map(({ layoutId, motionId }) => keyOf(layoutId, motionId)));
+      return Object.fromEntries(Object.entries(saved).filter(([id]) => allowedKeys.has(id)));
+    } catch { return {}; }
   });
   useEffect(() => { localStorage.setItem(KEY, JSON.stringify(reviews)); }, [reviews]);
   const specs = useMemo(() => combos.map(({ layoutId, motionId }) => ({
@@ -33,7 +37,7 @@ function App() {
   };
   return <main>
     <header><div><p className="eyebrow">MOSAE · CREATIVE REVIEW</p><h1>Collage building blocks</h1><p className="intro">Review original collage compositions and motion, staged with stock travel photography.</p></div><button className="export" onClick={exportJson}>Export JSON</button></header>
-    <div className="toolbar"><label>Effect <select value={effectId ?? "none"} onChange={(e) => setEffectId(e.target.value === "none" ? null : e.target.value as NonNullable<CollageSpec["effectId"]>)}><option value="none">None</option>{COLLAGE_EFFECTS.map((effect) => <option key={effect.id} value={effect.id}>{effect.label}</option>)}</select></label><span>{combos.length} combinations · {Object.keys(reviews).length} reviewed</span></div>
+    <div className="toolbar"><label>Effect <select value={effectId ?? "none"} onChange={(e) => setEffectId(e.target.value === "none" ? null : e.target.value as NonNullable<CollageSpec["effectId"]>)}><option value="none">None</option>{COLLAGE_EFFECTS.map((effect) => <option key={effect.id} value={effect.id}>{effect.label}</option>)}</select></label><span>{combos.length} approved combinations · {Object.keys(reviews).length} reviewed</span></div>
     <section className="gallery">{combos.map(({ layoutId, motionId }, index) => {
       const id = keyOf(layoutId, motionId); const current = reviews[id]; const spec = specs[index]; const label = `${COLLAGE_LAYOUTS.find((layout) => layout.id === layoutId)?.label} · ${motionId}`;
       return <article className={`card ${current?.verdict ?? ""}`} key={id}>

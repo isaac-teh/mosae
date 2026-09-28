@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 const packageRoot=resolve(dirname(fileURLToPath(import.meta.url)),"..");
@@ -13,6 +13,10 @@ const publicDir=fallback?galleryPublic:tripDir;
 const entry="src/collage/stills.tsx";
 mkdirSync(out,{recursive:true}); mkdirSync(resolve(out,"samples"),{recursive:true});
 function run(args){const r=spawnSync("npx",["remotion",...args],{cwd:packageRoot,stdio:"inherit",env:{...process.env,MOSAE_COLLAGE_STILL_PLACEHOLDERS:fallback?"1":"0"}});if(r.error)throw r.error;if(r.status!==0)process.exit(r.status??1);}
-for(const layout of ["photo-table","travel-journal","torn-paper","polaroid-garland","film-negative","postcard-stack","editorial-story","route-map","round-trip","souvenir-board","ticket-stubs","window-arches"]){run(["still",entry,`Collage-${layout}`,resolve(out,`${layout}.png`),"--frame=125",`--public-dir=${publicDir}`]);}
+const layouts=["photo-table","torn-paper","polaroid-garland","film-negative","postcard-stack","route-map"];
+const samples=[["photo-table","stack-deal"],["torn-paper","print-drop"],["polaroid-garland","focus-relay"],["film-negative","page-turn"],["postcard-stack","stack-deal"],["route-map","stack-deal"]];
+for(const file of readdirSync(out))if(file.endsWith(".png")&&file!=="contact-sheet.png"&&!layouts.includes(file.slice(0,-4)))rmSync(resolve(out,file),{force:true});
+for(const file of readdirSync(resolve(out,"samples")))if(file.endsWith(".mp4"))rmSync(resolve(out,"samples",file),{force:true});
+for(const layout of layouts){run(["still",entry,`Collage-${layout}`,resolve(out,`${layout}.png`),"--frame=125",`--public-dir=${publicDir}`]);}
 run(["still",entry,"CollageContactSheet",resolve(out,"contact-sheet.png"),"--frame=125",`--public-dir=${publicDir}`]);
-for(const [id,name] of [["SamplePhotoTable","photo-table-print-drop"],["SampleJournal","travel-journal-page-turn"],["SampleFilm","film-negative-parallax-glide"]])run(["render",entry,id,resolve(out,"samples",`${name}.mp4`),"--codec=h264",`--public-dir=${publicDir}`]);
+for(const [layout,motion] of samples)run(["render",entry,`Sample-${layout}`,resolve(out,"samples",`${layout}-${motion}.mp4`),"--codec=h264",`--public-dir=${publicDir}`]);

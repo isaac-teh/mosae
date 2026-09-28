@@ -8,32 +8,22 @@ const WOOD = ["radial-gradient(75% 55% at 32% 26%,rgba(255,238,205,.2),transpare
 const PAPER = ["radial-gradient(ellipse at 16% 10%,rgba(255,255,255,.68),transparent 56%)", "repeating-linear-gradient(0deg,rgba(82,64,42,.035) 0 1px,transparent 1px 5px)", "#eee3cc"].join(",");
 const layouts = [
   { id:"photo-table", bg:WOOD, pos:[[.33,.25,.43],[.67,.25,.42],[.34,.51,.41],[.68,.51,.40],[.34,.77,.41],[.68,.77,.4]] },
-  { id:"travel-journal", bg:`linear-gradient(90deg,#a88963 0 49.4%,#57432f 49.5%,#b9a27d 50.4%,#e5dbc6 50.5%),${PAPER}`, pos:[[.5,.27,.70],[.30,.53,.43],[.71,.56,.42],[.50,.82,.58]] },
-  { id:"torn-paper", bg:`radial-gradient(ellipse at 80% 18%,#efbb7c 0 12%,transparent 13%),${PAPER}`, pos:[[.34,.28,.49],[.69,.43,.48],[.34,.68,.50],[.68,.79,.44],[.52,.51,.42]] },
-  { id:"polaroid-garland", bg:`radial-gradient(ellipse at 50% 20%,#f4d7a6,transparent 65%),linear-gradient(145deg,#b7c7bf,#e7d5b8 55%,#d49c76)`, pos:[[.25,.32,.42],[.75,.39,.41],[.32,.69,.43],[.72,.72,.42],[.50,.53,.4]] },
-  { id:"film-negative", bg:"linear-gradient(135deg,#16232c,#344653 50%,#18252d)", pos:[[.50,.19,.76],[.50,.39,.76],[.50,.59,.76],[.50,.79,.76],[.50,.95,.76]] },
-  { id:"postcard-stack", bg:`radial-gradient(circle at 12% 8%,rgba(92,75,55,.09) 0 1px,transparent 2px),${PAPER}`, pos:[[.48,.23,.70],[.39,.51,.65],[.62,.57,.63],[.49,.79,.62],[.50,.48,.58]] },
-  { id:"editorial-story", bg:"linear-gradient(150deg,#f5f1e8,#e2d8c8)", pos:[[.50,.48,.82],[.28,.77,.43],[.72,.77,.42],[.50,.91,.52]] },
+  { id:"torn-paper", bg:PAPER, pos:[[.34,.28,.49],[.69,.43,.48],[.34,.68,.50],[.68,.79,.44],[.52,.51,.42]] },
+  { id:"polaroid-garland", bg:`radial-gradient(ellipse at 50% 20%,#f4d7a6,transparent 65%),linear-gradient(145deg,#b7c7bf,#e7d5b8 55%,#d49c76)`, pos:[[.32,.28,.52],[.68,.35,.52],[.32,.64,.53],[.68,.69,.52],[.50,.51,.51]] },
+  { id:"film-negative", bg:"linear-gradient(135deg,#16232c,#344653 50%,#18252d)", pos:[[.50,.17,.76],[.50,.35,.76],[.50,.53,.76],[.50,.71,.76],[.50,.85,.76]] },
+  { id:"postcard-stack", bg:`radial-gradient(circle at 12% 8%,rgba(92,75,55,.09) 0 1px,transparent 2px),${PAPER}`, pos:[[.48,.20,.68],[.39,.40,.64],[.62,.51,.62],[.49,.67,.61],[.50,.57,.58]] },
   { id:"route-map", bg:`repeating-linear-gradient(28deg,transparent 0 52px,rgba(94,121,106,.12) 53px 55px),repeating-linear-gradient(112deg,transparent 0 78px,rgba(94,121,106,.10) 79px 81px),#e4e7d4`, pos:[[.28,.28,.47],[.72,.43,.47],[.33,.66,.46],[.72,.78,.42],[.52,.52,.41]] },
-  { id:"round-trip", bg:`radial-gradient(circle at 50% 50%,#f7ead5 0 48%,transparent 49%),linear-gradient(145deg,#96a99d,#e1c99f)`, pos:[[.50,.23,.44],[.76,.49,.40],[.60,.76,.4],[.27,.67,.40],[.24,.36,.38]] },
-  { id:"souvenir-board", bg:`radial-gradient(circle at 50% 50%,rgba(170,99,65,.18),transparent 58%),${PAPER}`, pos:[[.32,.26,.48],[.68,.34,.43],[.32,.60,.48],[.69,.70,.42],[.50,.48,.40]] },
-  { id:"ticket-stubs", bg:"linear-gradient(135deg,#324d56,#60796f 55%,#b6a989)", pos:[[.28,.28,.44],[.72,.39,.43],[.31,.65,.44],[.71,.76,.43],[.50,.52,.40]] },
-  { id:"window-arches", bg:"linear-gradient(155deg,#b6c6bb,#d9c6a4 52%,#a85f43)", pos:[[.28,.35,.43],[.72,.35,.43],[.28,.72,.43],[.72,.72,.43]] },
 ] as const;
 type LayoutId = typeof layouts[number]["id"];
 const getLayout = (id: LayoutId) => layouts.find((item) => item.id === id)!;
 const sourceFor = (slot: CollageSlot, sources?: Record<string,string>) => slot.src ?? (slot.shotId ? sources?.[slot.shotId] : undefined);
-const CIRCLES = new Set(["round-trip"]);
 const placement = (id: LayoutId, index: number, count: number, seed: string, wide: boolean): React.CSSProperties => {
   const layout = getLayout(id); const raw = layout.pos[index % layout.pos.length];
-  const jitter = id === "photo-table" || id === "postcard-stack" || id === "souvenir-board" || id === "torn-paper" || id === "polaroid-garland";
+  const jitter = id === "photo-table" || id === "postcard-stack" || id === "torn-paper" || id === "polaroid-garland";
   const x = (raw[0] + (jitter ? (random(`${seed}:${index}:x`)-.5)*.045 : 0)) * (wide ? 1.65 : 1);
   const y = raw[1] + (jitter ? (random(`${seed}:${index}:y`)-.5)*.035 : 0);
   const w = raw[2] * (wide ? .74 : 1);
-  let h = w * (id === "film-negative" ? .91 : id === "editorial-story" && index===0 ? .78 : .77) * (wide ? .73 : .56);
-  if(id === "travel-journal" && index===0) h=.13;
-  if(id === "editorial-story" && index===0) h=.39;
-  if(id === "ticket-stubs") h=w*.54*(wide?.73:.56);
+  const h = w * (id === "film-negative" ? .42 : .77) * (wide ? .73 : .56);
   return { left:`${x*100}%`, top:`${y*100}%`, width:`${w*100}%`, height:`${h*100}%`, marginLeft:`-${w*50}%`, marginTop:`-${h*50}%` };
 };
 const Cell: React.FC<{spec:CollageSpec;slot:CollageSlot;index:number;sources?:Record<string,string>}> = ({spec,slot,index,sources}) => {
@@ -45,41 +35,38 @@ const Cell: React.FC<{spec:CollageSpec;slot:CollageSlot;index:number;sources?:Re
   let transform=`rotate(${rotate}deg) scale(1)`; let opacity=1;
   switch(spec.motionId){
     case "print-drop": case "stack-deal": case "tape-slap": transform=`translateY(${(1-eased)*-height*.18}px) rotate(${rotate+(1-eased)*-9}deg) scale(${.88+eased*.12})`; opacity=interpolate(eased,[0,.24],[0,1],{extrapolateRight:"clamp"});break;
-    case "overhead-settle": transform=`translateY(${(1-eased)*height*.11}px) rotate(${rotate+(1-eased)*10}deg) scale(${1+(1-eased)*.13})`;break;
     case "page-turn": transform=`perspective(1000px) rotateY(${(1-eased)*-78}deg) rotate(${rotate}deg)`;opacity=interpolate(eased,[0,.18],[0,1],{extrapolateRight:"clamp"});break;
     case "crash-zoom": {const hit=interpolate(progress,[0,.16,.23,1],[.55,1.10,.98,1]);transform=`scale(${hit}) rotate(${rotate*(1-progress)}deg)`;break;}
     case "focus-relay": {const focus=interpolate(progress,[Math.max(0,index/spec.slots.length-.16),Math.min(1,index/spec.slots.length+.2),1],[.91,1.15,1]);transform=`scale(${focus})`;break;}
-    case "parallax-glide": transform=`translate(${(progress-.5)*(index%2?12:-10)}px,${(progress-.5)*(index%2?-8:7)}px) rotate(${rotate}deg) scale(1.04)`;break;
   }
   const src=sourceFor(slot,sources); const id=spec.layoutId as LayoutId;
-  const oldPrint=["photo-table","postcard-stack","souvenir-board","polaroid-garland","torn-paper"].includes(id);
-  const frameColor=id==="ticket-stubs"?"#f6e6bf":id==="film-negative"?"#10171a":"#fffdf7";
-  const mask=id==="round-trip"?"50%":id==="window-arches"?(index%2?"48% 48% 0 0 / 32% 32% 0 0":"45% 45% 0 0 / 30% 30% 0 0"):id==="torn-paper"?"polygon(0 2%,5% 0,9% 2%,14% 0,19% 2%,23% 0,29% 2%,34% 0,40% 2%,46% 0,52% 2%,59% 0,65% 2%,72% 0,79% 2%,86% 0,93% 2%,100% 0,98% 100%,92% 98%,86% 100%,80% 98%,74% 100%,68% 98%,61% 100%,54% 98%,47% 100%,40% 98%,33% 100%,26% 98%,19% 100%,12% 98%,6% 100%,0 98%)":"none";
-  const photoPad=oldPrint?"3.5% 3.5% 15%":id==="film-negative"?"8% 8%":"2.2%";
+  const print=id==="photo-table"||id==="postcard-stack"||id==="polaroid-garland"||id==="torn-paper";
+  const frameColor=id==="film-negative"?"#10171a":"#fffdf7";
+  const mask=id==="torn-paper"?"polygon(0 2%,5% 0,9% 2%,14% 0,19% 2%,23% 0,29% 2%,34% 0,40% 2%,46% 0,52% 2%,59% 0,65% 2%,72% 0,79% 2%,86% 0,93% 2%,100% 0,98% 100%,92% 98%,86% 100%,80% 98%,74% 100%,68% 98%,61% 100%,54% 98%,47% 100%,40% 98%,33% 100%,26% 98%,19% 100%,12% 98%,6% 100%,0 98%)":"none";
+  const photoPad=print?"3.5% 3.5% 15%":id==="film-negative"?"8% 8%":"2.2%";
   return <div style={{position:"absolute",boxSizing:"border-box",...placement(id,index,spec.slots.length,seed,width>height),zIndex:10+Math.floor(random(`${seed}:${index}:z`)*30),transform,opacity,filter:"drop-shadow(3px 8px 8px rgba(20,22,24,.34))"}}>
-    <div style={{position:"absolute",inset:0,background:frameColor,padding:photoPad,boxSizing:"border-box",overflow:"hidden",border:id==="film-negative"?"2px solid #d7ca9f":"1px solid rgba(65,54,40,.12)",boxShadow:oldPrint?"2px 4px 8px rgba(21,16,12,.26), 9px 18px 25px rgba(18,12,7,.2)":"0 5px 18px rgba(16,22,24,.2)",clipPath:mask,borderRadius:CIRCLES.has(id)?"50%":id==="window-arches"?"45% 45% 2px 2px":"0"}}>
-      {src?<Img src={src} style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:slot.crop?`${slot.crop.x*100}% ${slot.crop.y*100}%`:"center",display:"block",borderRadius:CIRCLES.has(id)?"50%":id==="window-arches"?"42% 42% 0 0":"0"}}/>:<div style={{height:"100%",background:"linear-gradient(145deg,#a5b8b1,#c97756 52%,#304858)"}} />}
+    <div style={{position:"absolute",inset:0,background:frameColor,padding:photoPad,boxSizing:"border-box",overflow:"hidden",border:id==="film-negative"?"2px solid #d7ca9f":"1px solid rgba(65,54,40,.12)",boxShadow:print?"2px 4px 8px rgba(21,16,12,.26), 9px 18px 25px rgba(18,12,7,.2)":"0 5px 18px rgba(16,22,24,.2)",clipPath:mask}}>
+      {src?<Img src={src} style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:slot.crop?`${slot.crop.x*100}% ${slot.crop.y*100}%`:"center",display:"block"}}/>:<div style={{height:"100%",background:"linear-gradient(145deg,#a5b8b1,#c97756 52%,#304858)"}} />}
       {id==="film-negative"&&<div style={{position:"absolute",inset:"0 0 auto",height:"6%",background:"repeating-linear-gradient(90deg,#e9debd 0 8px,transparent 8px 16px)"}}/>}
     </div>
     {spec.motionId==="tape-slap"&&(index===0||index%2===0)&&<div style={{position:"absolute",zIndex:2,width:"36%",height:"11%",top:"-4%",left:"32%",transform:`rotate(${rotate*.45}deg)`,background:"linear-gradient(100deg,rgba(214,191,143,.84),rgba(246,230,188,.88),rgba(205,180,131,.86))",boxShadow:"0 2px 4px rgba(30,20,10,.16)"}}/>}
   </div>;
 };
 const Caption: React.FC<{spec:CollageSpec}> = ({spec}) => {
-  const title=spec.caption?.headline??spec.caption?.place??"POSTCARDS FROM ELSEWHERE";
   const id=spec.layoutId;
-  if(id==="editorial-story") return <div style={{position:"absolute",zIndex:70,top:"5%",left:"8%",right:"8%",color:"#263b48",textAlign:"left"}}><div style={{font:"600 11px Figtree,sans-serif",letterSpacing:".2em",textTransform:"uppercase"}}>{spec.caption?.date??"FIELD NOTES · 2026"}</div><div style={{font:"600 31px Literata,serif",lineHeight:1.04,marginTop:8}}>{title}</div><div style={{font:"400 12px Figtree,sans-serif",marginTop:7,letterSpacing:".08em"}}>{spec.caption?.subline??"A small collection of places"}</div></div>;
-  if(id==="travel-journal") return <div style={{position:"absolute",zIndex:60,top:"8%",left:"12%",width:"76%",textAlign:"center",color:"#3f392d",font:"500 11px Figtree,sans-serif",letterSpacing:".14em"}}><span style={{font:"600 22px Literata,serif",letterSpacing:0}}>{title}</span><br/>{spec.caption?.date??"NOTES FROM THE ROAD"}</div>;
-  return <div style={{position:"absolute",zIndex:1,bottom:"3.5%",left:"8%",color:id==="film-negative"?"#f0e2bd":"#304858",font:"600 12px Figtree,sans-serif",letterSpacing:".16em",textTransform:"uppercase"}}>{spec.caption?.place??title}<span style={{opacity:.7,marginLeft:9}}>{spec.caption?.date??"26° N · 139° E"}</span></div>;
+  const place=spec.caption?.place??"KYOTO · JAPAN";
+  const date=spec.caption?.date??"AUTUMN 2026";
+  const footerColor=id==="film-negative"?"#f5e8c9":"#203b48";
+  const footerSurface=id==="film-negative"?"rgba(20,40,58,.92)":"rgba(250,250,247,.94)";
+  return <div style={{position:"absolute",zIndex:80,bottom:"2.5%",left:"11%",width:"78%",boxSizing:"border-box",padding:"1.4% 3% 1.1%",borderRadius:3,background:footerSurface,color:footerColor,textAlign:"center",boxShadow:"0 2px 9px rgba(18,26,30,.18)",fontFamily:"Figtree,sans-serif",fontSize:12,fontWeight:600,lineHeight:1.25,letterSpacing:".13em",textTransform:"uppercase"}}>
+    <div>{place}</div><div style={{marginTop:2,fontSize:10,fontWeight:400,letterSpacing:".17em",opacity:.84}}>{date}</div>
+  </div>;
 };
 const Decoration: React.FC<{id:LayoutId}> = ({id}) => {
-  if(id==="travel-journal") return <div style={{position:"absolute",zIndex:1,top:0,bottom:0,left:"49.7%",width:4,background:"linear-gradient(90deg,rgba(40,30,20,.2),rgba(255,255,255,.45),rgba(30,20,10,.16))"}}/>;
   if(id==="route-map") return <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.46}} viewBox="0 0 100 180" preserveAspectRatio="none"><path d="M15 14 C75 26 22 54 75 67 S23 99 66 122 S28 149 81 166" fill="none" stroke="#c15d42" strokeWidth=".8" strokeDasharray="2 1.5"/><circle cx="15" cy="14" r="2" fill="#c15d42"/><circle cx="81" cy="166" r="2.5" fill="#c15d42"/></svg>;
   if(id==="polaroid-garland") return <svg style={{position:"absolute",inset:"12% 0 auto",width:"100%",height:"30%"}} viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0 7 Q50 26 100 6" fill="none" stroke="#f3e7cf" strokeWidth=".8"/><path d="M0 8 Q50 27 100 7" fill="none" stroke="rgba(30,35,30,.25)" strokeWidth=".3"/></svg>;
   if(id==="film-negative") return <div style={{position:"absolute",zIndex:50,inset:"0 0 auto",height:"3.6%",background:"repeating-linear-gradient(90deg,#ede1c5 0 10px,transparent 10px 20px)"}}/>;
   if(id==="postcard-stack") return <div style={{position:"absolute",zIndex:0,right:"8%",top:"7%",width:"18%",height:"10%",border:"1px solid rgba(174,82,60,.55)",color:"#a74e3d",font:"600 8px Figtree,sans-serif",display:"grid",placeItems:"center",transform:"rotate(9deg)"}}>MOSAE · POST</div>;
-  if(id==="souvenir-board") return <div style={{position:"absolute",inset:"3%",border:"1px solid rgba(151,100,62,.35)",borderRadius:"3px",boxShadow:"inset 0 0 0 5px rgba(255,255,255,.15)"}}/>;
-  if(id==="ticket-stubs") return <div style={{position:"absolute",inset:"0 0 auto",height:"100%",opacity:.13,background:"repeating-linear-gradient(0deg,transparent 0 31px,#fff 32px 33px)"}}/>;
-  if(id==="window-arches") return <div style={{position:"absolute",inset:"4%",border:"1px solid rgba(255,255,255,.52)",borderRadius:"48% 48% 4px 4px"}}/>;
   return null;
 };
 const Effect: React.FC<{id:NonNullable<CollageSpec["effectId"]>;seed:string}> = ({id,seed}) => {
@@ -91,7 +78,6 @@ const Effect: React.FC<{id:NonNullable<CollageSpec["effectId"]>;seed:string}> = 
 export const Collage: React.FC<CollageProps> = ({spec,sources}) => {
   const {width,height}=useVideoConfig(); const id=spec.layoutId as LayoutId;
   return <AbsoluteFill style={{background:getLayout(id).bg,overflow:"hidden",fontFamily:"Figtree,sans-serif"}}>
-    {id==="editorial-story"&&<div style={{position:"absolute",inset:"3%",border:"1px solid rgba(61,71,68,.2)"}}/>}
     <Decoration id={id}/>
     {spec.slots.map((slot,index)=><Cell key={slot.slotId} spec={spec} slot={slot} index={index} sources={sources}/>)}
     <Caption spec={spec}/>

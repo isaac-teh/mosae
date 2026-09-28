@@ -1,4 +1,6 @@
 import React from "react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +20,7 @@ vi.mock("remotion", () => ({
 }));
 
 import { Collage } from "./Collage";
+import { ALLOWED_COMBOS, ALLOWED_COMBO_KEYS } from "./allowedCombos";
 import { CollageSpecSchema, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, COLLAGE_EFFECTS, slotCountForLayout } from "./schema";
 import { createCollageSpec } from "./fixtures";
 
@@ -41,15 +44,31 @@ describe("CollageSpec", () => {
       expect(CollageSpecSchema.safeParse({ ...valid, slots: [...atMaximum, { slotId: "too-many", src: "/extra.svg" }] }).success, layout.id).toBe(false);
     }
   });
+
+  it("matches the committed review JSON and rejects every unapproved layout-motion pair", () => {
+    const reviewPath = resolve(process.cwd(), "../../docs/design/collage-review.json");
+    const review = JSON.parse(readFileSync(reviewPath, "utf8")) as {
+      combos: { layoutId: string; motionId: string; verdict: string }[];
+    };
+    const reviewedKeeps = review.combos.filter((combo) => combo.verdict === "keep")
+      .map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort();
+    expect(ALLOWED_COMBOS.map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort()).toEqual(reviewedKeeps);
+
+    for (const layout of COLLAGE_LAYOUTS) for (const motion of COLLAGE_MOTIONS) {
+      const spec = createCollageSpec(layout.id, { motionId: motion.id });
+      const shouldBeAllowed = ALLOWED_COMBO_KEYS.has(`${layout.id}::${motion.id}`);
+      expect(CollageSpecSchema.safeParse(spec).success, `${layout.id}/${motion.id}`).toBe(shouldBeAllowed);
+    }
+  });
 });
 
 describe("Collage", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("renders every layout, motion and effect combination to markup", () => {
-    for (const layout of COLLAGE_LAYOUTS) for (const motion of COLLAGE_MOTIONS) for (const effect of COLLAGE_EFFECTS) {
-      const spec = { ...createCollageSpec(layout.id), motionId: motion.id, effectId: effect.id };
-      expect(() => renderToStaticMarkup(<Collage spec={spec} />), `${layout.id}/${motion.id}/${effect.id}`).not.toThrow();
+  it("renders every approved combination and effect to markup", () => {
+    for (const combo of ALLOWED_COMBOS) for (const effect of COLLAGE_EFFECTS) {
+      const spec = { ...createCollageSpec(combo.layoutId), motionId: combo.motionId, effectId: effect.id };
+      expect(() => renderToStaticMarkup(<Collage spec={spec} />), `${combo.layoutId}/${combo.motionId}/${effect.id}`).not.toThrow();
     }
   });
 
