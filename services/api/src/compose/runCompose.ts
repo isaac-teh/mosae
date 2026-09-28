@@ -245,6 +245,7 @@ export async function runCompose(
   const clipPlans: ClipPlan[] = fittedClips.map((clip, index) => ({
     id: `clip-${index + 1}`,
     source: { shotId: shotIdByMoment.get(clip.itemId) },
+    momentId: clip.itemId,
     durationSec: clip.holdSec ?? (clip.sourceOutSec! - (clip.sourceInSec ?? 0)),
     transitionIn: transitionFor(clip.transition),
     strength: 0, // deferred: fitDuration does not yet rank by strength (I7)

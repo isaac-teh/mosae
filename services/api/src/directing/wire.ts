@@ -15,7 +15,7 @@ import { z } from "zod";
 import { estimateUsd, MODELS, type GenerateDeps } from "../gemini/client.js";
 import { createEmbedClient, createGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
 import { ensureCast } from "../cast/ensureCast.js";
-import { daySummary, tripDays } from "./days.js";
+import { daySummary, dayTitles, tripDays } from "./days.js";
 import { leaveOutShots } from "../cast/leaveOut.js";
 import type { PhotoAnalysis } from "../domain/understanding.js";
 
@@ -162,6 +162,12 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
           (constraints as typeof constraints & { hiddenShotIds?: string[] }).hiddenShotIds ?? [],
         );
         const autoExcluded = leftOut.map((item) => item.shotId);
+        // Only the photos the planner is actually given, so the day list and
+        // the working set name the same shots.
+        const days = tripDays(shots
+          .filter((shot) => !autoExcluded.includes(shot.id) && !constraints.excludedShotIds.includes(shot.id))
+          .map((shot) => ({ id: shot.id, day: shot.day ?? null, localTime: shot.localTime, place: shot.place ?? null })));
+        const hasDates = days.some((day) => day.date !== null);
         const job: PlanJob = {
           id: task.jobId, projectId: task.projectId,
           proposalId: acquired.proposalId, storyIntentId: acquired.storyIntentId,
@@ -169,9 +175,9 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
           ...acquired.pinnedInputs, constraints, shots, castSummary: ensured.summary ?? undefined,
           // Only the photos the planner is actually given, so the day list and
           // the working set name the same shots.
-          daySummary: daySummary(tripDays(shots
-            .filter((shot) => !autoExcluded.includes(shot.id) && !constraints.excludedShotIds.includes(shot.id))
-            .map((shot) => ({ id: shot.id, day: shot.day ?? null, localTime: shot.localTime, place: shot.place ?? null })))),
+          // Without any capture dates the planner chooses its own chapters, as before v2.
+          daySummary: hasDates ? daySummary(days) : undefined,
+          dayTitles: hasDates ? dayTitles(days) : undefined,
           parentProposal: parent?.exists ? parent.data() as StoryProposal : null,
           leftOut,
           autoExcludedShotIds: autoExcluded,

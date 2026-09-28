@@ -35,6 +35,8 @@ export type PlanJob = {
   workingSetCap?: number;
   castSummary?: string;
   daySummary?: string;
+  /** shotId → day title, so chapters are named by day in code. */
+  dayTitles?: Map<string, string>;
   leftOut?: { shotId: string; reason: string }[];
   autoExcludedShotIds?: string[];
 };
@@ -322,6 +324,7 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
           constraints: job.constraints,
           parentProposal: job.parentProposal,
           leftOut: job.leftOut,
+          dayTitles: job.dayTitles,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

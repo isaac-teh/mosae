@@ -246,3 +246,20 @@ describe("frame boundaries", () => {
     expect(Number.isInteger(Math.round(result.durationSec * fps * 1e6) / 1e6)).toBe(true);
   });
 });
+
+describe("reflow chapter starts with a partial cut", () => {
+  it("starts each chapter at its first kept clip and drops chapters with none", () => {
+    const plan = (id: string, momentId: string) => ({ id, momentId, source: {}, durationSec: 3, transitionIn: { kind: "cut" as const, durationSec: 0 }, strength: 0, minHoldSec: 0, maxHoldSec: Infinity });
+    const result = reflow({
+      fps: 30,
+      plans: [plan("c1", "m1"), plan("c2", "m4"), plan("c3", "m6")],
+      chapters: [
+        { id: "d1", title: "Day 1", summary: "", momentIds: ["m1", "m2", "m3"] },
+        { id: "d2", title: "Day 2", summary: "", momentIds: ["m4", "m5"] },
+        { id: "d3", title: "Day 3", summary: "", momentIds: ["m6"] },
+        { id: "d4", title: "Day 4", summary: "", momentIds: ["m7"] },
+      ],
+    });
+    expect(result.chapters.map((c) => [c.title, c.startSec])).toEqual([["Day 1", 0], ["Day 2", 3], ["Day 3", 6]]);
+  });
+});

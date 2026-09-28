@@ -17,6 +17,8 @@ export interface ClipPlan {
   maxHoldSec: number;
   crop?: { x: number; y: number; w: number; h: number };
   motion?: { kind: "slow-zoom"; from: number; to: number };
+  /** The proposal moment this clip shows, so chapter starts find their clip. */
+  momentId?: string;
 }
 
 /**
@@ -109,10 +111,10 @@ export function reflow(options: ReflowOptions): ReflowResult {
   return {
     clips,
     durationSec,
-    chapters: chapters.map((ch, i) => ({
-      ...ch,
-      startSec: chapterStarts[i] ?? quantize(0, fps),
-    })),
+    // A chapter none of whose moments made the cut has no start; leave it out.
+    chapters: chapters
+      .map((ch, i) => ({ ...ch, startSec: chapterStarts[i] ?? quantize(0, fps) }))
+      .filter((ch) => !Number.isNaN(ch.startSec)),
   };
 }
 
@@ -129,6 +131,14 @@ function computeChapterStarts(
   // In practice, each clip plan corresponds to one moment in the proposal.
   // The order of plans matches the chapter structure from buildCandidates.
   const momentToClipIndex = new Map<string, number>();
+  // Clips that name their moment are mapped directly: compose keeps only some
+  // moments, so the sequential fallback below would point chapters at the
+  // wrong clips (a later chapter could start at 0).
+  clips.forEach((clip, index) => { if (clip.momentId && !momentToClipIndex.has(clip.momentId)) momentToClipIndex.set(clip.momentId, index); });
+  if (momentToClipIndex.size > 0) return chapters.map((chapter) => {
+    const indices = chapter.momentIds.map((id) => momentToClipIndex.get(id)).filter((index): index is number => index !== undefined);
+    return indices.length ? Math.min(...indices.map((index) => clips[index]!.startSec)) : Number.NaN;
+  });
 
   // We need to know which moment each clip belongs to.
   // For now, assume clips are ordered by chapter and within-chapter by moment order.

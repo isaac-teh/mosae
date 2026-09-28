@@ -70,3 +70,10 @@ describe("assembleProposal", () => {
     expect(proposal.leftOut).toEqual([{ shotId: "shot-x", reason: "Hidden by you." }]);
   });
 });
+
+describe("assembleProposal — day chapter titles", () => {
+  it("names a chapter after the day most of its photos were taken on", () => {
+    const proposal = assembleProposal(body, { ...context, dayTitles: new Map(body.moments.map((m: { shotId: string }) => [m.shotId, "Day 1 · Siloso Beach"])) });
+    expect(proposal.chapters.every((c) => c.title === "Day 1 · Siloso Beach")).toBe(true);
+  });
+});

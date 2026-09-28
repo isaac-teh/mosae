@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daySummary, tripDays } from "./days.js";
+import { daySummary, dayTitles, tripDays } from "./days.js";
 
 const s = (id: string, localTime: string | null, place: string | null) => ({ id, day: localTime?.slice(0, 10) ?? null, localTime, place });
 
@@ -35,5 +35,16 @@ describe("daySummary without undated photos", () => {
   it("never mentions undated photos, so the planner doesn't invent that chapter", () => {
     const text = daySummary(tripDays([{ id: "a", day: "2026-06-01", localTime: "2026-06-01T09:00:00", place: null }]));
     expect(text.toLowerCase()).not.toContain("undated");
+  });
+});
+
+describe("dayTitles", () => {
+  it("names each shot's day for chapter titles", () => {
+    const titles = dayTitles(tripDays([
+      { id: "a", day: "2026-06-01", localTime: "2026-06-01T09:00:00", place: "Siloso Beach" },
+      { id: "b", day: "2026-06-02", localTime: "2026-06-02T09:00:00", place: null },
+      { id: "u", day: null, localTime: null, place: null },
+    ]));
+    expect([...titles]).toEqual([["a", "Day 1 · Siloso Beach"], ["b", "Day 2"], ["u", "Undated"]]);
   });
 });

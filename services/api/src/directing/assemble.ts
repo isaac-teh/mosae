@@ -30,6 +30,8 @@ export type ProposalAssemblyContext = {
   /** Persisted parent moments used to translate carried constraint ids. */
   parentProposal?: Pick<StoryProposal, "moments"> | null;
   leftOut?: { shotId: string; reason: string }[];
+  /** shotId → its day's title. When given, chapters are named by day in code. */
+  dayTitles?: Map<string, string>;
 };
 
 function momentId(proposalId: string, index: number): string {
@@ -66,9 +68,20 @@ export function assembleProposal(body: ProposalSubmission, context: ProposalAsse
       : {}),
   }));
 
+  // The model is asked to keep the day titles but sometimes shortens them;
+  // name each chapter after the day most of its photos were taken on.
+  const titleFor = (chapter: { title: string; momentIds: string[] }): string => {
+    if (!context.dayTitles) return chapter.title;
+    const counts = new Map<string, number>();
+    for (const shotId of chapter.momentIds) {
+      const title = context.dayTitles.get(shotId);
+      if (title) counts.set(title, (counts.get(title) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? chapter.title;
+  };
   const chapters = body.chapters.map((chapter, index) => ({
     id: chapterId(context.proposalId, index),
-    title: chapter.title,
+    title: titleFor(chapter),
     summary: chapter.summary,
     momentIds: [...new Set(chapter.momentIds)].map((shotId) => {
       const momentIndex = byShotId.get(shotId);

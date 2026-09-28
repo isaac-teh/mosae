@@ -32,3 +32,13 @@ export function daySummary(days: TripDay[]): string {
     ...lines,
   ].join("\n");
 }
+
+/** Each shot's day title ("Day 1 · Siloso Beach", or "Undated"), for naming chapters in code. */
+export function dayTitles(days: TripDay[]): Map<string, string> {
+  const titles = new Map<string, string>();
+  for (const day of days) {
+    const title = day.date === null ? "Undated" : `Day ${day.index}${day.place ? ` · ${day.place}` : ""}`;
+    for (const shotId of day.shotIds) titles.set(shotId, title);
+  }
+  return titles;
+}
