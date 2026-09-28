@@ -74,6 +74,16 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
 }
 
 describe("createApiStoryRepository", () => {
+  it("reads and saves edit revisions through the authenticated API", async () => {
+    const document = { revision: 2, ops: [{ op: "remove" as const, clipId: "clip-1" }], updatedAt: 123 };
+    const deps = dependencies({ request: vi.fn(async () => document) });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.getEdits("project-1", "gen-1")).resolves.toEqual(document);
+    await expect(repository.saveEdits("project-1", "gen-1", 2, document.ops)).resolves.toEqual(document);
+    expect(deps.request).toHaveBeenNthCalledWith(1, "GET", "/api/projects/project-1/generations/gen-1/edits");
+    expect(deps.request).toHaveBeenNthCalledWith(2, "PUT", "/api/projects/project-1/generations/gen-1/edits", { revision: 2, ops: document.ops });
+  });
+
   it("reads summary and interprets text through the project endpoints", async () => {
     const deps = dependencies();
     vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/summary")

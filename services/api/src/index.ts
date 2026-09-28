@@ -11,6 +11,7 @@ import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
 import { healthRouter } from "./routes/health.js";
 import { generationsRouter } from "./routes/generations.js";
+import { editsRouter } from "./routes/edits.js";
 import { directionOptionsRouter } from "./routes/directionOptions.js";
 import { summaryRouter } from "./routes/summary.js";
 import { chatInterpretRouter } from "./routes/chatInterpret.js";
@@ -184,6 +185,7 @@ app.use(
   "/api/projects",
   generationsRouter({ db: adminDb, loadSource, storageBucket: config.storageBucket, dispatch: () => dispatchDue(adminDb, queue, Date.now()) }),
 );
+app.use("/api/projects", editsRouter({ db: adminDb }));
 app.use(
   "/api/projects",
   directionOptionsRouter({ db: adminDb }),

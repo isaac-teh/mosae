@@ -3,7 +3,7 @@ import { ensureSignedIn } from "../auth";
 import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
 import { getFirestoreClient } from "../firebase";
-import type { ChatInterpretRequest, DirectorPerson, FilmListItem, StoryRepository } from "./repository";
+import type { ChatInterpretRequest, DirectorPerson, FilmEdits, FilmListItem, StoryRepository } from "./repository";
 import type { ProjectSummary } from "../chat/types";
 import type { DirectionOptions, Film } from "./types";
 import {
@@ -26,7 +26,7 @@ export type ApiStoryRepositoryDeps = {
   listenCollection(path: string): Promise<unknown[]>;
   listenUserProjects(userId: string): Promise<unknown[]>;
   getThumbnailUrl(projectId: string, assetId: string): Promise<string>;
-  request(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<unknown>;
+  request(method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown): Promise<unknown>;
 };
 
 export type ApiStoryRepositoryOptions = { projectId: string };
@@ -451,6 +451,12 @@ export function createApiStoryRepository(
       return { filmId: await postGeneration({ proposalId: planId, settings }) };
     },
     getFilm: (filmId) => loadFilm(filmId),
+    getEdits: async (projectId, generationId) => record(await deps.request(
+      "GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`,
+    ), "edits") as FilmEdits,
+    saveEdits: async (projectId, generationId, revision, ops) => record(await deps.request(
+      "PUT", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`, { revision, ops },
+    ), "edits") as FilmEdits,
     reviseFilm: async (filmId, request) => {
       const parent = await readGeneration(filmId);
       const settings = record(parent.settings, "generation settings");

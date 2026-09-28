@@ -12,6 +12,7 @@ import type {
   DurationChoice,
 } from "./types";
 import type { StoryRepository } from "./repository";
+import type { FilmEdits } from "./repository";
 
 const PLAN_ID = "demo";
 const FILM_ID = "demo-film";
@@ -211,6 +212,7 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
 
   let planState: StoryPlan = structuredClone(basePlan);
   let filmState: Film = structuredClone(baseFilm);
+  const editDocuments = new Map<string, FilmEdits>();
 
   function delayed<T>(fn: () => T): Promise<T> {
     return new Promise<T>((resolve) => {
@@ -289,6 +291,16 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
     getFilm: async (filmId: string) => {
       if (filmId !== FILM_ID) throw new Error(`Unknown film ${filmId}`);
       return structuredClone(filmState);
+    },
+
+    getEdits: async (projectId, generationId) => structuredClone(editDocuments.get(`${projectId}/${generationId}`) ?? { revision: 0, ops: [], updatedAt: null }),
+    saveEdits: async (projectId, generationId, revision, ops) => {
+      const key = `${projectId}/${generationId}`;
+      const current = editDocuments.get(key) ?? { revision: 0, ops: [], updatedAt: null };
+      if (revision !== current.revision + 1) throw new Error("stale_revision");
+      const document = { revision, ops: structuredClone(ops), updatedAt: Date.now() };
+      editDocuments.set(key, document);
+      return structuredClone(document);
     },
 
     reviseFilm: async (filmId: string, request: string) => {
