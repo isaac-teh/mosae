@@ -11,6 +11,7 @@ const DURATION_LABELS: Record<DurationId, { label: string; caption: string }> = 
   "1m": { label: "1 min", caption: "Highlights" },
   "2m": { label: "2 min", caption: "The full story" },
   "3m": { label: "3 min", caption: "Extended cut" },
+  "4m": { label: "4 min", caption: "A little more room" },
   "5m": { label: "5 min", caption: "Everything" },
 };
 

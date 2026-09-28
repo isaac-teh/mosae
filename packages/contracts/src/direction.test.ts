@@ -43,6 +43,11 @@ describe("DirectionSettingsSchema", () => {
     }
   });
 
+  it("supports the four-minute duration offered by the director chat", () => {
+    expect(DURATION_SECONDS["4m"]).toBe(240);
+    expect(safeParseDirectionSettings({ ...valid, durationId: "4m" }).ok).toBe(true);
+  });
+
   it("publishes a cadence catalog the client can render", () => {
     expect(CADENCES.map((cadence) => cadence.id)).toContain("tender");
     for (const cadence of CADENCES) expect(cadence.description.length).toBeGreaterThan(0);

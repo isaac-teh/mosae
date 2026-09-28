@@ -263,6 +263,7 @@ export function directingRouter(deps: {
       // moment screens only the two moment lists, so neither wipes the other.
       const parsed = ProposalConstraintsSchema.safeParse({
         ...source.constraints,
+        excludedShotIds: req.body?.excludedShotIds ?? source.constraints.excludedShotIds,
         deselectedMomentIds: req.body?.deselectedMomentIds ?? source.constraints.deselectedMomentIds,
         mustIncludeMomentIds: req.body?.mustIncludeMomentIds ?? source.constraints.mustIncludeMomentIds,
         ...((req.body?.focusCharacterIds ?? source.constraints.focusCharacterIds) !== undefined

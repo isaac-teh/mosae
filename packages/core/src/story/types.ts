@@ -26,6 +26,8 @@ export type PlanEdits = {
   deselectedMomentIds: string[];
   mustIncludeMomentIds: string[];
   hiddenShotIds: string[];
+  /** Shots kept out of the film, including earlier director-chat exclusions. */
+  excludedShotIds?: string[];
   /** Moment ids in the user's order; only moves within a chapter are honoured. */
   momentOrder: string[];
   /** momentId → the shot shown instead. */
@@ -78,7 +80,7 @@ export type CreateOption = "film" | "album" | "share" | "apple-photos";
 
 export type Cadence = { id: string; name: string; description: string };
 export type Soundtrack = { id: string; name: string; description: string };
-export type DurationChoice = { id: "30s" | "1m" | "2m" | "3m" | "5m"; label: string; caption: string; seconds: number };
+export type DurationChoice = { id: "30s" | "1m" | "2m" | "3m" | "4m" | "5m"; label: string; caption: string; seconds: number };
 
 export type DirectionOptions = {
   note: string;
@@ -114,6 +116,8 @@ export type Film = {
   videoUrl: string | null;
   /** True while the MP4 is still being made; the player waits on it. */
   rendering: boolean;
+  /** Render pipeline progress, from zero to one, while rendering. */
+  renderProgress?: number;
   /** Why the director placed what it placed, for the Review Film explanation. */
   reasons: string[];
 };

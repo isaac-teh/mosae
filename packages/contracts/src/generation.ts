@@ -24,6 +24,8 @@ export const GenerationSchema = z.strictObject({
   failureReasons: z.array(z.string()),
   outputPath: z.string().min(1).nullable(),
   renderProgress: z.number().min(0).max(1),
+  /** Milliseconds since epoch when the finished film was saved. */
+  savedAt: z.number().int().nonnegative().optional(),
 });
 
 export type Generation = z.infer<typeof GenerationSchema>;

@@ -1,0 +1,100 @@
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatMomentGrid, ChatPersonQuestion, ChatProposal, ChatShaping, ChatTyping, MomentPickerSheet } from "@/components/chat";
+import { FilmPlayer } from "@/components/FilmPlayer";
+import { Button } from "@/components/ds";
+import { useDirectorChat } from "@/lib/useDirectorChat";
+import { useStoryFlow } from "@/lib/storyFlow";
+
+function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
+  if (!summary) return "Your film";
+  const season = summary.season?.toLowerCase() ?? "";
+  const seasonName = /spring|summer|autumn|fall|winter/.exec(season)?.[0]?.replace("fall", "autumn")
+    ?? (/(january|february)/.test(season) ? "winter"
+      : /march|april|may/.test(season) ? "spring"
+        : /june|july|august/.test(season) ? "summer"
+          : /september|october|november/.test(season) ? "autumn"
+            : /december/.test(season) ? "winter" : null);
+  if (summary.country && seasonName) return `${summary.country}, ${seasonName}`;
+  return summary.places[0] || "Your film";
+}
+
+export default function DirectorScreen() {
+  const params = useLocalSearchParams<{ projectId?: string }>();
+  const projectId = params.projectId ?? "";
+  const story = useStoryFlow();
+  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, momentState, pickerOpen, directionOptions, people } = useDirectorChat(projectId, story.repository, story.flow);
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [namingPerson, setNamingPerson] = useState<string | null>(null);
+  const [pickerSelection, setPickerSelection] = useState<string[]>([]);
+  const momentsItem = state.items.find((item) => item.kind === "moments");
+  const suggestedTiles = useMemo(() => {
+    const suggestedIds = momentsItem?.kind === "moments" ? momentsItem.suggestedShotIds : [];
+    const allTiles = [
+      ...(plan?.moments ?? []).map((moment) => ({ shotId: moment.shotId ?? moment.id, uri: moment.imageKey })),
+      ...(plan?.leftOut ?? []).map((item) => ({ shotId: item.shotId, uri: item.thumbnailUrl })),
+    ];
+    const byId = new Map(allTiles.map((tile) => [tile.shotId, tile]));
+    return suggestedIds.map((id) => byId.get(id)).filter((tile): tile is { shotId: string; uri: string } => Boolean(tile));
+  }, [plan, momentsItem]);
+  const pickerDays = useMemo(() => {
+    const all = [
+      ...(plan?.moments ?? []).map((moment) => ({ shotId: moment.shotId ?? moment.id, uri: moment.imageKey, day: moment.meta.match(/day\s+\d+/i)?.[0] ?? "Other moments" })),
+      ...(plan?.leftOut ?? []).map((item) => ({ shotId: item.shotId, uri: item.thumbnailUrl, day: "Other moments" })),
+    ];
+    const groups = new Map<string, { shotId: string; uri: string }[]>();
+    all.forEach(({ day, ...tile }) => groups.set(day, [...(groups.get(day) ?? []), tile]));
+    return [...groups.entries()].map(([label, tiles]) => ({ label, tiles }));
+  }, [plan]);
+
+  return <View className="flex-1 bg-surface">
+    <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => router.back()} />
+    <ScrollView className="flex-1 px-5" contentContainerClassName="gap-5 py-6" keyboardShouldPersistTaps="handled">
+      {state.items.map((item) => {
+        if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => actions.resolveConflict(choice as "keep" | "leave")} />;
+        if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} />;
+        if (item.kind === "you") return <ChatMessage key={item.id} from="you" text={item.text} />;
+        if (item.kind === "typing") return <ChatTyping key={item.id} text={item.text} />;
+        if (item.kind === "shaping") return <ChatShaping key={item.id} stepsDone={item.stepsDone} />;
+        if (item.kind === "set-aside") return <View key={item.id} className="gap-3"><ChatMessage from="mosae" text={`Got it. I've set aside ${item.blurry} blurry ${item.blurry === 1 ? "shot" : "shots"} and ${item.duplicates} near-duplicates, keeping the best of each burst. Your originals are untouched.`} /><Button label="See what's set aside" variant="quiet" onPress={actions.seeSetAside} /></View>;
+        if (item.kind === "moments") return <ChatMomentGrid key={item.id} tiles={suggestedTiles} state={momentState} total={projectSummary?.total ?? 0} onTap={actions.toggleMoment} onDone={() => void actions.confirmMoments()} onChooseAll={() => { setPickerSelection(Object.entries(momentState).filter(([, value]) => value === "keep").map(([id]) => id)); actions.openPicker(); }} />;
+        if (item.kind === "direction") {
+          const focusOptions = [{ id: "family", label: "Whole family" }, ...people.filter((person) => person.name).map((person) => ({ id: person.personId, label: person.name as string }))];
+          const focusLabel = focusOptions.find((option) => option.id === item.focus)?.label ?? "Whole family";
+          const minutes = item.lengthSec / 60;
+          const explanation = item.lengthSec <= 120
+            ? `${item.momentCount} moments is more than ${minutes} minutes can hold. I'll keep ${focusLabel === "Whole family" ? "your family moments" : `${focusLabel}'s reactions`} and the strongest scenery, and tell you what I left out.`
+            : `For ${minutes} minutes, I'll keep ${focusLabel === "Whole family" ? "your family moments" : `${focusLabel}'s reactions`} and the strongest scenery, and tell you what I left out.`;
+          return <View key={item.id} className="gap-4"><ChatMessage from="mosae" text={`For a ${projectSummary?.days ?? 1}-day trip I'd suggest this. ${directionOptions?.note ?? "Change anything that doesn't feel right."}`} /><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} focus={item.focus} focusOptions={focusOptions} onChange={actions.setDirection} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good. Shape it." disabled={saving || !directionOptions} onPress={() => void actions.shapeIt()} /></View>;
+        }
+        if (item.kind === "film") return <View key={item.id} className="gap-4">
+          <ChatMessage from="mosae" text="Here's your first cut. Tap to watch." />
+          <FilmPlayer source={item.film.videoUrl ?? item.film.videoKey} poster={{ uri: item.film.posterKey }} durationSec={item.film.durationSec} aspect="portrait" />
+          <View className="gap-1"><Text className="font-title text-heading text-ink">{item.film.title}</Text><Text className="font-sans text-caption text-ink-muted">{plan?.chapters.length ?? 0} chapters</Text></View>
+          <View className="gap-2"><Text className="font-sans-semibold text-button text-ink">How I directed it</Text>{item.film.reasons.slice(0, 3).map((reason, index) => <Text key={`${item.id}-reason-${index}`} className="font-sans text-body text-ink">• {reason}</Text>)}</View>
+          <View className="flex-row gap-2"><Button label="Open in editor" variant="secondary" onPress={() => router.push({ pathname: "/review-moments", params: { planId: item.film.planId } } as any)} /><Button label="Save film" disabled={saving} onPress={() => void actions.saveFilm()} /></View>
+        </View>;
+        if (item.kind === "occasion") {
+          const country = projectSummary?.country;
+          const answer = country ? `Yes, our ${country} trip` : "Yes, that's our story";
+          const storyText = country ? `${country} trip` : projectSummary?.places[0] ?? "Our story";
+          return <ChatProposal key={item.id} question="Is that the story?" replies={[{ id: "yes", label: answer }]} onReply={() => void actions.confirmOccasion(answer, storyText)} />;
+        }
+        if (item.kind === "person") return <View key={item.id} className="gap-3">
+          <ChatPersonQuestion momentCount={item.momentCount} sampleUris={[]} days={item.days} chips={["My daughter", "My wife", "Me", "Type a name"]} onPick={(role) => void actions.setPerson(item.personId, role)} onTypeName={() => setNamingPerson(item.personId)} onSkip={() => void actions.setPerson(item.personId, "Skip")} />
+          {namingPerson === item.personId && <View className="flex-row gap-2"><TextInput accessibilityLabel="Person name" value={name} onChangeText={setName} className="min-h-11 flex-1 rounded-md border border-line-strong px-3 font-sans text-ink" /><Pressable role="button" onPress={() => { if (name.trim()) void actions.setPerson(item.personId, "Type a name", name.trim()); setName(""); setNamingPerson(null); }} className="min-h-11 justify-center px-3"><Text className="font-sans-semibold text-action">Save name</Text></Pressable></View>}
+          <Button label="Skip for now" variant="quiet" onPress={() => void actions.skipPeople()} />
+        </View>;
+        if (item.kind === "anyone-else") return <View key={item.id} className="gap-3"><ChatProposal question="Anyone else?" replies={[{ id: "no", label: "No, that's everyone" }]} onReply={() => void actions.skipPeople()} /></View>;
+        return null;
+      })}
+      {state.step === "people" && !state.items.some((item) => item.kind === "person" || item.kind === "anyone-else") && <Button label="Skip for now" variant="quiet" onPress={() => void actions.skipPeople()} />}
+      {pendingInterpret && <View className="gap-3"><ChatMessage from="mosae" text={pendingInterpret.reply} /><ChatMessage from="you" text={pendingInterpret.text} /><ChatProposal question="Did I get that right?" replies={[{ id: "confirm", label: "Yes, that's right" }]} onReply={() => actions.confirmInterpret()} /></View>}
+      {error && <View className="gap-2"><ChatMessage from="mosae" text={error} /><Pressable role="button" onPress={() => { retry(); if (state.step === "occasion") void actions.confirmOccasion(); }} className="min-h-11 self-start justify-center"><Text className="font-sans-semibold text-action">Try again</Text></Pressable></View>}
+    </ScrollView>
+    {pickerOpen && <MomentPickerSheet days={pickerDays} selected={pickerSelection} onToggle={(shotId) => setPickerSelection((current) => current.includes(shotId) ? current.filter((id) => id !== shotId) : [...current, shotId])} onCancel={() => { setPickerSelection([]); actions.confirmPicker([]); }} onConfirm={() => void actions.confirmPicker(pickerSelection)} />}
+    {projectSummary && <ChatComposer placeholder={state.placeholder} disabled={saving} onSend={(text) => state.step === "ready" ? actions.askForChange(text) : void actions.send(text)} />}
+  </View>;
+}

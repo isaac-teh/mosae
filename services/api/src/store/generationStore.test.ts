@@ -7,6 +7,7 @@ import {
   failGeneration,
   setRenderProgress,
   markSaved,
+  startRender,
   StoreError,
 } from "./generationStore.js";
 
@@ -191,8 +192,13 @@ describe("generationStore (emulator)", () => {
       now: Date.now(),
     });
 
-    // Marking saved requires rendering state with progress 1 — complex to set up in emulator test
-    // Just verify the function exists and has correct signature
-    expect(typeof markSaved).toBe("function");
+    await publishGeneration(adminDb, { userId: project.userId, projectId: project.id, generationId: gen.id, timeline: null, droppedPicks: [], now: Date.now() });
+    await startRender(adminDb, { userId: project.userId, projectId: project.id, generationId: gen.id });
+    await setRenderProgress(adminDb, { userId: project.userId, projectId: project.id, generationId: gen.id, progress: 1 });
+    const beforeSave = Date.now();
+    const saved = await markSaved(adminDb, { userId: project.userId, projectId: project.id, generationId: gen.id, outputPath: "films/output.mp4" });
+    expect(saved.status).toBe("saved");
+    expect(saved.savedAt).toBeGreaterThanOrEqual(beforeSave);
+    expect(saved.savedAt).toBeLessThanOrEqual(Date.now());
   });
 });

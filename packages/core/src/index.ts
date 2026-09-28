@@ -5,10 +5,12 @@ export { uploadMedia, contentTypeFor, type UploadDeps, type UploadProgress } fro
 export { setPendingMedia, getPendingMedia } from "./pendingMedia";
 export { isMedia, formatDuration, mediaId } from "./media";
 export type * from "./story/types";
-export { getStoryRepository, setStoryRepository, type StoryRepository } from "./story/repository";
+export { getStoryRepository, setStoryRepository, type StoryRepository, type DirectorPerson, type FilmListItem, type ChatInterpretRequest, type ChatInterpretResult } from "./story/repository";
 export { createFixtureStoryRepository } from "./story/fixtureRepository";
 export { createApiStoryRepository, type ApiStoryRepositoryOptions } from "./story/apiRepository";
 export { projectProposal } from "./story/projectProposal";
 export { startStoryPlan, watchStoryPlan, type StoryPlanJob } from "./story/planning";
 export { computeProgress, describeProgress, type ProjectProgress, type ProjectStatus, type RawProgress } from "./progress/progress";
 export { watchProjectProgress, type ProgressDeps } from "./progress/watchProgress";
+export { deriveChat } from "./chat/deriveChat";
+export type { ChatInput, ChatItem, ChatState, ProjectSummary } from "./chat/types";

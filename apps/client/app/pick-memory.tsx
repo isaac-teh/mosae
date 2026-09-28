@@ -5,7 +5,7 @@ import { formatDuration, getPendingMedia, mediaId, uploadMedia, type UploadProgr
 import { JourneySteps, MomentTile } from "@/components/ds";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
 import { MediaThumb } from "@/components/MediaThumb";
-import { ArrowRightIcon, CheckIcon, ChevronDownIcon, PlayIcon } from "@/components/icons";
+import { ArrowRightIcon, ChevronDownIcon, PlayIcon } from "@/components/icons";
 
 type Picked = { id: string; file: File; isVideo: boolean; duration?: string; selected: boolean };
 
@@ -58,7 +58,7 @@ export default function PickMemoryScreen() {
         setUploading(false);
         return;
       }
-      router.push({ pathname: "/tell-story", params: { projectId: result.projectId, count: String(result.finished), live: "1" } } as unknown as Href);
+      router.push({ pathname: "/director", params: { projectId: result.projectId, live: "1" } } as unknown as Href);
     } catch (e) {
       console.error("upload failed", e);
       setError("Upload failed. Please try again.");

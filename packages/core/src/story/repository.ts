@@ -1,6 +1,16 @@
 import type { AlternativeShot, CreateOption, Direction, DirectionOptions, Film, PlanEdits, StoryPlan } from "./types";
+import type { ProjectSummary } from "../chat/types";
+
+export type DirectorPerson = { personId: string; name: string | null; role: string | null; momentCount: number; sampleShotIds: string[]; days: number[] };
+export type FilmListItem = { projectId: string; filmId: string; title: string; month: string; duration: string; posterUrl: string; justSaved: boolean };
+export type ChatInterpretRequest = { step: "occasion" | "people" | "moments" | "direction"; text: string; context: { summary?: ProjectSummary; people?: { personId: string; name: string | null; role: string | null }[] } };
+export type ChatInterpretResult = { reply: string; change: { kind: string; [key: string]: unknown } };
 
 export interface StoryRepository {
+  listFilms(): Promise<FilmListItem[]>;
+  getSummary(projectId: string): Promise<ProjectSummary>;
+  interpret(projectId: string, req: ChatInterpretRequest): Promise<ChatInterpretResult>;
+  getPeople(projectId: string): Promise<DirectorPerson[]>;
   createPlan(storyText: string, mediaRefs: string[]): Promise<{ planId: string }>;
   getPlan(planId: string): Promise<StoryPlan>;
   setMomentSelected(planId: string, momentId: string, selected: boolean): Promise<StoryPlan>;

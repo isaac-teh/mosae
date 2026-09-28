@@ -6,7 +6,7 @@
  * worse, like the director inventing shot IDs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { normaliseRequest } from "./recorder.js";
@@ -105,6 +105,19 @@ describe("recording skips what it already has", () => {
     expect((second as { text: string }).text).toBe((first as { text: string }).text);
   });
 
+  it("never overwrites an existing fixture during recording", async () => {
+    const first = recorder.recordingGenerate(vi.fn(async () => ({ text: '{"caption":"original"}', usageMetadata: {} })) as never);
+    const second = recorder.recordingGenerate(vi.fn(async () => ({ text: '{"caption":"replacement"}', usageMetadata: {} })) as never);
+
+    await first(photo("AAAA") as never);
+    const [filename] = readdirSync(dir).filter((name) => name.endsWith(".json"));
+    const before = readFileSync(path.join(dir, filename!), "utf8");
+    const result = await second(photo("AAAA") as never);
+
+    expect((result as { text: string }).text).toBe('{"caption":"original"}');
+    expect(readFileSync(path.join(dir, filename!), "utf8")).toBe(before);
+  });
+
   it("still calls the model for a photo it has not seen", async () => {
     const real = vi.fn(async () => ({ text: '{"caption":"a cat"}', usageMetadata: {} }));
     const generate = recorder.recordingGenerate(real as never);
@@ -113,6 +126,15 @@ describe("recording skips what it already has", () => {
     await generate(photo("BBBB") as never);
 
     expect(real).toHaveBeenCalledTimes(2);
+  });
+
+  it("labels director chat interpretation recordings distinctly", async () => {
+    const real = vi.fn(async () => ({ text: '{"change":{"kind":"unclear"}}', usageMetadata: {} }));
+    await recorder.recordingGenerate(real as never)({
+      model: "gemini-3.1-flash-lite",
+      contents: [{ text: "Interpret the user's typed message only for the current director chat step." }],
+    } as never);
+    expect(readdirSync(dir).some((name) => name.startsWith("interpret-") && name.endsWith(".json"))).toBe(true);
   });
 
   it("embeds only the texts it lacks, and keeps every vector in position", async () => {
@@ -145,4 +167,3 @@ describe("recording skips what it already has", () => {
     expect(real).toHaveBeenCalledTimes(1);
   });
 });
-

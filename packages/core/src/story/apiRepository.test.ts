@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 const firebaseMocks = vi.hoisted(() => ({
-  ensureSignedIn: vi.fn(async () => ({ getIdToken: async () => "owner-token" })),
+  ensureSignedIn: vi.fn(async () => ({ uid: "owner", getIdToken: async () => "owner-token" })),
   onSnapshot: vi.fn(),
+  getDocs: vi.fn(),
+  query: vi.fn((source: unknown) => source),
+  where: vi.fn(),
 }));
 
 vi.mock("../auth", () => ({ ensureSignedIn: firebaseMocks.ensureSignedIn }));
@@ -12,6 +15,9 @@ vi.mock("firebase/firestore", () => ({
   doc: (_db: unknown, ...segments: string[]) => segments.join("/"),
   collection: (_db: unknown, ...segments: string[]) => segments.join("/"),
   onSnapshot: firebaseMocks.onSnapshot,
+  getDocs: firebaseMocks.getDocs,
+  query: firebaseMocks.query,
+  where: firebaseMocks.where,
 }));
 
 import { createApiStoryRepository, type ApiStoryRepositoryDeps } from "./apiRepository";
@@ -60,6 +66,7 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
       return value;
     }),
     listenCollection: vi.fn(async (path) => collections[path] ?? []),
+    listenUserProjects: vi.fn(async () => []),
     getThumbnailUrl: vi.fn(async (projectId, assetId) => `https://storage.test/${projectId}/${assetId}?signed=true`),
     request: vi.fn(async () => ({})),
     ...overrides,
@@ -67,6 +74,52 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
 }
 
 describe("createApiStoryRepository", () => {
+  it("reads summary and interprets text through the project endpoints", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/summary")
+      ? { total: 4, ready: { summary: true, faces: false, plan: false } }
+      : { reply: "A family trip.", change: { kind: "occasion", storyText: "A family trip" } });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.getSummary("project-1")).resolves.toMatchObject({ total: 4 });
+    await expect(repository.interpret("project-1", { step: "occasion", text: "our trip", context: {} })).resolves.toMatchObject({ change: { kind: "occasion" } });
+    expect(deps.request).toHaveBeenNthCalledWith(1, "GET", "/api/projects/project-1/summary");
+    expect(deps.request).toHaveBeenNthCalledWith(2, "POST", "/api/projects/project-1/chat/interpret", { step: "occasion", text: "our trip", context: {} });
+  });
+
+  it("lists saved films newest first with month, duration, poster and recent-save marker", async () => {
+    const deps = dependencies({
+      listenUserProjects: vi.fn(async () => [
+        { id: "old", createdAt: 1, savedGenerationId: "g-old", title: "Old" },
+        { id: "new", createdAt: 2, savedGenerationId: "g-new", title: "New" },
+      ]),
+      listenDocument: vi.fn(async (path) => {
+        if (path === "projects/old/generations/g-old") return { id: "g-old", proposalId: "p-old", status: "saved", savedAt: Date.now() - 60_000, timeline: { durationSec: 125, videoClips: [{ source: { shotId: "old-shot" } }] } };
+        if (path === "projects/new/generations/g-new") return { id: "g-new", proposalId: "p-new", status: "saved", savedAt: Date.now() - 60_000, timeline: { durationSec: 90, videoClips: [{ source: { shotId: "new-shot" } }] } };
+        if (path === "projects/old") return { dateRange: { start: "2025-06-02", end: "2025-06-03" } };
+        if (path === "projects/new") return { dateRange: { start: "2026-09-22", end: "2026-09-23" } };
+        if (path.endsWith("/storyProposals/p-old")) return { title: "Old" };
+        if (path.endsWith("/storyProposals/p-new")) return { title: "New" };
+        return null;
+      }),
+      listenCollection: vi.fn(async (path) => path === "projects/new/shots" ? [{ id: "new-shot", assetId: "new-asset" }] : [{ id: "old-shot", assetId: "old-asset" }]),
+    });
+    const films = await createApiStoryRepository({ projectId: "unused" }, deps).listFilms();
+    expect(films).toEqual([
+      { projectId: "new", filmId: "g-new", title: "New", month: "Sep 2026", duration: "1:30", posterUrl: "https://storage.test/new/new-asset?signed=true", justSaved: true },
+      { projectId: "old", filmId: "g-old", title: "Old", month: "Jun 2025", duration: "2:05", posterUrl: "https://storage.test/old/old-asset?signed=true", justSaved: true },
+    ]);
+  });
+
+  it("groups repeated faces by character and counts distinct shots", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
+      { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "face-1", characterId: "char-1" }, { faceId: "face-2", characterId: "char-1" }] },
+      { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "face-3", characterId: "char-1" }] },
+    ] } : { cast: { people: [{ personId: "char-1", name: "Mia", role: "child" }] } });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.getPeople("project-1")).resolves.toEqual([{ personId: "char-1", name: "Mia", role: "child", momentCount: 2, sampleShotIds: ["shot-1", "shot-2"], days: [1] }]);
+  });
+
   it("uses Firestore snapshots and authenticated thumbnail API URLs in its default read adapter", async () => {
     const fetchMock = vi.fn(async (url: string, options: RequestInit) => {
       if (options.method !== "GET" || (options.headers as Record<string, string>).Authorization !== "Bearer owner-token") {
@@ -378,11 +431,12 @@ describe("film adapters", () => {
   });
 
   it("maps a playable film with no video yet, its reasons and its poster", async () => {
-    const deps = filmDependencies({ [genPath]: generation({ reasons: ["Closing on the whole family together."] }) });
+    const deps = filmDependencies({ [genPath]: generation({ reasons: ["Closing on the whole family together."], renderProgress: 0.7 }) });
     const film = await createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1");
     expect(film).toMatchObject({
       filmId: "gen-1", planId: "proposal-1", version: 1, title: "Family weekend", durationSec: 30, momentCount: 2,
       status: "ready", videoUrl: null, rendering: true, reasons: ["Closing on the whole family together."],
+      renderProgress: 0.7,
       posterKey: "https://storage.test/project-1/asset-2?signed=true",
     });
     expect(deps.request).not.toHaveBeenCalled();

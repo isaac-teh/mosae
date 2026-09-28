@@ -172,6 +172,17 @@ describe("directing routes", () => {
     expect(queuePlan).not.toHaveBeenCalled();
   });
 
+  it("persists excluded shot ids from the director chat alongside its must-includes", async () => {
+    const response = await request(buildApp())
+      .patch("/api/projects/project-1/proposals/proposal-1/constraints")
+      .send({ mustIncludeMomentIds: ["shot-keep"], excludedShotIds: ["shot-leave"] });
+
+    expect(response.status).toBe(201);
+    expect(directingStore.reviseConstraints).toHaveBeenCalledWith(db, expect.objectContaining({
+      constraints: { ...constraints, mustIncludeMomentIds: ["shot-keep"], excludedShotIds: ["shot-leave"] },
+    }));
+  });
+
   it("re-selects a deselected moment and marks it must-include in the new draft", async () => {
     vi.mocked(directingStore.readProposal).mockResolvedValue({
       ...proposal,

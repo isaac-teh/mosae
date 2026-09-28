@@ -18,6 +18,7 @@ export type ProposalProjectionSource = {
     deselectedMomentIds: string[];
     mustIncludeMomentIds?: string[];
     hiddenShotIds?: string[];
+    excludedShotIds?: string[];
     momentOrder?: string[];
     photoSwaps?: Record<string, string>;
   };
@@ -30,6 +31,7 @@ export function editsOf(proposal: ProposalProjectionSource): PlanEdits {
     deselectedMomentIds: [...proposal.constraints.deselectedMomentIds],
     mustIncludeMomentIds: [...(proposal.constraints.mustIncludeMomentIds ?? [])],
     hiddenShotIds: [...(proposal.constraints.hiddenShotIds ?? [])],
+    excludedShotIds: [...(proposal.constraints.excludedShotIds ?? [])],
     momentOrder: [...(proposal.constraints.momentOrder ?? [])],
     photoSwaps: { ...(proposal.constraints.photoSwaps ?? {}) },
   };
