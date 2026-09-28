@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({ repo: null as any, confirmCast: vi.fn(), push:
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-1" }), useRouter: () => ({ back: vi.fn(), push: mocks.push }) }));
 vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typeof import("@mosae/core")>()), getStoryRepository: () => mocks.repo }));
 vi.mock("@/lib/characters", () => ({ confirmCast: (...args: any[]) => mocks.confirmCast(...args) }));
+vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: () => React.createElement("div", { "data-testid": "film-player" }) }));
 import DirectorScreen from "../app/director";
 
 let root: Root;
@@ -36,13 +37,14 @@ const planFixture = {
   edits: { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], excludedShotIds: ["previously-excluded", "dup-0"], momentOrder: [], photoSwaps: {} },
 } as any;
 const directionOptions = { note: "Warm, intimate story", rewrites: [], cadences: [{ id: "reflective", name: "Gentle", description: "Unhurried" }, { id: "playful", name: "Lively", description: "Energetic" }], soundtracks: [], durations: [{ id: "1m", label: "1 min", caption: "Short", seconds: 60 }, { id: "2m", label: "2 min", caption: "Balanced", seconds: 120 }, { id: "4m", label: "4 min", caption: "Long", seconds: 240 }], recommendedDuration: "2m", recommendedCadence: "reflective", cadenceReason: "The photos feel calm" };
-function setup(options: { faces?: boolean; interpret?: () => Promise<any>; createPlan?: () => Promise<any>; people?: any[]; readyPlan?: boolean; applyEdits?: (...args: any[]) => Promise<any> } = {}) {
+const filmFixture = { filmId: "film-1", planId: "proposal-1", version: 1, title: "Japan, autumn", subtitle: "A family trip", place: "Japan", dateLabel: "October", durationSec: 124, posterKey: "poster", savePosterKey: "poster", videoKey: "video", momentCount: 419, audioLabel: "Soft piano", shortcuts: [], status: "ready", videoUrl: "https://film.example/first-cut.mp4", rendering: false, reasons: ["Opens on the train window in Tokyo.", "Mia's reactions lead each day.", "Both moments you kept are in.", "I left out repeated scenery shots."] } as any;
+function setup(options: { faces?: boolean; interpret?: () => Promise<any>; createPlan?: () => Promise<any>; people?: any[]; readyPlan?: boolean; applyEdits?: (...args: any[]) => Promise<any>; getFilm?: (...args: any[]) => Promise<any>; saveFilm?: (...args: any[]) => Promise<any> } = {}) {
   const planReady = options.readyPlan ?? false;
   mocks.repo = {
     getSummary: vi.fn(async () => ({ ...summary(options.faces ?? true), total: planReady ? 465 : 8, ready: { ...summary(options.faces ?? true).ready, plan: planReady } })), getPeople: vi.fn(async () => options.people ?? people),
     createPlan: vi.fn(options.createPlan ?? (async () => ({ planId: "proposal-1" }))),
     interpret: vi.fn(options.interpret ?? (async () => ({ reply: "I understood the Japan trip.", change: { kind: "occasion", storyText: "Japan trip" } }))),
-    getPlan: vi.fn(async () => planFixture), applyEdits: vi.fn(options.applyEdits ?? (async () => planFixture)), getDirectionOptions: vi.fn(async () => directionOptions), directFilm: vi.fn(async () => ({ filmId: "film-1" })),
+    getPlan: vi.fn(async () => planFixture), applyEdits: vi.fn(options.applyEdits ?? (async () => planFixture)), getDirectionOptions: vi.fn(async () => directionOptions), directFilm: vi.fn(async () => ({ filmId: "film-1" })), getFilm: vi.fn(options.getFilm ?? (async () => filmFixture)), saveFilm: vi.fn(options.saveFilm ?? (async () => ({ downloadKey: "https://film.example/first-cut.mp4" }))),
   };
   mocks.confirmCast.mockResolvedValue({ cast: { people: [] }, proposalId: "proposal-2" });
 }
@@ -110,8 +112,8 @@ describe("Director chat", () => {
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledTimes(2));
   });
 
-  async function openMoments(applyEdits?: (...args: any[]) => Promise<any>) {
-    setup({ people: [], readyPlan: true, applyEdits }); await renderScreen();
+  async function openMoments(applyEdits?: (...args: any[]) => Promise<any>, getFilm?: (...args: any[]) => Promise<any>) {
+    setup({ people: [], readyPlan: true, applyEdits, getFilm }); await renderScreen();
     await click("Yes, that's our story");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
   }
@@ -173,5 +175,73 @@ describe("Director chat", () => {
     await click("Whole family");
     await click("Sounds good. Shape it.");
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ cadenceId: "playful", durationId: "4m", focus: "family" })));
+  });
+
+  it("maps generation polling progress to the shaping checklist from zero through three", async () => {
+    const earlyRender = { ...filmFixture, rendering: true, renderProgress: 0.45 };
+    const laterRender = { ...filmFixture, rendering: true, renderProgress: 0.8 };
+    let resolveFirst!: (film: any) => void;
+    const getFilm = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockResolvedValueOnce(laterRender).mockResolvedValueOnce(filmFixture);
+    await openMoments(undefined, getFilm);
+    await click("Done");
+    await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
+    await waitFor(() => expect((host.querySelector('button[aria-label="Sounds good. Shape it."]') as HTMLButtonElement).disabled).toBe(false));
+    vi.useFakeTimers();
+    try {
+      await click("Sounds good. Shape it.");
+      await act(async () => { await Promise.resolve(); });
+      expect(mocks.repo.directFilm).toHaveBeenCalledTimes(1);
+      expect(hasText("Shaping your film")).toBe(true);
+      const progress = () => host.querySelector('[aria-label="Film shaping progress"]')?.getAttribute("aria-valuenow");
+      expect(progress()).toBe("0");
+      await act(async () => { resolveFirst(earlyRender); await Promise.resolve(); });
+      expect(progress()).toBe("1");
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      expect(progress()).toBe("2");
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      expect(hasText("Here's your first cut. Tap to watch.")).toBe(true);
+      expect(getFilm).toHaveBeenCalledTimes(3);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("shows the completed film with three direction notes and opens its moments in the editor", async () => {
+    planFixture.chapters = Array.from({ length: 5 }, (_, index) => ({ id: `chapter-${index}`, title: `Chapter ${index + 1}`, momentIds: [] }));
+    await openMoments();
+    await click("Done");
+    await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
+    await click("Sounds good. Shape it.");
+    await waitFor(() => expect(hasText("Japan, autumn")).toBe(true));
+    expect(hasText("5 chapters")).toBe(true);
+    expect(hasText("How I directed it")).toBe(true);
+    expect(hasText("Both moments you kept are in.")).toBe(true);
+    expect(hasText("I left out repeated scenery shots.")).toBe(false);
+    await click("Open in editor");
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/review-moments", params: { planId: "proposal-1" } });
+  });
+
+  it("saves the film and opens the chat saved screen", async () => {
+    await openMoments();
+    await click("Done");
+    await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
+    await click("Sounds good. Shape it.");
+    await waitFor(() => expect(hasText("Save film")).toBe(true));
+    await click("Save film");
+    await waitFor(() => expect(mocks.repo.saveFilm).toHaveBeenCalledWith("film-1"));
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/save-film", params: { filmId: "film-1", directorChat: "true" } });
+  });
+
+  it("sends Ask for a change to Review Moments with the request in the URL", async () => {
+    await openMoments();
+    await click("Done");
+    await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
+    await click("Sounds good. Shape it.");
+    await waitFor(() => expect(host.querySelector('input[aria-label="Ask for a change"]')).toBeTruthy());
+    const composer = host.querySelector('input[aria-label="Ask for a change"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "Make it shorter"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("Send");
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/review-moments", params: { planId: "proposal-1", request: "Make it shorter" } });
+    expect(mocks.repo.interpret).not.toHaveBeenCalled();
   });
 });

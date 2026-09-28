@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatMomentGrid, ChatPersonQuestion, ChatProposal, ChatTyping, MomentPickerSheet } from "@/components/chat";
+import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatMomentGrid, ChatPersonQuestion, ChatProposal, ChatShaping, ChatTyping, MomentPickerSheet } from "@/components/chat";
+import { FilmPlayer } from "@/components/FilmPlayer";
 import { Button } from "@/components/ds";
 import { useDirectorChat } from "@/lib/useDirectorChat";
 
@@ -13,8 +14,6 @@ export default function DirectorScreen() {
   const [name, setName] = useState("");
   const [namingPerson, setNamingPerson] = useState<string | null>(null);
   const [pickerSelection, setPickerSelection] = useState<string[]>([]);
-  const occasionMessage = (state.items.find((item) => item.kind === "mosae" && item.id !== "moments-conflict") as { text?: string } | undefined)?.text;
-  const summary = occasionMessage;
   const momentsItem = state.items.find((item) => item.kind === "moments");
   const suggestedTiles = useMemo(() => {
     const suggestedIds = momentsItem?.kind === "moments" ? momentsItem.suggestedShotIds : [];
@@ -43,6 +42,7 @@ export default function DirectorScreen() {
         if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} />;
         if (item.kind === "you") return <ChatMessage key={item.id} from="you" text={item.text} />;
         if (item.kind === "typing") return <ChatTyping key={item.id} text={item.text} />;
+        if (item.kind === "shaping") return <ChatShaping key={item.id} stepsDone={item.stepsDone} />;
         if (item.kind === "set-aside") return <View key={item.id} className="gap-3"><ChatMessage from="mosae" text={`Got it. I've set aside ${item.blurry} blurry ${item.blurry === 1 ? "shot" : "shots"} and ${item.duplicates} near-duplicates, keeping the best of each burst. Your originals are untouched.`} /><Button label="See what's set aside" variant="quiet" onPress={actions.seeSetAside} /></View>;
         if (item.kind === "moments") return <ChatMomentGrid key={item.id} tiles={suggestedTiles} state={momentState} total={projectSummary?.total ?? 0} onTap={actions.toggleMoment} onDone={() => void actions.confirmMoments()} onChooseAll={() => { setPickerSelection(Object.entries(momentState).filter(([, value]) => value === "keep").map(([id]) => id)); actions.openPicker(); }} />;
         if (item.kind === "direction") {
@@ -54,6 +54,13 @@ export default function DirectorScreen() {
             : `For ${minutes} minutes, I'll keep ${focusLabel === "Whole family" ? "your family moments" : `${focusLabel}'s reactions`} and the strongest scenery, and tell you what I left out.`;
           return <View key={item.id} className="gap-4"><ChatMessage from="mosae" text={`For a ${projectSummary?.days ?? 1}-day trip I'd suggest this. ${directionOptions?.note ?? "Change anything that doesn't feel right."}`} /><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} focus={item.focus} focusOptions={focusOptions} onChange={actions.setDirection} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good. Shape it." disabled={saving || !directionOptions} onPress={() => void actions.shapeIt()} /></View>;
         }
+        if (item.kind === "film") return <View key={item.id} className="gap-4">
+          <ChatMessage from="mosae" text="Here's your first cut. Tap to watch." />
+          <FilmPlayer source={item.film.videoUrl ?? item.film.videoKey} poster={{ uri: item.film.posterKey }} durationSec={item.film.durationSec} aspect="portrait" />
+          <View className="gap-1"><Text className="font-title text-heading text-ink">{item.film.title}</Text><Text className="font-sans text-caption text-ink-muted">{plan?.chapters.length ?? 0} chapters</Text></View>
+          <View className="gap-2"><Text className="font-sans-semibold text-button text-ink">How I directed it</Text>{item.film.reasons.slice(0, 3).map((reason, index) => <Text key={`${item.id}-reason-${index}`} className="font-sans text-body text-ink">• {reason}</Text>)}</View>
+          <View className="flex-row gap-2"><Button label="Open in editor" variant="secondary" onPress={() => router.push({ pathname: "/review-moments", params: { planId: item.film.planId } } as any)} /><Button label="Save film" disabled={saving} onPress={() => void actions.saveFilm()} /></View>
+        </View>;
         if (item.kind === "occasion") return <ChatProposal key={item.id} question="Is that the story?" replies={[{ id: "yes", label: "Yes, that's our story" }]} onReply={() => void actions.confirmOccasion()} />;
         if (item.kind === "person") return <View key={item.id} className="gap-3">
           <ChatPersonQuestion momentCount={item.momentCount} sampleUris={[]} days={item.days} chips={["My daughter", "My wife", "Me", "Type a name"]} onPick={(role) => void actions.setPerson(item.personId, role)} onTypeName={() => setNamingPerson(item.personId)} onSkip={() => void actions.setPerson(item.personId, "Skip")} />
@@ -68,6 +75,6 @@ export default function DirectorScreen() {
       {error && <View className="gap-2"><ChatMessage from="mosae" text={error} /><Pressable role="button" onPress={() => { retry(); if (state.step === "occasion") void actions.confirmOccasion(); }} className="min-h-11 self-start justify-center"><Text className="font-sans-semibold text-action">Try again</Text></Pressable></View>}
     </ScrollView>
     {pickerOpen && <MomentPickerSheet days={pickerDays} selected={pickerSelection} onToggle={(shotId) => setPickerSelection((current) => current.includes(shotId) ? current.filter((id) => id !== shotId) : [...current, shotId])} onCancel={() => { setPickerSelection([]); actions.confirmPicker([]); }} onConfirm={() => void actions.confirmPicker(pickerSelection)} />}
-    {summary && <ChatComposer placeholder={state.placeholder} confirmed={state.confirmed} disabled={saving} onSend={(text) => void actions.send(text)} />}
+    {projectSummary && <ChatComposer placeholder={state.placeholder} confirmed={state.confirmed} disabled={saving} onSend={(text) => state.step === "ready" ? actions.askForChange(text) : void actions.send(text)} />}
   </View>;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deriveChat, getStoryRepository, type ChatInput, type ChatState, type Direction, type DirectionOptions, type PlanEdits, type ProjectSummary, type StoryPlan } from "@mosae/core";
+import { deriveChat, getStoryRepository, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type PlanEdits, type ProjectSummary, type StoryPlan } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
 import { useRouter } from "expo-router";
@@ -22,6 +22,7 @@ export function useDirectorChat(projectId: string) {
   const peopleEdits = useRef(new Map<string, { name: string | null; role: string | null; skipped: boolean }>());
   const skipPeopleForNow = useRef(false);
   const mounted = useRef(true);
+  const generationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const repository = getStoryRepository();
   const router = useRouter();
   const state: ChatState = deriveChat(input);
@@ -60,6 +61,26 @@ export function useDirectorChat(projectId: string) {
     const timer = setInterval(() => { void refresh().catch(() => {}); }, 3000);
     return () => { mounted.current = false; clearInterval(timer); };
   }, [refresh]);
+
+  useEffect(() => () => { if (generationTimer.current) clearTimeout(generationTimer.current); }, []);
+
+  const pollFilm = useCallback(async (filmId: string) => {
+    try {
+      const film = await repository.getFilm(filmId);
+      if (!mounted.current) return;
+      if (film.rendering) {
+        const nextStepsDone = Math.max(0, Math.min(2, Math.floor((film.renderProgress ?? 0) * 3)));
+        setInput((current) => ({ ...current, generation: { status: "running", stepsDone: nextStepsDone, film: null } }));
+        generationTimer.current = setTimeout(() => { void pollFilm(filmId); }, 2000);
+      } else {
+        setInput((current) => ({ ...current, generation: { status: "done", stepsDone: 3, film } }));
+      }
+    } catch (cause) {
+      if (!mounted.current) return;
+      setInput((current) => ({ ...current, generation: { status: "failed", stepsDone: 0, film: null } }));
+      setError(cause instanceof Error ? cause.message : "Couldn't shape your film. Please try again.");
+    }
+  }, [repository]);
 
   const actions = {
     async confirmOccasion(text?: string) {
@@ -155,10 +176,28 @@ export function useDirectorChat(projectId: string) {
       try {
         const focusLabel = directionSelection.focus === "family" ? "Whole family" : input.people?.find(({ personId }) => personId === directionSelection.focus)?.name ?? "Her reactions";
         const direction: Direction & { focus: string } = { note: `${directionOptions?.note ?? ""}${directionOptions?.note ? "\n" : ""}Focus: ${focusLabel}.`, cadenceId: directionSelection.cadenceId, soundtrackId: directionSelection.soundtrackId, durationId: directionSelection.durationId, focus: directionSelection.focus };
-        await repository.directFilm(input.plan.planId, direction);
-        setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction }));
-      } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't start shaping your film. Please try again."); }
+        setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction, generation: { status: "queued", stepsDone: 0, film: null } }));
+        const { filmId } = await repository.directFilm(input.plan.planId, direction);
+        if (mounted.current) { setInput((current) => ({ ...current, generation: { status: "running", stepsDone: 0, film: null } })); void pollFilm(filmId); }
+      } catch (cause) {
+        setInput((current) => ({ ...current, generation: { status: "failed", stepsDone: 0, film: null } }));
+        setError(cause instanceof Error ? cause.message : "Couldn't start shaping your film. Please try again.");
+      }
       finally { setSaving(false); }
+    },
+    async saveFilm() {
+      const film = input.generation?.film;
+      if (!film || saving) return;
+      setSaving(true); setError(null);
+      try {
+        await repository.saveFilm(film.filmId);
+        router.push({ pathname: "/save-film", params: { filmId: film.filmId, directorChat: "true" } } as any);
+      } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't save your film. Please try again."); }
+      finally { setSaving(false); }
+    },
+    askForChange(text: string) {
+      if (!input.plan || !text.trim()) return;
+      router.push({ pathname: "/review-moments", params: { planId: input.plan.planId, request: text.trim() } } as any);
     },
     async send(text: string) {
       if (!summary) return;

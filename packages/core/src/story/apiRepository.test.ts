@@ -400,11 +400,12 @@ describe("film adapters", () => {
   });
 
   it("maps a playable film with no video yet, its reasons and its poster", async () => {
-    const deps = filmDependencies({ [genPath]: generation({ reasons: ["Closing on the whole family together."] }) });
+    const deps = filmDependencies({ [genPath]: generation({ reasons: ["Closing on the whole family together."], renderProgress: 0.7 }) });
     const film = await createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1");
     expect(film).toMatchObject({
       filmId: "gen-1", planId: "proposal-1", version: 1, title: "Family weekend", durationSec: 30, momentCount: 2,
       status: "ready", videoUrl: null, rendering: true, reasons: ["Closing on the whole family together."],
+      renderProgress: 0.7,
       posterKey: "https://storage.test/project-1/asset-2?signed=true",
     });
     expect(deps.request).not.toHaveBeenCalled();

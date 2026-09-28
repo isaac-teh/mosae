@@ -108,7 +108,7 @@ describe("projectProposal — Review edits", () => {
   it("carries each moment's reason and fills in empty edits", () => {
     const plan = projectProposal(base, project, shots);
     expect(plan.moments.map((m) => m.reason)).toEqual(["Opens the day.", undefined, "Best moment."]);
-    expect(plan.edits).toEqual({ deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], momentOrder: [], photoSwaps: {} });
+    expect(plan.edits).toEqual({ deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], excludedShotIds: [], momentOrder: [], photoSwaps: {} });
   });
 
   it("shows a swapped photo, ignores a swap to a hidden shot, and takes hidden photos out", () => {

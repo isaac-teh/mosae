@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFixtureStoryRepository } from "../../../packages/core/src/story/fixtureRepository";
 import type { DirectionOptions, Film, StoryPlan } from "@mosae/core";
 
-const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, apiRepositories: new Map<string, any>(), params: {} as any, navigate: vi.fn(), setParams: vi.fn() }));
+const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, apiRepositories: new Map<string, any>(), params: {} as any, navigate: vi.fn(), setParams: vi.fn(), share: vi.fn() }));
 vi.mock("@mosae/core", () => ({
   getStoryRepository: () => boundary.repository,
   createFixtureStoryRepository: () => new Proxy({}, { get: (_, key) => boundary.repository[key] }),
@@ -36,8 +36,8 @@ vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "film.mp4" }) 
 vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circle: () => null, Rect: () => null }));
 vi.mock("react-native", () => {
   const element = (tag: string) => ({ children, onPress, onChangeText, numberOfLines, accessibilityLabel, source, resizeMode, keyboardShouldPersistTaps, placeholderTextColor, contentContainerClassName, multiline, textAlignVertical, horizontal, showsHorizontalScrollIndicator, showsVerticalScrollIndicator, ...props }: any) =>
-    React.createElement(tag, { ...props, onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined, ...(tag === "img" ? { src: source?.uri, alt: accessibilityLabel } : {}) }, children);
-  return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), Image: element("img"), TextInput: element("input") };
+    React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined, ...(tag === "img" ? { src: source?.uri, alt: accessibilityLabel } : {}) }, children);
+  return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), Image: element("img"), TextInput: element("input"), Share: { share: (...args: unknown[]) => boundary.share(...args) } };
 });
 
 import ReviewMomentsScreen from "../app/review-moments";
@@ -94,6 +94,12 @@ const film = (filmId: string, planId: string, posterKey: string): Film => ({
 });
 
 describe("review screens", () => {
+  it("shows an Ask for a change request at the top of Review Moments", async () => {
+    boundary.params = { planId: "initial", repository: "fixture", request: "Make it shorter" };
+    await render(ReviewMomentsScreen);
+    expect(host.textContent).toContain("You asked: Make it shorter");
+  });
+
   it("restores the live repository from the URL on a fresh mount and carries identity forward", async () => {
     boundary.params = { planId: "initial", repository: "api", projectId: "live-project" };
     await render(ReviewMomentsScreen);
@@ -105,6 +111,20 @@ describe("review screens", () => {
     root = createRoot(host);
     await render(ReviewMomentsScreen);
     expect(host.textContent).toContain("Live project story");
+  });
+
+  it("shows the director chat saved screen, shares the film URL, and returns to films", async () => {
+    boundary.params = { filmId: "saved-film", repository: "fixture", directorChat: "true" };
+    boundary.repository = { getFilm: vi.fn(async () => ({ ...film("saved-film", "plan-1", "poster"), title: "Japan, autumn", momentCount: 419, videoUrl: "https://film.example/saved.mp4" })) };
+    await render(SaveFilmScreen);
+    expect(host.textContent).toContain("✓ Saved to your films");
+    expect(host.textContent).toContain("419 moments · Still editable anytime");
+    expect(host.querySelectorAll('[aria-label="Share options"] button')).toHaveLength(4);
+    for (const label of ["Download", "WhatsApp", "Facebook", "Instagram"]) expect(host.querySelector(`button[aria-label="${label}"]`)).not.toBeNull();
+    await click("WhatsApp");
+    expect(boundary.share).toHaveBeenCalledWith({ message: "https://film.example/saved.mp4" });
+    await click("Back to your films");
+    expect(boundary.navigate).toHaveBeenCalledWith("/");
   });
   it("returns to a fixture review after a live review without retaining its repository", async () => {
     boundary.params = { planId: "initial", repository: "api", projectId: "live-project" };

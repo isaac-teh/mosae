@@ -63,7 +63,7 @@ function ReviewMoment({ moment, first, last, busy, highlight, onToggleSelected, 
 
 export default function ReviewMomentsScreen() {
   const router = useRouter();
-  const { planId } = useLocalSearchParams<{ planId: string }>();
+  const { planId, request } = useLocalSearchParams<{ planId: string; request?: string }>();
   const { repository, route } = useStoryFlow();
   const goBack = useStepBack(route("/tell-story") as Href);
   const { plan, error, mutationError, updating, mutate } = useStoryPlan(planId, repository);
@@ -201,6 +201,7 @@ export default function ReviewMomentsScreen() {
           other photos slid past it and the move looked reversed. */}
       <ScrollView className="flex-1" keyboardShouldPersistTaps="handled" style={{ overflowAnchor: "none" } as object}>
         <View className="px-4 pb-[112px] pt-[84px]">
+          {request ? <Text className="mb-4 rounded-md bg-surface-sunken p-3 font-sans text-body text-ink">You asked: {request}</Text> : null}
           {/* Intro heading - Figtree SemiBold 14px leading 17.5px tracking -0.35px */}
           <Text className="font-sans-semibold text-[14px] leading-[17.5px] tracking-[-0.35px] text-ink">
             {plan.intro.headline}

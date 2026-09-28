@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Share, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
@@ -20,13 +20,14 @@ function FacebookIcon() { return <Svg width={22} height={22} viewBox="0 0 22 22"
 function GalleryIcon() { return <Svg width={20} height={20} viewBox="0 0 20 20"><Rect x={2.5} y={3} width={12.5} height={12.5} rx={1.2} fill="none" stroke="rgb(var(--color-ink))" strokeWidth={1.5} /><Path d="m4.5 13 3.1-3.1 2.25 2.25 1.7-1.7 2.45 2.55M10.5 3V1.8h6.8v12.6h-2.3" fill="none" stroke="rgb(var(--color-ink))" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></Svg>; }
 
 export default function SaveFilmScreen() {
-  const { filmId } = useLocalSearchParams<{ filmId: string }>();
+  const { filmId, directorChat } = useLocalSearchParams<{ filmId: string; directorChat?: string }>();
   const story = useStoryFlow();
-  return <SaveFilmScreenContent key={`${story.identityKey}:film:${filmId}`} filmId={filmId} repository={story.repository} route={story.route} />;
+  return <SaveFilmScreenContent key={`${story.identityKey}:film:${filmId}`} filmId={filmId} directorChat={directorChat === "true"} repository={story.repository} route={story.route} />;
 }
 
-function SaveFilmScreenContent({ filmId, repository, route }: {
+function SaveFilmScreenContent({ filmId, directorChat, repository, route }: {
   filmId: string;
+  directorChat: boolean;
   repository: StoryRepository;
   route: (path: string, id?: { planId?: string; filmId?: string }) => string;
 }) {
@@ -64,6 +65,19 @@ function SaveFilmScreenContent({ filmId, repository, route }: {
   };
   if (error) return <View className="flex-1 items-center justify-center bg-surface"><Text className="text-action">{error}</Text></View>;
   if (!film) return <View className="flex-1 bg-surface"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => goBack()} backLabel="Go back to your film" /></View>;
+  if (directorChat) return <View className="flex-1 bg-surface px-5">
+    <View className="flex-row items-center justify-center gap-2 py-4"><Text className="font-sans-semibold text-button text-positive">✓ Saved to your films</Text></View>
+    <ScrollView className="flex-1" contentContainerClassName="gap-4 pb-4">
+      <FilmPlayer source={film.videoUrl ?? require("../assets/demo/film.mp4")} poster={storyImage(film.savePosterKey)} durationSec={film.durationSec} aspect="landscape" compact />
+      <View className="gap-1"><Text className="font-title text-heading text-ink">{film.title}</Text><Text className="font-sans text-caption text-ink-muted">{film.momentCount} moments · Still editable anytime</Text></View>
+      <Text className="font-sans-semibold text-button text-ink">Save or share</Text>
+      <View accessibilityLabel="Share options" className="flex-row flex-wrap justify-between gap-y-3">
+        <Pressable role="button" aria-label="Download" onPress={() => void download()} className="min-h-12 min-w-[72px] items-center justify-center rounded-full border border-line-strong px-3"><Text className="font-sans text-caption text-ink">Download</Text></Pressable>
+        {["WhatsApp", "Facebook", "Instagram"].map((service) => <Pressable key={service} role="button" aria-label={service} onPress={() => void Share.share({ message: film.videoUrl ?? film.title })} className="min-h-12 min-w-[72px] items-center justify-center rounded-full border border-line-strong px-3"><Text className="font-sans text-caption text-ink">{service}</Text></Pressable>)}
+      </View>
+    </ScrollView>
+    <Pressable role="button" aria-label="Back to your films" onPress={() => router.navigate("/" as never)} className="mb-5 min-h-12 items-center justify-center rounded-md border border-line-strong"><Text className="font-sans-semibold text-button text-ink">Back to your films</Text></Pressable>
+  </View>;
   const share = (name: string, icon: React.ReactNode, onPress: () => void) => <Pressable key={name} role="button" aria-label={name} onPress={onPress} className="w-[72px] items-center"><View className="size-12 items-center justify-center rounded-full bg-surface-raised shadow-[0_2px_10px_rgba(66,50,40,0.06)]">{icon}</View><Text className="mt-1.5 font-sans-medium text-[11px] text-ink">{name}</Text></Pressable>;
   return <View className="flex-1 bg-surface"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => goBack()} backLabel="Go back to your film" />
     <ScrollView className="flex-1" contentContainerClassName="min-h-[845px] px-4 pb-3" showsVerticalScrollIndicator={false}>
