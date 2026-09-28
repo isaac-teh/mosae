@@ -32,8 +32,9 @@ function labelFor(person: { personId: string; role: CastRole; name: string }, ev
  * square, then offsetting it so the box lands in view. Cropping this way needs
  * no server-side face images: the thumbnail the app already signs is enough.
  */
-function FaceCrop({ url, bbox }: { url?: string; bbox?: [number, number, number, number] }) {
-  if (!url || !bbox) return <View style={{ width: CROP_PX, height: CROP_PX }} className="rounded-[10px] bg-surface-sunken" />;
+function FaceCrop({ url, bbox, size = CROP_PX }: { url?: string; bbox?: [number, number, number, number]; size?: number }) {
+  const CROP = size;
+  if (!url || !bbox) return <View style={{ width: CROP, height: CROP }} className="rounded-[10px] bg-surface-sunken" />;
   const [ymin, xmin, ymax, xmax] = bbox;
   // Pad the box outward so the crop reads as a portrait, not a tight mask.
   const pad = 0.6;
@@ -42,18 +43,18 @@ function FaceCrop({ url, bbox }: { url?: string; bbox?: [number, number, number,
   const half = Math.max(halfW, halfH);
   const cx = (xmin + xmax) / 2;
   const cy = (ymin + ymax) / 2;
-  // The full image must be this many px wide for the 2*half slice to fill CROP_PX.
-  const scaled = CROP_PX / (2 * half);
+  // The full image must be this many px wide for the 2*half slice to fill CROP.
+  const scaled = CROP / (2 * half);
   return (
-    <View style={{ width: CROP_PX, height: CROP_PX, overflow: "hidden" }} className="rounded-[10px] bg-surface-sunken">
+    <View style={{ width: CROP, height: CROP, overflow: "hidden" }} className="rounded-[10px] bg-surface-sunken">
       <Image
         source={{ uri: url }}
         accessibilityIgnoresInvertColors
         style={{
           width: scaled,
           height: scaled,
-          marginLeft: -(cx * scaled - CROP_PX / 2),
-          marginTop: -(cy * scaled - CROP_PX / 2),
+          marginLeft: -(cx * scaled - CROP / 2),
+          marginTop: -(cy * scaled - CROP / 2),
         }}
       />
     </View>
@@ -216,25 +217,33 @@ export default function CharacterPickerScreen() {
     </View>
   );
 
-  const moveSheet = (faces: Face[]) => {
-    const face = faces.find((item) => item.faceId === movingFaceId);
-    if (!face) return null;
-    return (
-      <View className="mt-3 rounded-[12px] bg-surface-sunken p-3">
-        <Text className="font-sans-semibold text-xs leading-4 text-ink">Who is this really?</Text>
-        <View className="mt-2 flex-row flex-wrap gap-2">
-          {moveTargets(face.faceId).map((person) => (
-            <Pressable key={person.personId} role="button" aria-label={`Move to ${(person.name.trim() || person.fallback)}`} onPress={() => moveFace(face.faceId, person.personId)} className="rounded-full bg-white px-3 py-1.5">
-              <Text className="font-sans-medium text-xs leading-4 text-ink">{(person.name.trim() || person.fallback)}</Text>
+  // The move menu is a popup over the whole screen, so the bottom bar never
+  // hides it and it reads the same wherever the tapped crop sits.
+  const movingFace = allFaces.find((face) => face.faceId === movingFaceId);
+  const movePopup = movingFace ? (
+    <View className="absolute inset-0 z-30 items-center justify-center px-5">
+      <Pressable role="button" aria-label="Close" onPress={() => setMovingFaceId(null)} className="absolute inset-0 bg-black/40" />
+      <View role="dialog" aria-label="Who is this really?" className="w-full max-w-[420px] rounded-[20px] bg-white p-5 shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.2)]">
+        <View className="items-center">
+          <FaceCrop url={thumbnails[movingFace.assetId]} bbox={movingFace.bbox} size={120} />
+        </View>
+        <Text className="mt-4 text-center font-serif text-[20px] leading-[26px] text-ink">Who is this really?</Text>
+        <View className="mt-4 gap-2">
+          {moveTargets(movingFace.faceId).map((person) => (
+            <Pressable key={person.personId} role="button" aria-label={`Move to ${person.name.trim() || person.fallback}`} onPress={() => moveFace(movingFace.faceId, person.personId)} className="items-center rounded-full bg-surface-sunken py-3">
+              <Text className="font-sans-semibold text-sm leading-5 text-ink">{person.name.trim() || person.fallback}</Text>
             </Pressable>
           ))}
-          <Pressable role="button" aria-label="Move to a new person" onPress={() => moveFace(face.faceId, "new")} className="rounded-full bg-white px-3 py-1.5">
-            <Text className="font-sans-medium text-xs leading-4 text-brand">+ New person</Text>
+          <Pressable role="button" aria-label="Move to a new person" onPress={() => moveFace(movingFace.faceId, "new")} className="items-center rounded-full bg-surface-sunken py-3">
+            <Text className="font-sans-semibold text-sm leading-5 text-brand">+ Someone else</Text>
+          </Pressable>
+          <Pressable role="button" aria-label="Cancel" onPress={() => setMovingFaceId(null)} className="items-center py-2">
+            <Text className="font-sans-medium text-sm leading-5 text-ink-soft">Cancel</Text>
           </Pressable>
         </View>
       </View>
-    );
-  };
+    </View>
+  ) : null;
 
   return (
     <View className="flex-1 bg-canvas">
@@ -289,7 +298,6 @@ export default function CharacterPickerScreen() {
               </View>
               <Text className="mt-3 font-sans text-xs leading-4 text-ink-soft">{`Photos of ${label}. Not them? Tap the photo to move it.`}</Text>
               {cropRow(faces, label)}
-              {moveSheet(faces)}
               <Pressable role="switch" aria-checked={person.excluded} aria-label={`Leave ${label} out`} onPress={() => updatePerson(person.personId, { excluded: !person.excluded })} className="mt-3 self-start rounded-full bg-surface-muted px-3 py-1.5">
                 <Text className="font-sans-semibold text-xs leading-4 text-ink">{person.excluded ? "Bring back into the film" : "Leave out of the film"}</Text>
               </Pressable>
@@ -303,7 +311,6 @@ export default function CharacterPickerScreen() {
             <Text className="font-sans-semibold text-sm leading-5 text-ink">Others in your photos</Text>
             <Text className="mt-0.5 font-sans text-xs leading-4 text-ink-soft">Not in the film unless you add them. Tap one to say who it is.</Text>
             {cropRow(others, "unknown")}
-            {moveSheet(others)}
           </View>
         )}
       </ScrollView>
@@ -323,6 +330,7 @@ export default function CharacterPickerScreen() {
           <Text className="font-sans-medium text-xs leading-4 text-ink-soft">Skip — let Mosaé decide</Text>
         </Pressable>
       </View>
+      {movePopup}
     </View>
   );
 }
