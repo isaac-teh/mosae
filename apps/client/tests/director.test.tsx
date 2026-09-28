@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, conf
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-1" }), useRouter: () => ({ back: vi.fn(), push: mocks.push }) }));
 vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typeof import("@mosae/core")>()), getStoryRepository: () => mocks.repo }));
 vi.mock("@/lib/characters", () => ({ confirmCast: (...args: any[]) => mocks.confirmCast(...args) }));
-vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flowRepo }) }));
+vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flowRepo, flow: { repository: "api", projectId: "project-1" } }) }));
 vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: () => React.createElement("div", { "data-testid": "film-player" }) }));
 import DirectorScreen from "../app/director";
 
@@ -21,6 +21,7 @@ beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; host = d
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 async function renderScreen() { await act(async () => root.render(<DirectorScreen />)); }
 async function click(label: string) { const button = host.querySelector(`button[aria-label="${label}"]`) ?? host.querySelector(`button[aria-label^="${label},"]`) ?? [...host.querySelectorAll("button")].find((item) => item.textContent?.trim() === label); expect(button).toBeTruthy(); await act(async () => button!.dispatchEvent(new MouseEvent("click", { bubbles: true }))); }
+async function clickInDialog(label: string) { const button = host.querySelector(`[role="dialog"] button[aria-label="${label}"]`); expect(button).toBeTruthy(); await act(async () => button!.dispatchEvent(new MouseEvent("click", { bubbles: true }))); }
 function hasText(text: string) { return host.textContent?.includes(text) ?? false; }
 async function waitFor(check: () => void) { for (let i = 0; i < 40; i++) { try { check(); return; } catch { await act(async () => new Promise((resolve) => setTimeout(resolve, 10))); } } check(); }
 
@@ -118,14 +119,16 @@ describe("Director chat", () => {
   });
 
   it("shows a Mosae retry message and logs instead of rendering the API error code", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const infoLog = vi.spyOn(console, "info").mockImplementation(() => {});
     setup({ createPlan: async () => { throw new Error("not_found"); } }); await renderScreen();
     await click("Yes, our Japan trip");
     await waitFor(() => expect(hasText("I couldn't do that. Try again?")).toBe(true));
     expect(hasText("not_found")).toBe(false);
     expect(hasText("Try again")).toBe(true);
-    expect(log).toHaveBeenCalledWith("Director chat request failed", "not_found");
-    log.mockRestore();
+    expect(infoLog).toHaveBeenCalledWith("Director chat request failed", "not_found");
+    expect(errorLog.mock.calls.some(([message]) => message === "Director chat request failed")).toBe(false);
+    errorLog.mockRestore(); infoLog.mockRestore();
   });
 
   it("renders confirmation progress in the header only", async () => {
@@ -180,32 +183,41 @@ describe("Director chat", () => {
   });
 
   it("saves Keep and Leave out choices in one constraints update when Done is pressed", async () => {
+    const leftOut = planFixture.leftOut;
+    planFixture.leftOut = [];
     await openMoments();
-    await click("Moment set-aside-blur");
-    await click("Moment dup-0"); await click("Moment dup-0");
+    await click("Moment shot-1");
+    await click("Moment shot-2"); await click("Moment shot-2");
     await click("Done");
     await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledTimes(1));
-    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["set-aside-blur"], excludedShotIds: ["previously-excluded", "dup-0"] }));
+    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["moment-1"], excludedShotIds: ["previously-excluded", "dup-0", "shot-2"] }));
+    planFixture.leftOut = leftOut;
   });
 
   it("preserves earlier exclusions and removes a prior exclusion when that tile is marked Keep", async () => {
+    const leftOut = planFixture.leftOut;
+    planFixture.leftOut = [];
     await openMoments();
-    await click("Moment dup-0");
-    await click("Moment dup-1"); await click("Moment dup-1");
+    const priorExclusions = planFixture.edits.excludedShotIds;
+    planFixture.edits.excludedShotIds = ["previously-excluded", "shot-2", "dup-0"];
+    await click("Moment shot-2");
+    await click("Moment shot-3"); await click("Moment shot-3");
     await click("Done");
     await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledTimes(1));
-    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["dup-0"], excludedShotIds: ["previously-excluded", "dup-1"] }));
+    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["moment-2"], excludedShotIds: ["previously-excluded", "dup-0", "shot-3"] }));
+    planFixture.leftOut = leftOut;
+    planFixture.edits.excludedShotIds = priorExclusions;
   });
 
   it("opens the all-moments picker and submits the selected ids", async () => {
     await openMoments();
     await click("Choose from all 465");
     expect(hasText("Must-include moments")).toBe(true);
-    await click("Moment shot-4");
+    await clickInDialog("Moment shot-4");
     await click("Add 1 moments");
     expect(mocks.repo.applyEdits).not.toHaveBeenCalled();
     await click("Done");
-    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["shot-4"] })));
+    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["moment-4"] })));
   });
 
   it("shows a conflict question and stays on moments when the constraints patch returns 409", async () => {
@@ -282,7 +294,7 @@ describe("Director chat", () => {
     await waitFor(() => expect(hasText("Save film")).toBe(true));
     await click("Save film");
     await waitFor(() => expect(mocks.repo.saveFilm).toHaveBeenCalledWith("film-1"));
-    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/save-film", params: { filmId: "film-1", directorChat: "true" } });
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/save-film", params: { filmId: "film-1", directorChat: "true", repository: "api", projectId: "project-1" } });
   });
 
   it("sends Ask for a change to Review Moments with the request in the URL", async () => {

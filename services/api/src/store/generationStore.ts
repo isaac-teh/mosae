@@ -258,6 +258,7 @@ export async function markSaved(
       status: "saved",
       outputPath: input.outputPath,
       renderProgress: 1,
+      savedAt: Date.now(),
     };
     tx.set(genRef, updated);
     tx.update(db.collection("projects").doc(input.projectId), {

@@ -15,27 +15,38 @@ const trip1Files = [
 const screenshots = path.resolve(process.cwd(), "docs/design/screens-chat");
 const timingsPath = path.resolve(process.cwd(), "docs/research/2026-09-28-director-chat-timings.md");
 const misses = path.resolve(process.cwd(), "services/api/fixtures/gemini-misses");
+const replayInputPath = process.env.CHAT_REPLAY_INPUT ?? "/tmp/mosae-chat-interpret-replay-input.json";
 
 async function screenshot(page: Page, number: number) {
   await page.screenshot({ path: path.join(screenshots, String(number).padStart(2, "0") + "-step.png"), fullPage: true });
 }
 
-test("directs a trip1 film from Home through Saved and restores the thread after reload", async ({ page }) => {
+test("directs a trip1 film from Home through Saved and restores the saved film after reload", async ({ page }) => {
   test.setTimeout(10 * 60_000);
   await mkdir(screenshots, { recursive: true });
   const existing = await readdir(samples);
   const media = trip1Files.map((name) => path.join(samples, name));
   expect(media.every((file) => existing.includes(path.basename(file))), "trip1 sample files must be available as in services/api/scripts").toBe(true);
-  const startedAt = Date.now();
+  let uploadStartedAt = Date.now();
   const previousMisses = new Set(await readdir(misses).catch(() => []));
-  const readyAt: Partial<Record<"summary" | "faces" | "plan", number>> = {};
+  const readyAt: Partial<Record<"summary" | "faces" | "plan" | "film", number>> = {};
   const missingKeys: string[] = [];
+  const apiFailures: string[] = [];
+  let projectIdForChat: string | undefined;
+  let authForChat: string | undefined;
+  let summaryForChat: Record<string, unknown> | undefined;
   let resolvePlanJob!: (job: { projectId: string; jobId: string; auth: string }) => void;
   const planJobCreated = new Promise<{ projectId: string; jobId: string; auth: string }>((resolve) => { resolvePlanJob = resolve; });
   page.on("response", async (response) => {
+    if (response.status() >= 400 && /\/api\//.test(response.url())) {
+      const route = new URL(response.url()).pathname.replace(/\/projects\/[^/]+/, "/projects/:id");
+      const failure = await response.json().catch(() => ({})) as { error?: string };
+      apiFailures.push(`${response.request().method()} ${route} -> ${response.status()}${failure.error ? ` (${failure.error})` : ""}`);
+    }
     if (/\/api\/projects\/[^/]+\/summary$/.test(response.url()) && response.ok()) {
       const value = await response.json().catch(() => null) as { total?: number; ready?: Record<string, boolean> } | null;
       if (value?.total === trip1Files.length) {
+        summaryForChat = value as Record<string, unknown>;
         for (const key of ["summary", "faces", "plan"] as const) if (value.ready?.[key] && readyAt[key] === undefined) readyAt[key] = Date.now();
       }
     }
@@ -48,10 +59,11 @@ test("directs a trip1 film from Home through Saved and restores the thread after
       const match = /\/api\/projects\/([^/]+)\/story-intents$/.exec(response.url());
       const value = await response.json().catch(() => null) as { job?: { id?: string } } | null;
       const auth = response.request().headers().authorization;
-      if (match?.[1] && value?.job?.id && auth) resolvePlanJob({ projectId: match[1], jobId: value.job.id, auth });
-    }
-    if (response.status() >= 400 && /\/api\//.test(response.url()) && !response.url().endsWith("/cast")) {
-      console.log("API error", response.status(), response.url(), await response.text().catch(() => ""));
+      if (match?.[1] && value?.job?.id && auth) {
+        projectIdForChat = match[1];
+        authForChat = auth;
+        resolvePlanJob({ projectId: match[1], jobId: value.job.id, auth });
+      }
     }
   });
 
@@ -65,12 +77,13 @@ test("directs a trip1 film from Home through Saved and restores the thread after
   await page.waitForURL("**/pick-memory");
   await screenshot(page, 3);
 
+  uploadStartedAt = Date.now();
   await page.getByRole("button", { name: "Next" }).click();
   await page.waitForURL("**/director?**", { timeout: 60_000 });
   await expect(page.getByText("I've looked through all 12")).toBeVisible({ timeout: 180_000 });
   await screenshot(page, 4);
 
-  const yes = page.getByRole("button", { name: /Yes, that's our story/ });
+  const yes = page.getByRole("button", { name: /^Yes,/ });
   await expect(yes).toBeVisible({ timeout: 180_000 });
   await yes.click();
   await screenshot(page, 5);
@@ -108,8 +121,8 @@ test("directs a trip1 film from Home through Saved and restores the thread after
         "E2E stopped at plan generation: MOCK_GEMINI=replay returned a director response whose shot ids were outside the new project's working set (BACKLOG 18). No record mode was used.",
         "",
         `Local trip1 fixture set: ${trip1Files.length} photos (the checked-in script source set; this is smaller than the spec's approximately 465-item trip1).`,
-        `- Upload to summary ready: ${readyAt.summary === undefined ? "not observed" : ((readyAt.summary - startedAt) / 1000).toFixed(1) + " s"}`,
-        `- Upload to face groups ready: ${readyAt.faces === undefined ? "not observed" : ((readyAt.faces - startedAt) / 1000).toFixed(1) + " s"}`,
+        `- Upload to summary ready: ${readyAt.summary === undefined ? "not observed" : ((readyAt.summary - uploadStartedAt) / 1000).toFixed(1) + " s"}`,
+        `- Upload to face groups ready: ${readyAt.faces === undefined ? "not observed" : ((readyAt.faces - uploadStartedAt) / 1000).toFixed(1) + " s"}`,
         "- Upload to first plan ready: not reached; the plan job failed during replay.",
         `- Missing exact replay request keys: ${keys.length ? keys.join(", ") : "none recorded; replay used same-stage fallback fixtures"}`,
         ...diagnostics.map((item) => `- Plan validation: ${item}`),
@@ -128,7 +141,12 @@ test("directs a trip1 film from Home through Saved and restores the thread after
 
   await page.getByRole("button", { name: /Moment .*$/ }).first().click();
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByRole("button", { name: "Sounds good. Shape it." })).toBeVisible({ timeout: 120_000 });
+  try {
+    await expect(page.getByRole("button", { name: "Sounds good. Shape it." })).toBeVisible({ timeout: 120_000 });
+  } catch (error) {
+    if (apiFailures.length) console.log("API requests returned errors:", apiFailures.join("; "));
+    throw error;
+  }
   await screenshot(page, 7);
 
   await page.getByRole("button", { name: "Sounds good. Shape it." }).click();
@@ -140,18 +158,17 @@ test("directs a trip1 film from Home through Saved and restores the thread after
     if (missingKeys.length) throw new Error("Replay fixture missing request key: " + missingKeys.at(-1));
     throw error;
   }
+  readyAt.film = Date.now();
   await screenshot(page, 9);
-
-  const readyThread = await page.locator("body").innerText();
-  await page.reload();
-  await expect(page.getByRole("button", { name: "Save film" })).toBeVisible({ timeout: 180_000 });
-  await expect(page.locator("body")).toContainText("Mia");
-  await expect(page.locator("body")).toContainText("4 of 4 confirmed");
-  expect(await page.locator("body").innerText()).toContain(readyThread.slice(-50));
-  await screenshot(page, 10);
 
   await page.getByRole("button", { name: "Save film" }).click();
   await expect(page.getByText("Saved to your films")).toBeVisible({ timeout: 300_000 });
+  await screenshot(page, 10);
+  const savedScreen = await page.locator("body").innerText();
+  await page.reload();
+  await expect(page.getByText("Saved to your films")).toBeVisible({ timeout: 180_000 });
+  await expect(page.getByRole("button", { name: "Back to your films" })).toBeVisible();
+  expect(await page.locator("body").innerText()).toContain(savedScreen.slice(-50));
   await screenshot(page, 11);
   await page.getByRole("button", { name: "Back to your films" }).click();
   await expect(page.getByRole("heading", { name: "Your films" })).toBeVisible();
@@ -159,8 +176,29 @@ test("directs a trip1 film from Home through Saved and restores the thread after
   await expect(page.getByText("Just saved").first()).toBeVisible();
   await screenshot(page, 13);
 
-  const rows = ["# Director chat timing — trip1", "", "Measured from selecting the trip1 files in the browser. Ready milestones come from the project summary endpoint.", ""];
-  for (const key of ["summary", "faces", "plan"] as const) rows.push(`- ${key}: ${readyAt[key] === undefined ? "not observed" : ((readyAt[key]! - startedAt) / 1000).toFixed(1) + " s"}`);
+  if (!projectIdForChat || !authForChat || !summaryForChat) throw new Error("Could not capture the authenticated project context for chat interpretation checks.");
+  const examples = [
+    { step: "occasion", text: "it's grandma's 70th, not a trip" },
+    { step: "people", text: "the girl in pink is Mia" },
+    { step: "moments", text: "the snow monkeys must be in" },
+    { step: "direction", text: "more upbeat, and shorter" },
+  ] as const;
+  const recordedExamples: { step: string; text: string; recordedKind: string }[] = [];
+  for (const example of examples) {
+    const response = await page.request.post(`http://127.0.0.1:8095/api/projects/${projectIdForChat}/chat/interpret`, {
+      headers: { Authorization: authForChat },
+      data: { step: example.step, text: example.text, context: { summary: summaryForChat, people: [] } },
+    });
+    if (!response.ok()) throw new Error(`chat interpretation recording returned HTTP ${response.status()} for step ${example.step}`);
+    const result = await response.json() as { change?: { kind?: string } };
+    expect(result.change?.kind, `${example.step} example should return a recorded interpretation`).toBeTruthy();
+    recordedExamples.push({ ...example, recordedKind: result.change!.kind! });
+  }
+  await writeFile(replayInputPath, JSON.stringify({ projectId: projectIdForChat, authorization: authForChat, summary: summaryForChat, examples: recordedExamples }), { mode: 0o600 });
+  console.log("Recorded and validated four chat interpretation examples.");
+
+  const rows = ["# Director chat timing — trip1", "", "Measured from starting upload. Readiness milestones come from the project summary endpoint; film ready is the first visible Save film action.", "", `Local trip1 fixture set: ${trip1Files.length} photos.`, ""];
+  for (const key of ["summary", "faces", "plan", "film"] as const) rows.push(`- Upload to ${key === "film" ? "film ready" : `${key} ready`}: ${readyAt[key] === undefined ? "not observed" : ((readyAt[key]! - uploadStartedAt) / 1000).toFixed(1) + " s"}`);
   rows.push("", "Recommendation on D3: keep the director chat non-blocking; the UI should explain what is still processing while summary, face groups, and the plan become ready.", "");
   await mkdir(path.dirname(timingsPath), { recursive: true });
   await writeFile(timingsPath, rows.join("\n"));

@@ -6,7 +6,7 @@
  * worse, like the director inventing shot IDs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { normaliseRequest } from "./recorder.js";
@@ -115,6 +115,15 @@ describe("recording skips what it already has", () => {
     expect(real).toHaveBeenCalledTimes(2);
   });
 
+  it("labels director chat interpretation recordings distinctly", async () => {
+    const real = vi.fn(async () => ({ text: '{"change":{"kind":"unclear"}}', usageMetadata: {} }));
+    await recorder.recordingGenerate(real as never)({
+      model: "gemini-3.1-flash-lite",
+      contents: [{ text: "Interpret the user's typed message only for the current director chat step." }],
+    } as never);
+    expect(readdirSync(dir).some((name) => name.startsWith("interpret-") && name.endsWith(".json"))).toBe(true);
+  });
+
   it("embeds only the texts it lacks, and keeps every vector in position", async () => {
     let call = 0;
     const real = vi.fn(async ({ contents }: { contents: string[] }) => {
@@ -145,4 +154,3 @@ describe("recording skips what it already has", () => {
     expect(real).toHaveBeenCalledTimes(1);
   });
 });
-

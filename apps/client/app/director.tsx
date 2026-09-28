@@ -24,7 +24,7 @@ export default function DirectorScreen() {
   const params = useLocalSearchParams<{ projectId?: string }>();
   const projectId = params.projectId ?? "";
   const story = useStoryFlow();
-  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, momentState, pickerOpen, directionOptions, people } = useDirectorChat(projectId, story.repository);
+  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, momentState, pickerOpen, directionOptions, people } = useDirectorChat(projectId, story.repository, story.flow);
   const router = useRouter();
   const [name, setName] = useState("");
   const [namingPerson, setNamingPerson] = useState<string | null>(null);

@@ -10,11 +10,11 @@ const REQUEST_FAILURE = "I couldn't do that. Try again?";
 
 function reportFailure(cause: unknown): string {
   const error = cause as { code?: unknown; message?: unknown };
-  console.error("Director chat request failed", error?.code ?? error?.message ?? "unknown");
+  console.info("Director chat request failed", error?.code ?? error?.message ?? "unknown");
   return REQUEST_FAILURE;
 }
 
-export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository()) {
+export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository(), storyFlow?: { repository: "api" | "fixture"; projectId?: string }) {
   const [input, setInput] = useState<ChatInput>(EMPTY_INPUT);
   const [summary, setSummary] = useState<ProjectSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -135,8 +135,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       if (!input.plan || saving) return;
       setSaving(true); setError(null);
       try {
-        const mustIncludeMomentIds = [...new Set([...Object.entries(momentState).filter(([, value]) => value === "keep").map(([id]) => id)])];
-        const keptShotIds = new Set(mustIncludeMomentIds);
+        const momentIdsByShot = new Map(input.plan.moments.map((moment) => [moment.shotId ?? moment.id, moment.id]));
+        const mustIncludeMomentIds = [...new Set(Object.entries(momentState)
+          .filter(([, value]) => value === "keep")
+          .map(([shotId]) => momentIdsByShot.get(shotId) ?? shotId))];
+        const keptShotIds = new Set(Object.entries(momentState).filter(([, value]) => value === "keep").map(([shotId]) => shotId));
         const excludedShotIds = [...new Set([...(input.plan.edits?.excludedShotIds ?? []), ...Object.entries(momentState).filter(([, value]) => value === "leave").map(([id]) => id)])].filter((id) => !keptShotIds.has(id));
         const edits = { ...(input.plan.edits ?? { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], momentOrder: [], photoSwaps: {} }), mustIncludeMomentIds, excludedShotIds } as PlanEdits;
         const updated = await repository.applyEdits(input.plan.planId, edits);
@@ -197,7 +200,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       setSaving(true); setError(null);
       try {
         await repository.saveFilm(film.filmId);
-        router.push({ pathname: "/save-film", params: { filmId: film.filmId, directorChat: "true" } } as any);
+        router.push({ pathname: "/save-film", params: { filmId: film.filmId, directorChat: "true", ...(storyFlow ?? {}) } } as any);
       } catch (cause) { setError(reportFailure(cause)); }
       finally { setSaving(false); }
     },
