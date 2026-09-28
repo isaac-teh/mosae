@@ -12,6 +12,14 @@ describe("interpret", () => {
     expect(result.change).toEqual({ kind: "direction", pace: "lively", lengthSec: 60 });
     expect(result.reply).toBeTruthy();
   });
+  it("asks for confirmation because interpretation does not apply changes", async () => {
+    const generate = vi.fn().mockResolvedValue({ change: { kind: "direction", pace: "lively", lengthSec: 60 } });
+    await interpret(request("direction", "more upbeat, and shorter"), { generate, searchShots: vi.fn() });
+    const prompt = (generate.mock.calls[0]![0] as { contents: { text: string }[] }).contents[0]!.text;
+    expect(prompt).toContain("Nothing has been applied yet");
+    expect(prompt).toContain("confirmation question");
+    expect(prompt).toContain("Make it lively and about a minute?");
+  });
   it("keeps off-step text as a note", async () => {
     const result = await interpret(request("occasion", "remember to thank the hosts"), {
       generate: generate({ change: { kind: "note", note: "Thank the hosts" } }), searchShots: vi.fn(),

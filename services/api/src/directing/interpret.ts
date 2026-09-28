@@ -56,7 +56,7 @@ export async function interpret(req: InterpretRequest, deps: {
   try {
     const modelResult = validate(await deps.generate({
       model: MODELS.analyze, stage: "chat.interpret", thinking: "MINIMAL",
-      contents: [{ text: `Interpret the user's typed message only for the current director chat step. Never apply it; restate your understanding briefly. If unrelated to this step, return kind note. If unsure, return unclear. For moments, return a concise semantic search query.\nStep: ${req.step}\nContext: ${JSON.stringify(req.context)}\nText: ${req.text}` }],
+      contents: [{ text: `Interpret the user's typed message only for the current director chat step. Nothing has been applied yet. Restate the proposed change as a concise confirmation question for the user, such as "Make it lively and about a minute?" If unrelated to this step, return kind note. If unsure, return unclear. For moments, return a concise semantic search query.\nStep: ${req.step}\nContext: ${JSON.stringify(req.context)}\nText: ${req.text}` }],
       responseSchema, validate,
     }));
     const allowedKind: Record<ChatStep, ChatChange["kind"]> = {
