@@ -69,3 +69,5 @@ export {
   type ReflowOptions,
   type ReflowResult,
 } from "./reflow.js";
+
+export { EditOpSchema, applyEdits, mergeOps, type EditOp, type EditResult } from "./edits.js";

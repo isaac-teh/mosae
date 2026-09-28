@@ -16,6 +16,7 @@ const positiveSeconds = z.number().finite().positive();
 export const ChapterSchema = z.strictObject({
   title: z.string().min(1),
   startSec: seconds,
+  durationSec: positiveSeconds.optional(),
 });
 
 const VideoSourceSchema = z.strictObject({
