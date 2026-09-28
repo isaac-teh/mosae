@@ -1,5 +1,5 @@
 // Figma: "Review Selected Moments" (1:384)
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import type { AlternativeShot, Moment, PlanEdits } from "@mosae/core";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -66,6 +66,12 @@ export default function ReviewMomentsScreen() {
   const [undoCount, setUndoCount] = useState(0);
   const [swapping, setSwapping] = useState<{ moment: Moment; shots: AlternativeShot[] | null } | null>(null);
   const [showLeftOut, setShowLeftOut] = useState(false);
+  // Every edit is a new plan version. Point the URL at it, so a reload or a
+  // shared link opens what is on screen rather than the version before the edit.
+  const shownPlanId = plan?.planId;
+  useEffect(() => {
+    if (shownPlanId && planId && shownPlanId !== planId) router.setParams?.({ planId: shownPlanId });
+  }, [shownPlanId, planId, router]);
 
   if (error) {
     return (

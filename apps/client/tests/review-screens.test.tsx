@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFixtureStoryRepository } from "../../../packages/core/src/story/fixtureRepository";
 import type { DirectionOptions, Film, StoryPlan } from "@mosae/core";
 
-const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, apiRepositories: new Map<string, any>(), params: {} as any, navigate: vi.fn() }));
+const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, apiRepositories: new Map<string, any>(), params: {} as any, navigate: vi.fn(), setParams: vi.fn() }));
 vi.mock("@mosae/core", () => ({
   getStoryRepository: () => boundary.repository,
   createFixtureStoryRepository: () => new Proxy({}, { get: (_, key) => boundary.repository[key] }),
@@ -14,7 +14,7 @@ vi.mock("@mosae/core", () => ({
     return repository;
   },
 }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ navigate: boundary.navigate }) }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ navigate: boundary.navigate, setParams: boundary.setParams }) }));
 vi.mock("@/lib/useStepBack", () => ({ useStepBack: () => vi.fn() }));
 vi.mock("@/lib/demoAssets", () => ({ demoImage: (key: string) => {
   if (key.includes(":")) throw new Error("URI used as demo key");
@@ -408,6 +408,13 @@ describe("live review edits", () => {
     expect(boundary.repository.applyEdits).toHaveBeenLastCalledWith("initial", { ...emptyEdits, momentOrder: ["real-1", "real-0"] });
     await click("Undo");
     expect(boundary.repository.applyEdits).toHaveBeenLastCalledWith("v1", emptyEdits);
+  });
+
+  it("points the URL at the new version after an edit, so a reload keeps it", async () => {
+    await render(ReviewMomentsScreen);
+    await click("More for Memory 0");
+    await click("Move Memory 0 down");
+    expect(boundary.setParams).toHaveBeenCalledWith({ planId: "v1" });
   });
 
   it("can't move the first moment of a day up", async () => {

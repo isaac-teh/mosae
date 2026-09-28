@@ -224,6 +224,19 @@ describe("createApiStoryRepository", () => {
     expect(deps.listenDocument).not.toHaveBeenCalledWith("projects/project-1/storyProposals/proposal-next", true);
   });
 
+  it("opens the project's current version when the link names an older one", async () => {
+    const deps = dependencies();
+    const base = deps.listenDocument;
+    deps.listenDocument = vi.fn(async (path, waitForExists) => {
+      if (path === "projects/project-1") return { id: "project-1", currentProposalId: "proposal-2" };
+      if (path === "projects/project-1/storyProposals/proposal-2") return { ...(await base("projects/project-1/storyProposals/proposal-1")) as object, id: "proposal-2", title: "Edited" };
+      return base(path, waitForExists);
+    });
+    const plan = await createApiStoryRepository({ projectId: "project-1" }, deps).getPlan("proposal-1");
+    expect(plan.planId).toBe("proposal-2");
+    expect(plan.title).toBe("Edited");
+  });
+
   it("counts every project shot the proposal left out, not the shots it kept", async () => {
     const plan = await createApiStoryRepository({ projectId: "project-1" }, dependencies()).getPlan("proposal-1");
 

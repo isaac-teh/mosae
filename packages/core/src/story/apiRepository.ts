@@ -35,6 +35,8 @@ type ProjectionSources = {
   shots: ShotProjectionSource[];
   /** Every shot in the project, not only the ones this proposal uses. */
   totalShotCount: number;
+  /** The version that accepts edits; null for a project that has none yet. */
+  currentProposalId: string | null;
 };
 
 // Favorites are presentation-only. Keep them for the lifetime of the client
@@ -213,6 +215,7 @@ async function loadSources(deps: ApiStoryRepositoryDeps, projectId: string, prop
 
   return {
     proposal: proposalRecord,
+    currentProposalId: typeof projectRecord.currentProposalId === "string" ? projectRecord.currentProposalId : null,
     // Every shot in the project, so "add from N other photos" counts the media
     // the proposal left out rather than the moments it kept.
     totalShotCount: shotValues.length,
@@ -271,6 +274,10 @@ export function createApiStoryRepository(
     },
     getPlan: async (planId) => {
       const source = await loadSources(deps, projectId, planId);
+      // Edits make new versions, and only the current one accepts more edits.
+      // A reload or an old link names an earlier version: open the current one.
+      const current = source.currentProposalId;
+      if (current && current !== planId) return render(await loadSources(deps, projectId, current));
       return render(source);
     },
     setMomentSelected: async (planId, momentId, selected) => {

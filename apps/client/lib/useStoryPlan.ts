@@ -7,7 +7,10 @@ export function useStoryPlan(planId: string, repository: StoryRepository) {
   currentIdentity.current = identity;
   const empty = { plan: null as StoryPlan | null, error: null as string | null, mutationError: null as string | null, updating: false };
   const [state, setState] = useState({ identity, ...empty });
-  const visible = state.identity === identity ? state : empty;
+  // After an edit the screen points its URL at the version it already shows;
+  // that is the same plan, so keep it rather than blanking and reloading.
+  const adopted = state.identity !== identity && state.identity.repository === repository && state.plan?.planId === planId;
+  const visible = state.identity === identity || adopted ? state : empty;
   const request = useRef(0);
   const busy = useRef<typeof identity | null>(null);
   const load = useCallback(async () => {
@@ -23,6 +26,7 @@ export function useStoryPlan(planId: string, repository: StoryRepository) {
     }
   }, [identity, repository, planId]);
   useEffect(() => {
+    if (adopted) { setState((value) => ({ ...value, identity })); return; }
     void load();
     return () => { request.current++; };
   }, [load]);
