@@ -29,3 +29,7 @@ services/api/fixtures/gemini-misses/
 vendor/
 poc/gemini/PuLID-FLUX-diffusers/
 brag-output/
+
+poc/lyria/out/
+
+poc/lyria/.venv/
