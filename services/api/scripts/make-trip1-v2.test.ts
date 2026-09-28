@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { exiftool } from "exiftool-vendored";
+import sharp from "sharp";
 
 const SAMPLES_DIR = resolve(process.env.SAMPLES_DIR ?? "/Users/isaacteh/Projects/Triiz/mosae/poc/gemini/samples");
 const DIR = join(SAMPLES_DIR, "trip1-v2");
@@ -44,13 +45,31 @@ describe.skipIf(!existsSync(DIR))("trip1-v2 test set", () => {
       expect(photobomb!.filter((face) => face.personId && face.expect === "subject")).toHaveLength(3);
       const pastedFace = photobomb!.find((face) => !face.personId && face.expect === "background");
       expect(pastedFace).toBeDefined();
-      expect(pastedFace!.bbox[2] - pastedFace!.bbox[0]).toBeGreaterThan(0.05);
-      expect(pastedFace!.bbox[2] - pastedFace!.bbox[0]).toBeLessThan(0.08);
+      expect(pastedFace!.bbox[3] - pastedFace!.bbox[1]).toBeGreaterThan(0.05);
+      expect(pastedFace!.bbox[3] - pastedFace!.bbox[1]).toBeLessThan(0.08);
+      expect(pastedFace!.bbox[1]).toBeGreaterThan(0.6);
+      expect(pastedFace!.bbox[2]).toBeLessThan(0.35);
+      const photobombMeta = await sharp(join(DIR, "x-photobomb.jpg")).rotate().metadata();
+      expect(photobombMeta.width).toBeGreaterThan(0);
+      expect(photobombMeta.height).toBeGreaterThan(0);
+      const photobombCentreX = (pastedFace!.bbox[1] + pastedFace!.bbox[3]) / 2;
+      const photobombCentreY = (pastedFace!.bbox[0] + pastedFace!.bbox[2]) / 2;
+      expect(photobombCentreX).toBeGreaterThan(0.6);
+      expect(photobombCentreY).toBeLessThan(0.35);
       const distant = labels.photos[await hashFor("x-distant.jpg")];
       expect(distant).toHaveLength(1);
       expect(distant![0]).toMatchObject({ expect: "background" });
       expect(distant![0].personId).toBeUndefined();
-      expect(distant![0].bbox[2] - distant![0].bbox[0]).toBeLessThan(0.02);
+      expect(distant![0].bbox[3] - distant![0].bbox[1]).toBeLessThan(0.02);
+      const distantMeta = await sharp(join(DIR, "x-distant.jpg")).rotate().metadata();
+      expect(distantMeta.width).toBeGreaterThan(0);
+      expect(distantMeta.height).toBeGreaterThan(0);
+      const distantCentreX = (distant![0].bbox[1] + distant![0].bbox[3]) / 2;
+      const distantCentreY = (distant![0].bbox[0] + distant![0].bbox[2]) / 2;
+      expect(distantCentreX).toBeGreaterThan(0.23);
+      expect(distantCentreX).toBeLessThan(0.26);
+      expect(distantCentreY).toBeGreaterThan(0.29);
+      expect(distantCentreY).toBeLessThan(0.33);
     } finally {
       await exiftool.end();
     }

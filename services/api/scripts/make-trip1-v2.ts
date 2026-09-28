@@ -71,6 +71,17 @@ const DEMOTED_SOURCE_FACES: Record<string, string[]> = {
   "trip1/pexels-vo-van-ti-n-2037497312-34133887.jpg": ["p-dad"],
 };
 
+type PixelRect = { left: number; top: number; width: number; height: number };
+
+function normalizedBox(rect: PixelRect, imageWidth: number, imageHeight: number): [number, number, number, number] {
+  return [
+    rect.top / imageHeight,
+    rect.left / imageWidth,
+    (rect.top + rect.height) / imageHeight,
+    (rect.left + rect.width) / imageWidth,
+  ];
+}
+
 function sha(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -97,17 +108,49 @@ async function main() {
       const before = sha(await readFile(src));
       if (item.out === "x-photobomb.jpg") {
         const stranger = join(SAMPLES_DIR, "trip/d07-kyoto-photo-27467505.jpg");
-        const cutout = await sharp(stranger)
-          .extract({ left: 475, top: 280, width: 350, height: 430 })
-          .resize({ width: 300 })
+        const source = sharp(stranger).rotate();
+        const strangerMeta = await source.metadata();
+        if (!strangerMeta.width || !strangerMeta.height) throw new Error(`Missing oriented dimensions for ${stranger}`);
+        const crop = { left: 560, top: 300, width: 210, height: 350 };
+        const sourceFace = { left: 565, top: 335, width: 90, height: 130 };
+        const base = sharp(src).rotate();
+        const baseMeta = await base.metadata();
+        if (!baseMeta.width || !baseMeta.height) throw new Error(`Missing oriented dimensions for ${src}`);
+        const pasteWidth = Math.round(baseMeta.width * 0.14);
+        const scale = pasteWidth / crop.width;
+        const paste = { left: Math.round(baseMeta.width * 0.70), top: Math.round(baseMeta.height * 0.025) };
+        const cutout = await source
+          .extract(crop)
+          .resize({ width: pasteWidth })
           .jpeg({ quality: 92 })
           .toBuffer();
-        await sharp(src)
-          .composite([{ input: cutout, left: 1550, top: 25 }])
+        await base
+          .composite([{ input: cutout, ...paste }])
           .jpeg({ quality: 92 })
           .toFile(dst);
+        const outMeta = await sharp(dst).metadata();
+        if (!outMeta.width || !outMeta.height) throw new Error(`Missing output dimensions for ${dst}`);
+        const faceRect = {
+          left: paste.left + Math.round((sourceFace.left - crop.left) * scale),
+          top: paste.top + Math.round((sourceFace.top - crop.top) * scale),
+          width: Math.round(sourceFace.width * scale),
+          height: Math.round(sourceFace.height * scale),
+        };
+        EXTRA_FACES["x-photobomb.jpg"][0].bbox = normalizedBox(faceRect, outMeta.width, outMeta.height);
       } else {
-        await copyFile(src, dst);
+        if (item.out === "x-distant.jpg") {
+          await sharp(src).rotate().jpeg({ quality: 92 }).toFile(dst);
+          const oriented = await sharp(dst).metadata();
+          if (!oriented.width || !oriented.height) throw new Error(`Missing output dimensions for ${dst}`);
+          // The far-bank woman's face, measured in the auto-oriented source image.
+          EXTRA_FACES["x-distant.jpg"][0].bbox = normalizedBox(
+            { left: 451, top: 371, width: 16, height: 22 },
+            oriented.width,
+            oriented.height,
+          );
+        } else {
+          await copyFile(src, dst);
+        }
       }
       const gps = item.place ? PLACES[item.place] : null;
       await exiftool.write(dst, {
