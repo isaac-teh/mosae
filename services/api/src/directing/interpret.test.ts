@@ -18,6 +18,18 @@ describe("interpret", () => {
     });
     expect(result.change).toEqual({ kind: "note", note: "Thank the hosts" });
   });
+  it("turns a change kind for another step into the user's note", async () => {
+    const result = await interpret(request("occasion", "make it more upbeat"), {
+      generate: generate({ change: { kind: "direction", pace: "lively" }, reply: "I'll make it more upbeat." }), searchShots: vi.fn(),
+    });
+    expect(result).toEqual({ reply: "I'll keep that in mind.", change: { kind: "note", note: "make it more upbeat" } });
+  });
+  it("keeps off-step text as a note even when model confidence is low", async () => {
+    const result = await interpret(request("occasion", "make it more upbeat"), {
+      generate: generate({ confidence: 0.2, change: { kind: "direction", pace: "lively" } }), searchShots: vi.fn(),
+    });
+    expect(result).toEqual({ reply: "I'll keep that in mind.", change: { kind: "note", note: "make it more upbeat" } });
+  });
   it("returns the fallback when generation fails", async () => {
     const result = await interpret(request("people", "the girl in pink is Mia"), {
       generate: vi.fn().mockRejectedValue(new Error("offline")), searchShots: vi.fn(),

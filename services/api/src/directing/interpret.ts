@@ -59,6 +59,13 @@ export async function interpret(req: InterpretRequest, deps: {
       contents: [{ text: `Interpret the user's typed message only for the current director chat step. Never apply it; restate your understanding briefly. If unrelated to this step, return kind note. If unsure, return unclear. For moments, return a concise semantic search query.\nStep: ${req.step}\nContext: ${JSON.stringify(req.context)}\nText: ${req.text}` }],
       responseSchema, validate,
     }));
+    const allowedKind: Record<ChatStep, ChatChange["kind"]> = {
+      occasion: "occasion", people: "person", moments: "moments", direction: "direction",
+    };
+    const returnedKind = modelResult.change.kind;
+    if (returnedKind !== "note" && returnedKind !== allowedKind[req.step]) {
+      return { reply: "I'll keep that in mind.", change: { kind: "note", note: req.text } };
+    }
     if ((modelResult.confidence ?? 1) < 0.5 || modelResult.change.kind === "unclear") return { reply: fallback, change: { kind: "unclear" } };
     let change: ChatChange;
     if (modelResult.change.kind === "moments") {
