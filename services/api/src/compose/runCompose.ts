@@ -152,8 +152,8 @@ export async function runCompose(
 
   // Stage 4: assemble → orderByChronology → applyArc → applyCastGuards
   // (coverage, focus, closing-in-last-chapter, opening-from-first-chapter)
-  // → re-sort by chronology within chapters only, preserving the guard's
-  // closing clip as last and opening clip as first → fitDuration.
+  // → restore the arc after guard swaps, then re-pin only guard-selected
+  // boundaries → fitDuration.
   const timeOf = job.timeOf ?? new Map<string, ClipTime>();
   const chapterOf = job.chapterOf ?? new Map<string, number>();
   const chronological = orderByChronology(assembledClips, timeOf);
@@ -174,17 +174,16 @@ export async function runCompose(
       label: (personId) => job.cast!.namesById[personId] ?? "a family member",
     });
     const guardedClips = guarded.clips;
-    const opener = guardedClips[0];
-    const closer = guardedClips.at(-1);
-    const sorted = orderByChronology(guardedClips, timeOf);
-    // Keep the guard-selected boundary clips pinned while restoring chronology
-    // inside each chapter (including newly swapped clips).
-    selectedClips = sorted.filter((clip) => clip !== opener && clip !== closer);
+    const opener = guarded.opened ? guardedClips[0] : undefined;
+    const closer = guarded.closed ? guardedClips.at(-1) : undefined;
+    // Keep the guarded boundary clips in the arc input so a pinned last
+    // chapter still gives applyArc the chapter context needed for the earlier
+    // chapter peaks; re-pin them after the arc is restored.
+    const restoredArc = applyArc(orderByChronology(guardedClips, timeOf), timeOf).clips;
+    selectedClips = restoredArc.filter((clip) => clip !== opener && clip !== closer);
     if (opener) selectedClips.unshift(opener);
     if (closer && closer !== opener) selectedClips.push(closer);
     castReasons = [...arc.reasons, ...guarded.reasons];
-  } else {
-    selectedClips = orderByChronology(selectedClips, timeOf);
   }
 
   // Stage 5: fitDuration — adjust photo holds to target duration

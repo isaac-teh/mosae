@@ -13,6 +13,7 @@ describe("applyCastGuards", () => {
     expect(out.clips.map((c) => c.itemId)).toEqual(["m3", "m1", "m2"]);
     expect(out.reasons).toContain("Closing on the whole family together.");
     expect(out.reasons).toContain("Opening on the place before the people.");
+    expect(out).toMatchObject({ opened: true, closed: true });
   });
   it("adds missing core members without removing another's sole appearance", () => {
     const out = run([clip("m1"), clip("m3")], [clip("m2")]);
@@ -39,7 +40,7 @@ describe("applyCastGuards", () => {
   });
   it("returns clips unchanged for empty cast", () => {
     const clips = [clip("m2")];
-    expect(run(clips, [], [], [])).toEqual({ clips, reasons: [] });
+    expect(run(clips, [], [], [])).toEqual({ clips, reasons: [], opened: false, closed: false });
   });
   it("confirms already satisfied cast rules", () => {
     const out = run([clip("m2")], [], ["A", "B", "C"], ["C"]);

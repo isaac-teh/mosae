@@ -11,8 +11,8 @@ export type GuardInput = {
   label: (personId: string) => string;
 };
 
-export function applyCastGuards(input: GuardInput): { clips: AssembledClip[]; reasons: string[] } {
-  if (input.core.length === 0) return { clips: input.clips, reasons: [] };
+export function applyCastGuards(input: GuardInput): { clips: AssembledClip[]; reasons: string[]; opened: boolean; closed: boolean } {
+  if (input.core.length === 0) return { clips: input.clips, reasons: [], opened: false, closed: false };
   const clips = [...input.clips];
   const unused = [...input.unused];
   const reasons: string[] = [];
@@ -76,18 +76,24 @@ export function applyCastGuards(input: GuardInput): { clips: AssembledClip[]; re
     if (peopleClips.length > 0 && focusClips.length / peopleClips.length >= 0.5) reasons.push(`Centred the film on ${input.focus.map(input.label).join(" and ")}.`);
   }
 
+  let closed = false;
   const together = clips.map((clip, index) => ({ clip, index }))
     .filter(({ clip }) => input.chapterOf.get(clip.itemId) === lastChapter && input.core.every((id) => castOn(clip).has(id))).at(-1);
-  if (together && together.index !== clips.length - 1) {
-    clips.splice(together.index, 1);
-    clips.push(together.clip);
+  if (together) {
+    closed = true;
+    if (together.index !== clips.length - 1) {
+      clips.splice(together.index, 1);
+      clips.push(together.clip);
+    }
     reasons.push("Closing on the whole family together.");
-  } else if (together && together.index === clips.length - 1) reasons.push("Closing on the whole family together.");
+  }
   const establishing = clips.findIndex((clip) => input.chapterOf.get(clip.itemId) === firstChapter && castOn(clip).size === 0);
+  let opened = false;
   if (establishing > 0) {
     const [opener] = clips.splice(establishing, 1);
     clips.unshift(opener!);
     reasons.push("Opening on the place before the people.");
+    opened = true;
   }
-  return { clips: clips.map((clip, order) => ({ ...clip, order })), reasons };
+  return { clips: clips.map((clip, order) => ({ ...clip, order })), reasons, opened, closed };
 }

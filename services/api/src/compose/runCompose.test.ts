@@ -241,3 +241,57 @@ describe("runCompose — person-anchored Ken Burns", () => {
     expect(videoClip.motion).toBeUndefined();
   });
 });
+
+describe("runCompose — arc ordering after cast guards", () => {
+  const arcProposal = makeProposal({
+    moments: ["a", "b", "chapter2", "new"].map((id, index) => ({
+      id, shotId: `shot-${id}`, kind: "photo" as const, title: id, description: "", rationale: "",
+    })),
+    chapters: [
+      { id: "ch1", title: "Chapter 1", summary: "First chapter", momentIds: ["a", "b", "new"] },
+      { id: "ch2", title: "Chapter 2", summary: "Second chapter", momentIds: ["chapter2"] },
+    ],
+    constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: ["a", "b", "chapter2"], feedback: [] },
+  });
+  const arcAssets = new Map<string, import("./buildCandidates.js").Asset>(["a", "b", "chapter2"].map((id) => [id, {
+    kind: "video" as const, analysis: { shots: [{ startSec: 0, endSec: 12, description: id, usable: true }] },
+  }]));
+  arcAssets.set("new", { kind: "photo", analysis: { caption: "new" } });
+  const arcTimes = new Map([
+    ["a", { chapter: 0, localTime: "2026-01-01T08:00:00", score: 0.9 }],
+    ["b", { chapter: 0, localTime: "2026-01-01T09:00:00", score: 0.2 }],
+    ["chapter2", { chapter: 1, localTime: "2026-01-01T10:00:00", score: 0.5 }],
+    ["new", { chapter: 0, localTime: "2026-01-01T08:30:00", score: 0.1 }],
+  ]);
+  const arcDeps = () => makeDeps({
+    assets: arcAssets,
+    generateStructured: vi.fn().mockResolvedValue({
+      clips: ["a", "b", "chapter2"].map((id) => ({ candidateId: `${id}#s0@0.15c${id === "chapter2" ? 1 : 0}`, transition: "cut" as const, audio: "mute" as const })),
+      musicCues: [],
+    }),
+  });
+  const cast = (overrides?: Partial<NonNullable<ComposeJob["cast"]>>) => ({
+    summary: "family", core: ["mom"], focus: [], peopleByMoment: new Map<string, Set<string>>(),
+    subjectsByMoment: new Map<string, Set<string>>(), namesById: { mom: "Mom" }, ...overrides,
+  });
+
+  it("preserves the per chapter peak order when cast guards make no swaps", async () => {
+    const result = await runCompose(makeJob({
+      proposal: arcProposal, cast: cast({ peopleByMoment: new Map(["a", "b", "chapter2"].map((id) => [id, new Set(["mom", "dad"])])) }),
+      chapterOf: new Map([["a", 0], ["b", 0], ["chapter2", 1], ["new", 0]]), timeOf: arcTimes,
+    }), arcDeps());
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.timeline.videoClips.map((clip) => clip.id)).toEqual(["b#s0@0.15c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
+  });
+
+  it("orders a cast replacement by time while keeping the chapter peak last", async () => {
+    const result = await runCompose(makeJob({
+      proposal: arcProposal, cast: cast({ peopleByMoment: new Map([["a", new Set(["dad"])], ["b", new Set(["dad"])], ["chapter2", new Set(["dad"])], ["new", new Set(["mom"])]]), subjectsByMoment: new Map([["new", new Set(["mom"]) ]]) }),
+      chapterOf: new Map([["a", 0], ["b", 0], ["chapter2", 1], ["new", 0]]), timeOf: arcTimes,
+    }), arcDeps());
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.timeline.videoClips.map((clip) => clip.id)).toEqual(["new#still@c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
+  });
+});
