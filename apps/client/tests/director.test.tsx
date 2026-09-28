@@ -27,8 +27,13 @@ async function waitFor(check: () => void) { for (let i = 0; i < 40; i++) { try {
 
 const summary = (faces = true) => ({ total: 8, photos: 8, clips: 0, days: 2, dateRange: null, places: ["Tokyo"], country: "Japan", season: "late October", processed: { ingested: 8, understood: 8, faces: 4 }, ready: { summary: true, faces, plan: false } });
 const people = [
-  { personId: "person-1", name: null, role: null, momentCount: 212, sampleShotIds: ["a", "b"], days: [2, 3] },
-  { personId: "person-2", name: null, role: null, momentCount: 90, sampleShotIds: ["c"], days: [1] },
+  { personId: "person-1", name: null, role: null, momentCount: 212, sampleShotIds: ["a", "b", "c", "d"], sampleFaces: [
+    { shotId: "a", uri: "https://thumb.test/a", bbox: [0.1, 0.2, 0.4, 0.5] },
+    { shotId: "b", uri: "https://thumb.test/b", bbox: [0.3, 0.4, 0.7, 0.8] },
+    { shotId: "c", uri: "https://thumb.test/c", bbox: [0.2, 0.3, 0.5, 0.6] },
+    { shotId: "d", uri: "https://thumb.test/d", bbox: [0.4, 0.4, 0.8, 0.8] },
+  ], days: [1, 2, 3] },
+  { personId: "person-2", name: null, role: null, momentCount: 90, sampleShotIds: ["c"], sampleFaces: [], days: [1] },
 ];
 
 const planFixture = {
@@ -58,6 +63,8 @@ describe("Director chat", () => {
   it("shows the ready summary and starts the story intent when the occasion reply is tapped", async () => {
     setup(); await renderScreen();
     expect(hasText("I've looked through all 8")).toBe(true);
+    expect(host.textContent?.match(/Is that the story\?/g)).toHaveLength(1);
+    expect(host.querySelector('[data-from="mosae"]')?.textContent).toContain("Is that the story?");
     await click("Yes, our Japan trip");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip", []));
     expect(hasText("Yes, our Japan trip")).toBe(true);
@@ -65,7 +72,9 @@ describe("Director chat", () => {
 
   it("titles the chat from country and season, then falls back to place and Your film", async () => {
     setup(); await renderScreen();
-    expect(host.textContent).toContain("Japan, autumn");
+    expect(host.textContent).toContain("Japan, October");
+    setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), country: "Singapore", season: "early June", places: ["Telok Blangah"] }); await renderScreen();
+    expect(host.textContent).toContain("Singapore, June");
     setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), country: null, season: null }); await renderScreen();
     expect(host.textContent).toContain("Tokyo");
     setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), country: null, season: null, places: [] }); await renderScreen();
@@ -103,10 +112,18 @@ describe("Director chat", () => {
     expect(hasText("One person appears in 90 moments. Who is this?")).toBe(true);
   });
 
-  it("Skip for now advances past the people step", async () => {
+  it("shows face previews and only the inline Skip once the person question appears", async () => {
+    setup({ people: [{ ...people[0], momentCount: 12 }, { ...people[1], momentCount: 9 }] }); await renderScreen(); await click("Yes, our Japan trip");
+    expect(host.querySelectorAll('img[alt^="Person photo "]')).toHaveLength(4);
+    expect(hasText("4 of 12 shown · Day 1, 2 and 3")).toBe(true);
+    expect(host.querySelectorAll('button[aria-label="Skip"]')).toHaveLength(1);
+    expect(hasText("Skip for now")).toBe(false);
+  });
+
+  it("Skip on the person question advances past the people step", async () => {
     setup(); await renderScreen();
     await click("Yes, our Japan trip");
-    await click("Skip for now");
+    await click("Skip");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
     expect(hasText("Skip")).toBe(true);
     expect(hasText("Family")).toBe(false);

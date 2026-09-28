@@ -58,6 +58,8 @@ describe("deriveChat state table", () => {
     expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Reading your photos, 3 of 10" });
     const occasion = deriveChat({ ...base(), intent: null, people: null, peopleConfirmed: false, plan: null });
     expect(occasion.items[0]).toMatchObject({ kind: "mosae", text: "I've looked through all 10. It looks like a trip to Japan in late October: Tokyo, Kyoto. Is that the story?" });
+    const singapore = deriveChat({ ...base(), summary: { ...summary, country: "Singapore", season: "early June", places: ["Telok Blangah", "Siloso Beach"] }, intent: null, people: null, peopleConfirmed: false, plan: null });
+    expect(singapore.items[0]).toMatchObject({ kind: "mosae", text: "I've looked through all 10. It looks like a trip to Singapore in early June: Telok Blangah, Siloso Beach. Is that the story?" });
   });
 
   it("asks the three people with the most moments, then offers anyone else", () => {
@@ -79,6 +81,12 @@ describe("deriveChat state table", () => {
     const state = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null });
     expect(state.items[1]).toMatchObject({ kind: "you", text: "Skip" });
     expect(state.items[2]).toMatchObject({ kind: "person", personId: "p1" });
+  });
+
+  it("carries the person's face previews and bounding boxes to the question item", () => {
+    const sampleFaces = [{ shotId: "s1", uri: "https://thumb.test/s1", bbox: [0.1, 0.2, 0.4, 0.5] as [number, number, number, number] }];
+    const state = deriveChat({ ...base(), people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 12, sampleShotIds: ["s1"], sampleFaces } as any], peopleConfirmed: false, plan: null });
+    expect(state.items.find((item) => item.kind === "person")).toMatchObject({ kind: "person", sampleFaces });
   });
 
   it("uses the person chip label instead of a generic family label", () => {

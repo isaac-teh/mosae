@@ -330,7 +330,7 @@ export function createApiStoryRepository(
       const names = new Map(castPeople.map((person) => [String(person.personId), person]));
       const assets = new Map(assetsValue.map((value) => { const asset = record(value, "asset"); return [String(asset.id), asset] as const; }));
       const events = new Map(eventsValue.map((value) => { const event = record(value, "event"); return [String(event.id), event] as const; }));
-      const groups = new Map<string, { shots: Set<string>; days: Set<number> }>();
+      const groups = new Map<string, { shots: Set<string>; samples: Map<string, { shotId: string; assetId: string; bbox: [number, number, number, number] }>; days: Set<number> }>();
       const shots = Array.isArray(characters.shots) ? characters.shots as RecordData[] : [];
       for (const shotValue of shots) {
         const shot = record(shotValue, "character shot");
@@ -338,8 +338,12 @@ export function createApiStoryRepository(
         for (const faceValue of Array.isArray(shot.faces) ? shot.faces : []) {
           const face = record(faceValue, "face");
           if (typeof face.characterId !== "string" || !face.characterId) continue;
-          const group = groups.get(face.characterId) ?? { shots: new Set<string>(), days: new Set<number>() };
+          const group = groups.get(face.characterId) ?? { shots: new Set<string>(), samples: new Map(), days: new Set<number>() };
           group.shots.add(shotId);
+          const bbox = face.bbox;
+          if (typeof shot.assetId === "string" && Array.isArray(bbox) && bbox.length === 4 && bbox.every((value) => typeof value === "number") && !group.samples.has(shotId)) {
+            group.samples.set(shotId, { shotId, assetId: shot.assetId, bbox: bbox as [number, number, number, number] });
+          }
           const asset = assets.get(String(shot.assetId));
           const event = asset && events.get(String(asset.eventId));
           const day = /day\s+(\d+)/i.exec(String(event?.label ?? ""));
@@ -347,10 +351,20 @@ export function createApiStoryRepository(
           groups.set(face.characterId, group);
         }
       }
-      return [...groups.entries()].map(([personId, group]) => {
+      const thumbnailUrls = new Map<string, Promise<string>>();
+      const thumbnail = (assetId: string) => {
+        let pending = thumbnailUrls.get(assetId);
+        if (!pending) { pending = deps.getThumbnailUrl(id, assetId); thumbnailUrls.set(assetId, pending); }
+        return pending;
+      };
+      return (await Promise.all([...groups.entries()].map(async ([personId, group]) => {
         const person = names.get(personId);
-        return { personId, name: typeof person?.name === "string" ? person.name : null, role: typeof person?.role === "string" ? person.role : null, momentCount: group.shots.size, sampleShotIds: [...group.shots].slice(0, 4), days: [...group.days].sort((a, b) => a - b) } satisfies DirectorPerson;
-      }).sort((a, b) => b.momentCount - a.momentCount);
+        const samples = await Promise.all([...group.samples.values()].slice(0, 4).map(async ({ shotId, assetId, bbox }) => {
+          try { return { shotId, uri: await thumbnail(assetId), bbox }; }
+          catch { return null; }
+        }));
+        return { personId, name: typeof person?.name === "string" ? person.name : null, role: typeof person?.role === "string" ? person.role : null, momentCount: group.shots.size, sampleShotIds: [...group.shots].slice(0, 4), sampleFaces: samples.filter((sample): sample is NonNullable<typeof sample> => sample !== null), days: [...group.days].sort((a, b) => a - b) } satisfies DirectorPerson;
+      }))).sort((a, b) => b.momentCount - a.momentCount);
     },
     createPlan: async (storyText, _mediaRefs) => {
       const response = record(await deps.request("POST", `/api/projects/${encodeURIComponent(projectId)}/story-intents`, {

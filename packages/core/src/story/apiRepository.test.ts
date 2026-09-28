@@ -113,11 +113,16 @@ describe("createApiStoryRepository", () => {
   it("groups repeated faces by character and counts distinct shots", async () => {
     const deps = dependencies();
     vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
-      { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "face-1", characterId: "char-1" }, { faceId: "face-2", characterId: "char-1" }] },
-      { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "face-3", characterId: "char-1" }] },
+      { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "face-1", characterId: "char-1", bbox: [0.1, 0.2, 0.4, 0.5] }, { faceId: "face-2", characterId: "char-1", bbox: [0.2, 0.3, 0.5, 0.6] }] },
+      { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "face-3", characterId: "char-1", bbox: [0.3, 0.4, 0.7, 0.8] }] },
     ] } : { cast: { people: [{ personId: "char-1", name: "Mia", role: "child" }] } });
     const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
-    await expect(repository.getPeople("project-1")).resolves.toEqual([{ personId: "char-1", name: "Mia", role: "child", momentCount: 2, sampleShotIds: ["shot-1", "shot-2"], days: [1] }]);
+    await expect(repository.getPeople("project-1")).resolves.toEqual([{ personId: "char-1", name: "Mia", role: "child", momentCount: 2, sampleShotIds: ["shot-1", "shot-2"], sampleFaces: [
+      { shotId: "shot-1", uri: "https://storage.test/project-1/asset-1?signed=true", bbox: [0.1, 0.2, 0.4, 0.5] },
+      { shotId: "shot-2", uri: "https://storage.test/project-1/asset-2?signed=true", bbox: [0.3, 0.4, 0.7, 0.8] },
+    ], days: [1] }]);
+    expect(deps.getThumbnailUrl).toHaveBeenCalledWith("project-1", "asset-1");
+    expect(deps.getThumbnailUrl).toHaveBeenCalledWith("project-1", "asset-2");
   });
 
   it("uses Firestore snapshots and authenticated thumbnail API URLs in its default read adapter", async () => {

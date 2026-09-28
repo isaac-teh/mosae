@@ -53,9 +53,12 @@ describe("director chat components", () => {
 
   it("shows each person question's photos, days, role choices, and skip action", async () => {
     const onPick = vi.fn(); const onTypeName = vi.fn(); const onSkip = vi.fn();
-    await render(<ChatPersonQuestion momentCount={212} sampleUris={["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"]} days={[2, 3, 5, 6]} chips={["My daughter", "My wife", "Me"]} onPick={onPick} onTypeName={onTypeName} onSkip={onSkip} />);
+    await render(<ChatPersonQuestion momentCount={212} samples={["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"].map((uri, index) => ({ uri, bbox: [0.1, 0.2, 0.4, 0.5] as [number, number, number, number], shotId: `s${index}` }))} days={[2, 3, 5, 6]} chips={["My daughter", "My wife", "Me"]} onPick={onPick} onTypeName={onTypeName} onSkip={onSkip} />);
     expect(host.textContent).toContain("One person appears in 212 moments. Who is this?");
     expect(host.textContent).toContain("4 of 212 shown · Day 2, 3, 5 and 6");
+    expect(host.querySelectorAll('[data-face-preview="true"]')).toHaveLength(4);
+    expect(host.querySelector('[data-face-preview="true"]')?.className).toContain("rounded-md");
+    expect((host.querySelector('[data-face-preview="true"] img') as HTMLImageElement)?.style.marginLeft).toBeTruthy();
     await click("My daughter"); expect(onPick).toHaveBeenCalledWith("My daughter");
     await click("Type a name"); expect(onTypeName).toHaveBeenCalledOnce();
     expect(host.querySelectorAll("[role=button]")).toHaveLength(5);

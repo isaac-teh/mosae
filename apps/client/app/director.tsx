@@ -10,13 +10,14 @@ import { useStoryFlow } from "@/lib/storyFlow";
 function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
   if (!summary) return "Your film";
   const season = summary.season?.toLowerCase() ?? "";
+  const monthName = /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/.exec(season)?.[0];
   const seasonName = /spring|summer|autumn|fall|winter/.exec(season)?.[0]?.replace("fall", "autumn")
     ?? (/(january|february)/.test(season) ? "winter"
       : /march|april|may/.test(season) ? "spring"
         : /june|july|august/.test(season) ? "summer"
           : /september|october|november/.test(season) ? "autumn"
             : /december/.test(season) ? "winter" : null);
-  if (summary.country && seasonName) return `${summary.country}, ${seasonName}`;
+  if (summary.country && (monthName || seasonName)) return `${summary.country}, ${monthName ? monthName[0]!.toUpperCase() + monthName.slice(1) : seasonName}`;
   return summary.places[0] || "Your film";
 }
 
@@ -80,12 +81,11 @@ export default function DirectorScreen() {
           const country = projectSummary?.country;
           const answer = country ? `Yes, our ${country} trip` : "Yes, that's our story";
           const storyText = country ? `${country} trip` : projectSummary?.places[0] ?? "Our story";
-          return <ChatProposal key={item.id} question="Is that the story?" replies={[{ id: "yes", label: answer }]} onReply={() => void actions.confirmOccasion(answer, storyText)} />;
+          return <Pressable key={item.id} role="button" aria-label={answer} onPress={() => void actions.confirmOccasion(answer, storyText)} className="max-w-[80%] self-end rounded-md bg-bubble-you px-4 py-3"><Text className="font-sans text-body text-ink">{answer}</Text></Pressable>;
         }
         if (item.kind === "person") return <View key={item.id} className="gap-3">
-          <ChatPersonQuestion momentCount={item.momentCount} sampleUris={[]} days={item.days} chips={["My daughter", "My wife", "Me", "Type a name"]} onPick={(role) => void actions.setPerson(item.personId, role)} onTypeName={() => setNamingPerson(item.personId)} onSkip={() => void actions.setPerson(item.personId, "Skip")} />
+          <ChatPersonQuestion momentCount={item.momentCount} samples={item.sampleFaces} days={item.days} chips={["My daughter", "My wife", "Me", "Type a name"]} onPick={(role) => void actions.setPerson(item.personId, role)} onTypeName={() => setNamingPerson(item.personId)} onSkip={() => void actions.setPerson(item.personId, "Skip")} />
           {namingPerson === item.personId && <View className="flex-row gap-2"><TextInput accessibilityLabel="Person name" value={name} onChangeText={setName} className="min-h-11 flex-1 rounded-md border border-line-strong px-3 font-sans text-ink" /><Pressable role="button" onPress={() => { if (name.trim()) void actions.setPerson(item.personId, "Type a name", name.trim()); setName(""); setNamingPerson(null); }} className="min-h-11 justify-center px-3"><Text className="font-sans-semibold text-action">Save name</Text></Pressable></View>}
-          <Button label="Skip for now" variant="quiet" onPress={() => void actions.skipPeople()} />
         </View>;
         if (item.kind === "anyone-else") return <View key={item.id} className="gap-3"><ChatProposal question="Anyone else?" replies={[{ id: "no", label: "No, that's everyone" }]} onReply={() => void actions.skipPeople()} /></View>;
         return null;
