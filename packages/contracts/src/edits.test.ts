@@ -160,6 +160,26 @@ describe("applyEdits", () => {
     if (result.ok) expect(result.timeline.durationSec).toBe(10);
   });
 
+  it("preserves the incoming crossfade overlap after moving a clip", () => {
+    const crossfading = parseTimeline({
+      ...firstCut,
+      durationSec: 9.5,
+      chapters: [{ title: "Opening", startSec: 0 }, { title: "Journey", startSec: 4.5 }],
+      videoClips: firstCut.videoClips.map((clip, index) => index === 1
+        ? { ...clip, startSec: 1.5, transitionIn: { kind: "crossfade", durationSec: 0.5 } }
+        : { ...clip, startSec: [0, 1.5, 4.5, 6.5][index] }),
+      audioClips: [],
+      captions: [],
+    });
+    const result = applyEdits(crossfading, [{ op: "move", clipId: "p2", toIndex: 0 }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(geometry(result.timeline)).toEqual([
+      ["p2", 0, 2], ["p1", 2, 2], ["v1", 3.5, 3], ["c1", 6.5, 3],
+    ]);
+    expect(result.timeline.durationSec).toBe(9.5);
+  });
+
   it("rejects unknown clips and invalid trims without throwing", () => {
     expect(applyEdits(firstCut, [{ op: "remove", clipId: "missing" }])).toMatchObject({ ok: false, opIndex: 0 });
     expect(applyEdits(firstCut, [{ op: "trim", clipId: "p1", inSec: 0, outSec: 2 }])).toMatchObject({ ok: false, opIndex: 0 });

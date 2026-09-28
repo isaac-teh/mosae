@@ -56,9 +56,12 @@ function attach(firstCut: Timeline): WorkClip[] {
 
 function buildTimeline(firstCut: Timeline, work: WorkClip[], soundtrackId?: string): Timeline {
   let cursor = 0;
-  const videoClips = work.map((item) => {
-    const clip = { ...item.clip, startSec: cursor };
-    cursor += clip.durationSec;
+  const videoClips = work.map((item, index) => {
+    const overlap = index > 0 && item.clip.transitionIn?.kind === "crossfade"
+      ? Math.min(item.clip.transitionIn.durationSec, work[index - 1].clip.durationSec, cursor)
+      : 0;
+    const clip = { ...item.clip, startSec: cursor - overlap };
+    cursor = clip.startSec + clip.durationSec;
     if ("kind" in clip) return { ...clip, spec: { ...clip.spec, durationSec: clip.durationSec } };
     return clip;
   });
