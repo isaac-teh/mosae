@@ -33,7 +33,7 @@ export default function Home() {
   }
 
   return (
-    <View className="flex-1 bg-canvas">
+    <View className="flex-1 bg-surface">
       <MediaPicker ref={pickerRef} onFiles={start} />
       <ScrollView
         className="flex-1"
@@ -41,31 +41,31 @@ export default function Home() {
         style={{ overflow: "visible" }}
       >
         <LandingGlow />
-        <View className="relative h-14 flex-row items-center justify-between px-5"><Logo /><View className="rounded-full bg-surface-pill px-3 py-1"><Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-ink-soft">Beta</Text></View></View>
-        <View className="relative px-5 pt-6">
-          <Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-brand-bright">Your memories, directed</Text>
-          <Text role="heading" aria-level={1} className="mt-3 font-serif text-[36px] leading-[40px] tracking-[-0.5px] text-ink">Turn your photos into a film <Text className="font-serif-italic text-brand">worth keeping.</Text></Text>
-          <Text className="mt-3 font-sans text-sm leading-[22.75px] text-ink-soft">Upload the moments you love, tell Mosaé what they mean, and get an heirloom-quality short film made from your own photos and videos.</Text>
+        <View className="relative h-14 flex-row items-center justify-between px-4"><Logo /><View className="rounded-full bg-surface-sunken px-3 py-1"><Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-ink-muted">Beta</Text></View></View>
+        <View className="relative px-4 pt-6">
+          <Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-accent">Your memories, directed</Text>
+          <Text role="heading" aria-level={1} className="mt-3 font-title text-[36px] leading-[40px] tracking-[-0.5px] text-ink">Turn your photos into a film <Text className="font-sans text-action">worth keeping.</Text></Text>
+          <Text className="mt-3 font-sans text-body leading-[22.75px] text-ink-muted">Upload the moments you love, tell Mosaé what they mean, and get an heirloom-quality short film made from your own photos and videos.</Text>
         </View>
-        <View className="relative px-5 pt-7">
+        <View className="relative px-4 pt-7">
           <DropZone onFiles={start} onDraggingChange={setDragging}>
-            <Pressable role="button" onPress={() => pickerRef.current?.open()} className={`group w-full items-center rounded-3xl border-2 border-dashed px-6 pb-7 pt-8 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] ${dragging ? "border-brand bg-brand-tint/40" : "border-brand-dot bg-surface"}`}>
-              <View aria-hidden className="relative mb-5 h-[92px] w-[150px] items-center justify-center"><View className="absolute left-1 top-3 h-[72px] w-[58px] -rotate-12 rounded-xl bg-honey-tint shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]" /><View className="absolute right-1 top-3 h-[72px] w-[58px] rotate-12 rounded-xl bg-brand-tint shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]" /><View className="relative h-[84px] w-[66px] items-center justify-center rounded-xl bg-brand shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] group-hover:-translate-y-1"><Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d="M12 16V4" /><Path d="m6 10 6-6 6 6" /><Path d="M4 20h16" /></Svg></View></View>
-              <Text className="text-center font-serif text-[22px] leading-[28px] text-ink">{dragging ? "Drop to start" : "Upload photos & videos"}</Text><Text className="mt-1 text-center font-sans text-xs leading-[18px] text-ink-soft">Drag them here, or tap to browse your library</Text><View className="mt-4 rounded-full bg-surface-sunken px-3 py-1"><Text className="font-sans-medium text-[11px] leading-[14px] text-ink-soft">JPG · PNG · HEIC · MP4 · MOV</Text></View>
+            <Pressable role="button" onPress={() => pickerRef.current?.open()} className={`group w-full items-center rounded-3xl border-2 border-dashed px-6 pb-7 pt-8 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] ${dragging ? "border-action bg-ink-tint/40" : "border-line-strong bg-surface"}`}>
+              <View aria-hidden className="relative mb-5 h-[92px] w-[150px] items-center justify-center"><View className="absolute left-1 top-3 h-[72px] w-[58px] -rotate-12 rounded-xl bg-accent/20 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]" /><View className="absolute right-1 top-3 h-[72px] w-[58px] rotate-12 rounded-xl bg-ink-tint shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]" /><View className="relative h-[84px] w-[66px] items-center justify-center rounded-xl bg-action shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-4px_rgba(0,0,0,0.1)] group-hover:-translate-y-1"><Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d="M12 16V4" /><Path d="m6 10 6-6 6 6" /><Path d="M4 20h16" /></Svg></View></View>
+              <Text className="text-center font-title text-[22px] leading-[28px] text-ink">{dragging ? "Drop to start" : "Upload photos & videos"}</Text><Text className="mt-1 text-center font-sans text-caption leading-[18px] text-ink-muted">Drag them here, or tap to browse your library</Text><View className="mt-4 rounded-full bg-surface-sunken px-3 py-1"><Text className="font-sans-medium text-[11px] leading-[14px] text-ink-muted">JPG · PNG · HEIC · MP4 · MOV</Text></View>
             </Pressable>
           </DropZone>
-          {error && <Text role="alert" className="mt-3 text-center font-sans text-xs text-brand">{error}</Text>}
+          {error && <Text role="alert" className="mt-3 text-center font-sans text-caption text-action">{error}</Text>}
         </View>
-        <View className="relative px-5 pt-9"><Text role="heading" aria-level={2} className="font-sans-medium text-xs text-ink-soft">How it works</Text><View role="list" className="mt-3 flex-col gap-2">{STEPS.map((step, i) => <View role="listitem" key={step.title} className="flex-row items-start gap-3 rounded-2xl bg-surface-muted p-4"><View className="size-10 shrink-0 items-center justify-center rounded-full bg-surface shadow-sm"><Text className="text-lg">{step.emoji}</Text></View><View className="min-w-0 flex-1"><Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-ink-faint">Step {i + 1}</Text><Text className="mt-0.5 font-serif text-[17px] leading-[22px] text-ink">{step.title}</Text><Text className="mt-0.5 font-sans text-xs leading-[18px] text-ink-soft">{step.body}</Text></View></View>)}</View></View>
-        <View className="relative mt-6 flex-row items-center justify-center gap-1 px-5"><ShieldIcon /><Text className="font-sans text-xs leading-[18px] text-ink-soft/80">Your memories stay private to your account.</Text></View>
+        <View className="relative px-4 pt-9"><Text role="heading" aria-level={2} className="font-sans-medium text-caption text-ink-muted">How it works</Text><View role="list" className="mt-3 flex-col gap-2">{STEPS.map((step, i) => <View role="listitem" key={step.title} className="flex-row items-start gap-3 rounded-2xl bg-surface-sunken p-4"><View className="size-10 shrink-0 items-center justify-center rounded-full bg-surface shadow-sm"><Text className="text-lg">{step.emoji}</Text></View><View className="min-w-0 flex-1"><Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.55px] text-ink-muted">Step {i + 1}</Text><Text className="mt-0.5 font-sans text-[17px] leading-[22px] text-ink">{step.title}</Text><Text className="mt-0.5 font-sans text-caption leading-[18px] text-ink-muted">{step.body}</Text></View></View>)}</View></View>
+        <View className="relative mt-6 flex-row items-center justify-center gap-1 px-4"><ShieldIcon /><Text className="font-sans text-caption leading-[18px] text-ink-muted/80">Your memories stay private to your account.</Text></View>
       </ScrollView>
-      <View className="absolute inset-x-0 bottom-0 z-30 px-5 pb-8 pt-6">
+      <View className="absolute inset-x-0 bottom-0 z-30 px-4 pb-8 pt-6">
         <LinearGradient
-          colors={["rgba(252,249,244,0)", "rgba(252,249,244,0.95)", "#fcf9f4"]}
+          colors={["rgba(252,249,244,0)", "rgba(252,249,244,0.95)", "rgb(var(--color-surface))"]}
           locations={[0, 0.5, 1]}
           style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, pointerEvents: "none" }}
         />
-        <Pressable role="button" onPress={() => pickerRef.current?.open()} className="h-14 w-full flex-row items-center justify-center gap-1.5 rounded-full bg-brand shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)]"><SparklesIcon /><Text className="font-sans-medium text-sm tracking-[0.35px] text-white">Start with your memories</Text></Pressable>
+        <Pressable role="button" onPress={() => pickerRef.current?.open()} className="h-14 w-full flex-row items-center justify-center gap-1.5 rounded-full bg-action shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)]"><SparklesIcon /><Text className="font-sans-medium text-label tracking-[0.35px] text-on-action">Start with your memories</Text></Pressable>
       </View>
     </View>
   );

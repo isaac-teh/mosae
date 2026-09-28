@@ -7,7 +7,7 @@ import { startStoryPlan, watchStoryPlan, type StoryPlanJob } from "@mosae/core";
 import { getFixtureRepository, storyRoute } from "@/lib/storyFlow";
 import { StepHeader } from "@/components/StepHeader";
 import { ProcessingBanner } from "@/components/ProcessingBanner";
-import { PrimaryButton } from "@/components/PrimaryButton";
+import { Button } from "@/components/ds";
 import { useDictation } from "@/lib/useDictation";
 import { ChipCheckIcon, MicIcon, ShieldIcon, SparklesIcon } from "@/components/icons";
 
@@ -149,7 +149,7 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
 
   return (
     <ScrollView
-      className="flex-1 bg-canvas"
+      className="flex-1 bg-surface"
       stickyHeaderIndices={[0]}
       keyboardShouldPersistTaps="handled"
     >
@@ -161,11 +161,11 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
         backLabel="Go back to Step 1"
       />
 
-      <View className="px-5 pb-10 pt-6">
-        <Text role="heading" aria-level={2} className="pt-1 font-sans-semibold text-sm leading-[17.5px] tracking-[-0.35px] text-ink">
+      <View className="px-4 pb-10 pt-6">
+        <Text role="heading" aria-level={2} className="pt-1 font-sans-semibold text-button leading-[17.5px] tracking-[-0.35px] text-ink">
           What do you want this story to be about?
         </Text>
-        <Text className="mt-1 font-sans text-sm leading-[22.75px] text-ink-soft">
+        <Text className="mt-1 font-sans text-body leading-[22.75px] text-ink-muted">
           Mosaé will listen to your intent and curate the most meaningful moments from your {count || "selected"}{" "}
           {count === 1 ? "memory" : "memories"}.
         </Text>
@@ -173,24 +173,24 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
 
         <View className="mt-4 min-h-[280px] justify-between rounded-2xl bg-surface p-6 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1)]">
           <View className="flex-row items-center gap-1.5 pb-3">
-            <View className="size-2 rounded-full bg-brand-bright" />
-            <Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.275px] text-brand-bright">Intent</Text>
+            <View className="size-2 rounded-full bg-accent" />
+            <Text className="font-sans-semibold text-[11px] uppercase leading-[14px] tracking-[0.275px] text-accent">Intent</Text>
           </View>
           <TextInput
             multiline
             value={storyText}
             onChangeText={setStoryText}
             placeholder="This was our first family trip to Japan for my daughter's birthday. Focus on moments of her having fun, the food we tried, and the quiet places we explored together."
-            placeholderTextColor="#8c716a"
+            placeholderTextColor="rgb(var(--color-ink-muted))"
             textAlignVertical="top"
-            className="min-h-[160px] w-full flex-1 bg-transparent font-sans text-sm leading-[22.75px] text-ink outline-none"
+            className="min-h-[160px] w-full flex-1 bg-transparent font-sans text-body leading-[22.75px] text-ink outline-none"
           />
           <View className="flex-row items-center justify-between pt-2">
             <Pressable
               role="button"
               aria-pressed={dictation.listening}
               onPress={toggleDictation}
-              className={`flex-row items-center gap-1 rounded-full px-4 py-1.5 ${dictation.listening ? "bg-brand-tint" : "bg-surface-sunken"}`}
+              className={`flex-row items-center gap-1 rounded-full px-4 py-1.5 ${dictation.listening ? "bg-ink-tint" : "bg-surface-sunken"}`}
             >
               <MicIcon />
               <Text className="font-sans-semibold text-[11px] leading-[14px] text-ink">
@@ -198,15 +198,15 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
               </Text>
             </Pressable>
             <Pressable role="button" onPress={() => setStoryText("")} disabled={!storyText} className="px-1 disabled:opacity-40">
-              <Text className="font-sans text-xs leading-[18px] text-ink-soft">Clear</Text>
+              <Text className="font-sans text-caption leading-[18px] text-ink-muted">Clear</Text>
             </Pressable>
           </View>
         </View>
 
         <View className="mt-4">
           <View className="flex-row items-center justify-between">
-            <Text className="font-sans-medium text-xs text-ink-soft">Suggested focal themes</Text>
-            <Text className="font-sans text-xs leading-[18px] text-ink-faint">Tap to attach</Text>
+            <Text className="font-sans-medium text-caption text-ink-muted">Suggested focal themes</Text>
+            <Text className="font-sans text-caption leading-[18px] text-ink-muted">Tap to attach</Text>
           </View>
           <View className="mt-2 flex-row flex-wrap gap-2">
             {THEMES.map((theme) => {
@@ -218,10 +218,10 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
                   aria-pressed={active}
                   onPress={() => toggleTheme(theme)}
                   className={`flex-row items-center gap-1 rounded-full px-3.5 py-1.5 shadow-[0_1px_1px_rgba(0,0,0,0.05)] ${
-                    active ? "bg-brand-tint" : "bg-surface-sunken"
+                    active ? "bg-ink-tint" : "bg-surface-sunken"
                   }`}
                 >
-                  <Text className={`font-sans-medium text-xs leading-[18px] ${active ? "text-brand-deep" : "text-ink-soft"}`}>{theme}</Text>
+                  <Text className={`font-sans-medium text-caption leading-[18px] ${active ? "text-action" : "text-ink-muted"}`}>{theme}</Text>
                   {active && <ChipCheckIcon />}
                 </Pressable>
               );
@@ -231,21 +231,22 @@ function TellStoryProject({ live, projectId, count }: { live: boolean; projectId
 
         <View className="mt-6 flex-row items-center justify-center gap-1 py-1">
           <ShieldIcon />
-          <Text className="font-sans text-xs leading-[18px] text-ink-soft/80">Mosaé curates your memories privately and securely.</Text>
+          <Text className="font-sans text-caption leading-[18px] text-ink-muted/80">Mosaé curates your memories privately and securely.</Text>
         </View>
 
-        {unavailable && <Text role="alert" className="mt-4 text-center font-sans text-xs text-brand">{unavailable}</Text>}
+        {unavailable && <Text role="alert" className="mt-4 text-center font-sans text-caption text-action">{unavailable}</Text>}
         {job && submitting && !error && !unavailable && (
           <View role="status" aria-live="polite" className="mt-4 rounded-2xl bg-surface-sunken px-4 py-3">
-            <Text className="font-sans text-xs leading-[18px] text-ink-soft">{planningLabel}</Text>
+            <Text className="font-sans text-caption leading-[18px] text-ink-muted">{planningLabel}</Text>
           </View>
         )}
-        {error && <Text role="alert" className="mt-4 text-center font-sans text-xs text-brand">{error}</Text>}
+        {error && <Text role="alert" className="mt-4 text-center font-sans text-caption text-action">{error}</Text>}
 
-        <PrimaryButton
+        <Button
           label={reconnecting ? "Reconnect" : submitting ? "Finding the moments..." : error ? "Try again" : "Find the moments"}
           onPress={handleSubmit}
-          icon={<SparklesIcon />}
+          leadingIcon={<SparklesIcon />}
+          loading={submitting && !reconnecting}
           disabled={!canSubmit || Boolean(unavailable) || (submitting && !reconnecting)}
         />
       </View>

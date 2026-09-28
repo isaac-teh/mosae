@@ -35,18 +35,18 @@ function ReviewMoment({ moment, first, last, busy, highlight, onToggleSelected, 
   }, [highlight, anchorId]);
   const action = (label: string, aria: string, onPress: () => void, disabled = false) => (
     <Pressable role="button" aria-label={aria} disabled={busy || disabled} onPress={() => { setOpen(false); onPress(); }} className={`rounded-full bg-surface-sunken px-3 py-1.5 ${disabled ? "opacity-40" : ""}`}>
-      <Text className="font-sans-semibold text-xs leading-4 text-ink">{label}</Text>
+      <Text className="font-sans-semibold text-caption leading-4 text-ink">{label}</Text>
     </Pressable>
   );
   return (
-    <View nativeID={anchorId} className={`mt-3 rounded-[26px] ${highlight ? "border-2 border-brand" : "border-2 border-transparent"}`}>
+    <View nativeID={anchorId} className={`mt-3 rounded-[26px] ${highlight ? "border-2 border-action" : "border-2 border-transparent"}`}>
       <MomentCard moment={moment} size="hero" onToggleSelected={onToggleSelected} />
       <View className="mt-1.5 flex-row items-start gap-2 px-1">
-        <Text className="flex-1 font-sans text-xs leading-4 text-ink-soft">
+        <Text className="flex-1 font-sans text-caption leading-4 text-ink-muted">
           {moment.hidden ? "Hidden by you." : moment.reason ?? ""}
         </Text>
         <Pressable role="button" aria-label={`More for ${moment.title}`} aria-expanded={open} onPress={() => setOpen((value) => !value)} className="rounded-full px-2">
-          <Text className="font-sans-semibold text-base leading-4 text-ink-soft">⋯</Text>
+          <Text className="font-sans-semibold text-base leading-4 text-ink-muted">⋯</Text>
         </Pressable>
       </View>
       {open && (
@@ -88,13 +88,13 @@ export default function ReviewMomentsScreen() {
 
   if (error) {
     return (
-      <View className="flex-1 items-center justify-center bg-canvas px-5">
-        <Text className="text-brand text-sm">{error}</Text>
+      <View className="flex-1 items-center justify-center bg-surface px-4">
+        <Text className="text-action text-label">{error}</Text>
         <Pressable
           onPress={() => goBack()}
-          className="mt-4 rounded-full bg-brand px-6 py-2"
+          className="mt-4 rounded-full bg-action px-6 py-2"
         >
-          <Text className="font-sans-semibold text-sm text-white">Go back</Text>
+          <Text className="font-sans-semibold text-button text-on-action">Go back</Text>
         </Pressable>
       </View>
     );
@@ -184,7 +184,7 @@ export default function ReviewMomentsScreen() {
   }
 
   return (
-    <View className="flex-1 bg-canvas">
+    <View className="flex-1 bg-surface">
       {/* Header overlay - absolute positioned over content */}
       <View className="absolute inset-x-0 top-0 z-30">
         <StepHeader
@@ -200,52 +200,52 @@ export default function ReviewMomentsScreen() {
       {/* No scroll anchoring: it pinned the tapped card in place on a move, so the
           other photos slid past it and the move looked reversed. */}
       <ScrollView className="flex-1" keyboardShouldPersistTaps="handled" style={{ overflowAnchor: "none" } as object}>
-        <View className="px-5 pb-[112px] pt-[84px]">
-          {/* Intro heading - Plus Jakarta Sans SemiBold 14px leading 17.5px tracking -0.35px */}
+        <View className="px-4 pb-[112px] pt-[84px]">
+          {/* Intro heading - Figtree SemiBold 14px leading 17.5px tracking -0.35px */}
           <Text className="font-sans-semibold text-[14px] leading-[17.5px] tracking-[-0.35px] text-ink">
             {plan.intro.headline}
           </Text>
 
           {/* Body copy */}
-          <Text className="mt-[3.25px] font-sans text-sm leading-[22.75px] text-ink-soft">
+          <Text className="mt-[3.25px] font-sans text-body leading-[22.75px] text-ink-muted">
             {plan.intro.body}
           </Text>
 
           {/* AI Archival Match strip - 11px single line clipped, px-[10px] py-[8px], rounded-[16px] */}
-          <View className="mt-4 flex-row items-center overflow-hidden rounded-[16px] bg-honey-tint px-[10px] py-2 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
+          <View className="mt-4 flex-row items-center overflow-hidden rounded-[16px] bg-accent/20 px-[10px] py-2 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
             <View className="size-[16.5px] shrink-0 overflow-hidden">
               <ArchivalSparkleIcon />
             </View>
-            <Text className="ml-1.5 font-sans text-xs leading-[15.13px] text-honey-deep whitespace-nowrap">
-              <Text className="font-sans-semibold text-honey">AI Archival Match: </Text>
+            <Text className="ml-1.5 font-sans text-caption leading-[15.13px] text-accent whitespace-nowrap">
+              <Text className="font-sans-semibold text-accent">AI Archival Match: </Text>
               {archivalText}
             </Text>
           </View>
 
           {/* Cards - 16px gap between each card section */}
           <View className="mt-4">
-            {mutationError && <Text role="alert" className="mb-3 text-sm text-brand">{mutationError}</Text>}
+            {mutationError && <Text role="alert" className="mb-3 text-label text-action">{mutationError}</Text>}
             {edits && plan.chapters.length > 0 ? (
               <>
                 {/* The Character Picker: check who the film is about, fix faces,
                     or leave someone out. It returns here with the revised plan. */}
-                <Pressable role="button" aria-label="Who's in your film?" onPress={() => { void router.navigate(route("/character-picker", { planId: plan.planId }) as any); }} className="mb-4 flex-row items-center justify-between rounded-[16px] bg-white px-4 py-3 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
+                <Pressable role="button" aria-label="Who's in your film?" onPress={() => { void router.navigate(route("/character-picker", { planId: plan.planId }) as any); }} className="mb-4 flex-row items-center justify-between rounded-[16px] bg-surface-raised px-4 py-3 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
                   <View className="flex-1">
-                    <Text className="font-sans-semibold text-sm leading-5 text-ink">Who&apos;s in your film?</Text>
-                    <Text className="mt-0.5 font-sans text-xs leading-4 text-ink-soft">Check the people we found, fix a face, or leave someone out.</Text>
+                    <Text className="font-sans-semibold text-button leading-5 text-ink">Who&apos;s in your film?</Text>
+                    <Text className="mt-0.5 font-sans text-caption leading-4 text-ink-muted">Check the people we found, fix a face, or leave someone out.</Text>
                   </View>
-                  <Text className="font-sans-semibold text-xs leading-4 text-brand">Edit</Text>
+                  <Text className="font-sans-semibold text-caption leading-4 text-action">Edit</Text>
                 </Pressable>
                 <View className="mb-3 flex-row items-center justify-between">
-                  <Text className="font-sans text-xs leading-4 text-ink-soft">Tap ⋯ on a moment to swap, move or hide it.</Text>
-                  <Pressable role="button" aria-label="Undo" disabled={undoCount === 0 || updating} onPress={undo} className={`rounded-full px-3 py-1.5 ${undoCount === 0 ? "bg-surface-sunken opacity-50" : "bg-surface-pill"}`}>
-                    <Text className="font-sans-semibold text-xs leading-4 text-ink">Undo</Text>
+                  <Text className="font-sans text-caption leading-4 text-ink-muted">Tap ⋯ on a moment to swap, move or hide it.</Text>
+                  <Pressable role="button" aria-label="Undo" disabled={undoCount === 0 || updating} onPress={undo} className={`rounded-full px-3 py-1.5 ${undoCount === 0 ? "bg-surface-sunken opacity-50" : "bg-surface-sunken"}`}>
+                    <Text className="font-sans-semibold text-caption leading-4 text-ink">Undo</Text>
                   </Pressable>
                 </View>
                 {plan.chapters.map((chapter, chapterIndex) => (
                   <View key={chapter.id} className={chapterIndex ? "mt-6" : ""}>
-                    <Text className="font-serif text-[20px] leading-[26px] text-ink">{chapter.title}</Text>
-                    {chapter.subtitle ? <Text className="mt-0.5 font-sans text-xs leading-4 text-ink-soft">{chapter.subtitle}</Text> : null}
+                    <Text className="font-title text-[20px] leading-[26px] text-ink">{chapter.title}</Text>
+                    {chapter.subtitle ? <Text className="mt-0.5 font-sans text-caption leading-4 text-ink-muted">{chapter.subtitle}</Text> : null}
                     {chapter.momentIds.map((momentId, position) => {
                       const moment = momentsById.get(momentId);
                       if (!moment) return null;
@@ -267,15 +267,15 @@ export default function ReviewMomentsScreen() {
                   </View>
                 ))}
                 {(plan.leftOut?.length ?? 0) > 0 && (
-                  <View className="mt-6 rounded-[16px] bg-white p-4 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
+                  <View className="mt-6 rounded-[16px] bg-surface-raised p-4 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
                     <Pressable role="button" aria-expanded={showLeftOut} aria-label={`Left out (${plan.leftOut!.length})`} onPress={() => setShowLeftOut((open) => !open)} className="flex-row items-center justify-between">
-                      <Text className="font-sans-semibold text-sm leading-5 text-ink">{`Left out (${plan.leftOut!.length})`}</Text>
-                      <Text className="font-sans text-xs leading-4 text-ink-soft">{showLeftOut ? "Hide" : "Show why"}</Text>
+                      <Text className="font-sans-semibold text-button leading-5 text-ink">{`Left out (${plan.leftOut!.length})`}</Text>
+                      <Text className="font-sans text-caption leading-4 text-ink-muted">{showLeftOut ? "Hide" : "Show why"}</Text>
                     </Pressable>
                     {showLeftOut && plan.leftOut!.map((item) => (
                       <View key={item.shotId} className="mt-3 flex-row items-center gap-3">
                         {item.thumbnailUrl ? <Image source={{ uri: item.thumbnailUrl }} accessibilityIgnoresInvertColors style={{ width: 48, height: 48, borderRadius: 8 }} /> : <View style={{ width: 48, height: 48 }} className="rounded-[8px] bg-surface-sunken" />}
-                        <Text className="flex-1 font-sans text-xs leading-4 text-ink-soft">{item.reason}</Text>
+                        <Text className="flex-1 font-sans text-caption leading-4 text-ink-muted">{item.reason}</Text>
                       </View>
                     ))}
                   </View>
@@ -300,15 +300,15 @@ export default function ReviewMomentsScreen() {
               onPress={navigateToPickMemory}
               role="button"
               aria-label={`Add from ${plan.otherPhotoCount} other photos`}
-              className="mt-4 rounded-[24px] bg-surface-muted px-5 py-6 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]"
+              className="mt-4 rounded-[24px] bg-surface-sunken px-4 py-6 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]"
             >
-              <View className="mx-auto mb-3 size-12 items-center justify-center rounded-full bg-track">
+              <View className="mx-auto mb-3 size-12 items-center justify-center rounded-full bg-line">
                 <AddPhotoIcon />
               </View>
-              <Text className="font-serif text-[18px] leading-[26px] text-center text-ink">
+              <Text className="font-sans text-[18px] leading-[26px] text-center text-ink">
                 Add from {plan.otherPhotoCount} other photos
               </Text>
-              <Text className="mt-1.5 font-sans text-sm leading-[18px] text-center text-ink-soft">
+              <Text className="mt-1.5 font-sans text-body leading-[18px] text-center text-ink-muted">
                 Browse unselected captures, candid bursts, or audio clips from this celebration trip.
               </Text>
             </Pressable>
@@ -320,10 +320,10 @@ export default function ReviewMomentsScreen() {
                   onPress={navigateToPickMemory}
                   role="button"
                   aria-label="Add more"
-                  className="flex-row items-center justify-center gap-1.5 rounded-full bg-surface-pill px-4 py-3 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]"
+                  className="flex-row items-center justify-center gap-1.5 rounded-full bg-surface-sunken px-4 py-3 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]"
                 >
                   <AddMoreIcon />
-                  <Text className="font-sans-semibold text-sm leading-[20px] text-center text-ink">
+                  <Text className="font-sans-semibold text-button leading-[20px] text-center text-ink">
                     Add more
                   </Text>
                 </Pressable>
@@ -332,9 +332,9 @@ export default function ReviewMomentsScreen() {
                   onPress={navigateToCuratedTimeline}
                   role="button"
                   aria-label="Continue to curated timeline"
-                  className="flex-row items-center justify-center gap-1.5 rounded-full bg-brand px-4 py-3 shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.1),0px_8px_10px_-6px_rgba(0,0,0,0.1)]"
+                  className="flex-row items-center justify-center gap-1.5 rounded-full bg-action px-4 py-3 shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.1),0px_8px_10px_-6px_rgba(0,0,0,0.1)]"
                 >
-                  <Text className="font-sans-semibold text-sm leading-[20px] text-center text-white">
+                  <Text className="font-sans-semibold text-button leading-[20px] text-center text-on-action">
                     Continue
                   </Text>
                   <ContinueArrowIcon />
@@ -353,15 +353,15 @@ export default function ReviewMomentsScreen() {
       </ScrollView>
 
       {swapping && (
-        <View className="absolute inset-0 z-40 items-center justify-center px-5">
+        <View className="absolute inset-0 z-40 items-center justify-center px-4">
           <Pressable role="button" aria-label="Close" onPress={() => setSwapping(null)} className="absolute inset-0 bg-black/40" />
-          <View role="dialog" aria-label="Swap photo" className="w-full max-w-[420px] rounded-[20px] bg-white p-5">
-            <Text className="font-serif text-[20px] leading-[26px] text-ink">Swap photo</Text>
-            <Text className="mt-1 font-sans text-xs leading-4 text-ink-soft">Other shots from the same moment.</Text>
+          <View role="dialog" aria-label="Swap photo" className="w-full max-w-[420px] rounded-[20px] bg-surface-raised p-5">
+            <Text className="font-title text-[20px] leading-[26px] text-ink">Swap photo</Text>
+            <Text className="mt-1 font-sans text-caption leading-4 text-ink-muted">Other shots from the same moment.</Text>
             {swapping.shots === null ? (
-              <Text className="mt-4 font-sans text-sm leading-5 text-ink-soft">Looking…</Text>
+              <Text className="mt-4 font-sans text-body leading-5 text-ink-muted">Looking…</Text>
             ) : swapping.shots.length === 0 ? (
-              <Text className="mt-4 font-sans text-sm leading-5 text-ink-soft">No other shots of this moment.</Text>
+              <Text className="mt-4 font-sans text-body leading-5 text-ink-muted">No other shots of this moment.</Text>
             ) : (
               <View className="mt-4 flex-row flex-wrap gap-2">
                 {swapping.shots.map((shot, index) => (
@@ -372,7 +372,7 @@ export default function ReviewMomentsScreen() {
               </View>
             )}
             <Pressable role="button" aria-label="Cancel" onPress={() => setSwapping(null)} className="mt-4 items-center py-2">
-              <Text className="font-sans-medium text-sm leading-5 text-ink-soft">Cancel</Text>
+              <Text className="font-sans-medium text-label leading-5 text-ink-muted">Cancel</Text>
             </Pressable>
           </View>
         </View>

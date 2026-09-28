@@ -1,16 +1,17 @@
 import { Pressable, Text } from "react-native";
 
-type FocusChipProps = { label: string; selected?: boolean; onPress?: () => void; disabled?: boolean };
+type FocusChipProps = { label: string; selected?: boolean; onPress?: () => void; disabled?: boolean; role?: "button" | "checkbox"; accessibilityLabel?: string };
 
-export function FocusChip({ label, selected = false, onPress, disabled = false }: FocusChipProps) {
+export function FocusChip({ label, selected = false, onPress, disabled = false, role = "button", accessibilityLabel = label }: FocusChipProps) {
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityRole={role}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected, disabled }}
-      role="button"
-      aria-label={label}
-      aria-pressed={selected}
+      role={role}
+      aria-label={accessibilityLabel}
+      aria-pressed={role === "button" ? selected : undefined}
+      aria-checked={role === "checkbox" ? selected : undefined}
       aria-disabled={disabled}
       disabled={disabled}
       onPress={onPress}

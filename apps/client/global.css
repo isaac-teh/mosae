@@ -60,3 +60,9 @@
   --color-on-screen-muted: 167 180 193;
   --color-scrim: 11 14 18;
 }
+
+html,
+body {
+  min-height: 100%;
+  background-color: rgb(var(--color-surface));
+}

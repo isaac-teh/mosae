@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { FocusChip } from "@/components/ds";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
 import { useStoryFlow } from "@/lib/storyFlow";
@@ -62,7 +63,7 @@ function FaceCrop({ url, bbox, size = CROP_PX }: { url?: string; bbox?: [number,
 }
 
 function ErrorState({ error, retry }: { error: string; retry: () => void }) {
-  return <View className="flex-1 items-center justify-center bg-canvas"><Text role="alert" className="text-brand text-sm">{error}</Text><Pressable role="button" aria-label="Retry" onPress={retry} className="mt-4 rounded-full bg-brand px-5 py-3"><Text className="font-sans-semibold text-white">Retry</Text></Pressable></View>;
+  return <View className="flex-1 items-center justify-center bg-surface"><Text role="alert" className="text-action text-label">{error}</Text><Pressable role="button" aria-label="Retry" onPress={retry} className="mt-4 rounded-full bg-action px-4 py-3"><Text className="font-sans-semibold text-on-action">Retry</Text></Pressable></View>;
 }
 
 /** `fallback` is fixed when the screen loads, so tapping a role never renames anyone. */
@@ -209,7 +210,7 @@ export default function CharacterPickerScreen() {
             role="button"
             aria-label={`Move ${ownerLabel} photo ${index + 1} to someone else`}
             onPress={() => setMovingFaceId(movingFaceId === face.faceId ? null : face.faceId)}
-            className={`rounded-[12px] p-0.5 ${movingFaceId === face.faceId ? "bg-brand" : ""}`}
+            className={`rounded-[12px] p-0.5 ${movingFaceId === face.faceId ? "bg-action" : ""}`}
           >
             <FaceCrop url={thumbnails[face.assetId]} bbox={face.bbox} />
           </Pressable>
@@ -222,24 +223,24 @@ export default function CharacterPickerScreen() {
   // hides it and it reads the same wherever the tapped crop sits.
   const movingFace = allFaces.find((face) => face.faceId === movingFaceId);
   const movePopup = movingFace ? (
-    <View className="absolute inset-0 z-30 items-center justify-center px-5">
+    <View className="absolute inset-0 z-30 items-center justify-center px-4">
       <Pressable role="button" aria-label="Close" onPress={() => setMovingFaceId(null)} className="absolute inset-0 bg-black/40" />
-      <View role="dialog" aria-label="Who is this really?" className="w-full max-w-[420px] rounded-[20px] bg-white p-5 shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.2)]">
+      <View role="dialog" aria-label="Who is this really?" className="w-full max-w-[420px] rounded-[20px] bg-surface-raised p-5 shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.2)]">
         <View className="items-center">
           <FaceCrop url={thumbnails[movingFace.assetId]} bbox={movingFace.bbox} size={120} />
         </View>
-        <Text className="mt-4 text-center font-serif text-[20px] leading-[26px] text-ink">Who is this really?</Text>
+        <Text className="mt-4 text-center font-title text-[20px] leading-[26px] text-ink">Who is this really?</Text>
         <View className="mt-4 gap-2">
           {moveTargets(movingFace.faceId).map((person) => (
             <Pressable key={person.personId} role="button" aria-label={`Move to ${person.name.trim() || person.fallback}`} onPress={() => moveFace(movingFace.faceId, person.personId)} className="items-center rounded-full bg-surface-sunken py-3">
-              <Text className="font-sans-semibold text-sm leading-5 text-ink">{person.name.trim() || person.fallback}</Text>
+              <Text className="font-sans-semibold text-button leading-5 text-ink">{person.name.trim() || person.fallback}</Text>
             </Pressable>
           ))}
           <Pressable role="button" aria-label="Move to a new person" onPress={() => moveFace(movingFace.faceId, "new")} className="items-center rounded-full bg-surface-sunken py-3">
-            <Text className="font-sans-semibold text-sm leading-5 text-brand">+ Someone else</Text>
+            <Text className="font-sans-semibold text-button leading-5 text-action">+ Someone else</Text>
           </Pressable>
           <Pressable role="button" aria-label="Cancel" onPress={() => setMovingFaceId(null)} className="items-center py-2">
-            <Text className="font-sans-medium text-sm leading-5 text-ink-soft">Cancel</Text>
+            <Text className="font-sans-medium text-label leading-5 text-ink-muted">Cancel</Text>
           </Pressable>
         </View>
       </View>
@@ -247,12 +248,12 @@ export default function CharacterPickerScreen() {
   ) : null;
 
   return (
-    <View className="flex-1 bg-canvas">
+    <View className="flex-1 bg-surface">
       <StepHeader step="CHARACTERS" label="OPTIONAL" progress={0.5} onBack={() => goBack()} backLabel="Go back to your story" />
-      <ScrollView className="flex-1" contentContainerClassName="px-5 pb-[140px] pt-4" keyboardShouldPersistTaps="handled">
+      <ScrollView className="flex-1" contentContainerClassName="px-4 pb-[140px] pt-4" keyboardShouldPersistTaps="handled">
         <View className="mt-1">
-          <Text className="font-serif text-[26px] leading-[32.5px] tracking-[-0.65px] text-ink">Who&apos;s in your film?</Text>
-          <Text className="mt-1 font-sans text-sm leading-[22px] text-ink-soft">
+          <Text className="font-title text-[26px] leading-[32.5px] tracking-[-0.65px] text-ink">Who&apos;s in your film?</Text>
+          <Text className="mt-1 font-sans text-body leading-[22px] text-ink-muted">
             {people.length > 0
               ? `We found ${people.length} ${people.length === 1 ? "person" : "people"}. Fix anything we got wrong, or leave someone out.`
               : "We didn't find anyone to build the film around yet."}
@@ -261,19 +262,24 @@ export default function CharacterPickerScreen() {
 
         {people.length > 0 && (
           <View className="mt-5">
-            <Text className="font-sans-semibold text-xs leading-4 uppercase tracking-[0.5px] text-ink-soft">Who&apos;s the star?</Text>
-            <Text className="mt-0.5 font-sans text-xs leading-4 text-ink-soft">Tap who the film should be mostly about. You can pick more than one.</Text>
+            <Text className="font-sans-semibold text-caption leading-4 uppercase tracking-[0.5px] text-ink-muted">Who&apos;s the star?</Text>
+            <Text className="mt-0.5 font-sans text-caption leading-4 text-ink-muted">Tap who the film should be mostly about. You can pick more than one.</Text>
             <View role="group" aria-label="Film centres on" className="mt-2 flex-row flex-wrap gap-2">
               {ordered.filter((person) => !person.excluded).map((person) => {
                 const on = focus.includes(person.personId);
                 return (
-                  <Pressable key={person.personId} role="checkbox" aria-checked={on} aria-label={`Centre the film on ${(person.name.trim() || person.fallback)}`} onPress={() => toggleFocus(person.personId)} className={`rounded-full px-3 py-1.5 ${on ? "bg-brand" : "bg-surface-sunken"}`}>
-                    <Text className={`font-sans-semibold text-xs leading-4 ${on ? "text-white" : "text-ink-soft"}`}>{(person.name.trim() || person.fallback)}</Text>
-                  </Pressable>
+                  <FocusChip
+                    key={person.personId}
+                    label={person.name.trim() || person.fallback}
+                    accessibilityLabel={`Centre the film on ${person.name.trim() || person.fallback}`}
+                    role="checkbox"
+                    selected={on}
+                    onPress={() => toggleFocus(person.personId)}
+                  />
                 );
               })}
             </View>
-            {focus.length === 0 && <Text className="mt-1 font-sans text-xs leading-4 text-ink-soft">Nobody picked — we&apos;ll centre on whoever the photos are most about.</Text>}
+            {focus.length === 0 && <Text className="mt-1 font-sans text-caption leading-4 text-ink-muted">Nobody picked — we&apos;ll centre on whoever the photos are most about.</Text>}
           </View>
         )}
 
@@ -281,54 +287,54 @@ export default function CharacterPickerScreen() {
           const faces = facesOf(person.personId);
           const label = (person.name.trim() || person.fallback);
           return (
-            <View key={person.personId} className={`mt-4 rounded-[16px] bg-white p-4 shadow-[0px_1px_1px_rgba(0,0,0,0.05)] ${person.excluded ? "opacity-50" : ""}`}>
+            <View key={person.personId} className={`mt-4 rounded-[16px] bg-surface-raised p-4 shadow-[0px_1px_1px_rgba(0,0,0,0.05)] ${person.excluded ? "opacity-50" : ""}`}>
               <TextInput
                 value={person.name}
                 onChangeText={(name) => updatePerson(person.personId, { name })}
                 placeholder={person.fallback}
-                placeholderTextColor="#a8321266"
+                placeholderTextColor="rgb(var(--color-accent) / 0.4)"
                 aria-label={`Name person ${index + 1}`}
-                className="rounded-[10px] border border-brand-dot bg-surface px-3 py-1.5 font-serif text-[18px] leading-[24px] text-ink"
+                className="rounded-[10px] border border-line-strong bg-surface px-3 py-1.5 font-sans text-[18px] leading-[24px] text-ink"
               />
               <View role="radiogroup" aria-label={`${label}'s role`} className="mt-2 flex-row items-center gap-2">
                 {ROLES.map((role) => (
-                  <Pressable key={role} role="radio" aria-checked={person.role === role} aria-label={`${label} is ${ROLE_LABEL[role].toLowerCase()}`} onPress={() => updatePerson(person.personId, { role })} className={`rounded-full px-3 py-1 ${person.role === role ? "bg-brand" : "bg-surface-sunken"}`}>
-                    <Text className={`font-sans-semibold text-[11px] leading-4 uppercase tracking-[0.5px] ${person.role === role ? "text-white" : "text-ink-soft"}`}>{ROLE_LABEL[role]}</Text>
+                  <Pressable key={role} role="radio" aria-checked={person.role === role} aria-label={`${label} is ${ROLE_LABEL[role].toLowerCase()}`} onPress={() => updatePerson(person.personId, { role })} className={`rounded-full px-3 py-1 ${person.role === role ? "bg-action" : "bg-surface-sunken"}`}>
+                    <Text className={`font-sans-semibold text-[11px] leading-4 uppercase tracking-[0.5px] ${person.role === role ? "text-on-action" : "text-ink-muted"}`}>{ROLE_LABEL[role]}</Text>
                   </Pressable>
                 ))}
               </View>
-              <Text className="mt-3 font-sans text-xs leading-4 text-ink-soft">{`Photos of ${label}. Not them? Tap the photo to move it.`}</Text>
+              <Text className="mt-3 font-sans text-caption leading-4 text-ink-muted">{`Photos of ${label}. Not them? Tap the photo to move it.`}</Text>
               {cropRow(faces, label)}
-              <Pressable role="switch" aria-checked={person.excluded} aria-label={`Leave ${label} out`} onPress={() => updatePerson(person.personId, { excluded: !person.excluded })} className="mt-3 self-start rounded-full bg-surface-muted px-3 py-1.5">
-                <Text className="font-sans-semibold text-xs leading-4 text-ink">{person.excluded ? "Bring back into the film" : "Leave out of the film"}</Text>
+              <Pressable role="switch" aria-checked={person.excluded} aria-label={`Leave ${label} out`} onPress={() => updatePerson(person.personId, { excluded: !person.excluded })} className="mt-3 self-start rounded-full bg-surface-sunken px-3 py-1.5">
+                <Text className="font-sans-semibold text-caption leading-4 text-ink">{person.excluded ? "Bring back into the film" : "Leave out of the film"}</Text>
               </Pressable>
-              {person.excluded && <Text className="mt-1 font-sans text-xs leading-4 text-ink-soft">Photos where they&apos;re the main subject won&apos;t be used.</Text>}
+              {person.excluded && <Text className="mt-1 font-sans text-caption leading-4 text-ink-muted">Photos where they&apos;re the main subject won&apos;t be used.</Text>}
             </View>
           );
         })}
 
         {others.length > 0 && (
-          <View className="mt-4 rounded-[16px] bg-white p-4 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
-            <Text className="font-sans-semibold text-sm leading-5 text-ink">Others in your photos</Text>
-            <Text className="mt-0.5 font-sans text-xs leading-4 text-ink-soft">Not in the film unless you add them. Tap one to say who it is.</Text>
+          <View className="mt-4 rounded-[16px] bg-surface-raised p-4 shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
+            <Text className="font-sans-semibold text-button leading-5 text-ink">Others in your photos</Text>
+            <Text className="mt-0.5 font-sans text-caption leading-4 text-ink-muted">Not in the film unless you add them. Tap one to say who it is.</Text>
             {cropRow(others, "unknown")}
           </View>
         )}
       </ScrollView>
 
-      <View className="absolute inset-x-0 bottom-0 z-20 bg-canvas px-5 pb-2">
-        {error && <Text role="alert" className="mb-1 text-center font-sans text-xs leading-4 text-brand">{error}</Text>}
+      <View className="absolute inset-x-0 bottom-0 z-20 bg-surface px-4 pb-2">
+        {error && <Text role="alert" className="mb-1 text-center font-sans text-caption leading-4 text-action">{error}</Text>}
         <Pressable
           role="button"
           aria-label="Looks right"
           disabled={saving || !cast}
           onPress={() => void confirm()}
-          className="mt-2 flex-row items-center justify-center rounded-full bg-brand py-3.5 shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.1),0px_8px_10px_-6px_rgba(0,0,0,0.1)]"
+          className="mt-2 flex-row items-center justify-center rounded-full bg-action py-3.5 shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.1),0px_8px_10px_-6px_rgba(0,0,0,0.1)]"
         >
-          <Text className="font-sans-semibold text-sm leading-5 text-center text-white">{saving ? "Saving…" : "Looks right"}</Text>
+          <Text className="font-sans-semibold text-button leading-5 text-center text-on-action">{saving ? "Saving…" : "Looks right"}</Text>
         </Pressable>
         <Pressable role="button" aria-label="Skip" disabled={saving} onPress={() => proceed(planId)} className="mt-1 items-center py-2">
-          <Text className="font-sans-medium text-xs leading-4 text-ink-soft">Skip — let Mosaé decide</Text>
+          <Text className="font-sans-medium text-caption leading-4 text-ink-muted">Skip — let Mosaé decide</Text>
         </Pressable>
       </View>
       {movePopup}
