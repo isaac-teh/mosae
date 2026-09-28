@@ -144,6 +144,13 @@ describe("Character Picker", () => {
     expect(buttonByAriaLabel("Centre the film on Parent 2")).not.toBeNull();
   });
 
+  it("keeps a person's label when their role is changed", async () => {
+    await render(); await flush();
+    await clickByAriaLabel("A parent is child");
+    expect(buttonByAriaLabel("Centre the film on A parent")).not.toBeNull();
+    expect(host.textContent).not.toContain("Child 1");
+  });
+
   it("skips without saving and keeps the plan it was given", async () => {
     await render(); await flush();
     await clickByAriaLabel("Skip");

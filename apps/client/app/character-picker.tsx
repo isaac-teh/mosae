@@ -64,7 +64,8 @@ function ErrorState({ error, retry }: { error: string; retry: () => void }) {
   return <View className="flex-1 items-center justify-center bg-canvas"><Text role="alert" className="text-brand text-sm">{error}</Text><Pressable role="button" aria-label="Retry" onPress={retry} className="mt-4 rounded-full bg-brand px-5 py-3"><Text className="font-sans-semibold text-white">Retry</Text></Pressable></View>;
 }
 
-type DraftPerson = { personId: string; role: CastRole; name: string; excluded: boolean };
+/** `fallback` is fixed when the screen loads, so tapping a role never renames anyone. */
+type DraftPerson = { personId: string; role: CastRole; name: string; excluded: boolean; fallback: string };
 type Face = { faceId: string; shotId: string; assetId: string; bbox?: [number, number, number, number] };
 
 export default function CharacterPickerScreen() {
@@ -101,8 +102,10 @@ export default function CharacterPickerScreen() {
       }
       setAssignment(byFace);
       setOriginal(byFace);
-      setPeople((found?.people ?? []).map((person) => ({
+      const foundPeople = found?.people ?? [];
+      setPeople(foundPeople.map((person) => ({
         personId: person.personId, role: person.role, name: person.name ?? "", excluded: person.excluded ?? false,
+        fallback: labelFor({ ...person, name: "" }, foundPeople),
       })));
       setFocus(found?.focus ?? []);
       setError(null);
@@ -153,7 +156,7 @@ export default function CharacterPickerScreen() {
     let target = personId;
     if (personId === "new") {
       target = `p-new-${people.length + 1}`;
-      setPeople((prev) => [...prev, { personId: target, role: "other", name: "", excluded: false }]);
+      setPeople((prev) => [...prev, { personId: target, role: "other", name: "", excluded: false, fallback: `New person ${prev.filter((person) => person.personId.startsWith("p-new-")).length + 1}` }]);
     }
     setAssignment((prev) => ({ ...prev, [faceId]: target }));
     setMovingFaceId(null);
@@ -221,8 +224,8 @@ export default function CharacterPickerScreen() {
         <Text className="font-sans-semibold text-xs leading-4 text-ink">Who is this really?</Text>
         <View className="mt-2 flex-row flex-wrap gap-2">
           {moveTargets(face.faceId).map((person) => (
-            <Pressable key={person.personId} role="button" aria-label={`Move to ${labelFor(person, people)}`} onPress={() => moveFace(face.faceId, person.personId)} className="rounded-full bg-white px-3 py-1.5">
-              <Text className="font-sans-medium text-xs leading-4 text-ink">{labelFor(person, people)}</Text>
+            <Pressable key={person.personId} role="button" aria-label={`Move to ${(person.name.trim() || person.fallback)}`} onPress={() => moveFace(face.faceId, person.personId)} className="rounded-full bg-white px-3 py-1.5">
+              <Text className="font-sans-medium text-xs leading-4 text-ink">{(person.name.trim() || person.fallback)}</Text>
             </Pressable>
           ))}
           <Pressable role="button" aria-label="Move to a new person" onPress={() => moveFace(face.faceId, "new")} className="rounded-full bg-white px-3 py-1.5">
@@ -254,8 +257,8 @@ export default function CharacterPickerScreen() {
               {ordered.filter((person) => !person.excluded).map((person) => {
                 const on = focus.includes(person.personId);
                 return (
-                  <Pressable key={person.personId} role="checkbox" aria-checked={on} aria-label={`Centre the film on ${labelFor(person, people)}`} onPress={() => toggleFocus(person.personId)} className={`rounded-full px-3 py-1.5 ${on ? "bg-brand" : "bg-surface-sunken"}`}>
-                    <Text className={`font-sans-semibold text-xs leading-4 ${on ? "text-white" : "text-ink-soft"}`}>{labelFor(person, people)}</Text>
+                  <Pressable key={person.personId} role="checkbox" aria-checked={on} aria-label={`Centre the film on ${(person.name.trim() || person.fallback)}`} onPress={() => toggleFocus(person.personId)} className={`rounded-full px-3 py-1.5 ${on ? "bg-brand" : "bg-surface-sunken"}`}>
+                    <Text className={`font-sans-semibold text-xs leading-4 ${on ? "text-white" : "text-ink-soft"}`}>{(person.name.trim() || person.fallback)}</Text>
                   </Pressable>
                 );
               })}
@@ -266,13 +269,13 @@ export default function CharacterPickerScreen() {
 
         {ordered.map((person, index) => {
           const faces = facesOf(person.personId);
-          const label = labelFor(person, people);
+          const label = (person.name.trim() || person.fallback);
           return (
             <View key={person.personId} className={`mt-4 rounded-[16px] bg-white p-4 shadow-[0px_1px_1px_rgba(0,0,0,0.05)] ${person.excluded ? "opacity-50" : ""}`}>
               <TextInput
                 value={person.name}
                 onChangeText={(name) => updatePerson(person.personId, { name })}
-                placeholder={labelFor({ ...person, name: "" }, people)}
+                placeholder={person.fallback}
                 placeholderTextColor="#a8321266"
                 aria-label={`Name person ${index + 1}`}
                 className="rounded-[10px] border border-brand-dot bg-surface px-3 py-1.5 font-serif text-[18px] leading-[24px] text-ink"
