@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import { parseTimeline, safeParseTimeline, type Timeline } from "@mosae/contracts";
+import { ALLOWED_COMBOS, parseTimeline, safeParseTimeline, type Timeline } from "@mosae/contracts";
 import { loadCollageReview, placeCollages, type CollageSource } from "./placeCollages.js";
 
 const reviewPath = fileURLToPath(new URL("./fixtures/collage-review.json", import.meta.url));
@@ -115,11 +115,14 @@ describe("placeCollages", () => {
     expect([collage.spec.layoutId, collage.spec.motionId]).toEqual(["torn-paper", "print-drop"]);
   });
 
-  it("falls back to library combinations and warns if the review file is missing", () => {
+  it("falls back to reviewed combinations and warns if the review file is missing", () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fallback = loadCollageReview(`${reviewPath}.missing`);
-    expect(fallback.combos.length).toBeGreaterThan(0);
-    expect(warning).toHaveBeenCalled();
+    expect(fallback.combos).toEqual(ALLOWED_COMBOS.map((combo) => ({ ...combo, verdict: "keep" })));
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining("using reviewed combinations"),
+      expect.any(Error),
+    );
     warning.mockRestore();
   });
 

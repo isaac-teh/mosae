@@ -19,14 +19,14 @@ export type CollageSource = {
 export type CollageReview = { combos: Array<{ layoutId: string; motionId: string; verdict: string }> };
 const defaultReviewPath = fileURLToPath(new URL("../../../../docs/design/collage-review.json", import.meta.url));
 
-/** A missing review file allows every combination the collage library supports. */
+/** A missing review file uses only the combinations approved in contracts. */
 export function loadCollageReview(path = defaultReviewPath): CollageReview {
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as CollageReview;
     if (!Array.isArray(parsed.combos)) throw new Error("missing combos");
     return parsed;
   } catch (error) {
-    console.warn(`collage review unavailable at ${path}; allowing all library combinations`, error);
+    console.warn(`collage review unavailable at ${path}; using reviewed combinations`, error);
     return { combos: ALLOWED_COMBOS.map((combo) => ({ ...combo, verdict: "keep" })) };
   }
 }
