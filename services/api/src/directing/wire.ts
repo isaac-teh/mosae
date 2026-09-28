@@ -156,7 +156,7 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
         const leftOut = leaveOutShots(
           shots.filter((shot) => shot.analysis?.kind === "photo").map((shot) => ({
             shotId: shot.id,
-            faces: ((shot.analysis as PhotoAnalysis).faces ?? []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null })),
+            faces: ((shot.analysis as PhotoAnalysis).faces ?? []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null, stranger: face.stranger ?? false })),
           })),
           ensured.cast,
           (constraints as typeof constraints & { hiddenShotIds?: string[] }).hiddenShotIds ?? [],

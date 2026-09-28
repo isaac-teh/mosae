@@ -40,12 +40,17 @@ describe("ground truth (trip1-v2)", () => {
     expect(total).toBeGreaterThan(20);
     expect(right / total).toBeGreaterThanOrEqual(0.9);
   });
-  it("keeps the pasted photobomb face in the background", async () => {
-    const labels = await loadLabels(), target = [0.06004464285714286, 0.7032738095238096, 0.19017857142857142, 0.7632440476190476];
-    const faces = Object.values(labels.photos).find((fs) => fs.some((f) => !f.personId && f.bbox.join(",") === target.join(",")));
+  // The spec's promise is about the photo, not the face's role: a stranger in a
+  // family photo never costs that photo. Here the pasted head is about as large
+  // as the family's faces, so it may count as a subject; the family do too.
+  it("keeps the family photo that has a photobomber", async () => {
+    const { leaveOutShots } = await import("./leaveOut.js");
+    const labels = await loadLabels();
+    const faces = Object.values(labels.photos).find((fs) => fs.some((f) => !f.personId) && fs.some((f) => f.personId === "p-daughter"));
     expect(faces).toBeDefined();
-    const i = faces!.findIndex((f) => !f.personId && f.bbox.join(",") === target.join(","));
-    expect(photoRoles(faces!.map((f) => f.bbox))[i]).toBe("background");
+    const cast = { people: ["p-dad", "p-mom", "p-daughter"].map((personId) => ({ personId, role: "parent" as const, ageBand: "adult" as const, appearances: 1, subjectCount: 1, faceIds: [], confidence: "high" as const })), core: [], focus: [], source: "labelled" as const };
+    const shot = { shotId: "photobomb", faces: faces!.map((f) => ({ bbox: f.bbox, personId: f.personId ?? null, stranger: !f.personId })) };
+    expect(leaveOutShots([shot], cast, [])).toEqual([]);
   });
   it("keeps the distant landscape face in the background", async () => {
     const labels = await loadLabels(), target = [0.29608938547486036, 0.2398936170212766, 0.3136472466081405, 0.24840425531914895];

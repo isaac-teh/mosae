@@ -66,6 +66,7 @@ export async function ensureCast(
   }
   const resolver = labels ? labelledIdentity(labels) : null;
   const identities = resolver?.resolve(faces) ?? new Map<string, string>();
+  const strangers = resolver?.strangers?.(faces) ?? new Set<string>();
   const cast = buildCast({ faces, identities, interactions, source: resolver?.source ?? "none" });
   const summary = castSummary(cast, faces, identities);
 
@@ -81,6 +82,16 @@ export async function ensureCast(
     if (!face || face.name) continue;
     const next = byShot.get(ref.shotId) ?? [...(original.faces ?? [])];
     next[ref.index] = { ...next[ref.index]!, characterId: personId, role: cast.focus.includes(personId) ? "MAIN" : "SUPPORTING" };
+    byShot.set(ref.shotId, next);
+  }
+  for (const faceId of strangers) {
+    const ref = refs.get(faceId);
+    if (!ref) continue;
+    const original = shotSnaps.docs.find((doc) => doc.id === ref.shotId)?.get("analysis") as ShotAnalysis | undefined;
+    if (!original || original.kind !== "photo") continue;
+    const next = byShot.get(ref.shotId) ?? [...(original.faces ?? [])];
+    if (!next[ref.index] || next[ref.index]!.characterId) continue;
+    next[ref.index] = { ...next[ref.index]!, stranger: true };
     byShot.set(ref.shotId, next);
   }
   for (const [shotId, nextFaces] of byShot) {

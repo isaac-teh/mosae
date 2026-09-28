@@ -535,7 +535,7 @@ export function directingRouter(deps: {
       const leftOut = leaveOutShots(
         shots.map((shot, index) => ({
           shotId: shot.shotId,
-          faces: (facesByShot[index] ?? []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null })),
+          faces: (facesByShot[index] ?? []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null, stranger: face.stranger ?? false })),
         })),
         cast,
         source.constraints.hiddenShotIds ?? [],

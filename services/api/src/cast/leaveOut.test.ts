@@ -11,10 +11,10 @@ const SMALL_EDGE: [number, number, number, number] = [0.05, 0.9, 0.12, 0.97];
 
 describe("leaveOutShots", () => {
   it("keeps a family photo with a background stranger", () => {
-    expect(leaveOutShots([{ shotId: "s1", faces: [{ bbox: BIG, personId: "kid" }, { bbox: SMALL_EDGE, personId: null }] }], cast(), [])).toEqual([]);
+    expect(leaveOutShots([{ shotId: "s1", faces: [{ bbox: BIG, personId: "kid" }, { bbox: SMALL_EDGE, personId: null, stranger: true }] }], cast(), [])).toEqual([]);
   });
   it("leaves out a photo where a stranger is the only subject", () => {
-    expect(leaveOutShots([{ shotId: "s2", faces: [{ bbox: BIG, personId: null }] }], cast(), []))
+    expect(leaveOutShots([{ shotId: "s2", faces: [{ bbox: BIG, personId: null, stranger: true }] }], cast(), []))
       .toEqual([{ shotId: "s2", reason: "Left out: someone outside the family is the main subject." }]);
   });
   it("never leaves out a photo with no faces", () => {
@@ -33,5 +33,8 @@ describe("leaveOutShots", () => {
   it("treats a face with no confirmed person as a stranger", () => {
     const out = leaveOutShots([{ shotId: "new", faces: [{ bbox: BIG, personId: "unknown-9" }] }], { ...cast(), confirmed: true }, []);
     expect(out.map((item) => item.shotId)).toEqual(["new"]);
+  });
+  it("never leaves out a photo because its faces weren't recognised", () => {
+    expect(leaveOutShots([{ shotId: "missed", faces: [{ bbox: BIG, personId: null }, { bbox: BIG, personId: null }] }], cast(), [])).toEqual([]);
   });
 });

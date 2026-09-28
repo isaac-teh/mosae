@@ -30,6 +30,8 @@ export type Face = {
   characterId?: string;
   name?: string; // denormalized display name (for UI convenience)
   role?: "MAIN" | "SUPPORTING"; // denormalized role for the same reason
+  /** Known not to be anyone in the family (as opposed to not yet recognised). */
+  stranger?: boolean;
   ageBand?: "child" | "teen" | "adult" | "senior";
   appearance?: string;
   prominence?: "primary" | "secondary" | "background";

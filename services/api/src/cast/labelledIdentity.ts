@@ -31,10 +31,17 @@ export function iou(
 }
 
 export function labelledIdentity(labels: LabelFile): IdentityResolver {
+  // Faces matched to a box that names nobody: the labels say they're strangers.
+  let lastStrangers = new Set<string>();
   return {
     source: "labelled",
+    strangers(faces: FaceRef[]): Set<string> {
+      this.resolve(faces);
+      return new Set(lastStrangers);
+    },
     resolve(faces: FaceRef[]): Map<string, string> {
       const result = new Map<string, string>();
+      lastStrangers = new Set<string>();
 
       const facesByPhoto = new Map<string, FaceRef[]>();
       for (const face of faces) {
@@ -84,6 +91,7 @@ export function labelledIdentity(labels: LabelFile): IdentityResolver {
           usedFaces.add(pair.faceId);
           usedLabels.add(pair.labelIdx);
           if (pair.personId) result.set(pair.faceId, pair.personId);
+          else lastStrangers.add(pair.faceId);
         }
       }
 

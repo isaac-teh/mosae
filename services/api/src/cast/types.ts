@@ -15,6 +15,11 @@ export interface IdentityResolver {
   readonly source: "labelled" | "embeddings";
   /** faceId → personId for the faces it can place; unplaced faces are absent. */
   resolve(faces: FaceRef[]): Map<string, string>;
+  /**
+   * Faces known NOT to be anyone in the family. An unplaced face is only
+   * unknown; just these may take a photo out of the film.
+   */
+  strangers?(faces: FaceRef[]): Set<string>;
 }
 
 export type CastPerson = {
