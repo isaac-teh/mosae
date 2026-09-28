@@ -29,6 +29,33 @@ const mockDeps = (assets: Record<string, { storagePath: string; derivatives?: { 
 });
 
 describe("resolveSources", () => {
+  it("resolves every collage slot for preview and render", async () => {
+    const timeline = makeTimeline({
+      schemaVersion: 2,
+      videoClips: [{
+        kind: "collage", clipId: "collage-1", startSec: 0, durationSec: 4,
+        spec: {
+          layoutId: "torn-paper", motionId: "print-drop", effectId: null,
+          seed: "fixture", durationSec: 4,
+          slots: [
+            { slotId: "one", shotId: "shot-a", kind: "photo" },
+            { slotId: "two", shotId: "shot-b", kind: "photo" },
+            { slotId: "three", shotId: "shot-c", kind: "photo" },
+          ],
+        },
+      }],
+    });
+    const deps = mockDeps(Object.fromEntries(["shot-a", "shot-b", "shot-c"].map((id) => [id, {
+      storagePath: `original/${id}.jpg`, derivatives: { thumbPath: `thumb/${id}.jpg` },
+    }])));
+    expect([...collectSourceIds(timeline)]).toEqual(["shot-a", "shot-b", "shot-c"]);
+    expect(await resolveSources(timeline, deps, "proj-1", "preview")).toEqual({
+      "shot-a": "thumb/shot-a.jpg", "shot-b": "thumb/shot-b.jpg", "shot-c": "thumb/shot-c.jpg",
+    });
+    expect(await resolveSources(timeline, deps, "proj-1", "render")).toEqual({
+      "shot-a": "original/shot-a.jpg", "shot-b": "original/shot-b.jpg", "shot-c": "original/shot-c.jpg",
+    });
+  });
   it("resolves a photo shotId to proxy path in preview mode", async () => {
     const timeline = makeTimeline();
     const deps = mockDeps({

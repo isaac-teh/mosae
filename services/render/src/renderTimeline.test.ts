@@ -48,6 +48,25 @@ describe("renderTimeline", () => {
 });
 
 describe("parseRenderRequest", () => {
+  it("requires a resolved source for each collage slot", () => {
+    const timeline = {
+      ...fixtureTimeline, schemaVersion: 2,
+      videoClips: [{
+        kind: "collage", clipId: "collage-1", startSec: 0, durationSec: 6,
+        spec: {
+          layoutId: "torn-paper", motionId: "print-drop", effectId: null,
+          seed: "fixture", durationSec: 6,
+          slots: [
+            { slotId: "one", shotId: "shot-a", kind: "photo" },
+            { slotId: "two", shotId: "shot-b", kind: "photo" },
+            { slotId: "three", shotId: "shot-c", kind: "photo" },
+          ],
+        },
+      }],
+    };
+    expect(() => parseRenderRequest({ timeline, sources: { "shot-a": "/a.jpg", "shot-b": "/b.jpg" }, outputFile: "collage.mp4" })).toThrow(/shot-c/);
+    expect(parseRenderRequest({ timeline, sources: { "shot-a": "/a.jpg", "shot-b": "/b.jpg", "shot-c": "/c.jpg" }, outputFile: "collage.mp4" }).timeline.schemaVersion).toBe(2);
+  });
   it("accepts a well-formed request", () => {
     expect(parseRenderRequest(request).outputFile).toBe("out.mp4");
   });

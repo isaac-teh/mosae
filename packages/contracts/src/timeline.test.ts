@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TimelineSchema, parseTimeline, safeParseTimeline } from "./timeline.js";
+import { TimelineSchema, collageShotIds, parseTimeline, safeParseTimeline } from "./timeline.js";
 
 const valid = {
   schemaVersion: 1,
@@ -22,6 +22,36 @@ const valid = {
 };
 
 describe("TimelineSchema", () => {
+  const collage = {
+    kind: "collage", clipId: "collage-1", startSec: 0, durationSec: 6,
+    spec: {
+      layoutId: "torn-paper", motionId: "print-drop", effectId: null,
+      seed: "fixture", durationSec: 6,
+      slots: [
+        { slotId: "one", shotId: "shot-1", kind: "photo" },
+        { slotId: "two", shotId: "shot-2", kind: "photo" },
+        { slotId: "three", shotId: "shot-3", kind: "video" },
+      ],
+    },
+  };
+
+  it("keeps the v1 fixture valid and accepts a v2 collage clip", () => {
+    expect(parseTimeline(valid).schemaVersion).toBe(1);
+    expect(parseTimeline({ ...valid, schemaVersion: 2, videoClips: [collage] }).schemaVersion).toBe(2);
+    expect(safeParseTimeline({ ...valid, videoClips: [collage] }).ok).toBe(false);
+  });
+
+  it("rejects a collage with two video cells", () => {
+    const duplicateVideo = { ...collage, spec: { ...collage.spec, slots: collage.spec.slots.map((slot) => ({ ...slot, kind: "video" })) } };
+    const result = safeParseTimeline({ ...valid, schemaVersion: 2, videoClips: [duplicateVideo] });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(" ")).toContain("at most one video cell");
+  });
+
+  it("returns every collage slot shot ID", () => {
+    const timeline = parseTimeline({ ...valid, schemaVersion: 2, videoClips: [collage] });
+    expect(collageShotIds(timeline)).toEqual(["shot-1", "shot-2", "shot-3"]);
+  });
   it("accepts the spec's creator example", () => {
     const timeline = parseTimeline(valid);
     expect(timeline.videoClips).toHaveLength(3);
@@ -30,7 +60,8 @@ describe("TimelineSchema", () => {
 
   it("accepts a photo clip, which carries no source timing", () => {
     const photo = { ...valid, videoClips: [{ id: "p1", source: { kind: "photo", shotId: "shot1" }, startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 } }] };
-    expect(parseTimeline(photo).videoClips[0].source.kind).toBe("photo");
+    const clip = parseTimeline(photo).videoClips[0];
+    expect("source" in clip && clip.source.kind).toBe("photo");
   });
 
   it("rejects a photo clip carrying video-only source timing", () => {

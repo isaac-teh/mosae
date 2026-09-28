@@ -219,7 +219,7 @@ describe("runCompose — person-anchored Ken Burns", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
 
-    const photoClip = result.timeline.videoClips.find((c) => c.source.kind === "photo")!;
+    const photoClip = result.timeline.videoClips.find((c): c is import("@mosae/contracts").VideoClip => "source" in c && c.source.kind === "photo")!;
     expect(photoClip.motion).toBeUndefined();
   });
 
@@ -234,7 +234,7 @@ describe("runCompose — person-anchored Ken Burns", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
 
-    const photoClip = result.timeline.videoClips.find((c) => c.source.kind === "photo")!;
+    const photoClip = result.timeline.videoClips.find((c): c is import("@mosae/contracts").VideoClip => "source" in c && c.source.kind === "photo")!;
     expect(photoClip.motion).toMatchObject({ kind: "slow-zoom", from: 1 });
     expect((photoClip.motion as { center?: { cx: number; cy: number } }).center).toEqual({ cx: 0.4, cy: 0.35 });
   });
@@ -247,7 +247,7 @@ describe("runCompose — person-anchored Ken Burns", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
 
-    const videoClip = result.timeline.videoClips.find((c) => c.source.kind === "video")!;
+    const videoClip = result.timeline.videoClips.find((c): c is import("@mosae/contracts").VideoClip => "source" in c && c.source.kind === "video")!;
     expect(videoClip.motion).toBeUndefined();
   });
 });
@@ -292,7 +292,7 @@ describe("runCompose — arc ordering after cast guards", () => {
     }), arcDeps());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.timeline.videoClips.map((clip) => clip.id)).toEqual(["b#s0@0.15c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
+    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["b#s0@0.15c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
   });
 
   it("orders a cast replacement by time while keeping the chapter peak last", async () => {
@@ -302,6 +302,6 @@ describe("runCompose — arc ordering after cast guards", () => {
     }), arcDeps());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.timeline.videoClips.map((clip) => clip.id)).toEqual(["new#still@c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
+    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
   });
 });

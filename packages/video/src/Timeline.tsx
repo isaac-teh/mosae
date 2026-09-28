@@ -2,6 +2,7 @@ import React from "react";
 import type { AudioClip, VideoClip } from "@mosae/contracts";
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { audioTrimFrames, gainToVolume, type TimelineProps } from "./timelineMetadata";
+import { Collage } from "./collage/Collage";
 
 /**
  * Clips carry explicit output-relative start times, so they render as absolute
@@ -54,11 +55,11 @@ export const MosaeTimeline: React.FC<TimelineProps> = ({ timeline, sources }) =>
     <AbsoluteFill style={{ backgroundColor: "#15110f", overflow: "hidden" }}>
       {timeline.videoClips.map((clip) => (
         <Sequence
-          key={clip.id}
+          key={"kind" in clip ? clip.clipId : clip.id}
           from={Math.round(clip.startSec * fps)}
           durationInFrames={Math.max(1, Math.round(clip.durationSec * fps))}
         >
-          <ClipBody clip={clip} sources={sources} />
+          {"kind" in clip ? <Collage spec={clip.spec} sources={sources} /> : <ClipBody clip={clip} sources={sources} />}
         </Sequence>
       ))}
       {timeline.audioClips.map((clip) => (

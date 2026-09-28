@@ -1,4 +1,4 @@
-import type { Timeline, VideoClip, AudioClip } from "@mosae/contracts";
+import { collageShotIds, type Timeline, type AudioClip } from "@mosae/contracts";
 
 /** How sources should be resolved — proxy URLs for preview, originals for render. */
 export type ResolveMode = "preview" | "render";
@@ -41,8 +41,9 @@ export async function resolveSources(
   const soundtrackIds = new Set<string>();
 
   for (const clip of timeline.videoClips) {
-    neededIds.add(clip.source.shotId);
+    if ("source" in clip) neededIds.add(clip.source.shotId);
   }
+  for (const shotId of collageShotIds(timeline)) neededIds.add(shotId);
 
   for (const audio of timeline.audioClips) {
     if (audio.source.kind === "asset") {
@@ -87,8 +88,9 @@ export function collectSourceIds(timeline: Timeline): Set<string> {
   const ids = new Set<string>();
 
   for (const clip of timeline.videoClips) {
-    ids.add(clip.source.shotId);
+    if ("source" in clip) ids.add(clip.source.shotId);
   }
+  for (const shotId of collageShotIds(timeline)) ids.add(shotId);
 
   for (const audio of timeline.audioClips) {
     if (audio.source.kind === "asset") {

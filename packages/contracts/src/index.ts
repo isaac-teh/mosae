@@ -1,5 +1,7 @@
 export {
   TimelineSchema,
+  CollageClipSchema,
+  collageShotIds,
   VideoClipSchema,
   AudioClipSchema,
   CaptionSchema,
@@ -10,11 +12,19 @@ export {
   safeParseTimeline,
   type Timeline,
   type VideoClip,
+  type CollageClip,
   type AudioClip,
   type Caption,
   type Chapter,
   type ParseResult,
 } from "./timeline.js";
+
+export {
+  COLLAGE_EFFECTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS,
+  CollageSpecSchema, slotCountForLayout,
+} from "./collage.js";
+export type { CollageSpec, CollageSlot } from "./collage.js";
+export { ALLOWED_COMBOS, ALLOWED_COMBO_KEYS } from "./collageCombos.js";
 
 export {
   StoryProposalSchema,

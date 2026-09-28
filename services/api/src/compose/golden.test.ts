@@ -129,13 +129,13 @@ describe("golden composition", () => {
     const boundary = (out: typeof arrival, incoming: typeof arrival) =>
       Number(((out.startSec + out.durationSec) - incoming.startSec).toFixed(6));
 
-    expect(talking.transitionIn.kind).toBe("crossfade");
+    expect(talking.transitionIn?.kind).toBe("crossfade");
     expect(boundary(arrival, talking)).toBeCloseTo(0.5);
 
-    expect(water.transitionIn.kind).toBe("cut");
+    expect(water.transitionIn?.kind).toBe("cut");
     expect(boundary(talking, water)).toBeCloseTo(0);
 
-    expect(dusk.transitionIn.kind).toBe("crossfade");
+    expect(dusk.transitionIn?.kind).toBe("crossfade");
     expect(boundary(water, dusk)).toBeCloseTo(0.5);
   });
 
