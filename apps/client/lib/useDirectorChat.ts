@@ -25,6 +25,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const [directionOptions, setDirectionOptions] = useState<DirectionOptions | null>(null);
   const [directionSelection, setDirectionSelection] = useState<{ cadenceId: string; durationId: Direction["durationId"]; soundtrackId: string | null; focus: string }>({ cadenceId: "reflective", durationId: "2m", soundtrackId: null, focus: "family" });
   const proposalId = useRef<string | null>(null);
+  const personSaving = useRef(false);
   const planLoad = useRef(false);
   const peopleEdits = useRef(new Map<string, { name: string | null; role: string | null; skipped: boolean }>());
   const skipPeopleForNow = useRef(false);
@@ -103,24 +104,34 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       finally { setSaving(false); }
     },
     async setPerson(personId: string, role: string, name?: string) {
+      if (personSaving.current) return;
+      personSaving.current = true;
       const people = input.people ?? [];
       const roleValue = role === "My daughter" || role === "My son" ? "child" : role === "Skip" ? "other" : "parent";
       const personName = name ?? (role === "Skip" ? undefined : role);
       peopleEdits.current.set(personId, { name: role === "Skip" ? null : personName ?? null, role: roleValue, skipped: role === "Skip" });
       const updated = people.map((person) => person.personId === personId ? { ...person, role: roleValue, name: personName ?? null, skipped: role === "Skip" } : person);
       try {
-        await confirmCast(projectId, { people: updated.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(proposalId.current ? { proposalId: proposalId.current } : {}) });
-        setInput((current) => ({ ...current, people: updated, peopleConfirmed: updated.every((person) => person.name || person.role || person.skipped) }));
+        const result = await confirmCast(projectId, { people: updated.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        const revisedPlan = result.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+        if (result.proposalId) proposalId.current = result.proposalId;
+        setInput((current) => ({ ...current, people: updated, ...(revisedPlan ? { plan: revisedPlan } : {}), peopleConfirmed: false }));
         setError(null);
       } catch (cause) { setError(reportFailure(cause)); }
+      finally { personSaving.current = false; }
     },
     async skipPeople() {
+      if (personSaving.current) return;
+      personSaving.current = true;
       skipPeopleForNow.current = true;
       const people = (input.people ?? []).map((person) => ({ ...person, skipped: true }));
       try {
-        await confirmCast(projectId, { people: people.map((person) => ({ personId: person.personId, role: "other" as const, excluded: false })), focus: [], ...(proposalId.current ? { proposalId: proposalId.current } : {}) });
-        setInput((current) => ({ ...current, people, peopleConfirmed: true })); setError(null);
+        const result = await confirmCast(projectId, { people: people.map((person) => ({ personId: person.personId, role: "other" as const, excluded: false })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        const revisedPlan = result.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+        if (result.proposalId) proposalId.current = result.proposalId;
+        setInput((current) => ({ ...current, people, ...(revisedPlan ? { plan: revisedPlan } : {}), peopleConfirmed: true })); setError(null);
       } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't save this. Please try again."); }
+      finally { personSaving.current = false; }
     },
     toggleMoment(shotId: string) {
       setMomentState((current) => {
@@ -138,7 +149,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const momentIdsByShot = new Map(input.plan.moments.map((moment) => [moment.shotId ?? moment.id, moment.id]));
         const mustIncludeMomentIds = [...new Set(Object.entries(momentState)
           .filter(([, value]) => value === "keep")
-          .map(([shotId]) => momentIdsByShot.get(shotId) ?? shotId))];
+          .map(([shotId]) => momentIdsByShot.get(shotId))
+          .filter((momentId): momentId is string => Boolean(momentId)))];
         const keptShotIds = new Set(Object.entries(momentState).filter(([, value]) => value === "keep").map(([shotId]) => shotId));
         const excludedShotIds = [...new Set([...(input.plan.edits?.excludedShotIds ?? []), ...Object.entries(momentState).filter(([, value]) => value === "leave").map(([id]) => id)])].filter((id) => !keptShotIds.has(id));
         const edits = { ...(input.plan.edits ?? { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], momentOrder: [], photoSwaps: {} }), mustIncludeMomentIds, excludedShotIds } as PlanEdits;

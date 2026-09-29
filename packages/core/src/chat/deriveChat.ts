@@ -75,7 +75,7 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
     });
     if (unanswered) {
-      add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, days: unanswered.days });
+      add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days });
     } else {
       add({ kind: "anyone-else", id: "anyone-else" });
     }

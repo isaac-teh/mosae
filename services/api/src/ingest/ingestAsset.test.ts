@@ -62,7 +62,7 @@ describe("ingestAsset", () => {
 
   it("stores GPS-derived places, leaves no-GPS place null, and tolerates resolver failures", async () => {
     const gpsFacts = { ...photoFacts, gps: { lat: 1.404, lng: 103.793 } };
-    const place = { name: "Singapore Zoo", level: "landmark" as const };
+    const place = { name: "Singapore Zoo", level: "landmark" as const, country: "Singapore" };
     const withGps = setup(baseAsset, { probe: vi.fn().mockResolvedValue(gpsFacts), placeResolver: { resolve: vi.fn().mockResolvedValue(place) } });
     await ingestAsset(withGps.deps, task);
     expect(withGps.deps.commitIngested).toHaveBeenCalledWith(expect.objectContaining({ place }));

@@ -1,8 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
 import { recordUsageToLog } from "./wire.js";
 
 describe("recordUsageToLog", () => {
-  it("omits an absent optional subject id from Firestore documents", async () => {
+  it("omits undefined optional fields from Firestore documents", async () => {
     const add = vi.fn(async (value: Record<string, unknown>) => {
       if (Object.hasOwn(value, "subjectId")) throw new Error("Firestore rejects undefined subjectId");
     });
@@ -13,5 +12,6 @@ describe("recordUsageToLog", () => {
     });
     expect(add).toHaveBeenCalledOnce();
     expect(add.mock.calls[0]![0]).not.toHaveProperty("subjectId");
+    expect(add.mock.calls[0]![0]).toMatchObject({ projectId: "ask-usage-test" });
   });
 });

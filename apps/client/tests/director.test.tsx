@@ -27,8 +27,13 @@ async function waitFor(check: () => void) { for (let i = 0; i < 40; i++) { try {
 
 const summary = (faces = true) => ({ total: 8, photos: 8, clips: 0, days: 2, dateRange: null, places: ["Tokyo"], country: "Japan", season: "late October", processed: { ingested: 8, understood: 8, faces: 4 }, ready: { summary: true, faces, plan: false } });
 const people = [
-  { personId: "person-1", name: null, role: null, momentCount: 212, sampleShotIds: ["a", "b"], days: [2, 3] },
-  { personId: "person-2", name: null, role: null, momentCount: 90, sampleShotIds: ["c"], days: [1] },
+  { personId: "person-1", name: null, role: null, momentCount: 212, sampleShotIds: ["a", "b", "c", "d"], sampleFaces: [
+    { shotId: "a", uri: "https://thumb.test/a", bbox: [0.1, 0.2, 0.4, 0.5] },
+    { shotId: "b", uri: "https://thumb.test/b", bbox: [0.3, 0.4, 0.7, 0.8] },
+    { shotId: "c", uri: "https://thumb.test/c", bbox: [0.2, 0.3, 0.5, 0.6] },
+    { shotId: "d", uri: "https://thumb.test/d", bbox: [0.4, 0.4, 0.8, 0.8] },
+  ], days: [1, 2, 3] },
+  { personId: "person-2", name: null, role: null, momentCount: 90, sampleShotIds: ["c"], sampleFaces: [], days: [1] },
 ];
 
 const planFixture = {
@@ -58,6 +63,8 @@ describe("Director chat", () => {
   it("shows the ready summary and starts the story intent when the occasion reply is tapped", async () => {
     setup(); await renderScreen();
     expect(hasText("I've looked through all 8")).toBe(true);
+    expect(host.textContent?.match(/Is that the story\?/g)).toHaveLength(1);
+    expect(host.querySelector('[data-from="mosae"]')?.textContent).toContain("Is that the story?");
     await click("Yes, our Japan trip");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip", []));
     expect(hasText("Yes, our Japan trip")).toBe(true);
@@ -65,7 +72,9 @@ describe("Director chat", () => {
 
   it("titles the chat from country and season, then falls back to place and Your film", async () => {
     setup(); await renderScreen();
-    expect(host.textContent).toContain("Japan, autumn");
+    expect(host.textContent).toContain("Japan, October");
+    setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), country: "Singapore", season: "early June", places: ["Telok Blangah"] }); await renderScreen();
+    expect(host.textContent).toContain("Singapore, June");
     setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), country: null, season: null }); await renderScreen();
     expect(host.textContent).toContain("Tokyo");
     setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), country: null, season: null, places: [] }); await renderScreen();
@@ -96,17 +105,69 @@ describe("Director chat", () => {
   });
 
   it("saves the selected role and name before asking about the next person", async () => {
-    setup(); await renderScreen();
+    setup({ people: people.map((person) => ({ ...person, role: "other" })) }); await renderScreen();
     await click("Yes, our Japan trip");
     await click("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", role: "child", name: "My daughter" })]) })));
     expect(hasText("One person appears in 90 moments. Who is this?")).toBe(true);
   });
 
-  it("Skip for now advances past the people step", async () => {
+  it("does not revise a plan proposal until its asynchronous job has published it", async () => {
+    setup({ people: [{ ...people[0], role: null }] }); await renderScreen();
+    await click("Yes, our Japan trip");
+    await click("My daughter");
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
+    expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.not.objectContaining({ proposalId: expect.any(String) }));
+  });
+
+  it("uses the revised proposal returned by cast confirmation for later moment edits", async () => {
+    setup({ readyPlan: true, people: [{ ...people[0], role: null }] }); await renderScreen();
+    await click("Yes, our Japan trip");
+    await click("My daughter");
+    for (let i = 0; i < 3 && !hasText("Any moments that must be in the film"); i++) {
+      if (host.querySelector('button[aria-label="No, that\'s everyone"]')) await click("No, that's everyone");
+      else if (host.querySelector('button[aria-label="Skip"]')) await click("Skip");
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
+    await waitFor(() => expect(hasText("Any moments that must be in the film")).toBe(true));
+    await click("Done");
+    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-2", expect.anything()));
+  });
+
+  it("uses each returned proposal ID for the next cast edit", async () => {
+    setup({ readyPlan: true });
+    mocks.confirmCast.mockResolvedValueOnce({ cast: { people: [] }, proposalId: "proposal-2" }).mockResolvedValueOnce({ cast: { people: [] }, proposalId: "proposal-3" });
+    await renderScreen(); await click("Yes, our Japan trip");
+    await click("My daughter");
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(1));
+    await click("My wife");
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(2));
+    expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ proposalId: "proposal-2" }));
+  });
+
+  it("does not send a second cast edit while the first one is still pending", async () => {
+    setup({ readyPlan: true });
+    let resolveCast!: (value: any) => void;
+    mocks.confirmCast.mockImplementation(() => new Promise((resolve) => { resolveCast = resolve; }));
+    await renderScreen(); await click("Yes, our Japan trip");
+    await click("My daughter");
+    await click("My wife");
+    expect(mocks.confirmCast).toHaveBeenCalledTimes(1);
+    resolveCast({ cast: { people: [] }, proposalId: "proposal-2" });
+  });
+
+  it("shows face previews and only the inline Skip once the person question appears", async () => {
+    setup({ people: [{ ...people[0], momentCount: 12 }, { ...people[1], momentCount: 9 }] }); await renderScreen(); await click("Yes, our Japan trip");
+    expect(host.querySelectorAll('img[alt^="Person photo "]')).toHaveLength(4);
+    expect(hasText("4 of 12 shown · Day 1, 2 and 3")).toBe(true);
+    expect(host.querySelectorAll('button[aria-label="Skip"]')).toHaveLength(1);
+    expect(hasText("Skip for now")).toBe(false);
+  });
+
+  it("Skip on the person question advances past the people step", async () => {
     setup(); await renderScreen();
     await click("Yes, our Japan trip");
-    await click("Skip for now");
+    await click("Skip");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
     expect(hasText("Skip")).toBe(true);
     expect(hasText("Family")).toBe(false);
@@ -207,6 +268,20 @@ describe("Director chat", () => {
     expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["moment-2"], excludedShotIds: ["previously-excluded", "dup-0", "shot-3"] }));
     planFixture.leftOut = leftOut;
     planFixture.edits.excludedShotIds = priorExclusions;
+  });
+
+  it("does not send a kept set-aside shot as a must-include moment ID", async () => {
+    const leftOut = planFixture.leftOut;
+    const excludedShotIds = planFixture.edits.excludedShotIds;
+    planFixture.leftOut = [{ shotId: "set-aside-blur", thumbnailUrl: "https://image/blur", reason: "Blurry" }];
+    planFixture.edits.excludedShotIds = ["set-aside-blur", "previously-excluded"];
+    await openMoments();
+    await click("Moment set-aside-blur");
+    await click("Done");
+    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledTimes(1));
+    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: [], excludedShotIds: ["previously-excluded"] }));
+    planFixture.leftOut = leftOut;
+    planFixture.edits.excludedShotIds = excludedShotIds;
   });
 
   it("opens the all-moments picker and submits the selected ids", async () => {

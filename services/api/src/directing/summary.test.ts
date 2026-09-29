@@ -17,6 +17,10 @@ describe("summarise", () => {
   it("counts undated assets but excludes them from days", () => {
     expect(summarise([asset("photo", null)], false)).toMatchObject({ total: 1, days: 0, dateRange: null });
   });
+  it("preserves countries from resolved places in the chat summary", () => {
+    const singapore = (localTime: string, name: string): SummaryAsset => ({ media: { kind: "photo", localTime }, place: { name, country: "Singapore" }, status: "understood", hasFaces: true });
+    expect(summarise([singapore("2026-06-01T10:00:00", "Telok Blangah"), singapore("2026-06-02T10:00:00", "Siloso Beach")], false)).toMatchObject({ country: "Singapore", places: ["Telok Blangah", "Siloso Beach"], season: "early June" });
+  });
   it("is not ready while an asset is still ingesting", () => {
     expect(summarise([{ ...asset("photo", null), status: "uploaded", hasFaces: false }], false)).toMatchObject({ ready: { summary: false, faces: false } });
   });

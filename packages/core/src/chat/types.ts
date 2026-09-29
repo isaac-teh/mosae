@@ -16,7 +16,7 @@ export type ProjectSummary = {
 export type ChatInput = {
   summary: ProjectSummary | null;
   intent: { text: string } | null;
-  people: { personId: string; name: string | null; role: string | null; skipped: boolean; momentCount: number; sampleShotIds: string[]; days: number[] }[] | null;
+  people: { personId: string; name: string | null; role: string | null; skipped: boolean; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[] }[] | null;
   peopleConfirmed: boolean;
   plan: StoryPlan | null;
   momentsConfirmed: boolean;
@@ -31,7 +31,7 @@ export type ChatItem =
   | { kind: "you"; id: string; text: string }
   | { kind: "typing"; id: string; text: string }
   | { kind: "occasion"; id: string }
-  | { kind: "person"; id: string; personId: string; momentCount: number; sampleShotIds: string[]; days: number[] }
+  | { kind: "person"; id: string; personId: string; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[] }
   | { kind: "anyone-else"; id: string }
   | { kind: "set-aside"; id: string; blurry: number; duplicates: number }
   | { kind: "moments"; id: string; suggestedShotIds: string[] }

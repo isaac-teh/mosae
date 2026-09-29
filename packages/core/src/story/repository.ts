@@ -2,7 +2,7 @@ import type { AlternativeShot, CreateOption, Direction, DirectionOptions, Film, 
 import type { ProjectSummary } from "../chat/types";
 import type { EditOp, Timeline } from "@mosae/contracts";
 
-export type DirectorPerson = { personId: string; name: string | null; role: string | null; momentCount: number; sampleShotIds: string[]; days: number[] };
+export type DirectorPerson = { personId: string; name: string | null; role: string | null; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[] };
 export type FilmListItem = { projectId: string; filmId: string; title: string; month: string; duration: string; posterUrl: string; justSaved: boolean };
 export type ChatInterpretRequest = { step: "occasion" | "people" | "moments" | "direction"; text: string; context: { summary?: ProjectSummary; people?: { personId: string; name: string | null; role: string | null }[] } };
 export type ChatInterpretResult = { reply: string; change: { kind: string; [key: string]: unknown } };

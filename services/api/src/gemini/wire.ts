@@ -119,7 +119,7 @@ export async function deleteFileVia(client: GoogleGenAI, name: string): Promise<
 }
 export function recordUsageToLog(db: Firestore, context: { projectId: string }): (usage: UsageRecord) => Promise<void> {
   return async (usage) => {
-    const { subjectId, ...usageFields } = usage;
-    await db.collection("geminiUsage").add({ ...usageFields, ...(subjectId === undefined ? {} : { subjectId }), projectId: context.projectId, createdAt: Date.now() });
+    const fields = Object.fromEntries(Object.entries(usage).filter(([, value]) => value !== undefined));
+    await db.collection("geminiUsage").add({ ...fields, projectId: context.projectId, createdAt: Date.now() });
   };
 }
