@@ -20,6 +20,7 @@ vi.mock("remotion", () => ({
 }));
 
 import { Collage } from "./Collage";
+import { focusRelayInputRange } from "./CollageBase";
 import { ALLOWED_COMBOS, ALLOWED_COMBO_KEYS } from "./allowedCombos";
 import { CollageSpecSchema, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, COLLAGE_EFFECTS, slotCountForLayout } from "./schema";
 import { createCollageSpec } from "./fixtures";
@@ -76,5 +77,12 @@ describe("Collage", () => {
     const spec = createCollageSpec("photo-table");
     expect(renderToStaticMarkup(<Collage spec={spec} />)).toBe(renderToStaticMarkup(<Collage spec={spec} />));
     expect(renderToStaticMarkup(<Collage spec={{ ...spec, seed: "different-seed" }} />)).not.toBe(renderToStaticMarkup(<Collage spec={spec} />));
+  });
+
+  it("keeps focus-relay input ranges strictly increasing through the final slot", () => {
+    const finalSixSlotRange = focusRelayInputRange(5, 6);
+    expect(finalSixSlotRange).toEqual([expect.any(Number), expect.any(Number), 1]);
+    expect(finalSixSlotRange[0]).toBeLessThan(finalSixSlotRange[1]);
+    expect(finalSixSlotRange[1]).toBeLessThan(finalSixSlotRange[2]);
   });
 });

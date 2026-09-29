@@ -76,6 +76,8 @@ export interface ComposeJob {
   note: string;
   /** Whether the model's text overlays are burned into the film. */
   captions: boolean;
+  collageAmount?: "few" | "lots" | "none";
+  motionFeel?: "calm" | "playful";
   /**
    * Person-anchored Ken Burns hint, keyed by moment id → face bbox center in
    * normalized 0–1 coordinates. When a photo clip's moment names a focus person
@@ -89,6 +91,12 @@ export interface ComposeJob {
   cast?: { summary: string; core: string[]; focus: string[]; peopleByMoment: Map<string, Set<string>>; subjectsByMoment: Map<string, Set<string>>; namesById: Record<string, string> };
   chapterOf?: Map<string, number>;
   timeOf?: Map<string, ClipTime>;
+}
+
+/** Preserve the pre-collage fit's relative tolerance after collage compression. */
+export function collageAdjustedTargetSec(fittedTargetSec: number, beforeCollagesSec: number, afterCollagesSec: number): number {
+  if (beforeCollagesSec <= 0 || afterCollagesSec >= beforeCollagesSec) return fittedTargetSec;
+  return fittedTargetSec * afterCollagesSec / beforeCollagesSec;
 }
 
 /**
@@ -374,7 +382,7 @@ export async function runCompose(
   }
   let withCollages: Timeline;
   try {
-    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview());
+    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm" });
   } catch (error) {
     return { ok: false, reasons: [`collage placement failed: ${error instanceof Error ? error.message : String(error)}`] };
   }
@@ -387,7 +395,7 @@ export async function runCompose(
     soundtrackIds: deps.soundtrackIds,
     // The length the film is committed to after fitting — the requested target,
     // or the shortened one when the media could not reach it.
-    targetSec: fittedTargetSec - (timeline.durationSec - withCollages.durationSec),
+    targetSec: collageAdjustedTargetSec(fittedTargetSec, timeline.durationSec, withCollages.durationSec),
     fps: 30,
   };
 

@@ -451,7 +451,16 @@ describe("film adapters", () => {
     expect(calls[0]).toEqual(["POST", "/api/projects/project-1/proposals/proposal-1/accept"]);
     expect(calls[1][0]).toBe("POST");
     expect(calls[1][1]).toBe("/api/projects/project-1/generations");
-    expect(calls[1][2]).toMatchObject({ proposalId: "proposal-1", settings: { projectId: "project-1", note: "warm", cadenceId: "playful", durationId: "30s", soundtrackId: null, schemaVersion: 1, version: 1 } });
+    expect(calls[1][2]).toMatchObject({ proposalId: "proposal-1", settings: { projectId: "project-1", note: "warm", cadenceId: "playful", durationId: "30s", soundtrackId: null, schemaVersion: 1, version: 1, collageAmount: "few", motionFeel: "calm" } });
+  });
+
+  it("sends explicitly selected collage density and motion feel in generation settings", async () => {
+    const deps = dependencies({ request: vi.fn(async (_method: string, path: string) => path.endsWith("/generations") ? { generation: { id: "gen-9" } } : {}) });
+    await createApiStoryRepository({ projectId: "project-1" }, deps).directFilm("proposal-1", {
+      note: "", cadenceId: "playful", soundtrackId: null, durationId: null, collageAmount: "lots", motionFeel: "playful",
+    });
+    const request = vi.mocked(deps.request).mock.calls.find((call) => call[1].endsWith("/generations"));
+    expect(request?.[2]).toMatchObject({ settings: { collageAmount: "lots", motionFeel: "playful" } });
   });
 
   it("sends the chosen soundtrack — accepts the plan, then posts a generation and returns its id as the film id", async () => {

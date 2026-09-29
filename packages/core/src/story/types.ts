@@ -94,9 +94,11 @@ export type DirectionOptions = {
   /** The tone the planner suggests from the photos' mood; preselected on Direct Film. */
   recommendedCadence: string;
   cadenceReason: string | null;
+  collageAmount?: "few" | "lots" | "none";
+  motionFeel?: "calm" | "playful";
 };
 
-export type Direction = { note: string; cadenceId: string; soundtrackId: string | null; durationId: DurationChoice["id"] | null };
+export type Direction = { note: string; cadenceId: string; soundtrackId: string | null; durationId: DurationChoice["id"] | null; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
 
 export type Film = {
   filmId: string;

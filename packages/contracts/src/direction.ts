@@ -35,6 +35,8 @@ export const DirectionSettingsSchema = z.strictObject({
   durationId: z.enum(durationIds).nullable(),
   aspect: z.enum(["16:9", "9:16"]),
   captions: z.boolean().default(false),
+  collageAmount: z.enum(["few", "lots", "none"]).default("few"),
+  motionFeel: z.enum(["calm", "playful"]).default("calm"),
 });
 
 export type CadenceId = (typeof CADENCES)[number]["id"];

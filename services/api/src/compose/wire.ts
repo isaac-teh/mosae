@@ -295,6 +295,8 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       // field that carries what the user actually asked for.
       note: settings.settings.note,
       captions: settings.settings.captions,
+      collageAmount: settings.settings.collageAmount,
+      motionFeel: settings.settings.motionFeel,
       focusCenter,
       chapterOf,
       timeOf,

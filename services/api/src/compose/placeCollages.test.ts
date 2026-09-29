@@ -50,13 +50,55 @@ describe("placeCollages", () => {
     expect(result.videoClips).toHaveLength(7);
   });
 
-  it("caps collages at a quarter of final visual clips and one per chapter", () => {
+  it("finds a normal trip collage from fifteen photos across three days when few is selected", () => {
+    const events = Array.from({ length: 15 }, () => "different-event");
+    const { timeline, sources } = fixture(events);
+    for (let index = 0; index < 15; index++) sources.set(`clip-${index}`, {
+      ...sources.get(`clip-${index}`)!, eventId: `event-${index}`,
+      localTime: `2026-06-${String(Math.floor(index / 5) + 1).padStart(2, "0")}T09:${String(index % 5).padStart(2, "0")}:00`,
+    });
+    const result = placeCollages(timeline, sources, "trip:few", review, { collageAmount: "few", motionFeel: "calm" });
+    expect(collages(result).length).toBeGreaterThanOrEqual(1);
+    expect(collages(result).length).toBeLessThanOrEqual(1);
+  });
+
+  it("omits collages when the direction says none", () => {
+    const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "x", "y"]);
+    expect(collages(placeCollages(timeline, sources, "trip:none", review, { collageAmount: "none", motionFeel: "calm" }))).toHaveLength(0);
+  });
+
+  it("makes lots produce more collages than few on a three-day, fifteen-photo trip", () => {
+    const events = Array.from({ length: 15 }, () => "different-event");
+    const { timeline, sources } = fixture(events);
+    for (let index = 0; index < 15; index++) sources.set(`clip-${index}`, {
+      ...sources.get(`clip-${index}`)!, eventId: `event-${index}`,
+      localTime: `2026-06-${String(Math.floor(index / 5) + 1).padStart(2, "0")}T09:${String(index % 5).padStart(2, "0")}:00`,
+    });
+    const few = placeCollages(timeline, sources, "trip:few", review, { collageAmount: "few", motionFeel: "calm" });
+    const lots = placeCollages(timeline, sources, "trip:lots", review, { collageAmount: "lots", motionFeel: "calm" });
+    expect(collages(lots).length).toBeGreaterThan(collages(few).length);
+    expect(collages(lots).length / lots.videoClips.length).toBeLessThanOrEqual(0.4);
+  });
+
+  it.each([
+    ["calm", ["page-turn", "print-drop", "focus-relay"]],
+    ["playful", ["stack-deal", "tape-slap", "crash-zoom"]],
+  ] as const)("prefers %s motion for collage placement", (motionFeel, preferred) => {
+    const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "x", "y"]);
+    const allKept = { combos: ALLOWED_COMBOS.map((combo) => ({ ...combo, verdict: "keep" })) };
+    const result = placeCollages(timeline, sources, "trip:motion", allKept, { collageAmount: "few", motionFeel });
+    const collage = collages(result)[0];
+    if (!(collage && "kind" in collage)) throw new Error("expected collage");
+    expect(preferred).toContain(collage.spec.motionId);
+  });
+
+  it("caps lots collages at forty percent of final visual clips and two per chapter", () => {
     const events = ["a", "a", "a", "a", "b", "b", "b", "b", "c", "c", "c", "c", "x", "y", "z"];
     const chapters = events.map((_, index) => Math.floor(index / 4));
     const { timeline, sources } = fixture(events, chapters);
-    const result = placeCollages(timeline, sources, "project-1:generation-1", review);
+    const result = placeCollages(timeline, sources, "project-1:generation-1", review, { collageAmount: "lots" });
     expect(collages(result)).toHaveLength(2);
-    expect(collages(result).length / result.videoClips.length).toBeLessThanOrEqual(0.25);
+    expect(collages(result).length / result.videoClips.length).toBeLessThanOrEqual(0.4);
     expect(new Set(collages(result).map((clip) => "kind" in clip ? clip.chapterId : "" )).size).toBe(collages(result).length);
   });
 
