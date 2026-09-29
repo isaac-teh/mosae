@@ -1,7 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Firestore } from "firebase-admin/firestore";
 import type { StoryProposal } from "@mosae/contracts";
-import { loadComposeCatalog } from "./wire.js";
+import { InMemoryTaskQueue } from "../queue/taskQueue.js";
+
+vi.mock("../store/enqueueRender.js", () => ({ enqueueRender: vi.fn() }));
+vi.mock("../store/generationStore.js", () => ({ publishGeneration: vi.fn(), failGeneration: vi.fn() }));
+vi.mock("./runCompose.js", () => ({ runCompose: vi.fn() }));
+
+import { enqueueRender } from "../store/enqueueRender.js";
+import { publishGeneration } from "../store/generationStore.js";
+import { runCompose } from "./runCompose.js";
+import { createCompose, loadComposeCatalog } from "./wire.js";
 
 function proposal(constraints: Partial<StoryProposal["constraints"]> = {}): StoryProposal {
   return {
@@ -46,6 +55,30 @@ function firestore() {
   return db as unknown as Firestore;
 }
 
+function composeFirestore(proposalData: StoryProposal): Firestore {
+  const generationData = {
+    schemaVersion: 1,
+    proposalId: proposalData.id,
+    status: "composing",
+    seed: "seed-1",
+    settings: { schemaVersion: 1, id: "settings-1", projectId: "project1", version: 1, note: "", cadenceId: "tender", soundtrackId: null, durationId: "30s", aspect: "9:16", captions: false },
+  };
+  const generationSnap = { exists: true, data: () => generationData };
+  const proposalSnap = { exists: true, data: () => proposalData };
+  const projectSnap = { exists: true, get: (key: string) => ({ userId: "owner", mode: "memory" } as Record<string, unknown>)[key] };
+  const emptyCollection = { get: async () => ({ docs: [] }) };
+  const projectRef = {
+    get: async () => projectSnap,
+    collection: (name: string) => {
+      if (name === "generations") return { doc: () => ({ get: async () => generationSnap }) };
+      if (name === "storyProposals") return { doc: () => ({ get: async () => proposalSnap }) };
+      if (name === "cast") return { doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }) };
+      return emptyCollection;
+    },
+  };
+  return { collection: () => ({ doc: () => projectRef }) } as unknown as Firestore;
+}
+
 describe("loadComposeCatalog review edits", () => {
   it("uses swap shots, hides original shots, and ignores swaps pointing at hidden shots", async () => {
     const catalog = await loadComposeCatalog(firestore(), "project1", proposal({
@@ -67,5 +100,53 @@ describe("loadComposeCatalog review edits", () => {
       assetId: "a1", eventId: "burst", dupOf: "a0",
       localTime: "2026-05-03T09:00:00", dHash: "0000000000000001",
     });
+  });
+});
+
+describe("createCompose render handoff", () => {
+  it("awaits the Cloud Tasks queue handoff after writing the render outbox task", async () => {
+    const projectId = "project1";
+    const generationId = "generation1";
+    const proposalData = proposal();
+    const db = composeFirestore(proposalData);
+    const queue = new InMemoryTaskQueue();
+    let notifyEnqueueStarted!: () => void;
+    const enqueueStarted = new Promise<void>((resolve) => { notifyEnqueueStarted = resolve; });
+    let releaseEnqueue!: () => void;
+    const enqueueGate = new Promise<void>((resolve) => { releaseEnqueue = resolve; });
+    const realEnqueue = queue.enqueue.bind(queue);
+    let outboxWritten = false;
+    vi.mocked(enqueueRender).mockImplementation(async () => { outboxWritten = true; });
+    vi.mocked(publishGeneration).mockResolvedValue({} as never);
+    vi.mocked(runCompose).mockResolvedValue({ ok: true, timeline: {} as never, droppedPicks: [], reasons: [] } as never);
+    vi.spyOn(queue, "enqueue").mockImplementation(async (task) => {
+      expect(outboxWritten).toBe(true);
+      notifyEnqueueStarted();
+      await enqueueGate;
+      return realEnqueue(task);
+    });
+
+    const compose = createCompose({
+      db,
+      generateStructured: async () => ({}) as never,
+      afterRenderEnqueued: () => queue.enqueue({
+        name: "render-work-key",
+        path: "/tasks/render",
+        body: { projectId, subjectKind: "generation", subjectId: generationId, generation: "1", workKey: "render-work-key" },
+      }).then(() => undefined),
+    });
+
+    let finished = false;
+    const running = compose({ projectId, generationId }).finally(() => { finished = true; });
+    try {
+      await enqueueStarted;
+      await Promise.resolve();
+      expect(finished).toBe(false);
+    } finally {
+      releaseEnqueue();
+      await running;
+    }
+
+    expect(queue.tasks).toEqual([expect.objectContaining({ path: "/tasks/render", body: expect.objectContaining({ projectId, subjectId: generationId }) })]);
   });
 });

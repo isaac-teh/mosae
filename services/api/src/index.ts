@@ -80,11 +80,11 @@ const plan = createPlan({ db: adminDb, storageBucket: config.storageBucket, gemi
 const compose = createCompose({
   db: adminDb,
   geminiApiKey: config.geminiApiKey,
-  // Compose runs inside a drain, so deliver the render it queued on the next
-  // tick, the same hand-off clustering uses for plan readiness.
+  // Production waits for Cloud Tasks to accept the render after its outbox
+  // write. The dev runner defers its in-process queue to avoid reentrant drains.
   afterRenderEnqueued: useDevRunner
     ? () => { setImmediate(() => { void dispatchDue(adminDb, queue, Date.now()).catch((error) => console.error("render dispatch failed", error)); }); }
-    : undefined,
+    : () => dispatchDue(adminDb, queue, Date.now()).then(() => undefined),
 });
 
 // A Timeline names shots; files hang off assets, so the shot is the hop in
