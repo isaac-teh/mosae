@@ -46,9 +46,11 @@ function FaceCrop({ url, bbox, size = CROP_PX }: { url?: string; bbox?: FaceBbox
         accessibilityIgnoresInvertColors
         resizeMode={crop ? "stretch" : "cover"}
         onLoad={(event: any) => {
+          // The crop restyles the image, which fires onLoad again on web; measure once.
+          if (sourceSize) return;
           const dimensions = imageSizeFromLoadEvent(event);
           if (dimensions) setSourceSize(dimensions);
-          else Image.getSize(url, (width, height) => setSourceSize({ width, height }), () => {});
+          else Image.getSize(url, (width, height) => setSourceSize((current) => current ?? { width, height }), () => {});
         }}
         style={crop
           ? { position: "absolute", width: crop.width, height: crop.height, left: crop.left, top: crop.top }
