@@ -68,6 +68,14 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledWith({ op: "setPhotoDuration", clipId: "a", sec: 4 });
   });
 
+  it("explains when a photo duration edit is rejected", async () => {
+    apply.mockReturnValue(false);
+    await render(<TrimControl clip={clips[0]} onApply={apply} onClose={() => {}} />);
+    await click("Photo duration 2 seconds");
+    expect(host.textContent).toContain("That change couldn’t be applied. Try another edit.");
+    expect(host.querySelector('[aria-label="Photo duration 2 seconds"]')).not.toBeNull();
+  });
+
   it("moves a clip to the pointer drop position", async () => {
     await render(<MoveMode timeline={timeline} clipId="a" onApply={apply} onClose={() => {}} />);
     const source = host.querySelector('[aria-label="Move clip a"]')!;

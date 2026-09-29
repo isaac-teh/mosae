@@ -20,7 +20,8 @@ export function TimelineStrip({ timeline, sources, selectedClipId, onSelect }: {
           const id = clipId(clip);
           const uri = sources[shotId(clip) ?? ""];
           return <Pressable key={id} role="button" accessibilityLabel={`Select clip ${id}`} onPress={() => onSelect(id)}
-            className={`h-14 w-[53px] overflow-hidden rounded-sm border-2 ${selectedClipId === id ? "border-accent" : "border-transparent"}`}>
+            style={{ width: Math.max(36, clip.durationSec * 21.2) }}
+            className={`h-14 overflow-hidden rounded-sm border-2 ${selectedClipId === id ? "border-accent" : "border-transparent"}`}>
             {uri ? <Image source={{ uri }} resizeMode="cover" className="size-full" /> : <View className={`size-full ${index % 2 ? "bg-tide-tile" : "bg-paper"}`} />}
             {"kind" in clip && <View className="absolute bottom-0 left-0 right-0 bg-screen/70"><Text className="text-center font-sans text-[9px] text-on-screen">Collage</Text></View>}
           </Pressable>;

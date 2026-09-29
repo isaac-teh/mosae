@@ -33,6 +33,9 @@ test("opens a saved film in the editor, edits it, restores the saved revision, a
   await page.getByRole("button", { name: "Select clip clip-1" }).click();
   await page.getByRole("button", { name: "Trim" }).click();
   await page.getByRole("button", { name: "Photo duration 4 seconds" }).click();
+  await expect(page.getByRole("button", { name: "Photo duration 4 seconds" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("0:00 / 0:23", { exact: true })).toBeVisible();
+  await page.locator('[aria-label="Close trim"]').click();
   await capture(page, "editor-e2e-04-trimmed.png");
 
   await page.getByRole("button", { name: "Select clip collage-1" }).click();

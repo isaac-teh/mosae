@@ -74,12 +74,15 @@ export default function EditorScreen() {
     }));
     return [...unselected, ...leftOut];
   }, [plan, editor.timeline]);
-  const onApply = (op: EditOp) => { editor.apply(op); setTool(null); };
-  const onApplyCollage = (op: EditOp | EditOp[]) => {
-    if (Array.isArray(op)) editor.applyMany(op);
-    else editor.apply(op);
+  const onApply = (op: EditOp) => {
+    const applied = editor.apply(op);
+    if (applied) setTool(null);
+    return applied;
   };
-  const onApplyAsk = (ops: EditOp[]) => { editor.applyMany(ops); setTool(null); };
+  const onApplyCollage = (op: EditOp | EditOp[]) => {
+    return Array.isArray(op) ? editor.applyMany(op) : editor.apply(op);
+  };
+  const onApplyAsk = (ops: EditOp[]) => { if (editor.applyMany(ops)) setTool(null); };
   const chooseClip = (id: string) => {
     editor.select(id);
     const clip = editor.timeline?.videoClips.find((item) => clipId(item) === id);
@@ -98,6 +101,7 @@ export default function EditorScreen() {
       <View className="flex-row items-center gap-2"><EditorMenu onReset={(ops) => editor.reset(ops)} /><Pressable role="button" accessibilityLabel="Save" onPress={() => void editor.render()} className="min-h-11 min-w-11 items-end justify-center"><Text className="font-sans-medium text-[16px] text-on-screen">Save</Text></Pressable></View>
     </View>
     <View className="min-h-[29px] justify-center px-5"><SaveState save={editor.save} onReload={() => void editor.reloadAfterConflict()} /></View>
+    {editor.editError ? <Text accessibilityRole="alert" className="px-5 pb-2 font-sans text-caption text-on-screen">{editor.editError}</Text> : null}
     {editor.save.state === "ready" && editor.downloadUrl ? <View className="flex-row gap-2 px-5 pb-2"><Pressable role="button" accessibilityLabel="Download rendered film" onPress={() => void Linking.openURL(editor.downloadUrl!)} className="min-h-10 justify-center rounded-full bg-[#294655] px-4"><Text className="font-sans-medium text-caption text-on-screen">Download</Text></Pressable><Pressable role="button" accessibilityLabel="Share rendered film" onPress={() => void Share.share({ message: editor.downloadUrl! })} className="min-h-10 justify-center rounded-full border border-on-screen-muted px-4"><Text className="font-sans-medium text-caption text-on-screen">Share</Text></Pressable></View> : null}
     {editor.error ? <View className="flex-1 items-center justify-center px-6"><Text className="text-center font-sans text-body text-on-screen">{editor.error}</Text></View>
       : !editor.timeline ? <View className="flex-1 items-center justify-center"><Text className="font-sans text-body text-on-screen-muted">Opening your film…</Text></View>
@@ -117,7 +121,7 @@ export default function EditorScreen() {
       </ScrollView>}
     <ToolBar onTool={(value) => openTool(value)} />
     {tool === "Swap" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={selectedClip.id} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} onApply={onApply} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}
-    {tool === "Trim" && selectedClip ? <TrimControl clip={selectedClip} onApply={onApply} onClose={() => setTool(null)} /> : null}
+    {tool === "Trim" && selectedClip ? <TrimControl clip={selectedClip} onApply={editor.apply} onClose={() => setTool(null)} /> : null}
     {tool === "Move" && editor.timeline && editor.selectedClipId ? <MoveMode timeline={editor.timeline} clipId={editor.selectedClipId} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
     {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} onApply={onApply} onClose={() => setTool(null)} /> : null}

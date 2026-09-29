@@ -41,6 +41,28 @@ describe("applyEdits", () => {
     expect(result).toEqual({ ok: true, timeline: firstCut, leftOutShotIds: [] });
   });
 
+  it("applies the two second photo length and ripples the soundtrack with the shorter film", () => {
+    const longPhoto: Timeline = {
+      ...firstCut,
+      durationSec: 10.5,
+      videoClips: firstCut.videoClips.map((clip, index) => index === 0
+        ? { ...clip, durationSec: 2.5 }
+        : { ...clip, startSec: clip.startSec + 0.5 }),
+      audioClips: firstCut.audioClips.map((clip) => ({
+        ...clip,
+        source: clip.source.kind === "soundtrack" ? { ...clip.source, sourceOutSec: 10.5 } : clip.source,
+      })),
+    };
+    const result = applyEdits(longPhoto, [{ op: "setPhotoDuration", clipId: "p1", sec: 2 }]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.timeline.videoClips[0]).toMatchObject({ id: "p1", durationSec: 2, startSec: 0 });
+      expect(result.timeline.videoClips[1].startSec).toBe(2);
+      expect(result.timeline.durationSec).toBe(10);
+      expect(result.timeline.audioClips[0].source).toMatchObject({ kind: "soundtrack", sourceOutSec: 10 });
+    }
+  });
+
   it.each<{
     name: string; op: EditOp; clips: Array<[string, number, number]>; duration: number;
   }>([
