@@ -6,8 +6,10 @@ import type { Moment, Soundtrack } from "@mosae/core";
 import type { StoryRepository } from "@mosae/core";
 
 vi.mock("react-native", () => {
-  const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, numberOfLines, ...props }: any) =>
-    React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), ...(numberOfLines ? { "data-number-of-lines": numberOfLines } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
+  const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, numberOfLines, onLayout, onResponderGrant, onResponderMove, ...props }: any) => {
+    React.useEffect(() => { onLayout?.({ nativeEvent: { layout: { width: 100 } } }); }, [onLayout]);
+    return React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), ...(numberOfLines ? { "data-number-of-lines": numberOfLines } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined, onTouchStart: onResponderGrant, onTouchMove: onResponderMove }, children);
+  };
   return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }) };
 });
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
@@ -107,10 +109,36 @@ describe("editor tool operations", () => {
         { title: "A second chapter title that also must stay on one line", startSec: 3, durationSec: 6 },
       ],
     };
-    await render(<TimelineStrip timeline={chapterTimeline} sources={{}} selectedClipId={null} onSelect={() => {}} />);
+    await render(<TimelineStrip timeline={chapterTimeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} />);
     const labels = [...host.querySelectorAll('[data-number-of-lines="1"]')];
     expect(labels).toHaveLength(2);
     expect(labels.every((label) => Number.parseFloat((label.parentElement as HTMLElement).style.width) > 0)).toBe(true);
+  });
+
+  it("selects a strip clip at its actual timeline start and shows the current playhead", async () => {
+    const onSelect = vi.fn();
+    await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={4.5} onSelect={onSelect} onScrub={() => {}} />);
+    await click("Select clip b");
+    expect(onSelect).toHaveBeenCalledWith("b", 3);
+    expect(host.querySelector('[aria-label="Timeline playhead"]')?.getAttribute("style")).toContain("left: 50%");
+  });
+
+  it("maps scrub bar touch positions to timeline seconds", async () => {
+    const onScrub = vi.fn();
+    await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={onScrub} />);
+    const scrubber = host.querySelector('[aria-label="Scrub timeline"]') as HTMLElement;
+    await act(async () => scrubber.dispatchEvent(Object.assign(new Event("touchstart", { bubbles: true }), { locationX: 25 })));
+    await act(async () => scrubber.dispatchEvent(Object.assign(new Event("touchmove", { bubbles: true }), { locationX: 75 })));
+    expect(onScrub).toHaveBeenLastCalledWith(6.75);
+  });
+
+  it("uses page coordinates when a browser touch has no locationX", async () => {
+    const onScrub = vi.fn();
+    await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={onScrub} />);
+    const scrubber = host.querySelector('[aria-label="Scrub timeline"]') as HTMLElement;
+    vi.spyOn(scrubber, "getBoundingClientRect").mockReturnValue({ x: 40, y: 0, left: 40, right: 140, top: 0, bottom: 10, width: 100, height: 10, toJSON: () => ({}) });
+    await act(async () => scrubber.dispatchEvent(Object.assign(new Event("touchmove", { bubbles: true }), { pageX: 115 })));
+    expect(onScrub).toHaveBeenCalledWith(6.75);
   });
 
   it("shows selected collage chips, every allowed layout, and only motions allowed by the selected layout", async () => {

@@ -33,11 +33,17 @@ export default function EditorScreen() {
   const { height } = useWindowDimensions();
   const editor = useEditor(params.projectId || "fixture", params.generationId || "demo-film", repository);
   const [playhead, setPlayhead] = useState(0);
+  const [seekRequest, setSeekRequest] = useState<{ seconds: number } | null>(null);
   const [tool, setTool] = useState<Tool>(params.request ? "Ask" : null);
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [directions, setDirections] = useState<DirectionOptions | null>(null);
   const [slotAlternatives, setSlotAlternatives] = useState<{ clipId: string; values: Record<string, { shotId: string; thumbnailUrl: string; kind?: "photo" | "video" }[]> } | null>(null);
   const onTimeChange = useCallback((seconds: number) => setPlayhead(seconds), []);
+  const seekTo = (seconds: number) => {
+    const target = Math.max(0, Math.min(editor.timeline?.durationSec ?? 0, seconds));
+    setPlayhead(target);
+    setSeekRequest({ seconds: target });
+  };
   const previewHeight = Math.max(280, Math.min(720, height - 390));
   const soundtrack = editor.timeline?.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   const soundtrackId = soundtrack?.source.kind === "soundtrack" ? soundtrack.source.soundtrackId : null;
@@ -113,7 +119,7 @@ export default function EditorScreen() {
       : !editor.timeline ? <View className="flex-1 items-center justify-center"><Text className="font-sans text-body text-on-screen-muted">Opening your film…</Text></View>
       : <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4" showsVerticalScrollIndicator={false}>
         <View className="w-full overflow-hidden rounded-[14px] bg-tide-tile" style={{ height: previewHeight }}>
-          <EditorPreview timeline={editor.timeline} sources={editor.sources} onTimeChange={onTimeChange} />
+          <EditorPreview timeline={editor.timeline} sources={editor.sources} onTimeChange={onTimeChange} seekRequest={seekRequest} />
         </View>
         <View className="mt-4 flex-row items-center justify-between">
           <Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text>
@@ -122,7 +128,8 @@ export default function EditorScreen() {
             <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="min-h-10 min-w-10 items-center justify-center"><RedoIcon disabled={!editor.canRedo} /></Pressable>
           </View>
         </View>
-        <TimelineStrip timeline={editor.timeline} sources={editor.sources} selectedClipId={editor.selectedClipId} onSelect={chooseClip} />
+        <TimelineStrip timeline={editor.timeline} sources={editor.sources} selectedClipId={editor.selectedClipId} playheadSec={playhead}
+          onSelect={(id, startSec) => { chooseClip(id); seekTo(startSec); }} onScrub={seekTo} />
         <Pressable accessibilityLabel="Open soundtrack picker" onPress={() => setTool("Soundtrack")} className="mt-3 min-h-[44px] flex-row items-center rounded-md bg-[#142a39] px-4"><Text className="font-sans text-caption text-on-screen-muted">♫ &nbsp; {soundtrackLabel}</Text></Pressable>
       </ScrollView>}
     <ToolBar onTool={(value) => openTool(value)} />
