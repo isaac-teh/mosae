@@ -24,7 +24,3 @@ run gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccoun
 run gcloud iam service-accounts add-iam-policy-binding "$API_SA" --project "$PROJECT_ID" --member "serviceAccount:$API_SA" --role roles/iam.serviceAccountTokenCreator --quiet
 run gcloud iam service-accounts add-iam-policy-binding "$INVOKER_SA" --project "$PROJECT_ID" --member "serviceAccount:$API_SA" --role roles/iam.serviceAccountUser --quiet
 run gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:$INVOKER_SA" --role roles/eventarc.eventReceiver --quiet
-
-# Cloud Storage publishes to Eventarc's transport topic through its service agent.
-storage_agent="$(capture "service-123456789012@gs-project-accounts.iam.gserviceaccount.com" gcloud storage service-agent --project "$PROJECT_ID")"
-run gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:$storage_agent" --role roles/pubsub.publisher --quiet

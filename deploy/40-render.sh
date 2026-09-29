@@ -10,7 +10,8 @@ run gcloud builds submit "$ROOT_DIR" --project "$PROJECT_ID" --config "$DEPLOY_D
 # audience the service uses to validate authenticated calls.
 initial_url=https://pending.invalid
 if probe gcloud run services describe "$RENDER_SERVICE" --project "$PROJECT_ID" --region "$REGION"; then
-  initial_url="$(service_url "$RENDER_SERVICE")"
+  existing_url="$(service_url "$RENDER_SERVICE")"
+  if [[ -n "$existing_url" ]]; then initial_url="$existing_url"; fi
 fi
 run gcloud run deploy "$RENDER_SERVICE" --project "$PROJECT_ID" --region "$REGION" \
   --image "$image" --service-account "$RENDER_SA" --cpu 4 --memory 8Gi \

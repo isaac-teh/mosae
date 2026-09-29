@@ -13,7 +13,8 @@ render_url="$(service_url "$RENDER_SERVICE")"
 run gcloud builds submit "$ROOT_DIR" --project "$PROJECT_ID" --config "$DEPLOY_DIR/cloudbuild.yaml" --substitutions "_DOCKERFILE=services/api/Dockerfile,_IMAGE=$image"
 initial_url=https://pending.invalid
 if probe gcloud run services describe "$API_SERVICE" --project "$PROJECT_ID" --region "$REGION"; then
-  initial_url="$(service_url "$API_SERVICE")"
+  existing_url="$(service_url "$API_SERVICE")"
+  if [[ -n "$existing_url" ]]; then initial_url="$existing_url"; fi
 fi
 secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest
 if [[ "${USE_GOOGLE_MAPS:-0}" == 1 ]]; then secrets+=,GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest; fi

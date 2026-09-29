@@ -8,6 +8,7 @@ RUN npm ci --workspace services/api --workspace packages/contracts --include-wor
 COPY packages/contracts packages/contracts
 COPY services/api services/api
 RUN npm run build -w services/api
+RUN npx tsc -p packages/contracts/tsconfig.json --noEmit false --outDir packages/contracts/generated
 
 FROM node:22-slim AS runtime
 # ffmpeg and ffprobe are used by ingest for probing, proxies and shot detection.
@@ -23,6 +24,7 @@ COPY packages/contracts/package.json packages/contracts/
 COPY services/api/package.json services/api/
 RUN npm ci --omit=dev --workspace services/api --workspace packages/contracts --include-workspace-root
 COPY packages/contracts packages/contracts
+COPY --from=build /app/packages/contracts/generated packages/contracts/src
 COPY --from=build /app/services/api/dist services/api/dist
 COPY services/api/fixtures/music services/api/fixtures/music
 EXPOSE 8080

@@ -51,3 +51,12 @@ image_tag() { printf '%s/%s:%s' "$IMAGE_BASE" "$1" "$(git -C "$ROOT_DIR" rev-par
 assert_command() {
   if [[ "${DRY_RUN:-0}" != 1 ]] && ! command -v "$1" >/dev/null; then echo "Missing command: $1" >&2; exit 2; fi
 }
+firebase_deploy() {
+  if [[ "${DRY_RUN:-0}" == 1 ]]; then
+    print_command gcloud auth print-access-token
+    print_command env "GOOGLE_CLOUD_QUOTA_PROJECT=$PROJECT_ID" 'FIREBASE_TOKEN=<redacted>' npx --no-install firebase deploy "$@"
+  else
+    GOOGLE_CLOUD_QUOTA_PROJECT="$PROJECT_ID" FIREBASE_TOKEN="$(gcloud auth print-access-token)" \
+      npx --no-install firebase deploy "$@"
+  fi
+}
