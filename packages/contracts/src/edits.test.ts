@@ -98,6 +98,15 @@ describe("applyEdits", () => {
     expect(apply([{ op: "setSoundtrack", soundtrackId: "new-theme" }]).timeline.audioClips[0].source).toMatchObject({ soundtrackId: "new-theme" });
   });
 
+  it("applies a collage layout and its compatible motion as one validated change", () => {
+    const result = applyEdits(firstCut, [
+      { op: "setCollageLayout", clipId: "c1", layoutId: "polaroid-garland" },
+      { op: "setCollageMotion", clipId: "c1", motionId: "page-turn" },
+    ]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.timeline.videoClips[3]).toMatchObject({ spec: { layoutId: "polaroid-garland", motionId: "page-turn" } });
+  });
+
   it("adds source-backed clips, splits collage slots into photos, and tracks removed shots", () => {
     const added = apply([{ op: "add", shotId: "new-shot", kind: "video", afterClipId: "p1", durationSec: 2, sourceInSec: 1, sourceOutSec: 3 }]).timeline.videoClips[1];
     expect("source" in added && added.source).toEqual({ kind: "video", shotId: "new-shot", sourceInSec: 1, sourceOutSec: 3 });

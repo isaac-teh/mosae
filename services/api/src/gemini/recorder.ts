@@ -179,6 +179,7 @@ function save(fixture: Omit<Fixture, "label">, label: string): void {
 /** A label that makes the fixture directory readable at a glance. */
 function labelFor(request: unknown): string {
   const text = JSON.stringify(request ?? "");
+  if (/Translate the user's request into a small ordered list of allowed edit operations/i.test(text)) return "edit-interpret";
   if (/Interpret the user's typed message only for the current director chat step/i.test(text)) return "interpret";
   if (/story director/i.test(text)) return "direct";
   if (/Candidates:/i.test(text)) return "compose";

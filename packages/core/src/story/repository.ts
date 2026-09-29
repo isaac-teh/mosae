@@ -9,6 +9,7 @@ export type ChatInterpretResult = { reply: string; change: { kind: string; [key:
 export type FilmEdits = { revision: number; ops: EditOp[]; updatedAt: number | null };
 export type FilmRender = { revision: number; status: "pending" | "rendering" | "ready" | "failed"; downloadUrl?: string; outputPath?: string };
 export type FilmTimeline = { timeline: Timeline; sources: Record<string, string> };
+export type EditInterpretation = { reply: string; ops: EditOp[] };
 
 export interface StoryRepository {
   listFilms(): Promise<FilmListItem[]>;
@@ -30,6 +31,7 @@ export interface StoryRepository {
   getFilm(filmId: string): Promise<Film>;
   getFilmTimeline(projectId: string, generationId: string): Promise<FilmTimeline>;
   getEdits(projectId: string, generationId: string): Promise<FilmEdits>;
+  interpretEdit(projectId: string, generationId: string, text: string, revision: number): Promise<EditInterpretation>;
   saveEdits(projectId: string, generationId: string, revision: number, ops: EditOp[]): Promise<FilmEdits>;
   renderRevision(projectId: string, generationId: string, revision: number): Promise<{ renderId: string }>;
   getRender(projectId: string, generationId: string, revision: number): Promise<FilmRender>;

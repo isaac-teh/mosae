@@ -173,13 +173,20 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         if (!item || !("kind" in item.clip)) return fail(`${op.op} requires a collage clip`);
         const spec = item.clip.spec;
         if (op.op === "replaceCollageSlot" && !spec.slots.some((slot) => slot.slotId === op.slotId)) return fail(`unknown slotId: ${op.slotId}`);
-        const next = op.op === "setCollageLayout" ? { ...spec, layoutId: op.layoutId }
+        const parsedNext = opIndex + 1 < ops.length ? EditOpSchema.safeParse(ops[opIndex + 1]) : null;
+        const nextOp = parsedNext?.success ? parsedNext.data : null;
+        const layoutChange = op.op === "setCollageLayout" ? op : nextOp?.op === "setCollageLayout" && nextOp.clipId === op.clipId ? nextOp : null;
+        const motionChange = op.op === "setCollageMotion" ? op : nextOp?.op === "setCollageMotion" && nextOp.clipId === op.clipId ? nextOp : null;
+        const isLayoutMotionPair = Boolean(layoutChange && motionChange && ((op.op === "setCollageLayout" && nextOp?.op === "setCollageMotion") || (op.op === "setCollageMotion" && nextOp?.op === "setCollageLayout")));
+        const next = isLayoutMotionPair ? { ...spec, layoutId: layoutChange!.layoutId, motionId: motionChange!.motionId }
+          : op.op === "setCollageLayout" ? { ...spec, layoutId: op.layoutId }
           : op.op === "setCollageMotion" ? { ...spec, motionId: op.motionId }
           : op.op === "setCollageEffect" ? { ...spec, effectId: op.effectId }
           : { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { ...slot, shotId: op.shotId, kind: op.kind } : slot) };
         const changed = collageWithSpec(item.clip, next as CollageClip["spec"]);
         if (typeof changed === "string") return fail(changed);
         item.clip = changed;
+        if (isLayoutMotionPair) opIndex += 1;
         break;
       }
       case "splitCollage": {

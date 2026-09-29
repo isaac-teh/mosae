@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Linking, Pressable, ScrollView, Share, Text, View, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { EditOp, Timeline } from "@mosae/contracts";
 import { useStoryFlow } from "@/lib/storyFlow";
@@ -17,6 +17,7 @@ import { CollagePanel } from "@/components/editor/CollagePanel";
 import { SoundtrackSheet } from "@/components/editor/SoundtrackSheet";
 import { RemoveConfirm } from "@/components/editor/RemoveConfirm";
 import { EditorMenu } from "@/components/editor/EditorMenu";
+import { AskSheet } from "@/components/editor/AskSheet";
 
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 type Tool = "Swap" | "Trim" | "Move" | "Remove" | "Add" | "Ask" | "Collage" | "Soundtrack" | null;
@@ -31,7 +32,7 @@ export default function EditorScreen() {
   const { height } = useWindowDimensions();
   const editor = useEditor(params.projectId || "fixture", params.generationId || "demo-film", repository);
   const [playhead, setPlayhead] = useState(0);
-  const [tool, setTool] = useState<Tool>(null);
+  const [tool, setTool] = useState<Tool>(params.request ? "Ask" : null);
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [directions, setDirections] = useState<DirectionOptions | null>(null);
   const [slotAlternatives, setSlotAlternatives] = useState<{ clipId: string; values: Record<string, { shotId: string; thumbnailUrl: string; kind?: "photo" | "video" }[]> } | null>(null);
@@ -78,6 +79,7 @@ export default function EditorScreen() {
     if (Array.isArray(op)) editor.applyMany(op);
     else editor.apply(op);
   };
+  const onApplyAsk = (ops: EditOp[]) => { editor.applyMany(ops); setTool(null); };
   const chooseClip = (id: string) => {
     editor.select(id);
     const clip = editor.timeline?.videoClips.find((item) => clipId(item) === id);
@@ -96,13 +98,13 @@ export default function EditorScreen() {
       <View className="flex-row items-center gap-2"><EditorMenu onReset={(ops) => editor.reset(ops)} /><Pressable role="button" accessibilityLabel="Save" onPress={() => void editor.render()} className="min-h-11 min-w-11 items-end justify-center"><Text className="font-sans-medium text-[16px] text-on-screen">Save</Text></Pressable></View>
     </View>
     <View className="min-h-[29px] justify-center px-5"><SaveState save={editor.save} onReload={() => void editor.reloadAfterConflict()} /></View>
+    {editor.save.state === "ready" && editor.downloadUrl ? <View className="flex-row gap-2 px-5 pb-2"><Pressable role="button" accessibilityLabel="Download rendered film" onPress={() => void Linking.openURL(editor.downloadUrl!)} className="min-h-10 justify-center rounded-full bg-[#294655] px-4"><Text className="font-sans-medium text-caption text-on-screen">Download</Text></Pressable><Pressable role="button" accessibilityLabel="Share rendered film" onPress={() => void Share.share({ message: editor.downloadUrl! })} className="min-h-10 justify-center rounded-full border border-on-screen-muted px-4"><Text className="font-sans-medium text-caption text-on-screen">Share</Text></Pressable></View> : null}
     {editor.error ? <View className="flex-1 items-center justify-center px-6"><Text className="text-center font-sans text-body text-on-screen">{editor.error}</Text></View>
       : !editor.timeline ? <View className="flex-1 items-center justify-center"><Text className="font-sans text-body text-on-screen-muted">Opening your film…</Text></View>
       : <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4" showsVerticalScrollIndicator={false}>
         <View className="w-full overflow-hidden rounded-[14px] bg-tide-tile" style={{ height: previewHeight }}>
           <EditorPreview timeline={editor.timeline} sources={editor.sources} onTimeChange={onTimeChange} />
         </View>
-        {params.request ? <Text className="mt-2 rounded-md bg-tide-tile/20 px-3 py-2 font-sans text-caption text-on-screen">You asked: {params.request}</Text> : null}
         <View className="mt-4 flex-row items-center justify-between">
           <Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text>
           <View className="flex-row gap-4">
@@ -120,6 +122,7 @@ export default function EditorScreen() {
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
     {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {tool === "Collage" && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} sources={editor.sources} slotAlternatives={slotAlternatives?.clipId === selectedClip.clipId ? slotAlternatives.values : {}} onApply={onApplyCollage} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}
+    {tool === "Ask" && editor.timeline ? <AskSheet visible projectId={params.projectId || "fixture"} generationId={params.generationId || "demo-film"} revision={editor.savedRevision} timeline={editor.timeline} sources={editor.sources} repository={repository} initialRequest={typeof params.request === "string" ? params.request : ""} onApply={onApplyAsk} onClose={() => setTool(null)} /> : null}
     {tool === "Soundtrack" ? <SoundtrackSheet visible soundtracks={directions?.soundtracks ?? []} onApply={onApply} onClose={() => setTool(null)} /> : null}
   </View>;
 }

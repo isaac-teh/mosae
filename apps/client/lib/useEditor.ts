@@ -22,8 +22,10 @@ export function useEditor(projectId: string, generationId: string, repository: S
   const [savedOpsKey, setSavedOpsKey] = useState("[]");
   const [savedRevision, setSavedRevision] = useState(0);
   const [retryAttempt, setRetryAttempt] = useState(0);
-  const [renderRevision, setRenderRevision] = useState<number | null>(null);
+  const [renderRequest, setRenderRequest] = useState<{ revision: number; requestId: number } | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const pendingSave = useRef<Promise<boolean> | null>(null);
+  const renderRequestId = useRef(0);
   const revisionRef = useRef(0);
   const savedOpsKeyRef = useRef("[]");
   const ops = history.snapshots[history.index] ?? [];
@@ -122,44 +124,50 @@ export function useEditor(projectId: string, generationId: string, repository: S
 
   const render = useCallback(async () => {
     if (!loaded || save.state === "conflict") return;
+    const requestId = ++renderRequestId.current;
+    setDownloadUrl(null);
+    setRenderRequest(null);
     while (savedOpsKeyRef.current !== keyOf(opsRef.current)) {
       const saved = await persist(opsRef.current);
       if (!saved) return;
+      if (requestId !== renderRequestId.current) return;
     }
     const revision = revisionRef.current;
     setSave({ state: "rendering" });
     try {
       if (revision === 0) {
-        await repository.saveFilm(generationId);
+        const result = await repository.saveFilm(generationId);
+        if (requestId !== renderRequestId.current) return;
+        setDownloadUrl(result.downloadKey);
         setSave({ state: "ready" });
         return;
       }
       await repository.renderRevision(projectId, generationId, revision);
-      setRenderRevision(revision);
+      if (requestId === renderRequestId.current) setRenderRequest({ revision, requestId });
     } catch {
-      setSave({ state: "retrying" });
+      if (requestId === renderRequestId.current) setSave({ state: "retrying" });
     }
   }, [loaded, save.state, persist, projectId, generationId, repository]);
 
   useEffect(() => {
-    if (renderRevision === null) return;
+    if (renderRequest === null) return;
     let active = true;
     const check = async () => {
       try {
-        const result = await repository.getRender(projectId, generationId, renderRevision);
-        if (!active) return;
-        if (result.status === "ready") { setSave({ state: "ready" }); setRenderRevision(null); }
-        if (result.status === "failed") { setSave({ state: "retrying" }); setRenderRevision(null); }
-      } catch { if (active) { setSave({ state: "retrying" }); setRenderRevision(null); } }
+        const result = await repository.getRender(projectId, generationId, renderRequest.revision);
+        if (!active || renderRequest.requestId !== renderRequestId.current) return;
+        if (result.status === "ready") { setDownloadUrl(result.downloadUrl ?? null); setSave({ state: "ready" }); setRenderRequest(null); }
+        if (result.status === "failed") { setSave({ state: "retrying" }); setRenderRequest(null); }
+      } catch { if (active && renderRequest.requestId === renderRequestId.current) { setSave({ state: "retrying" }); setRenderRequest(null); } }
     };
     void check();
     const interval = setInterval(() => { void check(); }, 2000);
     return () => { active = false; clearInterval(interval); };
-  }, [renderRevision, projectId, generationId, repository]);
+  }, [renderRequest, projectId, generationId, repository]);
 
   return {
     timeline, firstCut, sources, setSource, ops, selectedClipId, select: setSelectedClipId,
     apply, applyMany, undo, redo, reset, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
-    save, savedRevision, reloadAfterConflict, render, loaded, error,
+    save, savedRevision, downloadUrl, reloadAfterConflict, render, loaded, error,
   };
 }

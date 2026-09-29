@@ -91,6 +91,14 @@ describe("createApiStoryRepository", () => {
     expect(deps.request).toHaveBeenNthCalledWith(2, "PUT", "/api/projects/project-1/generations/gen-1/edits", { revision: 2, ops: document.ops });
   });
 
+  it("asks the generation edit interpreter at the requested revision", async () => {
+    const response = { reply: "Move the second photo earlier?", ops: [{ op: "move" as const, clipId: "clip-2", toIndex: 0 }] };
+    const deps = dependencies({ request: vi.fn(async () => response) });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.interpretEdit("project-1", "gen-1", "move the second photo earlier", 3)).resolves.toEqual(response);
+    expect(deps.request).toHaveBeenCalledWith("POST", "/api/projects/project-1/generations/gen-1/edits/interpret", { text: "move the second photo earlier", revision: 3 });
+  });
+
   it("requests and reads an edited render", async () => {
     const deps = dependencies({ request: vi.fn(async (method) => method === "POST"
       ? { renderId: "g1-edit-3" }

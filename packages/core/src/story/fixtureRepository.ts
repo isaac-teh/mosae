@@ -317,6 +317,7 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
     },
 
     getEdits: async (projectId, generationId) => structuredClone(editDocuments.get(`${projectId}/${generationId}`) ?? { revision: 0, ops: [], updatedAt: null }),
+    interpretEdit: async () => ({ reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] }),
     saveEdits: async (projectId, generationId, revision, ops) => {
       const key = `${projectId}/${generationId}`;
       const current = editDocuments.get(key) ?? { revision: 0, ops: [], updatedAt: null };

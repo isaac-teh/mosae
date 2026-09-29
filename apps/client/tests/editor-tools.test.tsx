@@ -21,6 +21,7 @@ import { CollagePanel } from "../components/editor/CollagePanel";
 import { SoundtrackSheet } from "../components/editor/SoundtrackSheet";
 import { RemoveConfirm } from "../components/editor/RemoveConfirm";
 import { EditorMenu } from "../components/editor/EditorMenu";
+import { AskSheet } from "../components/editor/AskSheet";
 
 const clips = ["a", "b", "c"].map((id, index) => ({
   id, source: { kind: "photo" as const, shotId: `shot-${id}` }, startSec: index * 3, durationSec: 3,
@@ -132,6 +133,21 @@ describe("editor tool operations", () => {
     await click("Replace Photo 2 with option 1");
     expect(host.textContent).toContain("A collage can hold one video.");
     expect(apply).not.toHaveBeenCalled();
+  });
+
+  it("previews an Ask proposal without editing, then applies all operations together", async () => {
+    const askRepository = { interpretEdit: vi.fn(async () => ({ reply: "Move the second photo earlier?", ops: [{ op: "move" as const, clipId: "b", toIndex: 0 }] })) };
+    await render(<AskSheet visible projectId="p1" generationId="g1" revision={0} timeline={timeline} sources={{}} repository={askRepository} initialRequest="move this earlier" onApply={apply} onClose={() => {}} />);
+    expect((host.querySelector('[aria-label="Ask for an edit"]') as HTMLInputElement).value).toBe("move this earlier");
+    await click("Suggest edit");
+    expect(askRepository.interpretEdit).toHaveBeenCalledWith("p1", "g1", "move this earlier", 0);
+    expect(host.textContent).toContain("Move the second photo earlier?");
+    expect(host.textContent).toContain("Before");
+    expect(host.textContent).toContain("After");
+    expect(apply).not.toHaveBeenCalled();
+    await click("Apply edits");
+    expect(apply).toHaveBeenCalledOnce();
+    expect(apply).toHaveBeenCalledWith([{ op: "move", clipId: "b", toIndex: 0 }]);
   });
 
   it("sets the selected soundtrack", async () => {

@@ -3,7 +3,7 @@ import { ensureSignedIn } from "../auth";
 import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
 import { getFirestoreClient } from "../firebase";
-import { parseTimeline } from "@mosae/contracts";
+import { parseTimeline, type EditOp } from "@mosae/contracts";
 import type { ChatInterpretRequest, DirectorPerson, FilmEdits, FilmListItem, FilmRender, StoryRepository } from "./repository";
 import type { ProjectSummary } from "../chat/types";
 import type { DirectionOptions, Film } from "./types";
@@ -460,6 +460,9 @@ export function createApiStoryRepository(
     getEdits: async (projectId, generationId) => record(await deps.request(
       "GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`,
     ), "edits") as FilmEdits,
+    interpretEdit: async (projectId, generationId, text, revision) => record(await deps.request(
+      "POST", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits/interpret`, { text, revision },
+    ), "edit interpretation") as { reply: string; ops: EditOp[] },
     saveEdits: async (projectId, generationId, revision, ops) => record(await deps.request(
       "PUT", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`, { revision, ops },
     ), "edits") as FilmEdits,
