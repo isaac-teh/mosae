@@ -3,50 +3,45 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const samples = path.resolve(process.env.SAMPLES_DIR ?? "/Users/isaacteh/Projects/Triiz/mosae/poc/gemini/samples", "trip1");
-const trip1Files = [
-  "pexels-vo-van-ti-n-2037497312-34133873.jpg", "pexels-vo-van-ti-n-2037497312-34133876.jpg",
-  "pexels-vo-van-ti-n-2037497312-34133877.jpg", "pexels-vo-van-ti-n-2037497312-34133878.jpg",
-  "pexels-vo-van-ti-n-2037497312-34133880.jpg", "pexels-vo-van-ti-n-2037497312-34133884.jpg",
-  "pexels-vo-van-ti-n-2037497312-34133885.jpg", "pexels-vo-van-ti-n-2037497312-34133887.jpg",
-  "pexels-vo-van-ti-n-2037497312-34133888.jpg", "pexels-vo-van-ti-n-2037497312-34133920.jpg",
-  "pexels-vo-van-ti-n-2037497312-34133922.jpg", "pexels-vo-van-ti-n-2037497312-34133923.jpg",
+const samples = path.resolve(process.env.SAMPLES_DIR ?? "/Users/isaacteh/Projects/Triiz/mosae/poc/gemini/samples", "trip1-v2");
+const tripFiles = [
+  "d1-01.jpg", "d1-02.jpg", "d1-03.jpg", "d1-04.jpg", "d1-05.jpg", "d1-06.jpg", "d1-07.jpg", "d1-08.jpg", "d1-09.jpg", "d1-10.jpg", "d1-11.jpg", "d1-12.jpg",
+  "x-photobomb.jpg", "x-distant.jpg", "x-stranger.jpg",
 ];
-const screenshots = path.resolve(process.cwd(), "docs/design/screens-chat");
-const timingsPath = path.resolve(process.cwd(), "docs/research/2026-09-28-director-chat-timings.md");
+const screenshots = path.resolve(process.cwd(), "docs/design/screens-chat-v2");
+const timingsPath = path.resolve(process.cwd(), "docs/research/2026-09-28-director-chat-v2-timings.md");
 const misses = path.resolve(process.cwd(), "services/api/fixtures/gemini-misses");
-const replayInputPath = process.env.CHAT_REPLAY_INPUT ?? "/tmp/mosae-chat-interpret-replay-input.json";
 
-async function screenshot(page: Page, number: number) {
-  await page.screenshot({ path: path.join(screenshots, String(number).padStart(2, "0") + "-step.png"), fullPage: true });
+async function screenshot(page: Page, name: string) {
+  await page.screenshot({ path: path.join(screenshots, name), fullPage: false });
 }
 
-test("directs a trip1 film from Home through Saved and restores the saved film after reload", async ({ page }) => {
+test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thread after reload", async ({ page }) => {
   test.setTimeout(10 * 60_000);
+  await page.setViewportSize({ width: 390, height: 844 });
   await mkdir(screenshots, { recursive: true });
   const existing = await readdir(samples);
-  const media = trip1Files.map((name) => path.join(samples, name));
-  expect(media.every((file) => existing.includes(path.basename(file))), "trip1 sample files must be available as in services/api/scripts").toBe(true);
+  const media = tripFiles.map((name) => path.join(samples, name));
+  expect(media.every((file) => existing.includes(path.basename(file))), "trip1-v2 sample files from make-trip1-v2.ts must be available").toBe(true);
   let uploadStartedAt = Date.now();
   const previousMisses = new Set(await readdir(misses).catch(() => []));
   const readyAt: Partial<Record<"summary" | "faces" | "plan" | "film", number>> = {};
   const missingKeys: string[] = [];
   const apiFailures: string[] = [];
-  let projectIdForChat: string | undefined;
-  let authForChat: string | undefined;
-  let summaryForChat: Record<string, unknown> | undefined;
   let resolvePlanJob!: (job: { projectId: string; jobId: string; auth: string }) => void;
   const planJobCreated = new Promise<{ projectId: string; jobId: string; auth: string }>((resolve) => { resolvePlanJob = resolve; });
   page.on("response", async (response) => {
     if (response.status() >= 400 && /\/api\//.test(response.url())) {
       const route = new URL(response.url()).pathname.replace(/\/projects\/[^/]+/, "/projects/:id");
       const failure = await response.json().catch(() => ({})) as { error?: string };
-      apiFailures.push(`${response.request().method()} ${route} -> ${response.status()}${failure.error ? ` (${failure.error})` : ""}`);
+      const projectId = /\/projects\/([^/]+)/.exec(new URL(response.url()).pathname)?.[1];
+      let proposalId: string | undefined;
+      try { proposalId = JSON.parse(response.request().postData() ?? "{}").proposalId; } catch { /* non-JSON request */ }
+      apiFailures.push(`${response.request().method()} ${route} -> ${response.status()}${failure.error ? ` (${failure.error})` : ""}${projectId && route.endsWith("/cast") ? ` [project ${projectId}${proposalId ? `, proposal ${proposalId}` : ""}]` : ""}`);
     }
     if (/\/api\/projects\/[^/]+\/summary$/.test(response.url()) && response.ok()) {
       const value = await response.json().catch(() => null) as { total?: number; ready?: Record<string, boolean> } | null;
-      if (value?.total === trip1Files.length) {
-        summaryForChat = value as Record<string, unknown>;
+      if (value?.total === tripFiles.length) {
         for (const key of ["summary", "faces", "plan"] as const) if (value.ready?.[key] && readyAt[key] === undefined) readyAt[key] = Date.now();
       }
     }
@@ -60,8 +55,6 @@ test("directs a trip1 film from Home through Saved and restores the saved film a
       const value = await response.json().catch(() => null) as { job?: { id?: string } } | null;
       const auth = response.request().headers().authorization;
       if (match?.[1] && value?.job?.id && auth) {
-        projectIdForChat = match[1];
-        authForChat = auth;
         resolvePlanJob({ projectId: match[1], jobId: value.job.id, auth });
       }
     }
@@ -69,31 +62,85 @@ test("directs a trip1 film from Home through Saved and restores the saved film a
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Many moments. One story." })).toBeVisible();
-  await screenshot(page, 1);
+  const mosaicTiles = page.getByLabel("Mosaé tile mosaic").locator("div");
+  await expect(mosaicTiles).toHaveCount(12);
+  const tileRowsAndColumns = await mosaicTiles.evaluateAll((tiles) => {
+    const rows = new Set(tiles.map((tile) => Math.round(tile.getBoundingClientRect().top)));
+    const columns = new Set(tiles.map((tile) => Math.round(tile.getBoundingClientRect().left)));
+    return { rows: rows.size, columns: columns.size };
+  });
+  expect(tileRowsAndColumns).toEqual({ rows: 3, columns: 4 });
+  await expect(page.getByRole("button", { name: "Create a new film" })).toHaveCount(1);
+  await expect(page.getByLabel("Four tiles")).toBeVisible();
+  await expect(page.getByLabel("Four tiles").locator("div")).toHaveCount(4);
+  await screenshot(page, "01-home-empty.png");
 
   await page.getByRole("button", { name: "Create a new film" }).first().click();
-  await screenshot(page, 2);
+  await screenshot(page, "02-add-photos.png");
   await page.locator('input[type="file"]').setInputFiles(media);
   await page.waitForURL("**/pick-memory");
-  await screenshot(page, 3);
+  await screenshot(page, "03-pick-memory.png");
 
   uploadStartedAt = Date.now();
   await page.getByRole("button", { name: "Next" }).click();
   await page.waitForURL("**/director?**", { timeout: 60_000 });
-  await expect(page.getByText("I've looked through all 12")).toBeVisible({ timeout: 180_000 });
-  await screenshot(page, 4);
+  await expect(page.getByText(`I've looked through all ${tripFiles.length}`)).toBeVisible({ timeout: 180_000 });
+  await expect(page.getByText("Singapore, June", { exact: true })).toBeVisible({ timeout: 180_000 });
+  await expect(page.getByText(/I've looked through all 15\. It looks like a trip to Singapore/)).toBeVisible();
+  expect((await page.locator("body").innerText()).match(/Is that the story\?/g)).toHaveLength(1);
+  await expect(page.getByRole("button", { name: "Yes, our Singapore trip" })).toBeVisible();
+  await screenshot(page, "04-occasion-singapore.png");
+
+  const composer = page.getByLabel("Tell me anything about the story");
+  await composer.fill("it's our Singapore holiday with the kids");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("it's our Singapore holiday with the kids")).toBeVisible({ timeout: 60_000 });
+  await expect.poll(async () => (await page.locator("body").innerText()).match(/\?/g)?.length ?? 0, { timeout: 60_000 }).toBeGreaterThan(2);
+  await expect(page.getByText("I didn't catch that. Pick one below, or say it another way.")).toHaveCount(0);
+  await screenshot(page, "05-free-text-confirmation.png");
+  // The typed suggestion is still pending until confirmed. Reload restores the
+  // initial occasion state so the primary Yes chip can drive the full film run.
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Yes, our Singapore trip" })).toBeVisible({ timeout: 60_000 });
 
   const yes = page.getByRole("button", { name: /^Yes,/ });
   await expect(yes).toBeVisible({ timeout: 180_000 });
   await yes.click();
-  await screenshot(page, 5);
   await expect(page.getByText("One person appears in")).toBeVisible({ timeout: 120_000 });
+  await screenshot(page, "06-person-question.png");
+  const faceImages = page.locator('img[alt^="Person photo "]');
+  await expect(faceImages).toHaveCount(4);
+  await expect.poll(() => faceImages.evaluateAll((images) => images.filter((image) => (image as HTMLImageElement).naturalWidth > 0).length), { timeout: 60_000 }).toBe(4);
+  await expect(page.getByText(/\d+ of \d+ shown · Day /)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Skip" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Skip for now" })).toHaveCount(0);
   await page.getByRole("button", { name: "Type a name" }).click();
   await page.getByLabel("Person name").fill("Mia");
+  const nameCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
   await page.getByText("Save name").click();
-  await expect(page.getByRole("button", { name: "Skip for now" })).toBeVisible();
-  await page.getByRole("button", { name: "Skip for now" }).click();
-  await expect(page.getByRole("button", { name: "Skip for now" })).toHaveCount(0, { timeout: 30_000 });
+  const savedNameResponse = await nameCastResponse;
+  if (!savedNameResponse.ok()) console.log("Name cast update failed:", savedNameResponse.status(), savedNameResponse.url(), savedNameResponse.request().postData(), await savedNameResponse.text());
+  expect(savedNameResponse.ok()).toBe(true);
+  await expect(page.getByText("Mia", { exact: true })).toBeVisible();
+  const previousDaughterReplies = await page.getByText("My daughter", { exact: true }).count();
+  const daughterCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
+  await page.getByRole("button", { name: "My daughter" }).click();
+  expect((await daughterCastResponse).ok()).toBe(true);
+  await expect.poll(() => page.getByText("My daughter", { exact: true }).count(), { timeout: 30_000 }).toBeGreaterThan(previousDaughterReplies);
+  const wifeChip = page.getByRole("button", { name: "My wife" });
+  const everyone = page.getByRole("button", { name: "No, that's everyone" });
+  for (let answer = 0; answer < 3; answer += 1) {
+    if (await everyone.count()) break;
+    const previousReplies = await page.getByText("My wife", { exact: true }).count();
+    const wifeCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
+    await wifeChip.click();
+    const wifeResponse = await wifeCastResponse;
+    if (!wifeResponse.ok()) console.log("Person cast update failed:", wifeResponse.status(), wifeResponse.url(), wifeResponse.request().postData(), await wifeResponse.text());
+    expect(wifeResponse.ok()).toBe(true);
+    await expect.poll(async () => (await everyone.count()) > 0 || (await page.getByText("My wife", { exact: true }).count()) > previousReplies, { timeout: 30_000 }).toBe(true);
+  }
+  await expect(everyone).toBeVisible({ timeout: 30_000 });
+  await everyone.click();
 
   {
     const createdPlanJob = await planJobCreated;
@@ -111,23 +158,23 @@ test("directs a trip1 film from Home through Saved and restores the saved film a
       await page.waitForTimeout(1_000);
     }
     if (failedJob) {
-      await screenshot(page, 6);
+      await screenshot(page, "07-plan-failed.png");
       const newMisses = (await readdir(misses).catch(() => [])).filter((name) => name.startsWith("direct-") && !previousMisses.has(name));
       const keys = await Promise.all(newMisses.map(async (name) => createHash("sha256").update(await readFile(path.join(misses, name))).digest("hex")));
       const diagnostics = (failedJob.diagnostics as { arrayValue?: { values?: { stringValue?: string }[] } } | undefined)?.arrayValue?.values?.map((item) => item.stringValue ?? "") ?? [];
       const rows = [
-        "# Director chat timing — trip1",
+        "# Director chat timing — trip1-v2",
         "",
-        "E2E stopped at plan generation: MOCK_GEMINI=replay returned a director response whose shot ids were outside the new project's working set (BACKLOG 18). No record mode was used.",
+        "E2E stopped at plan generation in MOCK_GEMINI=record; see the stored job diagnostics below.",
         "",
-        `Local trip1 fixture set: ${trip1Files.length} photos (the checked-in script source set; this is smaller than the spec's approximately 465-item trip1).`,
+        `Local trip1-v2 fixture set: ${tripFiles.length} photos, including the synthetic photobomb and distant stranger.`,
         `- Upload to summary ready: ${readyAt.summary === undefined ? "not observed" : ((readyAt.summary - uploadStartedAt) / 1000).toFixed(1) + " s"}`,
         `- Upload to face groups ready: ${readyAt.faces === undefined ? "not observed" : ((readyAt.faces - uploadStartedAt) / 1000).toFixed(1) + " s"}`,
         "- Upload to first plan ready: not reached; the plan job failed during replay.",
-        `- Missing exact replay request keys: ${keys.length ? keys.join(", ") : "none recorded; replay used same-stage fallback fixtures"}`,
+        `- Direct request-key digests: ${keys.length ? keys.join(", ") : "none captured"}`,
         ...diagnostics.map((item) => `- Plan validation: ${item}`),
         "",
-        "D3 recommendation: keep the current occasion → people → moments order pending a timing run on the full approximately 465-item set. This 12-photo run cannot establish whether face detection makes the people step too slow.",
+        "The run used the 15-photo trip1-v2 test set; these timings are for the smaller browser verification set.",
         "",
       ];
       await mkdir(path.dirname(timingsPath), { recursive: true });
@@ -137,7 +184,7 @@ test("directs a trip1 film from Home through Saved and restores the saved film a
   }
 
   await expect(page.getByText("Any moments that must be in the film")).toBeVisible({ timeout: 180_000 });
-  await screenshot(page, 6);
+  await screenshot(page, "07-moments.png");
 
   await page.getByRole("button", { name: /Moment .*$/ }).first().click();
   await page.getByRole("button", { name: "Done" }).click();
@@ -147,10 +194,10 @@ test("directs a trip1 film from Home through Saved and restores the saved film a
     if (apiFailures.length) console.log("API requests returned errors:", apiFailures.join("; "));
     throw error;
   }
-  await screenshot(page, 7);
+  await screenshot(page, "08-direction.png");
 
   await page.getByRole("button", { name: "Sounds good. Shape it." }).click();
-  await screenshot(page, 8);
+  await screenshot(page, "09-shaping.png");
   const save = page.getByRole("button", { name: "Save film" });
   try {
     await expect(save).toBeVisible({ timeout: 300_000 });
@@ -159,47 +206,27 @@ test("directs a trip1 film from Home through Saved and restores the saved film a
     throw error;
   }
   readyAt.film = Date.now();
-  await screenshot(page, 9);
+  await screenshot(page, "10-film-ready.png");
 
   await page.getByRole("button", { name: "Save film" }).click();
   await expect(page.getByText("Saved to your films")).toBeVisible({ timeout: 300_000 });
-  await screenshot(page, 10);
+  await screenshot(page, "11-saved.png");
   const savedScreen = await page.locator("body").innerText();
   await page.reload();
   await expect(page.getByText("Saved to your films")).toBeVisible({ timeout: 180_000 });
   await expect(page.getByRole("button", { name: "Back to your films" })).toBeVisible();
   expect(await page.locator("body").innerText()).toContain(savedScreen.slice(-50));
-  await screenshot(page, 11);
+  await screenshot(page, "12-saved-reload.png");
   await page.getByRole("button", { name: "Back to your films" }).click();
   await expect(page.getByRole("heading", { name: "Your films" })).toBeVisible();
-  await screenshot(page, 12);
+  await screenshot(page, "13-home-filled.png");
   await expect(page.getByText("Just saved").first()).toBeVisible();
-  await screenshot(page, 13);
+  await expect(page.getByRole("button", { name: "Create a new film" })).toHaveCount(1);
+  await screenshot(page, "14-home-film-saved.png");
 
-  if (!projectIdForChat || !authForChat || !summaryForChat) throw new Error("Could not capture the authenticated project context for chat interpretation checks.");
-  const examples = [
-    { step: "occasion", text: "it's grandma's 70th, not a trip" },
-    { step: "people", text: "the girl in pink is Mia" },
-    { step: "moments", text: "the snow monkeys must be in" },
-    { step: "direction", text: "more upbeat, and shorter" },
-  ] as const;
-  const recordedExamples: { step: string; text: string; recordedKind: string }[] = [];
-  for (const example of examples) {
-    const response = await page.request.post(`http://127.0.0.1:8095/api/projects/${projectIdForChat}/chat/interpret`, {
-      headers: { Authorization: authForChat },
-      data: { step: example.step, text: example.text, context: { summary: summaryForChat, people: [] } },
-    });
-    if (!response.ok()) throw new Error(`chat interpretation recording returned HTTP ${response.status()} for step ${example.step}`);
-    const result = await response.json() as { change?: { kind?: string } };
-    expect(result.change?.kind, `${example.step} example should return a recorded interpretation`).toBeTruthy();
-    recordedExamples.push({ ...example, recordedKind: result.change!.kind! });
-  }
-  await writeFile(replayInputPath, JSON.stringify({ projectId: projectIdForChat, authorization: authForChat, summary: summaryForChat, examples: recordedExamples }), { mode: 0o600 });
-  console.log("Recorded and validated four chat interpretation examples.");
-
-  const rows = ["# Director chat timing — trip1", "", "Measured from starting upload. Readiness milestones come from the project summary endpoint; film ready is the first visible Save film action.", "", `Local trip1 fixture set: ${trip1Files.length} photos.`, ""];
+  const rows = ["# Director chat timing — trip1-v2", "", "Measured from starting upload. Readiness milestones come from the project summary endpoint; film ready is the first visible Save film action.", "", `Local trip1-v2 fixture set: ${tripFiles.length} photos, including the synthetic photobomb and distant stranger.`, ""];
   for (const key of ["summary", "faces", "plan", "film"] as const) rows.push(`- Upload to ${key === "film" ? "film ready" : `${key} ready`}: ${readyAt[key] === undefined ? "not observed" : ((readyAt[key]! - uploadStartedAt) / 1000).toFixed(1) + " s"}`);
-  rows.push("", "Recommendation on D3: keep the director chat non-blocking; the UI should explain what is still processing while summary, face groups, and the plan become ready.", "");
+  rows.push("", "The run used the 15-photo trip1-v2 test set, including the synthetic photobomb and distant stranger.", "");
   await mkdir(path.dirname(timingsPath), { recursive: true });
   await writeFile(timingsPath, rows.join("\n"));
 });

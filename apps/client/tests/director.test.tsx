@@ -105,11 +105,55 @@ describe("Director chat", () => {
   });
 
   it("saves the selected role and name before asking about the next person", async () => {
-    setup(); await renderScreen();
+    setup({ people: people.map((person) => ({ ...person, role: "other" })) }); await renderScreen();
     await click("Yes, our Japan trip");
     await click("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", role: "child", name: "My daughter" })]) })));
     expect(hasText("One person appears in 90 moments. Who is this?")).toBe(true);
+  });
+
+  it("does not revise a plan proposal until its asynchronous job has published it", async () => {
+    setup({ people: [{ ...people[0], role: null }] }); await renderScreen();
+    await click("Yes, our Japan trip");
+    await click("My daughter");
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
+    expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.not.objectContaining({ proposalId: expect.any(String) }));
+  });
+
+  it("uses the revised proposal returned by cast confirmation for later moment edits", async () => {
+    setup({ readyPlan: true, people: [{ ...people[0], role: null }] }); await renderScreen();
+    await click("Yes, our Japan trip");
+    await click("My daughter");
+    for (let i = 0; i < 3 && !hasText("Any moments that must be in the film"); i++) {
+      if (host.querySelector('button[aria-label="No, that\'s everyone"]')) await click("No, that's everyone");
+      else if (host.querySelector('button[aria-label="Skip"]')) await click("Skip");
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
+    await waitFor(() => expect(hasText("Any moments that must be in the film")).toBe(true));
+    await click("Done");
+    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-2", expect.anything()));
+  });
+
+  it("uses each returned proposal ID for the next cast edit", async () => {
+    setup({ readyPlan: true });
+    mocks.confirmCast.mockResolvedValueOnce({ cast: { people: [] }, proposalId: "proposal-2" }).mockResolvedValueOnce({ cast: { people: [] }, proposalId: "proposal-3" });
+    await renderScreen(); await click("Yes, our Japan trip");
+    await click("My daughter");
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(1));
+    await click("My wife");
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(2));
+    expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ proposalId: "proposal-2" }));
+  });
+
+  it("does not send a second cast edit while the first one is still pending", async () => {
+    setup({ readyPlan: true });
+    let resolveCast!: (value: any) => void;
+    mocks.confirmCast.mockImplementation(() => new Promise((resolve) => { resolveCast = resolve; }));
+    await renderScreen(); await click("Yes, our Japan trip");
+    await click("My daughter");
+    await click("My wife");
+    expect(mocks.confirmCast).toHaveBeenCalledTimes(1);
+    resolveCast({ cast: { people: [] }, proposalId: "proposal-2" });
   });
 
   it("shows face previews and only the inline Skip once the person question appears", async () => {
@@ -224,6 +268,20 @@ describe("Director chat", () => {
     expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["moment-2"], excludedShotIds: ["previously-excluded", "dup-0", "shot-3"] }));
     planFixture.leftOut = leftOut;
     planFixture.edits.excludedShotIds = priorExclusions;
+  });
+
+  it("does not send a kept set-aside shot as a must-include moment ID", async () => {
+    const leftOut = planFixture.leftOut;
+    const excludedShotIds = planFixture.edits.excludedShotIds;
+    planFixture.leftOut = [{ shotId: "set-aside-blur", thumbnailUrl: "https://image/blur", reason: "Blurry" }];
+    planFixture.edits.excludedShotIds = ["set-aside-blur", "previously-excluded"];
+    await openMoments();
+    await click("Moment set-aside-blur");
+    await click("Done");
+    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledTimes(1));
+    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: [], excludedShotIds: ["previously-excluded"] }));
+    planFixture.leftOut = leftOut;
+    planFixture.edits.excludedShotIds = excludedShotIds;
   });
 
   it("opens the all-moments picker and submits the selected ids", async () => {
