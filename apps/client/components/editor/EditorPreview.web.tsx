@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Player, type PlayerRef } from "@remotion/player";
 import { MosaeTimeline } from "@mosae/video/timeline";
@@ -12,6 +12,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest }: 
 }) {
   const player = useRef<PlayerRef>(null);
   const [playing, setPlaying] = useState(false);
+  const inputProps = useMemo(() => ({ timeline, sources }), [timeline, sources]);
   useEffect(() => {
     const current = player.current;
     if (!current) return;
@@ -39,7 +40,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest }: 
 
 
   return <View className="relative size-full overflow-hidden rounded-[14px] bg-[#18211d]">
-    <Player ref={player} component={MosaeTimeline} inputProps={{ timeline, sources }} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}
+    <Player ref={player} component={MosaeTimeline} inputProps={inputProps} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}
       compositionWidth={timeline.aspect === "9:16" ? 1080 : 1920} compositionHeight={timeline.aspect === "9:16" ? 1920 : 1080}
       fps={timeline.fps} style={{ width: "100%", height: "100%" }} controls={false} clickToPlay />
     {!playing && <Pressable role="button" accessibilityLabel="Play preview" onPress={() => player.current?.play()}
