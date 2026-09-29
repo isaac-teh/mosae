@@ -81,6 +81,9 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   const scrollView = useRef<React.ElementRef<typeof ScrollView>>(null);
   const scrollLeft = useRef(0);
   const isUserScrolling = useRef(false);
+  const programmaticOffset = useRef<number | null>(null);
+  const interactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mouseDrag = useRef<{ x: number; scrollLeft: number } | null>(null);
   const pinch = useRef<PinchState>(null);
   const leadingPadding = viewportWidth / 2;
   const contentWidth = timelineContentWidth(timeline.durationSec, viewportWidth, pixelsPerSecond);
@@ -89,11 +92,38 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = event.nativeEvent.contentOffset.x;
     scrollLeft.current = offset;
+    const expected = programmaticOffset.current;
+    if (!isUserScrolling.current && expected !== null && Math.abs(expected - offset) < 2) {
+      programmaticOffset.current = null;
+      return;
+    }
     if (isUserScrolling.current) onScrub(Math.max(0, Math.min(timeline.durationSec, xToTime(offset + viewportWidth / 2, pixelsPerSecond, leadingPadding))));
   }, [leadingPadding, onScrub, pixelsPerSecond, timeline.durationSec, viewportWidth]);
+  const beginInteraction = useCallback(() => {
+    if (interactionTimer.current) clearTimeout(interactionTimer.current);
+    interactionTimer.current = null;
+    if (!isUserScrolling.current) onScrubStart();
+    isUserScrolling.current = true;
+    programmaticOffset.current = null;
+  }, [onScrubStart]);
+  const endInteractionSoon = useCallback(() => {
+    if (interactionTimer.current) clearTimeout(interactionTimer.current);
+    interactionTimer.current = setTimeout(() => {
+      isUserScrolling.current = false;
+      interactionTimer.current = null;
+    }, 120);
+  }, []);
+  const scrubBy = useCallback((delta: number) => {
+    const next = Math.max(0, Math.min(contentWidth - viewportWidth, scrollLeft.current + delta));
+    scrollLeft.current = next;
+    scrollView.current?.scrollTo({ x: next, animated: false });
+    onScrub(Math.max(0, Math.min(timeline.durationSec, xToTime(next + viewportWidth / 2, pixelsPerSecond, leadingPadding))));
+  }, [contentWidth, leadingPadding, onScrub, pixelsPerSecond, timeline.durationSec, viewportWidth]);
   const syncScrollToTime = useCallback((seconds: number, animated = false) => {
     if (!viewportWidth) return;
     const x = Math.max(0, Math.min(contentWidth - viewportWidth, timeToX(seconds, pixelsPerSecond, leadingPadding) - viewportWidth / 2));
+    if (Math.abs(x - scrollLeft.current) < 0.5) return;
+    programmaticOffset.current = x;
     scrollLeft.current = x;
     scrollView.current?.scrollTo({ x, animated });
   }, [contentWidth, leadingPadding, pixelsPerSecond, viewportWidth]);
@@ -112,7 +142,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   const touchX = (touch: TouchPoint, left: number) => touch.locationX ?? (touch.clientX !== undefined ? touch.clientX - left : touch.pageX !== undefined ? touch.pageX - left - (typeof window === "undefined" ? 0 : window.scrollX) : 0);
   const onTouchStart = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } } }) => {
     const touches = (event.nativeEvent ?? event).touches;
-    if (touches?.length === 1) onScrubStart();
+    if (touches?.length === 1) beginInteraction();
     if (!touches || touches.length < 2 || !viewportWidth) return;
     const left = event.currentTarget?.getBoundingClientRect?.().left ?? 0;
     const first = touchX(touches[0], left);
@@ -134,14 +164,42 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     requestAnimationFrame(() => scrollView.current?.scrollTo({ x, animated: false }));
   };
 
+  const webHandlers = {
+    onMouseDown: (event: { button: number; clientX: number; preventDefault: () => void }) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      beginInteraction();
+      mouseDrag.current = { x: event.clientX, scrollLeft: scrollLeft.current };
+    },
+    onMouseMove: (event: { clientX: number }) => {
+      const drag = mouseDrag.current;
+      if (!drag) return;
+      scrubBy(drag.x - event.clientX);
+    },
+    onMouseUp: () => { mouseDrag.current = null; endInteractionSoon(); },
+    onMouseLeave: () => { if (mouseDrag.current) { mouseDrag.current = null; endInteractionSoon(); } },
+    onWheel: (event: { deltaX: number; deltaY: number; shiftKey?: boolean; preventDefault: () => void }) => {
+      const delta = event.deltaX || (event.shiftKey ? event.deltaY : 0);
+      if (!delta) return;
+      event.preventDefault();
+      beginInteraction();
+      requestAnimationFrame(() => {
+        scrubBy(delta);
+        endInteractionSoon();
+      });
+    },
+    onTouchEnd: () => endInteractionSoon(),
+    onTouchCancel: () => endInteractionSoon(),
+  } as any;
+
   return <View className="mt-1">
     <View className="mb-1 h-8 flex-row items-center justify-end gap-1">
       <Pressable role="button" accessibilityLabel="Zoom out timeline" disabled={pixelsPerSecond <= MIN_PIXELS_PER_SECOND} onPress={() => zoom(-4)} className="size-8 items-center justify-center rounded-full border border-on-screen-muted"><Text className="font-sans text-body text-on-screen">−</Text></Pressable>
       <Text accessibilityLabel={`Timeline zoom ${pixelsPerSecond} pixels per second`} className="w-12 text-center font-sans text-[10px] text-on-screen-muted">{pixelsPerSecond} px/s</Text>
       <Pressable role="button" accessibilityLabel="Zoom in timeline" disabled={pixelsPerSecond >= MAX_PIXELS_PER_SECOND} onPress={() => zoom(4)} className="size-8 items-center justify-center rounded-full border border-on-screen-muted"><Text className="font-sans text-body text-on-screen">+</Text></Pressable>
     </View>
-    <View className="relative overflow-hidden" onTouchStart={onTouchStart} onTouchMove={onTouchMove}>
-      <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={() => { isUserScrolling.current = true; onScrubStart(); }} onScrollEndDrag={() => { isUserScrolling.current = false; }} onMomentumScrollBegin={() => { isUserScrolling.current = true; }} onMomentumScrollEnd={() => { isUserScrolling.current = false; }} onScroll={onScroll} scrollEventThrottle={16} onTouchStart={onTouchStart} onTouchMove={onTouchMove} style={{ width: "100%" }}>
+    <View className="relative overflow-hidden" onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
+      <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} onTouchStart={onTouchStart} onTouchMove={onTouchMove} style={{ width: "100%" }}>
         <TimelineRows timeline={timeline} sources={sources} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={onSelect} onSoundtrack={onSoundtrack} />
       </ScrollView>
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />
