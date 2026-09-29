@@ -24,11 +24,11 @@ run gcloud run deploy "$API_SERVICE" --project "$PROJECT_ID" --region "$REGION" 
   --set-env-vars "^|^NODE_ENV=production|SERVICE_URL=$initial_url|RENDER_SERVICE_URL=$render_url|ALLOWED_ORIGINS=$ALLOWED_ORIGINS|FIREBASE_STORAGE_BUCKET=$BUCKET|INVOKER_SERVICE_ACCOUNTS=$INVOKER_SA|GCP_PROJECT_ID=$PROJECT_ID|TASKS_LOCATION=$REGION|TASKS_QUEUE=$TASKS_QUEUE|TASKS_INVOKER_SERVICE_ACCOUNT=$INVOKER_SA|PLACE_RESOLVER=nominatim|NOMINATIM_CONTACT=$NOMINATIM_CONTACT" \
   --set-secrets "$secrets"
 api_url="$(service_url "$API_SERVICE")"
-# Cloud Run also serves the API at a project-number URL, and Eventarc signs its
-# tokens for that one, so the API must accept both as audiences.
+# Eventarc signs its OIDC token for the full handler URL. Accept that audience
+# on both Cloud Run URL forms because Eventarc may address either one.
 project_number="$(gcloud projects describe "$PROJECT_ID" --format 'value(projectNumber)')"
 number_url="https://$API_SERVICE-$project_number.$REGION.run.app"
 run gcloud run services update "$API_SERVICE" --project "$PROJECT_ID" --region "$REGION" \
-  --update-env-vars "^|^SERVICE_URL=$api_url|SERVICE_AUDIENCES=$number_url"
+  --update-env-vars "^|^SERVICE_URL=$api_url|SERVICE_AUDIENCES=$api_url/events/storage-finalize,$number_url/events/storage-finalize"
 run gcloud run services add-iam-policy-binding "$API_SERVICE" --project "$PROJECT_ID" --region "$REGION" --member allUsers --role roles/run.invoker --quiet
 run gcloud run services add-iam-policy-binding "$API_SERVICE" --project "$PROJECT_ID" --region "$REGION" --member "serviceAccount:$INVOKER_SA" --role roles/run.invoker --quiet
