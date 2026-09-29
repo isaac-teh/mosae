@@ -27,4 +27,12 @@ run gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccoun
 
 # Cloud Storage publishes to Eventarc's transport topic through its service agent.
 storage_agent="$(capture "service-123456789012@gs-project-accounts.iam.gserviceaccount.com" gcloud storage service-agent --project "$PROJECT_ID")"
-run gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:$storage_agent" --role roles/pubsub.publisher --quiet
+# A newly created Storage service agent can take a few moments to become
+# visible to IAM even after gcloud storage service-agent returns its email.
+for attempt in {1..6}; do
+  if run gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:$storage_agent" --role roles/pubsub.publisher --quiet; then
+    break
+  fi
+  if (( attempt == 6 )); then exit 1; fi
+  sleep 10
+done
