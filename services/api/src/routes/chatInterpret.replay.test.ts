@@ -22,8 +22,9 @@ describe("chat interpret replay route", () => {
     const [{ chatInterpretRouter }, { generateStructured }, { createGeminiClient }] = await Promise.all([
       import("./chatInterpret.js"), import("../gemini/client.js"), import("../gemini/wire.js"),
     ]);
-    const files = readdirSync(fixturesDir).filter((name) => name.startsWith("interpret-") && name.endsWith(".json"));
-    expect(files).toHaveLength(4);
+    // The four plan examples; later end-to-end runs record more interpret fixtures beside them.
+    const files = ["interpret-01d724a117a9.json", "interpret-7cced985f820.json", "interpret-82cc1d67a409.json", "interpret-c5072669ddec.json"];
+    for (const name of files) expect(readdirSync(fixturesDir)).toContain(name);
     const fixtures = files.map((name) => JSON.parse(readFileSync(`${fixturesDir}/${name}`, "utf8")) as { request: string });
     const examples = fixtures.map(({ request: requestText }) => {
       const modelRequest = JSON.parse(requestText) as { contents: { text: string }[] };

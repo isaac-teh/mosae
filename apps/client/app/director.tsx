@@ -81,6 +81,9 @@ export default function DirectorScreen() {
           const country = projectSummary?.country;
           const answer = country ? `Yes, our ${country} trip` : "Yes, that's our story";
           const storyText = country ? `${country} trip` : projectSummary?.places[0] ?? "Our story";
+          // The occasion chip is only an available answer until the user has
+          // typed a free-text answer; then the confirmation card owns the turn.
+          if (saving || pendingInterpret) return null;
           return <Pressable key={item.id} role="button" aria-label={answer} onPress={() => void actions.confirmOccasion(answer, storyText)} className="max-w-[80%] self-end rounded-md bg-bubble-you px-4 py-3"><Text className="font-sans text-body text-ink">{answer}</Text></Pressable>;
         }
         if (item.kind === "person") return <View key={item.id} className="gap-3">
@@ -91,7 +94,7 @@ export default function DirectorScreen() {
         return null;
       })}
       {state.step === "people" && !state.items.some((item) => item.kind === "person" || item.kind === "anyone-else") && <Button label="Skip for now" variant="quiet" onPress={() => void actions.skipPeople()} />}
-      {pendingInterpret && <View className="gap-3"><ChatMessage from="mosae" text={pendingInterpret.reply} /><ChatMessage from="you" text={pendingInterpret.text} /><ChatProposal question="Did I get that right?" replies={[{ id: "confirm", label: "Yes, that's right" }]} onReply={() => actions.confirmInterpret()} /></View>}
+      {pendingInterpret && <View className="gap-3"><ChatMessage from="you" text={pendingInterpret.text} /><ChatMessage from="mosae" text={pendingInterpret.reply} /><ChatProposal replies={[{ id: "confirm", label: "Yes, that's right" }, { id: "discard", label: "Not quite" }]} onReply={(choice) => choice === "confirm" ? actions.confirmInterpret() : actions.discardInterpret()} /></View>}
       {error && <View className="gap-2"><ChatMessage from="mosae" text={error} /><Pressable role="button" onPress={() => { retry(); if (state.step === "occasion") void actions.confirmOccasion(); }} className="min-h-11 self-start justify-center"><Text className="font-sans-semibold text-action">Try again</Text></Pressable></View>}
     </ScrollView>
     {pickerOpen && <MomentPickerSheet days={pickerDays} selected={pickerSelection} onToggle={(shotId) => setPickerSelection((current) => current.includes(shotId) ? current.filter((id) => id !== shotId) : [...current, shotId])} onCancel={() => { setPickerSelection([]); actions.confirmPicker([]); }} onConfirm={() => void actions.confirmPicker(pickerSelection)} />}

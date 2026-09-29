@@ -95,8 +95,19 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await composer.fill("it's our Singapore holiday with the kids");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("it's our Singapore holiday with the kids")).toBeVisible({ timeout: 60_000 });
-  await expect.poll(async () => (await page.locator("body").innerText()).match(/\?/g)?.length ?? 0, { timeout: 60_000 }).toBeGreaterThan(2);
+  const interpretationText = "Should I create a story about your Singapore family holiday?";
+  const interpretationReply = page.getByText(interpretationText, { exact: true });
+  await expect(interpretationReply).toBeVisible({ timeout: 60_000 });
+  const typedBubble = page.getByText("it's our Singapore holiday with the kids", { exact: true });
+  expect(await typedBubble.evaluate((node, text) => {
+    const reply = [...document.querySelectorAll("*")].find((item) => item.childElementCount === 0 && item.textContent?.trim() === text);
+    return Boolean(reply && node.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }, interpretationText)).toBe(true);
+  await expect(page.getByText("Did I get that right?")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Not quite" })).toBeVisible();
   await expect(page.getByText("I didn't catch that. Pick one below, or say it another way.")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Yes, our Singapore trip" })).toHaveCount(0);
+  await expect(page.getByText("0 of 4 confirmed", { exact: true })).toBeVisible();
   await screenshot(page, "05-free-text-confirmation.png");
   // The typed suggestion is still pending until confirmed. Reload restores the
   // initial occasion state so the primary Yes chip can drive the full film run.
@@ -107,10 +118,13 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await expect(yes).toBeVisible({ timeout: 180_000 });
   await yes.click();
   await expect(page.getByText("One person appears in")).toBeVisible({ timeout: 120_000 });
-  await screenshot(page, "06-person-question.png");
   const faceImages = page.locator('img[alt^="Person photo "]');
   await expect(faceImages).toHaveCount(4);
   await expect.poll(() => faceImages.evaluateAll((images) => images.filter((image) => (image as HTMLImageElement).naturalWidth > 0).length), { timeout: 60_000 }).toBe(4);
+  await expect.poll(() => faceImages.first().evaluate((image) =>
+    Number.parseFloat(getComputedStyle(image.parentElement!).width) > 72,
+  ), { timeout: 10_000 }).toBe(true);
+  await screenshot(page, "06-person-question.png");
   await expect(page.getByText(/\d+ of \d+ shown · Day /)).toBeVisible();
   await expect(page.getByRole("button", { name: "Skip" })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Skip for now" })).toHaveCount(0);

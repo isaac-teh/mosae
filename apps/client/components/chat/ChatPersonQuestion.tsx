@@ -1,18 +1,21 @@
+import { useState } from "react";
 import { Image, Text, View } from "react-native";
 import { Button, FocusChip } from "../ds";
+import { faceCropGeometry, imageSizeFromLoadEvent, type FaceBbox } from "../../lib/faceCrop";
 
-type FacePreview = { shotId: string; uri: string; bbox: [number, number, number, number] };
+type FacePreview = { shotId: string; uri: string; bbox: FaceBbox };
 type ChatPersonQuestionProps = { momentCount: number; samples: FacePreview[]; days: number[]; chips: string[]; onPick: (role: string) => void; onTypeName: () => void; onSkip: () => void };
 
 function FacePreviewTile({ sample, index }: { sample: FacePreview; index: number }) {
   const size = 72;
-  const [ymin, xmin, ymax, xmax] = sample.bbox;
-  const half = Math.max((xmax - xmin) * 0.8, (ymax - ymin) * 0.8, 0.02) / 2;
-  const scaled = size / (2 * half);
-  const cx = (xmin + xmax) / 2;
-  const cy = (ymin + ymax) / 2;
+  const [sourceSize, setSourceSize] = useState<{ width: number; height: number } | null>(null);
+  const crop = sourceSize ? faceCropGeometry(sample.bbox, sourceSize.width, sourceSize.height, size) : null;
   return <View data-face-preview="true" className="h-[72px] w-[72px] overflow-hidden rounded-md bg-surface-sunken">
-    <Image source={{ uri: sample.uri }} accessibilityLabel={`Person photo ${index + 1}`} resizeMode="cover" style={{ width: scaled, height: scaled, marginLeft: -(cx * scaled - size / 2), marginTop: -(cy * scaled - size / 2) }} />
+    <Image source={{ uri: sample.uri }} accessibilityLabel={`Person photo ${index + 1}`} resizeMode={crop ? "stretch" : "cover"} onLoad={(event: any) => {
+      const dimensions = imageSizeFromLoadEvent(event);
+      if (dimensions) setSourceSize(dimensions);
+      else Image.getSize(sample.uri, (width, height) => setSourceSize({ width, height }), () => {});
+    }} style={crop ? { position: "absolute", width: crop.width, height: crop.height, left: crop.left, top: crop.top } : { width: size, height: size }} />
   </View>;
 }
 

@@ -204,9 +204,42 @@ describe("Director chat", () => {
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "our family trip"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("→");
     await waitFor(() => expect(hasText("I understood the Japan trip.")).toBe(true));
+    const typed = host.querySelector('[data-from="you"]');
+    const reply = [...host.querySelectorAll('[data-from="mosae"]')].find((item) => item.textContent?.includes("I understood the Japan trip."));
+    expect(typed).toBeTruthy();
+    expect(reply).toBeTruthy();
+    expect(typed!.compareDocumentPosition(reply!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(hasText("Did I get that right?")).toBe(false);
+    expect(hasText("Not quite")).toBe(true);
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+    expect(host.querySelector('button[aria-label="Yes, our Japan trip"]')).toBeFalsy();
+    expect(host.textContent?.match(/0 of 4 confirmed/g) ?? []).toHaveLength(1);
     await click("Yes, that's right");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("our family trip", []));
+  });
+
+  it("discards an interpretation with Not quite and returns to the original occasion chip", async () => {
+    setup(); await renderScreen();
+    const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "something different"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("→");
+    await waitFor(() => expect(hasText("I understood the Japan trip.")).toBe(true));
+    await click("Not quite");
+    expect(hasText("I understood the Japan trip.")).toBe(false);
+    expect(hasText("something different")).toBe(false);
+    expect(host.querySelector('button[aria-label="Yes, our Japan trip"]')).toBeTruthy();
+    expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+  });
+
+  it("does not show an occasion answer bubble or progress until the answer is saved", async () => {
+    let finish!: (value: { planId: string }) => void;
+    setup({ createPlan: () => new Promise((resolve) => { finish = resolve; }) }); await renderScreen();
+    await click("Yes, our Japan trip");
+    expect([...host.querySelectorAll('[data-from="you"]')].some((item) => item.textContent?.includes("Yes, our Japan trip"))).toBe(false);
+    expect(host.querySelector('button[aria-label="Yes, our Japan trip"]')).toBeFalsy();
+    expect(host.textContent?.match(/0 of 4 confirmed/g) ?? []).toHaveLength(1);
+    await act(async () => finish({ planId: "proposal-1" }));
+    await waitFor(() => expect(host.querySelector('[data-from="you"]')?.textContent).toContain("Yes, our Japan trip"));
   });
 
   it("shows the retry message when interpretation fails and keeps the occasion reply usable", async () => {

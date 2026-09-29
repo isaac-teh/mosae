@@ -9,6 +9,7 @@ import { useStepBack } from "@/lib/useStepBack";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { StepHeader } from "@/components/StepHeader";
 import { type Cast, type CastRole, type ProjectCharacters, confirmCast, getAssetThumbnailUrl, getCast, getProjectCharacters } from "@/lib/characters";
+import { faceCropGeometry, imageSizeFromLoadEvent, type FaceBbox } from "@/lib/faceCrop";
 
 /** Side of the square window a face crop is shown in. */
 const CROP_PX = 64;
@@ -33,30 +34,25 @@ function labelFor(person: { personId: string; role: CastRole; name: string }, ev
  * square, then offsetting it so the box lands in view. Cropping this way needs
  * no server-side face images: the thumbnail the app already signs is enough.
  */
-function FaceCrop({ url, bbox, size = CROP_PX }: { url?: string; bbox?: [number, number, number, number]; size?: number }) {
+function FaceCrop({ url, bbox, size = CROP_PX }: { url?: string; bbox?: FaceBbox; size?: number }) {
   const CROP = size;
+  const [sourceSize, setSourceSize] = useState<{ width: number; height: number } | null>(null);
   if (!url || !bbox) return <View style={{ width: CROP, height: CROP }} className="rounded-[10px] bg-surface-sunken" />;
-  const [ymin, xmin, ymax, xmax] = bbox;
-  // Pad the box outward so the crop reads as a portrait, not a tight mask.
-  const pad = 0.6;
-  const halfW = Math.max((xmax - xmin) * (1 + pad), 0.02) / 2;
-  const halfH = Math.max((ymax - ymin) * (1 + pad), 0.02) / 2;
-  const half = Math.max(halfW, halfH);
-  const cx = (xmin + xmax) / 2;
-  const cy = (ymin + ymax) / 2;
-  // The full image must be this many px wide for the 2*half slice to fill CROP.
-  const scaled = CROP / (2 * half);
+  const crop = sourceSize ? faceCropGeometry(bbox, sourceSize.width, sourceSize.height, CROP) : null;
   return (
     <View style={{ width: CROP, height: CROP, overflow: "hidden" }} className="rounded-[10px] bg-surface-sunken">
       <Image
         source={{ uri: url }}
         accessibilityIgnoresInvertColors
-        style={{
-          width: scaled,
-          height: scaled,
-          marginLeft: -(cx * scaled - CROP / 2),
-          marginTop: -(cy * scaled - CROP / 2),
+        resizeMode={crop ? "stretch" : "cover"}
+        onLoad={(event: any) => {
+          const dimensions = imageSizeFromLoadEvent(event);
+          if (dimensions) setSourceSize(dimensions);
+          else Image.getSize(url, (width, height) => setSourceSize({ width, height }), () => {});
         }}
+        style={crop
+          ? { position: "absolute", width: crop.width, height: crop.height, left: crop.left, top: crop.top }
+          : { width: CROP, height: CROP }}
       />
     </View>
   );
