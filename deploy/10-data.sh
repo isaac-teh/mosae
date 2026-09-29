@@ -56,7 +56,7 @@ else
   run gcloud storage buckets update "gs://$BUCKET" --cors-file "$cors_file" --project "$PROJECT_ID"
 fi
 cd "$ROOT_DIR"
-run npx --no-install firebase deploy --project "$PROJECT_ID" --only firestore:rules,firestore:indexes,storage --non-interactive
+firebase_deploy --project "$PROJECT_ID" --only firestore:rules,firestore:indexes,storage --non-interactive
 for track in services/api/fixtures/music/*.mp3; do
   run gcloud storage cp "$track" "gs://$BUCKET/library/music/$(basename "$track")" --project "$PROJECT_ID"
 done

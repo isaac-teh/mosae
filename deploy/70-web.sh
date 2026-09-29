@@ -16,4 +16,4 @@ export EXPO_PUBLIC_USE_EMULATORS=false
 export EXPO_PUBLIC_USE_API_STORY_REPOSITORY=false
 cd "$ROOT_DIR"
 run npm run build:web -w apps/client
-run npx --no-install firebase deploy --project "$PROJECT_ID" --only hosting --non-interactive
+firebase_deploy --project "$PROJECT_ID" --only hosting --non-interactive
