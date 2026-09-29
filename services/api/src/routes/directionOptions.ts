@@ -5,6 +5,7 @@ import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
 import { CADENCES, DURATION_SECONDS, recommendDuration, type CadenceId, type DurationId } from "@mosae/contracts";
 import { stripProposalEnvelope } from "../store/directingStore.js";
+import { holdsFor } from "../compose/brief.js";
 
 const DURATION_LABELS: Record<DurationId, { label: string; caption: string }> = {
   "30s": { label: "30 sec", caption: "A quick share" },
@@ -59,10 +60,30 @@ export function directionOptionsRouter(deps: {
 
       const proposalData = stripProposalEnvelope(proposalSnap.data()) as Record<string, unknown>;
 
-      // Count photo moments for recommendedDuration
+      // Count only moments still in the user's accepted selection.
       const moments = Array.isArray(proposalData.moments) ? proposalData.moments as Array<Record<string, unknown>> : [];
-      const photoCount = moments.filter((m) => m.kind === "photo").length;
+      const constraints = proposalData.constraints && typeof proposalData.constraints === "object" ? proposalData.constraints as Record<string, unknown> : {};
+      const ids = (key: string) => new Set(Array.isArray(constraints[key]) ? (constraints[key] as unknown[]).filter((id): id is string => typeof id === "string") : []);
+      const deselected = ids("deselectedMomentIds");
+      const excluded = ids("excludedShotIds");
+      const hidden = ids("hiddenShotIds");
+      const keptMoments = moments.filter((moment) => typeof moment.id === "string" && typeof moment.shotId === "string" && !deselected.has(moment.id) && !excluded.has(moment.shotId) && !hidden.has(moment.shotId));
+      const photoCount = keptMoments.filter((m) => m.kind === "photo").length;
+      const videos = keptMoments.filter((m) => m.kind === "video");
+      const videoSeconds = videos.reduce((sum, moment) => {
+        const start = typeof moment.previewInSec === "number" ? moment.previewInSec : 0;
+        const end = typeof moment.previewOutSec === "number" ? moment.previewOutSec : start;
+        return sum + Math.max(0, end - start);
+      }, 0);
       const recommendedDuration: DurationId = recommendDuration(photoCount);
+      // Estimate capacity for each selectable pace. These values use the same
+      // maximum holds that composition uses, so a long option is only offered
+      // when the proposal has enough selected material for that cadence.
+      const maximumDurationSecByCadence = Object.fromEntries(CADENCES.map(({ id }) => {
+        const maximumHold = holdsFor(id).max;
+        return [id, photoCount * maximumHold + Math.min(videoSeconds, videos.length * maximumHold * 2)];
+      }));
+      const maximumDurationSec = Math.max(...Object.values(maximumDurationSecByCadence));
 
       // Read the story intent for the note text
       const storyIntentId = typeof proposalData.storyIntentId === "string" ? proposalData.storyIntentId : null;
@@ -102,6 +123,8 @@ export function directionOptionsRouter(deps: {
         cadences: CADENCES.map(({ id, name, description }) => ({ id, name, description })),
         soundtracks: soundtrackCatalog(library, recommendedCadence),
         durations,
+        maximumDurationSec,
+        maximumDurationSecByCadence,
         recommendedDuration,
         recommendedCadence,
         cadenceReason,

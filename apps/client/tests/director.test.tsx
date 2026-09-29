@@ -43,15 +43,15 @@ const planFixture = {
   leftOut: [{ shotId: "set-aside-blur", thumbnailUrl: "https://image/blur", reason: "Blurry" }, ...Array.from({ length: 120 }, (_, index) => ({ shotId: `dup-${index}`, thumbnailUrl: "", reason: "Near duplicate" }))],
   edits: { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], excludedShotIds: ["previously-excluded", "dup-0"], momentOrder: [], photoSwaps: {} },
 } as any;
-const directionOptions = { note: "Warm, intimate story", rewrites: [], cadences: [{ id: "reflective", name: "Gentle", description: "Unhurried" }, { id: "playful", name: "Lively", description: "Energetic" }], soundtracks: [{ id: "lyria-reflective", name: "Quiet afternoon", description: "Gentle piano" }], durations: [{ id: "1m", label: "1 min", caption: "Short", seconds: 60 }, { id: "2m", label: "2 min", caption: "Balanced", seconds: 120 }, { id: "4m", label: "4 min", caption: "Long", seconds: 240 }], recommendedDuration: "2m", recommendedCadence: "reflective", cadenceReason: "The photos feel calm" };
+const directionOptions = { note: "Warm, intimate story", rewrites: [], cadences: [{ id: "reflective", name: "Gentle", description: "Unhurried" }, { id: "playful", name: "Lively", description: "Energetic" }], soundtracks: [{ id: "lyria-reflective", name: "Quiet afternoon", description: "Gentle piano" }], durations: [{ id: "30s", label: "30 sec", caption: "Quick", seconds: 30 }, { id: "1m", label: "1 min", caption: "Short", seconds: 60 }, { id: "2m", label: "2 min", caption: "Balanced", seconds: 120 }, { id: "3m", label: "3 min", caption: "Extended", seconds: 180 }, { id: "4m", label: "4 min", caption: "Long", seconds: 240 }, { id: "5m", label: "5 min", caption: "Everything", seconds: 300 }], recommendedDuration: "2m", recommendedCadence: "reflective", cadenceReason: "The photos feel calm", maximumDurationSec: 300 };
 const filmFixture = { filmId: "film-1", planId: "proposal-1", version: 1, title: "Japan, autumn", subtitle: "A family trip", place: "Japan", dateLabel: "October", durationSec: 124, posterKey: "poster", savePosterKey: "poster", videoKey: "video", momentCount: 419, audioLabel: "Soft piano", shortcuts: [], status: "ready", videoUrl: "https://film.example/first-cut.mp4", rendering: false, reasons: ["Opens on the train window in Tokyo.", "Mia's reactions lead each day.", "Both moments you kept are in.", "I left out repeated scenery shots."] } as any;
-function setup(options: { faces?: boolean; interpret?: () => Promise<any>; createPlan?: () => Promise<any>; people?: any[]; readyPlan?: boolean; applyEdits?: (...args: any[]) => Promise<any>; getFilm?: (...args: any[]) => Promise<any>; saveFilm?: (...args: any[]) => Promise<any> } = {}) {
+function setup(options: { faces?: boolean; interpret?: () => Promise<any>; createPlan?: () => Promise<any>; people?: any[]; readyPlan?: boolean; applyEdits?: (...args: any[]) => Promise<any>; getFilm?: (...args: any[]) => Promise<any>; saveFilm?: (...args: any[]) => Promise<any>; maximumDurationSec?: number; maximumDurationSecByCadence?: Record<string, number> } = {}) {
   const planReady = options.readyPlan ?? false;
   mocks.repo = {
     getSummary: vi.fn(async () => ({ ...summary(options.faces ?? true), total: planReady ? 465 : 8, ready: { ...summary(options.faces ?? true).ready, plan: planReady } })), getPeople: vi.fn(async () => options.people ?? people),
     createPlan: vi.fn(options.createPlan ?? (async () => ({ planId: "proposal-1" }))),
     interpret: vi.fn(options.interpret ?? (async () => ({ reply: "I understood the Japan trip.", change: { kind: "occasion", storyText: "Japan trip" } }))),
-    getPlan: vi.fn(async () => planFixture), applyEdits: vi.fn(options.applyEdits ?? (async () => planFixture)), getDirectionOptions: vi.fn(async () => directionOptions), directFilm: vi.fn(async () => ({ filmId: "film-1" })), getFilm: vi.fn(options.getFilm ?? (async () => filmFixture)), saveFilm: vi.fn(options.saveFilm ?? (async () => ({ downloadKey: "https://film.example/first-cut.mp4" }))),
+    getPlan: vi.fn(async () => planFixture), applyEdits: vi.fn(options.applyEdits ?? (async () => planFixture)), getDirectionOptions: vi.fn(async () => ({ ...directionOptions, maximumDurationSec: options.maximumDurationSec ?? directionOptions.maximumDurationSec, ...(options.maximumDurationSecByCadence ? { maximumDurationSecByCadence: options.maximumDurationSecByCadence } : {}) })), directFilm: vi.fn(async () => ({ filmId: "film-1" })), getFilm: vi.fn(options.getFilm ?? (async () => filmFixture)), saveFilm: vi.fn(options.saveFilm ?? (async () => ({ downloadKey: "https://film.example/first-cut.mp4" }))),
   };
   mocks.flowRepo = mocks.repo;
   mocks.confirmCast.mockResolvedValue({ cast: { people: [] }, proposalId: "proposal-2" });
@@ -270,10 +270,28 @@ describe("Director chat", () => {
 
   it("shows the set-aside counts from the plan", async () => {
     await openMoments();
-    expect(hasText("1 blurry shot and 120 near-duplicates")).toBe(true);
+    expect(hasText("I've set aside 1 blurry shot and 120 near-duplicates. Your originals are untouched.")).toBe(true);
     expect(hasText("See what's set aside")).toBe(true);
     await click("See what's set aside");
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/review-moments", params: { planId: "proposal-1", tab: "left-out" } });
+  });
+
+  it.each([
+    { name: "no shots", leftOut: [], copy: "Nothing needed setting aside - every photo is sharp and different. Your originals are untouched.", showButton: false },
+    { name: "one blurry shot", leftOut: [{ shotId: "blur-1", thumbnailUrl: "", reason: "Blurry" }], copy: "I've set aside 1 blurry shot. Your originals are untouched.", showButton: true },
+    { name: "several blurry shots", leftOut: [{ shotId: "blur-1", thumbnailUrl: "", reason: "Blurry" }, { shotId: "blur-2", thumbnailUrl: "", reason: "Soft focus" }], copy: "I've set aside 2 blurry shots. Your originals are untouched.", showButton: true },
+    { name: "one near-duplicate", leftOut: [{ shotId: "dup-1", thumbnailUrl: "", reason: "Near duplicate" }], copy: "I've set aside 1 near-duplicate. Your originals are untouched.", showButton: true },
+    { name: "several near-duplicates", leftOut: [{ shotId: "dup-1", thumbnailUrl: "", reason: "Near duplicate" }, { shotId: "dup-2", thumbnailUrl: "", reason: "Near duplicate" }], copy: "I've set aside 2 near-duplicates. Your originals are untouched.", showButton: true },
+  ])("uses accurate set-aside copy for $name", async ({ leftOut, copy, showButton }) => {
+    const previous = planFixture.leftOut;
+    planFixture.leftOut = leftOut as any;
+    try {
+      await openMoments();
+      expect(hasText(copy)).toBe(true);
+      expect([...host.querySelectorAll("button")].some((button) => button.textContent?.trim() === "See what's set aside")).toBe(showButton);
+    } finally {
+      planFixture.leftOut = previous;
+    }
   });
 
   it("saves Keep and Leave out choices in one constraints update when Done is pressed", async () => {
@@ -350,6 +368,41 @@ describe("Director chat", () => {
     await click("Playful");
     await click("Sounds good. Shape it.");
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ cadenceId: "playful", durationId: "4m", focus: "family", soundtrackId: "lyria-reflective", collageAmount: "lots", motionFeel: "playful" })));
+  });
+
+  it("offers the achievable direction lengths and explains the material limit", async () => {
+    setup({ people: [], readyPlan: true, maximumDurationSec: 60 }); await renderScreen();
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
+    await click("Done");
+    await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
+    expect(host.querySelector('button[aria-label="1 min"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('button[aria-label="2 min"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="4 min"]')).toBeNull();
+    expect(hasText("With these moments, I can make up to 1 min.")).toBe(true);
+  });
+
+  it("reduces the selected length when a faster pace cannot support it", async () => {
+    setup({ people: [], readyPlan: true, maximumDurationSec: 65, maximumDurationSecByCadence: { reflective: 65, playful: 45.5 } }); await renderScreen();
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
+    await click("Done");
+    await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
+    expect(host.querySelector('button[aria-label="1 min"]')?.getAttribute("aria-pressed")).toBe("true");
+    await click("Lively");
+    expect(host.querySelector('button[aria-label="30 sec"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('button[aria-label="1 min"]')).toBeNull();
+    expect(hasText("With these moments, I can make up to 30 sec.")).toBe(true);
+  });
+
+  it("does not allow shaping a standard length when the moments cannot reach it", async () => {
+    setup({ people: [], readyPlan: true, maximumDurationSec: 10 }); await renderScreen();
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
+    await click("Done");
+    await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
+    expect(hasText("These moments can make about 10 seconds. Add more photos for a longer film.")).toBe(true);
+    expect((host.querySelector('button[aria-label="Sounds good. Shape it."]') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("maps generation polling progress to the shaping checklist from zero through three", async () => {

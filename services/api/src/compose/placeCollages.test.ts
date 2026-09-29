@@ -38,7 +38,8 @@ describe("placeCollages", () => {
     const collage = collages(result)[0];
     if (!("kind" in collage)) throw new Error("expected collage");
     expect(collage.spec.slots.map((slot) => slot.shotId)).toEqual(["shot-0", "shot-1", "shot-2", "shot-3"]);
-    expect(collage.durationSec).toBe(4);
+    expect(collage.durationSec).toBe(8);
+    expect(result.durationSec).toBe(timeline.durationSec);
     expect(safeParseTimeline(result).ok).toBe(true);
   });
 

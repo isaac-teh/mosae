@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { runCompose, applyUserOrder, collageAdjustedTargetSec, type ComposeJob, type ComposeDeps } from "./runCompose.js";
+import { runCompose, applyUserOrder, type ComposeJob, type ComposeDeps } from "./runCompose.js";
 import { safeParseTimeline } from "@mosae/contracts";
 
 describe("applyUserOrder", () => {
@@ -10,14 +10,6 @@ describe("applyUserOrder", () => {
     expect(applyUserOrder(clips, ["m3", "m1", "m2"], chapterOf).map((c) => c.itemId)).toEqual(["m1", "m2", "m3"]);
   });
   it("no order leaves clips unchanged", () => expect(applyUserOrder(clips, undefined, chapterOf)).toEqual(clips));
-});
-
-describe("collageAdjustedTargetSec", () => {
-  it("preserves the fitted film's relative duration tolerance when collages compress it", () => {
-    const target = collageAdjustedTargetSec(30, 28.5, 13);
-    expect(target).toBeCloseTo(30 * 13 / 28.5);
-    expect(Math.abs(13 - target)).toBeLessThanOrEqual(target * 0.1);
-  });
 });
 
 // --- Helpers to build minimal test fixtures ---
@@ -122,7 +114,37 @@ describe("runCompose — collages", () => {
     if (!result.ok) return;
     expect(result.timeline.schemaVersion).toBe(2);
     expect(result.timeline.videoClips.filter((clip) => "kind" in clip)).toHaveLength(1);
+    expect(result.timeline.durationSec).toBeGreaterThanOrEqual(27);
+    expect(result.timeline.durationSec).toBeLessThanOrEqual(33);
     expect(safeParseTimeline(result.timeline).ok).toBe(true);
+  });
+
+  it.each([
+    { durationId: "30s" as const, cadenceId: "playful" as const, minimum: 27, maximum: 33 },
+    { durationId: "1m" as const, cadenceId: "reflective" as const, minimum: 54, maximum: 66 },
+  ])("fills a $durationId film from kept proposal photos when the model under-selects clips", async ({ durationId, cadenceId, minimum, maximum }) => {
+    const moments = Array.from({ length: 13 }, (_, index) => ({
+      id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const,
+      title: `Photo ${index}`, description: "", rationale: "",
+    }));
+    const proposal = makeProposal({
+      moments,
+      chapters: [0, 1, 2].map((chapter) => ({ id: `chapter-${chapter}`, title: `Day ${chapter + 1}`, summary: "", momentIds: moments.slice(chapter * 4, chapter === 2 ? 13 : (chapter + 1) * 4).map((moment) => moment.id) })),
+      constraints: { excludedShotIds: [], deselectedMomentIds: ["photo3"], mustIncludeMomentIds: [], feedback: [] },
+    });
+    const assets = new Map(moments.map((moment, index) => [moment.id, {
+      kind: "photo" as const, eventId: `day-${Math.floor(index / 4)}`, assetId: `asset-${index}`,
+      localTime: `2026-06-${String(Math.floor(index / 4) + 1).padStart(2, "0")}T09:${String(index % 4).padStart(2, "0")}:00`,
+    }]));
+    const result = await runCompose(makeJob({ proposal, durationId, cadenceId, collageAmount: "few" }), makeDeps({
+      assets,
+      generateStructured: async () => ({ clips: moments.slice(0, 3).map((moment) => ({ candidateId: `${moment.id}#still@c0`, holdSec: 2, transition: "cut", audio: "mute" })), musicCues: [] }),
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.timeline.durationSec).toBeGreaterThanOrEqual(minimum);
+    expect(result.timeline.durationSec).toBeLessThanOrEqual(maximum);
+    expect(result.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.shotId) : [clip.source.shotId])).not.toContain("shot-3");
   });
 
   it("passes a none collage setting through composition without adding collage clips", async () => {
