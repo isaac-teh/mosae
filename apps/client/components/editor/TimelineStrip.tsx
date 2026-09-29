@@ -64,6 +64,7 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedCli
 
 type TouchPoint = { pageX?: number; clientX?: number; locationX?: number };
 type PinchState = { distance: number; scale: number; timeAtCenter: number; centerX: number } | null;
+type TouchDragState = { lastX: number } | null;
 
 export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onSoundtrack = () => {} }: {
   timeline: Timeline;
@@ -84,6 +85,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   const programmaticOffset = useRef<number | null>(null);
   const interactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mouseDrag = useRef<{ x: number; scrollLeft: number } | null>(null);
+  const touchDrag = useRef<TouchDragState>(null);
   const pinch = useRef<PinchState>(null);
   const leadingPadding = viewportWidth / 2;
   const contentWidth = timelineContentWidth(timeline.durationSec, viewportWidth, pixelsPerSecond);
@@ -142,8 +144,13 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   const touchX = (touch: TouchPoint, left: number) => touch.locationX ?? (touch.clientX !== undefined ? touch.clientX - left : touch.pageX !== undefined ? touch.pageX - left - (typeof window === "undefined" ? 0 : window.scrollX) : 0);
   const onTouchStart = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } } }) => {
     const touches = (event.nativeEvent ?? event).touches;
-    if (touches?.length === 1) beginInteraction();
+    if (touches?.length === 1) {
+      beginInteraction();
+      const left = event.currentTarget?.getBoundingClientRect?.().left ?? 0;
+      touchDrag.current = { lastX: touchX(touches[0], left) };
+    }
     if (!touches || touches.length < 2 || !viewportWidth) return;
+    touchDrag.current = null;
     const left = event.currentTarget?.getBoundingClientRect?.().left ?? 0;
     const first = touchX(touches[0], left);
     const second = touchX(touches[1], left);
@@ -151,9 +158,17 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     pinch.current = { distance: Math.abs(second - first), scale: pixelsPerSecond, timeAtCenter: xToTime(scrollLeft.current + centerX, pixelsPerSecond, leadingPadding), centerX };
     isUserScrolling.current = false;
   };
-  const onTouchMove = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } } }) => {
+  const onTouchMove = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } }; preventDefault?: () => void }) => {
     const initial = pinch.current;
     const touches = (event.nativeEvent ?? event).touches;
+    if (!initial && touches?.length === 1 && touchDrag.current) {
+      event.preventDefault?.();
+      const left = event.currentTarget?.getBoundingClientRect?.().left ?? 0;
+      const currentX = touchX(touches[0], left);
+      scrubBy(touchDrag.current.lastX - currentX);
+      touchDrag.current.lastX = currentX;
+      return;
+    }
     if (!initial || !touches || touches.length < 2 || initial.distance < 1) return;
     const left = event.currentTarget?.getBoundingClientRect?.().left ?? 0;
     const distance = Math.abs(touchX(touches[1], left) - touchX(touches[0], left));
@@ -188,8 +203,8 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
         endInteractionSoon();
       });
     },
-    onTouchEnd: () => endInteractionSoon(),
-    onTouchCancel: () => endInteractionSoon(),
+    onTouchEnd: () => { touchDrag.current = null; endInteractionSoon(); },
+    onTouchCancel: () => { touchDrag.current = null; endInteractionSoon(); },
   } as any;
 
   return <View className="mt-1">
@@ -199,7 +214,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
       <Pressable role="button" accessibilityLabel="Zoom in timeline" disabled={pixelsPerSecond >= MAX_PIXELS_PER_SECOND} onPress={() => zoom(4)} className="size-8 items-center justify-center rounded-full border border-on-screen-muted"><Text className="font-sans text-body text-on-screen">+</Text></Pressable>
     </View>
     <View className="relative overflow-hidden" onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
-      <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} onTouchStart={onTouchStart} onTouchMove={onTouchMove} style={{ width: "100%" }}>
+      <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} style={{ width: "100%" }}>
         <TimelineRows timeline={timeline} sources={sources} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={onSelect} onSoundtrack={onSoundtrack} />
       </ScrollView>
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />
