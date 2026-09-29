@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import { requireUser } from "./requireUser.js";
 
 function buildApp(verify: (token: string) => Promise<{ uid: string }>) {
@@ -14,7 +15,7 @@ function buildApp(verify: (token: string) => Promise<{ uid: string }>) {
 describe("requireUser", () => {
   it("rejects requests without a bearer token", async () => {
     const verify = vi.fn();
-    const res = await request(buildApp(verify)).get("/me");
+    const res = await request(await listeningServer(buildApp(verify))).get("/me");
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: "unauthenticated" });
     expect(verify).not.toHaveBeenCalled();
@@ -22,13 +23,13 @@ describe("requireUser", () => {
 
   it("rejects an Authorization header without the Bearer prefix", async () => {
     const verify = vi.fn();
-    const res = await request(buildApp(verify)).get("/me").set("Authorization", "token");
+    const res = await request(await listeningServer(buildApp(verify))).get("/me").set("Authorization", "token");
     expect(res.status).toBe(401);
     expect(verify).not.toHaveBeenCalled();
   });
 
   it("rejects tokens that fail verification", async () => {
-    const res = await request(buildApp(() => Promise.reject(new Error("expired"))))
+    const res = await request(await listeningServer(buildApp(() => Promise.reject(new Error("expired")))))
       .get("/me")
       .set("Authorization", "Bearer bad");
     expect(res.status).toBe(401);
@@ -36,7 +37,7 @@ describe("requireUser", () => {
 
   it("exposes the verified uid", async () => {
     const verify = vi.fn().mockResolvedValue({ uid: "user-7" });
-    const res = await request(buildApp(verify)).get("/me").set("Authorization", "Bearer good");
+    const res = await request(await listeningServer(buildApp(verify))).get("/me").set("Authorization", "Bearer good");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ userId: "user-7" });
     expect(verify).toHaveBeenCalledWith("good");

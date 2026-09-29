@@ -1,6 +1,7 @@
 import express, { type RequestHandler } from "express";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import { describe, expect, it } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 import { adminDb } from "../firebase/admin.js";
@@ -30,10 +31,10 @@ describe("edit interpretation route (Firestore emulator)", () => {
     const app = express();
     app.use(express.json());
     app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, generate }));
-    const response = await request(app).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: "move the snow monkeys earlier", revision: 0 });
+    const response = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: "move the snow monkeys earlier", revision: 0 });
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ reply: "Move the monkeys earlier?", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] });
-    const stale = await request(app).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: "move the snow monkeys earlier", revision: 4 });
+    const stale = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: "move the snow monkeys earlier", revision: 4 });
     expect(stale.status).toBe(409);
   });
 });

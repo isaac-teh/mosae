@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import { adminDb } from "../firebase/admin.js";
 import { createCompose } from "../compose/wire.js";
 import { startRender, getGeneration } from "./generationStore.js";
@@ -96,7 +97,7 @@ function buildApp(projectId: string): express.Express {
  * retires it instead of leaving it for someone else.
  */
 async function requestGeneration(projectId: string, proposalId: string, dispatch = false): Promise<string> {
-  const res = await request(buildApp(projectId))
+  const res = await request(await listeningServer(buildApp(projectId)))
     .post(`/api/projects/${projectId}/generations`)
     .send({ proposalId, settings: { ...SETTINGS, projectId } });
   expect(res.status).toBe(201);
@@ -226,7 +227,7 @@ describe("compose flow (emulator)", () => {
     expect(saved?.renderProgress).toBe(1);
     expect(await pointers(projectId)).toEqual({ latestRequested: generationId, currentPlayable: generationId, saved: generationId });
 
-    const download = await request(buildApp(projectId)).get(`/api/projects/${projectId}/generations/${generationId}/download`);
+    const download = await request(await listeningServer(buildApp(projectId))).get(`/api/projects/${projectId}/generations/${generationId}/download`);
     // The download route gets past its status gate now; only the signing itself
     // is beyond an emulator without a service-account key.
     expect(download.status).not.toBe(400);
@@ -241,7 +242,7 @@ describe("compose flow (emulator)", () => {
     const queue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), compose: createCompose({ db: adminDb, generateStructured: async () => RECORDED }) });
     await deliverOwnTasks(projectId, queue);
 
-    await request(buildApp(projectId)).post(`/api/projects/${projectId}/generations/${generationId}/render`).send({});
+    await request(await listeningServer(buildApp(projectId))).post(`/api/projects/${projectId}/generations/${generationId}/render`).send({});
     const failing = new DevTaskQueue({
       ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(),
       render: renderLeg([{ progress: 0.3 }, { error: "render_failed", detail: "chromium died" }]),
@@ -256,7 +257,7 @@ describe("compose flow (emulator)", () => {
     expect(await pointers(projectId)).toEqual({ latestRequested: generationId, currentPlayable: generationId, saved: null });
 
     // And it can be asked for again, which is the point.
-    const retry = await request(buildApp(projectId)).post(`/api/projects/${projectId}/generations/${generationId}/render`).send({});
+    const retry = await request(await listeningServer(buildApp(projectId))).post(`/api/projects/${projectId}/generations/${generationId}/render`).send({});
     expect(retry.status).toBe(202);
     await retireTasks(projectId);
   });

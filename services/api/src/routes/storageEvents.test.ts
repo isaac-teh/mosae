@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import type { Firestore } from "firebase-admin/firestore";
 
 vi.mock("../store/finalizeStore.js", () => ({ recordFinalize: vi.fn() }));
@@ -42,7 +43,7 @@ describe("POST /events/storage-finalize", () => {
       assetId: "a",
       taskId: "t",
     });
-    const res = await request(buildApp())
+    const res = await request(await listeningServer(buildApp()))
       .post("/events/storage-finalize")
       .send(payload);
     expect(res.status).toBe(204);
@@ -58,14 +59,14 @@ describe("POST /events/storage-finalize", () => {
   });
   it("acknowledges non-retryable outcomes without dispatching", async () => {
     vi.mocked(recordFinalize).mockResolvedValue({ kind: "ignored_path" });
-    const res = await request(buildApp())
+    const res = await request(await listeningServer(buildApp()))
       .post("/events/storage-finalize")
       .send(payload);
     expect(res.status).toBe(204);
     expect(onAccepted).not.toHaveBeenCalled();
   });
   it("acknowledges malformed payloads without touching Firestore", async () => {
-    const res = await request(buildApp())
+    const res = await request(await listeningServer(buildApp()))
       .post("/events/storage-finalize")
       .send({ bucket: "b1" });
     expect(res.status).toBe(204);
@@ -73,7 +74,7 @@ describe("POST /events/storage-finalize", () => {
   });
   it("returns 500 on transaction errors so Eventarc retries", async () => {
     vi.mocked(recordFinalize).mockRejectedValue(new Error("aborted"));
-    const res = await request(buildApp())
+    const res = await request(await listeningServer(buildApp()))
       .post("/events/storage-finalize")
       .send(payload);
     expect(res.status).toBe(500);

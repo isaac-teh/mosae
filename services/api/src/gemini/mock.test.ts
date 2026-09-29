@@ -78,15 +78,14 @@ describe("recording skips what it already has", () => {
 
   beforeEach(async () => {
     dir = mkdtempSync(path.join(tmpdir(), "gemini-fixtures-"));
-    process.env.GEMINI_FIXTURES = dir;
-    process.env.MOCK_GEMINI = "record";
+    vi.stubEnv("GEMINI_FIXTURES", dir);
+    vi.stubEnv("MOCK_GEMINI", "record");
     vi.resetModules();
     recorder = await import("./recorder.js");
   });
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
-    delete process.env.GEMINI_FIXTURES;
-    delete process.env.MOCK_GEMINI;
+    vi.unstubAllEnvs();
   });
 
   const photo = (data: string) => ({

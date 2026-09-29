@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import type { Firestore } from "firebase-admin/firestore";
 
 vi.mock("../outbox/dispatcher.js", () => ({
@@ -90,7 +91,7 @@ describe("generationsRouter", () => {
           }),
         })),
       };
-      const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
+      const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore })))
         .post("/api/projects/p1/generations")
         .set("Authorization", "Bearer user-token")
         .send({});
@@ -107,7 +108,7 @@ describe("generationsRouter", () => {
           }),
         })),
       };
-      const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
+      const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore })))
         .post("/api/projects/p1/generations")
         .set("Authorization", "Bearer user-token")
         .send({ proposalId: "proposal-1" });
@@ -166,7 +167,7 @@ describe("generationsRouter", () => {
         set: vi.fn(), update: vi.fn(), commit: vi.fn().mockResolvedValue(undefined),
       }));
 
-      const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
+      const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore })))
         .post("/api/projects/p1/generations")
         .set("Authorization", "Bearer user-token")
         .send({ proposalId: "proposal-1", settings });
@@ -183,7 +184,7 @@ describe("generationsRouter", () => {
         })),
       };
 
-      const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
+      const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore })))
         .post("/api/projects/p1/generations")
         .set("Authorization", "Bearer user-token")
         .send({ proposalId: "proposal-1" });
@@ -208,7 +209,7 @@ describe("generationsRouter", () => {
         })),
       };
 
-      const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
+      const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore })))
         .get("/api/projects/p1/generations/gen-123")
         .set("Authorization", "Bearer user-token");
 
@@ -231,7 +232,7 @@ describe("generationsRouter", () => {
         })),
       };
 
-      const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
+      const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore })))
         .post("/api/projects/p1/generations/gen-123/render")
         .set("Authorization", "Bearer user-token");
 
@@ -254,7 +255,7 @@ describe("generationsRouter", () => {
         })),
       };
 
-      const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
+      const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore })))
         .get("/api/projects/p1/generations/gen-123/download")
         .set("Authorization", "Bearer user-token");
 
@@ -264,7 +265,7 @@ describe("generationsRouter", () => {
     it("returns 400 when render not complete", async () => {
       const dbMock = makeDbMock(true, true, "pending");
 
-      const res = await request(buildApp({ db: dbMock as unknown as Firestore }))
+      const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore })))
         .get("/api/projects/p1/generations/gen-123/download")
         .set("Authorization", "Bearer user-token");
 

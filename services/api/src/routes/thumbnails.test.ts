@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
 import { firebaseObjectStore, firebaseThumbnailUrlStore } from "../ingest/objectStore.js";
@@ -40,7 +41,7 @@ describe("owner thumbnail URLs", () => {
   it("signs the actual ingest thumbnail without requiring or adding Firebase download tokens", async () => {
     const { app, upload, objects, signed } = setup();
     await upload();
-    const res = await request(app).get("/api/projects/p1/assets/a1/thumbnail").set("Authorization", "Bearer owner");
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/assets/a1/thumbnail").set("Authorization", "Bearer owner");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ url: `https://storage.test/${path}?X-Goog-Signature=test`, expiresAt: 301000 });
     expect(res.headers["cache-control"]).toBe("private, no-store");
@@ -50,7 +51,7 @@ describe("owner thumbnail URLs", () => {
 
   it.each([undefined, "invalid", "other-user"])("rejects unauthorized access for %s before signing", async (token) => {
     const { app, signed } = setup();
-    const req = request(app).get("/api/projects/p1/assets/a1/thumbnail");
+    const req = request(await listeningServer(app)).get("/api/projects/p1/assets/a1/thumbnail");
     if (token) req.set("Authorization", `Bearer ${token}`);
     const res = await req;
     expect(res.status).toBe(token === "other-user" ? 404 : 401);
@@ -59,14 +60,14 @@ describe("owner thumbnail URLs", () => {
 
   it.each([null, "proxies/other/p1/a1/7/thumb.jpg", "proxies/owner/other/a1/7/thumb.jpg", "proxies/owner/p1/other/7/thumb.jpg", "proxies/owner/p1/a1/7/proxy.mp4", "proxies/owner/p1/a1/../thumb.jpg"])("rejects unavailable or out-of-scope thumbnail %s", async (thumbPath) => {
     const { app, signed } = setup(thumbPath);
-    const res = await request(app).get("/api/projects/p1/assets/a1/thumbnail").set("Authorization", "Bearer owner");
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/assets/a1/thumbnail").set("Authorization", "Bearer owner");
     expect(res.status).toBe(404);
     expect(signed).not.toHaveBeenCalled();
   });
 
   it.each(["missing/assets/a1", "p1/assets/missing", "p1%2Fother/assets/a1"])("does not sign missing or malformed resource %s", async (resource) => {
     const { app, signed } = setup();
-    const res = await request(app).get(`/api/projects/${resource}/thumbnail`).set("Authorization", "Bearer owner");
+    const res = await request(await listeningServer(app)).get(`/api/projects/${resource}/thumbnail`).set("Authorization", "Bearer owner");
     expect(res.status).toBe(404);
     expect(signed).not.toHaveBeenCalled();
   });
