@@ -41,8 +41,8 @@ describe("deriveChat state table", () => {
       { name: "people confirmed and plan ready", input: { ...base(), people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: true }, step: "moments", confirmed: 2, kinds: ["you", "you", "set-aside", "moments"] },
       { name: "planning conflict", input: { ...base(), conflict: { shotIds: ["m1"], message: "This moment is both kept and left out." } }, step: "moments", confirmed: 2, kinds: ["you", "mosae", "set-aside", "moments"] },
       { name: "moments confirmed", input: { ...base(), momentsConfirmed: true, direction: { confirmed: false, pace: "gentle", lengthSec: 120, focus: "family" } }, step: "direction", confirmed: 3, kinds: ["you", "set-aside", "moments", "you", "direction"] },
-      { name: "direction confirmed and generation running", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "running", stepsDone: 2, film: null } }, step: "shaping", confirmed: 4, kinds: ["you", "set-aside", "moments", "you", "you", "shaping"] },
-      { name: "generation done", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stepsDone: 3, film } }, step: "ready", confirmed: 4, kinds: ["you", "set-aside", "moments", "you", "you", "film"] },
+      { name: "direction confirmed and generation running", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "running", stage: "rendering", progress: 0.7, stepsDone: 2, film: null } }, step: "shaping", confirmed: 4, kinds: ["you", "set-aside", "moments", "you", "you", "shaping"] },
+      { name: "generation done", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } }, step: "ready", confirmed: 4, kinds: ["you", "set-aside", "moments", "you", "you", "film"] },
     ];
 
     for (const row of cases) {
@@ -124,7 +124,7 @@ describe("deriveChat state table", () => {
   });
 
   it("shows film-ready copy and default placeholder", () => {
-    const state = deriveChat({ ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stepsDone: 3, film } });
+    const state = deriveChat({ ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } });
     expect(state.placeholder).toBe("Ask for a change");
   });
 });

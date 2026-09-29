@@ -135,7 +135,7 @@ export function deriveChat(input: ChatInput): ChatState {
   }
 
   step = "shaping";
-  if (input.generation) add({ kind: "shaping", id: "shaping", stepsDone: input.generation.stepsDone });
+  if (input.generation) add({ kind: "shaping", id: "shaping", progress: input.generation.progress, stepsDone: input.generation.stepsDone });
   else add({ kind: "typing", id: "shaping-wait", text: "Shaping your film…" });
   return { items, step, confirmed, placeholder };
 }

@@ -22,7 +22,7 @@ export type ChatInput = {
   momentsConfirmed: boolean;
   conflict: { shotIds: string[]; message: string } | null;
   direction: { confirmed: boolean; pace: "gentle" | "lively"; lengthSec: number; focus: string } | null;
-  generation: { status: "queued" | "running" | "done" | "failed"; stepsDone: number; film: Film | null } | null;
+  generation: { status: "queued" | "running" | "done" | "failed"; stage: "queued" | "composing" | "playable" | "rendering" | "saved" | "failed"; progress: number; stepsDone: number; film: Film | null } | null;
   notes: string[];
 };
 
@@ -36,7 +36,7 @@ export type ChatItem =
   | { kind: "set-aside"; id: string; blurry: number; duplicates: number }
   | { kind: "moments"; id: string; suggestedShotIds: string[] }
   | { kind: "direction"; id: string; pace: string; lengthSec: number; focus: string; momentCount: number }
-  | { kind: "shaping"; id: string; stepsDone: number }
+  | { kind: "shaping"; id: string; progress: number; stepsDone: number }
   | { kind: "film"; id: string; film: Film };
 
 export type ChatState = {

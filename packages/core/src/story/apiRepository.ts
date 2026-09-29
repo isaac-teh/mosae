@@ -494,7 +494,7 @@ export function createApiStoryRepository(
         parentGenerationId: filmId,
         settings: { ...settings, id: newId(), version: Number(settings.version ?? 1) + 1, note: request },
       });
-      return loadFilm(childId);
+      return loadFilm(childId, true);
     },
     saveFilm: async (filmId) => {
       // Compose starts the render itself, so by the time Save is tapped the film
@@ -540,35 +540,39 @@ export function createApiStoryRepository(
     return version;
   }
 
-  async function loadFilm(filmId: string): Promise<Film> {
-    // Composing is the only state a film leaves on its own; wait it out here so
-    // the review screen never renders a film that has no timeline yet.
-    const generation = record(await deps.listenUntil(
-      `projects/${projectId}/generations/${filmId}`,
-      (value) => Boolean(value) && !isStatus(value, "composing"),
-    ), "generation");
+  async function loadFilm(filmId: string, waitForComposition = false): Promise<Film> {
+    // Read exactly one current generation snapshot. The chat polls this method
+    // throughout composition and rendering so its progress stays live.
+    const generationPath = `projects/${projectId}/generations/${filmId}`;
+    const generationValue = waitForComposition
+      ? await deps.listenUntil(generationPath, (value) => Boolean(value) && !isStatus(value, "composing"))
+      : await deps.listenDocument(generationPath);
+    const generation = record(generationValue, "generation");
     if (generation.status === "failed") throw new Error(failureMessage(generation));
 
     const planId = stringField(generation.proposalId, "proposal id");
-    const timeline = record(generation.timeline, "timeline");
-    const clips = Array.isArray(timeline.videoClips) ? timeline.videoClips as RecordData[] : [];
+    const timeline = generation.timeline && typeof generation.timeline === "object" ? record(generation.timeline, "timeline") : null;
+    const clips = timeline && Array.isArray(timeline.videoClips) ? timeline.videoClips as RecordData[] : [];
+    const status = generation.status as Film["generationStatus"];
     const [proposalValue, projectValue, shotValues, version, videoUrl] = await Promise.all([
       deps.listenDocument(`projects/${projectId}/storyProposals/${planId}`),
       deps.listenDocument(`projects/${projectId}`),
-      deps.listenCollection(`projects/${projectId}/shots`),
+      clips.length ? deps.listenCollection(`projects/${projectId}/shots`) : Promise.resolve([]),
       versionOf(generation),
       generation.status === "saved" ? downloadUrl(filmId) : Promise.resolve(null),
     ]);
     const proposalRecord = (proposalValue ?? {}) as RecordData;
     const projectRecord = (projectValue ?? {}) as RecordData;
 
-    const firstShotId = (record(clips[0]?.source ?? {}, "clip source") as RecordData).shotId;
-    const firstShot = shotValues.map((value) => value as RecordData).find((shot) => shot.id === firstShotId);
+    const firstSource = clips[0]?.source && typeof clips[0].source === "object" ? clips[0].source as RecordData : null;
+    const firstShot = firstSource
+      ? shotValues.map((value) => value as RecordData).find((shot) => shot.id === firstSource.shotId)
+      : undefined;
     const poster = typeof firstShot?.assetId === "string"
       ? await deps.getThumbnailUrl(projectId, firstShot.assetId).catch(() => "")
       : "";
 
-    const durationSec = Number(timeline.durationSec ?? 0);
+    const durationSec = Number(timeline?.durationSec ?? 0);
     const place = typeof projectRecord.place === "string" ? projectRecord.place : "";
     const dateLabel = [place, projectDateRange(projectRecord.dateRange)].filter(Boolean).join(" • ");
     const length = `${Math.floor(durationSec / 60)}:${String(Math.round(durationSec % 60)).padStart(2, "0")}`;
@@ -589,7 +593,8 @@ export function createApiStoryRepository(
       shortcuts: [],
       status: "ready",
       videoUrl,
-      rendering: isStatus(generation, "playable", "rendering"),
+      generationStatus: status,
+      rendering: isStatus(generation, "composing", "playable", "rendering"),
       renderProgress: typeof generation.renderProgress === "number" ? generation.renderProgress : 0,
       reasons: Array.isArray(generation.reasons) ? generation.reasons.filter((reason): reason is string => typeof reason === "string") : [],
     };

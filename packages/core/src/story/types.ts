@@ -118,6 +118,8 @@ export type Film = {
   videoUrl: string | null;
   /** True while the MP4 is still being made; the player waits on it. */
   rendering: boolean;
+  /** Current generation document status, refreshed by each getFilm poll. */
+  generationStatus?: "composing" | "playable" | "rendering" | "saved" | "failed";
   /** Render pipeline progress, from zero to one, while rendering. */
   renderProgress?: number;
   /** Why the director placed what it placed, for the Review Film explanation. */

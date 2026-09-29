@@ -58,7 +58,7 @@ export default function DirectorScreen() {
         if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} />;
         if (item.kind === "you") return <ChatMessage key={item.id} from="you" text={item.text} />;
         if (item.kind === "typing") return <ChatTyping key={item.id} text={item.text} />;
-        if (item.kind === "shaping") return <ChatShaping key={item.id} stepsDone={item.stepsDone} />;
+        if (item.kind === "shaping") return <ChatShaping key={item.id} progress={item.progress} stepsDone={item.stepsDone} />;
         if (item.kind === "set-aside") return <View key={item.id} className="gap-3"><ChatMessage from="mosae" text={`Got it. I've set aside ${item.blurry} blurry ${item.blurry === 1 ? "shot" : "shots"} and ${item.duplicates} near-duplicates, keeping the best of each burst. Your originals are untouched.`} /><Button label="See what's set aside" variant="quiet" onPress={actions.seeSetAside} /></View>;
         if (item.kind === "moments") return <ChatMomentGrid key={item.id} tiles={suggestedTiles} state={momentState} total={projectSummary?.total ?? 0} onTap={actions.toggleMoment} onDone={() => void actions.confirmMoments()} onChooseAll={() => { setPickerSelection(Object.entries(momentState).filter(([, value]) => value === "keep").map(([id]) => id)); actions.openPicker(); }} />;
         if (item.kind === "direction") {

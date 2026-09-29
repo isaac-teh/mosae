@@ -110,9 +110,20 @@ describe("director chat components", () => {
   });
 
   it("shows shaping progress without promising a duration", async () => {
-    await render(<ChatShaping stepsDone={2} />);
+    await render(<ChatShaping progress={0.74} stepsDone={2} />);
     expect(host.textContent).toContain("Shaping your film");
     expect(host.textContent).toContain("Picked moments for each chapter");
     expect(host.textContent).not.toMatch(/\b\d+\s*(seconds?|minutes?)\b/i);
+    expect(host.querySelector('[data-step="Picked moments for each chapter"]')?.getAttribute("data-status")).toBe("done");
+    expect(host.querySelector('[data-step="Picked moments for each chapter"]')?.textContent).toBe("✓");
+    expect(host.querySelector('[data-step="Trimmed the best parts of each clip"]')?.getAttribute("data-status")).toBe("done");
+    expect(host.querySelector('[data-step="Pacing it to the music"]')?.getAttribute("data-status")).toBe("current");
+    expect(host.querySelector('[data-step="Pacing it to the music"]')?.textContent).toBe("◷");
+    const segments = [...host.querySelectorAll<HTMLElement>("[data-progress-segment]")];
+    expect(segments).toHaveLength(10);
+    expect(segments.filter((segment) => segment.getAttribute("data-filled") === "true")).toHaveLength(8);
+    expect(parseFloat((segments[7]!.querySelector("[data-progress-fill]") as HTMLElement).style.width)).toBeCloseTo(40);
+    await render(<ChatShaping progress={0.9} stepsDone={2} />);
+    expect([...host.querySelectorAll("[data-progress-segment]")].filter((segment) => segment.getAttribute("data-filled") === "true")).toHaveLength(9);
   });
 });

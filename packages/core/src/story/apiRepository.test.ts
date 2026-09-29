@@ -484,9 +484,23 @@ describe("film adapters", () => {
       filmId: "gen-1", planId: "proposal-1", version: 1, title: "Family weekend", durationSec: 30, momentCount: 2,
       status: "ready", videoUrl: null, rendering: true, reasons: ["Closing on the whole family together."],
       renderProgress: 0.7,
+      generationStatus: "playable",
       posterKey: "https://storage.test/project-1/asset-2?signed=true",
     });
     expect(deps.request).not.toHaveBeenCalled();
+  });
+
+  it("reads the latest generation status and render progress on each film poll", async () => {
+    const generations: Record<string, unknown> = { [genPath]: generation({ status: "composing", timeline: null }) };
+    const deps = filmDependencies(generations);
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    const composing = await repository.getFilm("gen-1");
+    generations[genPath] = generation({ status: "rendering", renderProgress: 0.56 });
+    const rendering = await repository.getFilm("gen-1");
+    expect(composing).toMatchObject({ generationStatus: "composing", rendering: true, renderProgress: 0 });
+    expect(rendering).toMatchObject({ generationStatus: "rendering", rendering: true, renderProgress: 0.56 });
+    expect(deps.listenDocument).toHaveBeenCalledWith(genPath);
+    expect(vi.mocked(deps.listenDocument).mock.calls.filter(([path]) => path === genPath)).toHaveLength(2);
   });
 
   it("gives a saved film its download URL", async () => {
@@ -496,6 +510,7 @@ describe("film adapters", () => {
     const film = await createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1");
     expect(film.videoUrl).toBe("http://127.0.0.1:9199/download/film.mp4");
     expect(film.rendering).toBe(false);
+    expect(film.generationStatus).toBe("saved");
     expect(deps.request).toHaveBeenCalledWith("GET", "/api/projects/project-1/generations/gen-1/download");
   });
 
@@ -505,6 +520,7 @@ describe("film adapters", () => {
       request: vi.fn(async () => ({ generation: { id: "gen-2" } })),
     });
     const film = await createApiStoryRepository({ projectId: "project-1" }, deps).reviseFilm("gen-1", "shorter please");
+    expect(deps.listenUntil).toHaveBeenCalledWith("projects/project-1/generations/gen-2", expect.any(Function));
     const calls = vi.mocked(deps.request).mock.calls;
     expect(calls).toHaveLength(1);
     expect(calls[0][0]).toBe("POST");

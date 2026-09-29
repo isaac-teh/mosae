@@ -351,12 +351,13 @@ describe("Director chat", () => {
   });
 
   it("maps generation polling progress to the shaping checklist from zero through three", async () => {
-    const earlyRender = { ...filmFixture, rendering: true, renderProgress: 0.45 };
-    const laterRender = { ...filmFixture, rendering: true, renderProgress: 0.8 };
+    const earlyRender = { ...filmFixture, rendering: true, generationStatus: "rendering", renderProgress: 0.45 };
+    const laterRender = { ...filmFixture, rendering: true, generationStatus: "rendering", renderProgress: 0.73 };
+    const regressedRender = { ...filmFixture, rendering: true, generationStatus: "rendering", renderProgress: 0.56 };
     let resolveFirst!: (film: any) => void;
     const getFilm = vi.fn()
       .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
-      .mockResolvedValueOnce(laterRender).mockResolvedValueOnce(filmFixture);
+      .mockResolvedValueOnce(laterRender).mockResolvedValueOnce(regressedRender).mockResolvedValueOnce(filmFixture);
     await openMoments(undefined, getFilm);
     await click("Done");
     await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
@@ -369,13 +370,25 @@ describe("Director chat", () => {
       expect(hasText("Shaping your film")).toBe(true);
       const progress = () => host.querySelector('[aria-label="Film shaping progress"]')?.getAttribute("aria-valuenow");
       expect(progress()).toBe("0");
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+      expect(Number(progress())).toBeCloseTo(100 / 6);
       await act(async () => { resolveFirst(earlyRender); await Promise.resolve(); });
-      expect(progress()).toBe("1");
-      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
-      expect(progress()).toBe("2");
-      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      expect(Number(progress())).toBeCloseTo((1 / 3 + 0.45 * 2 / 3) * 100);
+      expect(host.querySelector('[data-step="Picked moments for each chapter"]')?.getAttribute("data-status")).toBe("done");
+      expect(host.querySelector('[data-step="Trimmed the best parts of each clip"]')?.getAttribute("data-status")).toBe("current");
+      expect(getFilm).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1499); });
+      expect(getFilm).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); await Promise.resolve(); });
+      const afterLaterPoll = Number(progress());
+      expect(afterLaterPoll).toBeCloseTo((1 / 3 + 0.73 * 2 / 3) * 100);
+      expect(host.querySelector('[data-step="Trimmed the best parts of each clip"]')?.getAttribute("data-status")).toBe("done");
+      expect(host.querySelector('[data-step="Pacing it to the music"]')?.getAttribute("data-status")).toBe("current");
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500); await Promise.resolve(); });
+      expect(Number(progress())).toBe(afterLaterPoll);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500); await Promise.resolve(); });
       expect(hasText("Here's your first cut. Tap to watch.")).toBe(true);
-      expect(getFilm).toHaveBeenCalledTimes(3);
+      expect(getFilm).toHaveBeenCalledTimes(4);
     } finally { vi.useRealTimers(); }
   });
 

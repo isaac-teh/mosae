@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { deriveChat, getStoryRepository, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type PlanEdits, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
+import { mapShapingProgress } from "./shapingProgress";
 import { useRouter } from "expo-router";
 
 const EMPTY_INPUT: ChatInput = { summary: null, intent: null, people: null, peopleConfirmed: false, plan: null, momentsConfirmed: false, conflict: null, direction: null, generation: null, notes: [] };
@@ -31,6 +32,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const skipPeopleForNow = useRef(false);
   const mounted = useRef(true);
   const generationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const compositionStartedAt = useRef<number | null>(null);
   const router = useRouter();
   const state: ChatState = deriveChat(input);
 
@@ -71,20 +73,45 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
 
   useEffect(() => () => { if (generationTimer.current) clearTimeout(generationTimer.current); }, []);
 
+  useEffect(() => {
+    const generation = input.generation;
+    if (!generation || generation.status === "done" || generation.status === "failed" || (generation.stage !== "queued" && generation.stage !== "composing")) return;
+    const timer = setInterval(() => {
+      const startedAt = compositionStartedAt.current;
+      const compositionProgress = startedAt === null ? 0 : Math.min(1, (Date.now() - startedAt) / 30_000);
+      const mapped = mapShapingProgress(generation.stage, 0, compositionProgress);
+      setInput((current) => {
+        if (!current.generation || current.generation.status === "done" || current.generation.status === "failed") return current;
+        return { ...current, generation: { ...current.generation, progress: Math.max(current.generation.progress, mapped.progress) } };
+      });
+    }, 100);
+    return () => clearInterval(timer);
+  }, [input.generation?.status, input.generation?.stage]);
+
   const pollFilm = useCallback(async (filmId: string) => {
     try {
       const film = await repository.getFilm(filmId);
       if (!mounted.current) return;
       if (film.rendering) {
-        const nextStepsDone = Math.max(0, Math.min(2, Math.floor((film.renderProgress ?? 0) * 3)));
-        setInput((current) => ({ ...current, generation: { status: "running", stepsDone: nextStepsDone, film: null } }));
-        generationTimer.current = setTimeout(() => { void pollFilm(filmId); }, 2000);
+        const stage = film.generationStatus ?? "rendering";
+        const compositionProgress = stage === "composing"
+          ? Math.min(1, (Date.now() - (compositionStartedAt.current ?? Date.now())) / 30_000)
+          : 0;
+        const mapped = mapShapingProgress(stage, film.renderProgress ?? 0, compositionProgress);
+        setInput((current) => ({ ...current, generation: {
+          status: "running",
+          stage,
+          progress: Math.max(current.generation?.progress ?? 0, mapped.progress),
+          stepsDone: Math.max(current.generation?.stepsDone ?? 0, mapped.stepsDone),
+          film: null,
+        } }));
+        generationTimer.current = setTimeout(() => { void pollFilm(filmId); }, 1500);
       } else {
-        setInput((current) => ({ ...current, generation: { status: "done", stepsDone: 3, film } }));
+        setInput((current) => ({ ...current, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } }));
       }
     } catch (cause) {
       if (!mounted.current) return;
-      setInput((current) => ({ ...current, generation: { status: "failed", stepsDone: 0, film: null } }));
+      setInput((current) => ({ ...current, generation: { status: "failed", stage: "failed", progress: current.generation?.progress ?? 0, stepsDone: current.generation?.stepsDone ?? 0, film: null } }));
       setError(reportFailure(cause));
     }
   }, [repository]);
@@ -197,11 +224,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       try {
         const focusLabel = directionSelection.focus === "family" ? "Whole family" : input.people?.find(({ personId }) => personId === directionSelection.focus)?.name ?? "Her reactions";
         const direction: Direction & { focus: string } = { note: `${directionOptions?.note ?? ""}${directionOptions?.note ? "\n" : ""}Focus: ${focusLabel}.`, cadenceId: directionSelection.cadenceId, soundtrackId: directionSelection.soundtrackId, durationId: directionSelection.durationId, focus: directionSelection.focus };
-        setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction, generation: { status: "queued", stepsDone: 0, film: null } }));
+        compositionStartedAt.current = Date.now();
+        setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction, generation: { status: "queued", stage: "queued", progress: 0, stepsDone: 0, film: null } }));
         const { filmId } = await repository.directFilm(input.plan.planId, direction);
-        if (mounted.current) { setInput((current) => ({ ...current, generation: { status: "running", stepsDone: 0, film: null } })); void pollFilm(filmId); }
+        if (mounted.current) { setInput((current) => ({ ...current, generation: current.generation ? { ...current.generation, status: "running", stage: "composing" } : current.generation })); void pollFilm(filmId); }
       } catch (cause) {
-        setInput((current) => ({ ...current, generation: { status: "failed", stepsDone: 0, film: null } }));
+        setInput((current) => ({ ...current, generation: { status: "failed", stage: "failed", progress: current.generation?.progress ?? 0, stepsDone: current.generation?.stepsDone ?? 0, film: null } }));
         setError(reportFailure(cause));
       }
       finally { setSaving(false); }
