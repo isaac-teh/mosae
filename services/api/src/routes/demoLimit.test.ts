@@ -4,7 +4,7 @@ import request from "supertest";
 import type { Firestore } from "firebase-admin/firestore";
 import { listeningServer } from "../test/listeningServer.js";
 import { chatInterpretRouter } from "./chatInterpret.js";
-import { DemoLimitReached } from "../gemini/wire.js";
+import { DemoLimitReached } from "../gemini/errors.js";
 
 describe("demo typed request limit", () => {
   it("returns a friendly limit response from chat interpretation", async () => {

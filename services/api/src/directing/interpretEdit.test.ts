@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 import { interpretEdit, type InterpretEditModelResult } from "./interpretEdit.js";
+import { DemoLimitReached } from "../gemini/errors.js";
 
 const timeline: Timeline = {
   schemaVersion: 1, projectId: "p1", mode: "memory", aspect: "9:16", fps: 30, durationSec: 6,
@@ -39,5 +40,10 @@ describe("interpretEdit", () => {
     const invalid = await interpretEdit({ text: "make it calmer", timeline }, { generate });
     expect(empty).toEqual({ reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] });
     expect(invalid).toEqual({ reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] });
+  });
+
+  it("lets the typed demo limit reach the API route", async () => {
+    const limit = new DemoLimitReached();
+    await expect(interpretEdit({ text: "make it calmer", timeline }, { generate: async () => { throw limit; } })).rejects.toBe(limit);
   });
 });

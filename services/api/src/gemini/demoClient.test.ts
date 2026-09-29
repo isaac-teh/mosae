@@ -10,7 +10,8 @@ describe("demo Gemini fallback", () => {
     vi.stubEnv("GEMINI_FIXTURES", dir);
     vi.resetModules();
     try {
-      const { createProjectGeminiClient, DemoLimitReached } = await import("./wire.js");
+      const { createProjectGeminiClient } = await import("./wire.js");
+      const { DemoLimitReached } = await import("./errors.js");
       const data = { demo: "trip1-v2", demoLiveCalls: 0 };
       const ref = { get: async () => ({ exists: true, get: (key: keyof typeof data) => data[key] }) };
       const db = {

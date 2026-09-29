@@ -4,7 +4,7 @@ import { applyEdits, type EditOp, type Timeline } from "@mosae/contracts";
 import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
 import type { GenerateOptions } from "../gemini/client.js";
-import { DemoLimitReached } from "../gemini/wire.js";
+import { DemoLimitReached } from "../gemini/errors.js";
 import { interpretEdit, type InterpretEditModelResult } from "../directing/interpretEdit.js";
 import { getEditDocument } from "../directing/editStore.js";
 

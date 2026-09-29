@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { MODE, recordingGenerate, replayingGenerate, replayingExactGenerate, FixtureMissing, recordingEmbed, replayingEmbed, rememberFileUri } from "./recorder.js";
 import { EMBED_DIMENSIONS } from "./pricing.js";
+import { DemoLimitReached } from "./errors.js";
 
 // ── Record and replay ──────────────────────────────────────────────
 // MOCK_GEMINI=record hits the real API and saves each exchange; =replay serves
@@ -27,10 +28,6 @@ export function createGeminiClient(apiKey?: string): GenerateDeps["generateConte
   const real = generateContentVia(createGenAI(apiKey));
   if (MODE === "record") return recordingGenerate(real as (request: unknown) => Promise<unknown>) as GenerateDeps["generateContent"];
   return real;
-}
-
-export class DemoLimitReached extends Error {
-  constructor() { super("Demo limit reached — try the options"); this.name = "DemoLimitReached"; }
 }
 
 /** Demo projects use only exact fixtures; reserve a Firestore slot before each

@@ -5,7 +5,7 @@ import { isValidId } from "../domain/ids.js";
 import { getOwnedProject } from "../store/projectStore.js";
 import { interpret, type ChatStep } from "../directing/interpret.js";
 import type { GenerateOptions } from "../gemini/client.js";
-import { DemoLimitReached } from "../gemini/wire.js";
+import { DemoLimitReached } from "../gemini/errors.js";
 
 const steps = new Set<ChatStep>(["occasion", "people", "moments", "direction"]);
 export function chatInterpretRouter(deps: {
