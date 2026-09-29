@@ -74,7 +74,7 @@ export default function DirectorScreen() {
           <FilmPlayer source={item.film.videoUrl ?? item.film.videoKey} poster={{ uri: item.film.posterKey }} durationSec={item.film.durationSec} aspect="portrait" />
           <View className="gap-1"><Text className="font-title text-heading text-ink">{item.film.title}</Text><Text className="font-sans text-caption text-ink-muted">{plan?.chapters.length ?? 0} chapters</Text></View>
           <View className="gap-2"><Text className="font-sans-semibold text-button text-ink">How I directed it</Text>{item.film.reasons.slice(0, 3).map((reason, index) => <Text key={`${item.id}-reason-${index}`} className="font-sans text-body text-ink">• {reason}</Text>)}</View>
-          <View className="flex-row gap-2"><Button label="Open in editor" variant="secondary" onPress={() => router.push({ pathname: "/review-moments", params: { planId: item.film.planId } } as any)} /><Button label="Save film" disabled={saving} onPress={() => void actions.saveFilm()} /></View>
+          <View className="flex-row gap-2"><Button label="Open in editor" variant="secondary" onPress={() => router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", generationId: item.film.filmId, request: "", ...story.flow } } as any)} /><Button label="Save film" disabled={saving} onPress={() => void actions.saveFilm()} /></View>
         </View>;
         if (item.kind === "occasion") {
           const country = projectSummary?.country;

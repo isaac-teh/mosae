@@ -1,6 +1,6 @@
 import type { AlternativeShot, CreateOption, Direction, DirectionOptions, Film, PlanEdits, StoryPlan } from "./types";
 import type { ProjectSummary } from "../chat/types";
-import type { EditOp } from "@mosae/contracts";
+import type { EditOp, Timeline } from "@mosae/contracts";
 
 export type DirectorPerson = { personId: string; name: string | null; role: string | null; momentCount: number; sampleShotIds: string[]; days: number[] };
 export type FilmListItem = { projectId: string; filmId: string; title: string; month: string; duration: string; posterUrl: string; justSaved: boolean };
@@ -8,6 +8,7 @@ export type ChatInterpretRequest = { step: "occasion" | "people" | "moments" | "
 export type ChatInterpretResult = { reply: string; change: { kind: string; [key: string]: unknown } };
 export type FilmEdits = { revision: number; ops: EditOp[]; updatedAt: number | null };
 export type FilmRender = { revision: number; status: "pending" | "rendering" | "ready" | "failed"; downloadUrl?: string; outputPath?: string };
+export type FilmTimeline = { timeline: Timeline; sources: Record<string, string> };
 
 export interface StoryRepository {
   listFilms(): Promise<FilmListItem[]>;
@@ -27,6 +28,7 @@ export interface StoryRepository {
   getDirectionOptions(planId: string): Promise<DirectionOptions>;
   directFilm(planId: string, direction: Direction): Promise<{ filmId: string }>;
   getFilm(filmId: string): Promise<Film>;
+  getFilmTimeline(projectId: string, generationId: string): Promise<FilmTimeline>;
   getEdits(projectId: string, generationId: string): Promise<FilmEdits>;
   saveEdits(projectId: string, generationId: string, revision: number, ops: EditOp[]): Promise<FilmEdits>;
   renderRevision(projectId: string, generationId: string, revision: number): Promise<{ renderId: string }>;

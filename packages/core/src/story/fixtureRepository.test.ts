@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { createFixtureStoryRepository } from "./fixtureRepository";
 
 describe("fixture story repository", () => {
+  it("provides a playable editor timeline and local image keys", async () => {
+    const { timeline, sources } = await createFixtureStoryRepository({ delayMs: 0 }).getFilmTimeline("fixture", "demo-film");
+    expect(timeline.videoClips).toHaveLength(7);
+    expect(timeline.chapters.map((chapter) => chapter.title)).toEqual(["Opening", "Candid moments", "Closing"]);
+    expect(Object.keys(sources)).toHaveLength(7);
+    expect(Object.values(sources).every((value) => value.startsWith("demo:"))).toBe(true);
+  });
+
   it("creates the Figma example plan", async () => {
     const repo = createFixtureStoryRepository({ delayMs: 0 });
     const { planId } = await repo.createPlan("our trip", ["p1"]);

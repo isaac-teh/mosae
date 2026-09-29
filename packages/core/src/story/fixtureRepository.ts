@@ -13,6 +13,7 @@ import type {
 } from "./types";
 import type { StoryRepository } from "./repository";
 import type { FilmEdits, FilmRender } from "./repository";
+import { parseTimeline } from "@mosae/contracts";
 
 const PLAN_ID = "demo";
 const FILM_ID = "demo-film";
@@ -292,6 +293,20 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
     getFilm: async (filmId: string) => {
       if (filmId !== FILM_ID) throw new Error(`Unknown film ${filmId}`);
       return structuredClone(filmState);
+    },
+
+    getFilmTimeline: async (projectId) => {
+      const photos = ["timeline-lantern-stroll", "timeline-strawberry", "timeline-torii", "timeline-birthday", "timeline-lantern-stroll", "timeline-strawberry", "timeline-birthday"];
+      return {
+        timeline: parseTimeline({
+          schemaVersion: 1, projectId: projectId || "fixture", mode: "memory", aspect: "9:16", fps: 30,
+          durationSec: photos.length * 3,
+          chapters: [{ title: "Opening", startSec: 0 }, { title: "Candid moments", startSec: 6 }, { title: "Closing", startSec: 15 }],
+          videoClips: photos.map((key, index) => ({ id: `clip-${index + 1}`, source: { kind: "photo", shotId: `fixture-${index + 1}` }, startSec: index * 3, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } })),
+          audioClips: [], captions: [],
+        }),
+        sources: Object.fromEntries(photos.map((key, index) => [`fixture-${index + 1}`, `demo:${key}`])),
+      };
     },
 
     getEdits: async (projectId, generationId) => structuredClone(editDocuments.get(`${projectId}/${generationId}`) ?? { revision: 0, ops: [], updatedAt: null }),

@@ -326,6 +326,14 @@ describe("downstream story screens", () => {
     expect(repo.getFilm.mock.calls.length).toBe(calls);
   });
 
+  it("opens the film editor from the review screen", async () => {
+    boundary.apiRepositories = new Map([["project-a", { getFilm: vi.fn(async () => film("film-1", "plan-a", "poster")) }]]);
+    boundary.params = { filmId: "film-1", repository: "api", projectId: "project-a" };
+    await render(ReviewFilmScreen);
+    await click("Manual Editor");
+    expect(boundary.navigate).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-a", generationId: "film-1", request: "", repository: "api" } });
+  });
+
   it("does not navigate when directing the previous project finishes", async () => {
     let resolveDirect!: (value: { filmId: string }) => void;
     const repoA = {

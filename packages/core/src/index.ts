@@ -5,7 +5,7 @@ export { uploadMedia, contentTypeFor, type UploadDeps, type UploadProgress } fro
 export { setPendingMedia, getPendingMedia } from "./pendingMedia";
 export { isMedia, formatDuration, mediaId } from "./media";
 export type * from "./story/types";
-export { getStoryRepository, setStoryRepository, type StoryRepository, type DirectorPerson, type FilmListItem, type ChatInterpretRequest, type ChatInterpretResult } from "./story/repository";
+export { getStoryRepository, setStoryRepository, type StoryRepository, type DirectorPerson, type FilmListItem, type FilmTimeline, type ChatInterpretRequest, type ChatInterpretResult } from "./story/repository";
 export { createFixtureStoryRepository } from "./story/fixtureRepository";
 export { createApiStoryRepository, type ApiStoryRepositoryOptions } from "./story/apiRepository";
 export { projectProposal } from "./story/projectProposal";

@@ -3,6 +3,7 @@ import { ensureSignedIn } from "../auth";
 import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
 import { getFirestoreClient } from "../firebase";
+import { parseTimeline } from "@mosae/contracts";
 import type { ChatInterpretRequest, DirectorPerson, FilmEdits, FilmListItem, FilmRender, StoryRepository } from "./repository";
 import type { ProjectSummary } from "../chat/types";
 import type { DirectionOptions, Film } from "./types";
@@ -451,6 +452,11 @@ export function createApiStoryRepository(
       return { filmId: await postGeneration({ proposalId: planId, settings }) };
     },
     getFilm: (filmId) => loadFilm(filmId),
+    getFilmTimeline: async (projectId, generationId) => {
+      const response = record(await deps.request("GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}`), "generation");
+      const sources = record(response.sources, "preview sources");
+      return { timeline: parseTimeline(response.timeline), sources: Object.fromEntries(Object.entries(sources).map(([id, path]) => [id, stringField(path, "preview source")])) };
+    },
     getEdits: async (projectId, generationId) => record(await deps.request(
       "GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`,
     ), "edits") as FilmEdits,

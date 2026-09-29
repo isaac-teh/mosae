@@ -271,7 +271,7 @@ describe("Director chat", () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it("shows the completed film with three direction notes and opens its moments in the editor", async () => {
+  it("shows the completed film with three direction notes and opens the editor", async () => {
     planFixture.chapters = Array.from({ length: 5 }, (_, index) => ({ id: `chapter-${index}`, title: `Chapter ${index + 1}`, momentIds: [] }));
     await openMoments();
     await click("Done");
@@ -283,7 +283,7 @@ describe("Director chat", () => {
     expect(hasText("Both moments you kept are in.")).toBe(true);
     expect(hasText("I left out repeated scenery shots.")).toBe(false);
     await click("Open in editor");
-    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/review-moments", params: { planId: "proposal-1" } });
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", generationId: "film-1", request: "", repository: "api" } });
   });
 
   it("saves the film and opens the chat saved screen", async () => {
@@ -297,7 +297,7 @@ describe("Director chat", () => {
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/save-film", params: { filmId: "film-1", directorChat: "true", repository: "api", projectId: "project-1" } });
   });
 
-  it("sends Ask for a change to Review Moments with the request in the URL", async () => {
+  it("sends Ask for a change to the editor with the request in the URL", async () => {
     await openMoments();
     await click("Done");
     await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
@@ -306,7 +306,7 @@ describe("Director chat", () => {
     const composer = host.querySelector('input[aria-label="Ask for a change"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "Make it shorter"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("Send");
-    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/review-moments", params: { planId: "proposal-1", request: "Make it shorter" } });
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", generationId: "film-1", request: "Make it shorter", repository: "api" } });
     expect(mocks.repo.interpret).not.toHaveBeenCalled();
   });
 });

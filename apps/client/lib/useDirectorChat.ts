@@ -205,8 +205,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       finally { setSaving(false); }
     },
     askForChange(text: string) {
-      if (!input.plan || !text.trim()) return;
-      router.push({ pathname: "/review-moments", params: { planId: input.plan.planId, request: text.trim() } } as any);
+      const film = input.generation?.film;
+      if (!film || !text.trim()) return;
+      router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", generationId: film.filmId, request: text.trim(), ...(storyFlow ?? {}) } } as any);
     },
     async send(text: string) {
       if (!summary) return;
