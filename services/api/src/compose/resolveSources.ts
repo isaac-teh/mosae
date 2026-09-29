@@ -37,17 +37,17 @@ export async function resolveSources(
   const sources: Record<string, string> = {};
 
   // Collect all unique IDs that need resolution
-  const neededIds = new Set<string>();
+  const neededKinds = new Map<string, "photo" | "video" | "audio">();
   const soundtrackIds = new Set<string>();
 
   for (const clip of timeline.videoClips) {
-    if ("source" in clip) neededIds.add(clip.source.shotId);
+    if ("source" in clip) neededKinds.set(clip.source.shotId, clip.source.kind);
   }
-  for (const shotId of collageShotIds(timeline)) neededIds.add(shotId);
+  for (const shotId of collageShotIds(timeline)) neededKinds.set(shotId, "photo");
 
   for (const audio of timeline.audioClips) {
     if (audio.source.kind === "asset") {
-      neededIds.add(audio.source.assetId);
+      neededKinds.set(audio.source.assetId, "audio");
     } else {
       soundtrackIds.add(audio.source.soundtrackId);
     }
@@ -62,15 +62,20 @@ export async function resolveSources(
   }
 
   // Resolve each ID to a file path
-  for (const id of neededIds) {
+  for (const [id, kind] of neededKinds) {
     const asset = await deps.loadAsset(projectId, id);
     if (!asset) {
       throw new Error(`missing source: ${id}`);
     }
 
     if (mode === "preview") {
-      // Preview mode: use proxy path or thumb as fallback
-      sources[id] = asset.derivatives?.proxyPath || asset.derivatives?.thumbPath || asset.storagePath;
+      // Photo and collage frames are rendered as images, so an MP4 proxy
+      // cannot serve them. Video clips need the playable proxy instead.
+      sources[id] = kind === "video"
+        ? asset.derivatives?.proxyPath || asset.derivatives?.thumbPath || asset.storagePath
+        : kind === "photo"
+          ? asset.derivatives?.thumbPath || asset.storagePath
+          : asset.storagePath;
     } else {
       // Render mode: use original storage path
       sources[id] = asset.storagePath;

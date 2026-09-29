@@ -28,6 +28,10 @@ export function generationsRouter(deps: {
   loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
   /** The bucket renders are stored in. The admin app has no default bucket. */
   storageBucket?: string;
+  /** Map resolved object paths to URLs the editor's browser can load. */
+  signReadUrl?: (path: string, expiresAt: number) => Promise<string>;
+  /** Resolve a selected library track to its object path. */
+  loadSoundtrack?: (soundtrackId: string) => Promise<string | null>;
   /** Drains the outbox after a task is written; the dispatcher does it in production. */
   dispatch?: () => Promise<unknown>;
 }): Router {
@@ -156,9 +160,19 @@ export function generationsRouter(deps: {
       if (generation.timeline) {
         const { resolveSources } = await import("../compose/resolveSources.js");
         try {
-          sources = await resolveSources(generation.timeline, { loadAsset: resolve }, projectId, "preview");
-        } catch {
-          // Sources missing — still return the generation without them
+          const paths = await resolveSources(generation.timeline, {
+            loadAsset: resolve,
+            ...(deps.loadSoundtrack ? { loadSoundtrack: deps.loadSoundtrack } : {}),
+          }, projectId, "preview");
+          const signReadUrl = deps.signReadUrl;
+          if (!signReadUrl) throw new Error("preview URL signer is not configured");
+          sources = Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([id, objectPath]) => [
+            id,
+            await signReadUrl(objectPath, Date.now() + 6 * 60 * 60 * 1000),
+          ])));
+        } catch (error) {
+          console.error("generation preview source resolution failed", error);
+          return res.status(500).json({ error: "preview_sources_unavailable" });
         }
       }
 

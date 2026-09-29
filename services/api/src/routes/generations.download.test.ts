@@ -52,11 +52,15 @@ vi.mock("../firebase/admin.js", () => ({ getAdminApp: () => ({}), adminDb: {} })
 
 const { generationsRouter } = await import("./generations.js");
 
-function buildApp(db: Firestore, fakeBucket: ReturnType<typeof makeBucket>) {
+function buildApp(db: Firestore, fakeBucket: ReturnType<typeof makeBucket>, sourceDeps: {
+  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
+  loadSoundtrack?: (soundtrackId: string) => Promise<string | null>;
+  signReadUrl?: (path: string, expiresAt: number) => Promise<string>;
+} = {}) {
   currentBucket = fakeBucket.bucket;
   const app = express();
   app.use(express.json());
-  app.use("/api/projects", generationsRouter({ db, storageBucket: "demo-mosae.appspot.com", dispatch: async () => undefined }));
+  app.use("/api/projects", generationsRouter({ db, storageBucket: "demo-mosae.appspot.com", dispatch: async () => undefined, ...sourceDeps }));
   return app;
 }
 
@@ -65,6 +69,47 @@ beforeEach(() => {
 });
 
 describe("GET /download — emulator branch", () => {
+  it("returns browser-loadable sources for every clip and the selected soundtrack in a stored generation", async () => {
+    const storedTimeline = {
+      schemaVersion: 1,
+      projectId: "p1",
+      mode: "creator",
+      aspect: "9:16",
+      fps: 30,
+      durationSec: 8,
+      chapters: [{ title: "Trip", startSec: 0 }],
+      videoClips: ["shot-a", "shot-b"].map((shotId, index) => ({
+        id: `clip-${index + 1}`, source: { kind: "photo", shotId }, startSec: index * 4, durationSec: 4,
+        transitionIn: { kind: "cut", durationSec: 0 },
+      })),
+      audioClips: [{
+        id: "music-1", role: "music", startSec: 0, durationSec: 8, gain: 0.2,
+        source: { kind: "soundtrack", soundtrackId: "lyria-energetic", sourceInSec: 0, sourceOutSec: 8 },
+      }],
+      captions: [],
+    };
+    const storedGeneration = { ...generation, timeline: storedTimeline };
+    const signed: string[] = [];
+    const app = buildApp(makeDb(storedGeneration), makeBucket(), {
+      loadSource: async (_projectId, shotId) => ({ storagePath: `original/${shotId}.jpg`, derivatives: { thumbPath: `thumb/${shotId}.jpg`, proxyPath: `proxy/${shotId}.mp4` } }),
+      loadSoundtrack: async (id) => id === "lyria-energetic" ? "library/music/lyria-energetic.mp3" : null,
+      signReadUrl: async (path) => { signed.push(path); return `http://127.0.0.1:9199/download/${path}`; },
+    });
+
+    const res = await request(app).get("/api/projects/p1/generations/g1").set("Authorization", "Bearer owner");
+
+    expect(res.status).toBe(200);
+    expect(res.body.timeline.videoClips).toHaveLength(2);
+    expect(res.body.timeline.audioClips).toHaveLength(1);
+    expect(res.body.sources).toEqual({
+      "shot-a": "http://127.0.0.1:9199/download/thumb/shot-a.jpg",
+      "shot-b": "http://127.0.0.1:9199/download/thumb/shot-b.jpg",
+      "lyria-energetic": "http://127.0.0.1:9199/download/library/music/lyria-energetic.mp3",
+    });
+    expect(signed).toHaveLength(3);
+    expect(signed).toEqual(expect.arrayContaining(["thumb/shot-a.jpg", "thumb/shot-b.jpg", "library/music/lyria-energetic.mp3"]));
+  });
+
   it("prefers the current edited render over the first cut", async () => {
     const { bucket, calls } = makeBucket();
     const app = buildApp(makeDb(generation, { revision: 3, renderRevision: 3, status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" }), { bucket, calls });

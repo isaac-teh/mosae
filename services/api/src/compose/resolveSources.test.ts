@@ -56,7 +56,7 @@ describe("resolveSources", () => {
       "shot-a": "original/shot-a.jpg", "shot-b": "original/shot-b.jpg", "shot-c": "original/shot-c.jpg",
     });
   });
-  it("resolves a photo shotId to proxy path in preview mode", async () => {
+  it("resolves a photo shotId to its image thumbnail in preview mode", async () => {
     const timeline = makeTimeline();
     const deps = mockDeps({
       "shot-photo-1": {
@@ -67,7 +67,21 @@ describe("resolveSources", () => {
 
     const sources = await resolveSources(timeline, deps, "proj-1", "preview");
 
-    expect(sources["shot-photo-1"]).toBe("proxies/u/p/a/1/proxy.mp4");
+    expect(sources["shot-photo-1"]).toBe("proxies/u/p/a/1/thumb.jpg");
+  });
+
+  it("resolves a video shotId to its playable proxy in preview mode", async () => {
+    const timeline = makeTimeline({ videoClips: [{
+      id: "clip-video-1",
+      source: { kind: "video", shotId: "shot-video-1", sourceInSec: 0, sourceOutSec: 4 },
+      startSec: 0, durationSec: 4, transitionIn: { kind: "cut", durationSec: 0 },
+    }] });
+    const deps = mockDeps({ "shot-video-1": {
+      storagePath: "uploads/alice/p1/s1/a1/original.mp4",
+      derivatives: { thumbPath: "proxies/u/p/a/1/thumb.jpg", proxyPath: "proxies/u/p/a/1/proxy.mp4" },
+    } });
+
+    expect(await resolveSources(timeline, deps, "proj-1", "preview")).toEqual({ "shot-video-1": "proxies/u/p/a/1/proxy.mp4" });
   });
 
   it("resolves a photo shotId to original path in render mode", async () => {

@@ -40,7 +40,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const cadenceId = options.recommendedCadence;
     const durationId = options.recommendedDuration;
     const lengthSec = options.durations.find(({ id }) => id === durationId)?.seconds ?? 120;
-    setDirectionSelection((current) => ({ ...current, cadenceId, durationId }));
+    setDirectionSelection((current) => ({ ...current, cadenceId, durationId, soundtrackId: current.soundtrackId ?? options.soundtracks[0]?.id ?? null }));
     setInput((current) => ({ ...current, direction: { confirmed: false, pace: /gentle|reflective/i.test(cadenceId) ? "gentle" : "lively", lengthSec, focus: "family" } }));
   }, [repository]);
 

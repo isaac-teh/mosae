@@ -185,7 +185,14 @@ app.use(
 );
 app.use(
   "/api/projects",
-  generationsRouter({ db: adminDb, loadSource, storageBucket: config.storageBucket, dispatch: () => dispatchDue(adminDb, queue, Date.now()) }),
+  generationsRouter({
+    db: adminDb,
+    loadSource,
+    storageBucket: config.storageBucket,
+    loadSoundtrack: async (soundtrackId) => soundtrackPath(musicLibrary, soundtrackId),
+    signReadUrl: (path, expiresAt) => firebaseThumbnailUrlStore(renderBucket()).signedReadUrl(path, expiresAt),
+    dispatch: () => dispatchDue(adminDb, queue, Date.now()),
+  }),
 );
 app.use("/api/projects", editsRouter({ db: adminDb }));
 app.use("/api/projects", editRenderRouter({
