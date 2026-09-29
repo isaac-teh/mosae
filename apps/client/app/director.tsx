@@ -59,7 +59,16 @@ export default function DirectorScreen() {
         if (item.kind === "you") return <ChatMessage key={item.id} from="you" text={item.text} />;
         if (item.kind === "typing") return <ChatTyping key={item.id} text={item.text} />;
         if (item.kind === "shaping") return <ChatShaping key={item.id} progress={item.progress} stepsDone={item.stepsDone} />;
-        if (item.kind === "set-aside") return <View key={item.id} className="gap-3"><ChatMessage from="mosae" text={`Got it. I've set aside ${item.blurry} blurry ${item.blurry === 1 ? "shot" : "shots"} and ${item.duplicates} near-duplicates, keeping the best of each burst. Your originals are untouched.`} /><Button label="See what's set aside" variant="quiet" onPress={actions.seeSetAside} /></View>;
+        if (item.kind === "set-aside") {
+          const parts = [
+            item.blurry ? `${item.blurry} blurry ${item.blurry === 1 ? "shot" : "shots"}` : "",
+            item.duplicates ? `${item.duplicates} near-duplicate${item.duplicates === 1 ? "" : "s"}` : "",
+          ].filter(Boolean);
+          const message = parts.length
+            ? `I've set aside ${parts.join(" and ")}. Your originals are untouched.`
+            : "Nothing needed setting aside - every photo is sharp and different. Your originals are untouched.";
+          return <View key={item.id} className="gap-3"><ChatMessage from="mosae" text={message} />{parts.length > 0 ? <Button label="See what's set aside" variant="quiet" onPress={actions.seeSetAside} /> : null}</View>;
+        }
         if (item.kind === "moments") return <ChatMomentGrid key={item.id} tiles={suggestedTiles} state={momentState} total={projectSummary?.total ?? 0} onTap={actions.toggleMoment} onDone={() => void actions.confirmMoments()} onChooseAll={() => { setPickerSelection(Object.entries(momentState).filter(([, value]) => value === "keep").map(([id]) => id)); actions.openPicker(); }} />;
         if (item.kind === "direction") {
           const focusOptions = [{ id: "family", label: "Whole family" }, ...people.filter((person) => person.name).map((person) => ({ id: person.personId, label: person.name as string }))];

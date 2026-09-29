@@ -270,10 +270,28 @@ describe("Director chat", () => {
 
   it("shows the set-aside counts from the plan", async () => {
     await openMoments();
-    expect(hasText("1 blurry shot and 120 near-duplicates")).toBe(true);
+    expect(hasText("I've set aside 1 blurry shot and 120 near-duplicates. Your originals are untouched.")).toBe(true);
     expect(hasText("See what's set aside")).toBe(true);
     await click("See what's set aside");
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/review-moments", params: { planId: "proposal-1", tab: "left-out" } });
+  });
+
+  it.each([
+    { name: "no shots", leftOut: [], copy: "Nothing needed setting aside - every photo is sharp and different. Your originals are untouched.", showButton: false },
+    { name: "one blurry shot", leftOut: [{ shotId: "blur-1", thumbnailUrl: "", reason: "Blurry" }], copy: "I've set aside 1 blurry shot. Your originals are untouched.", showButton: true },
+    { name: "several blurry shots", leftOut: [{ shotId: "blur-1", thumbnailUrl: "", reason: "Blurry" }, { shotId: "blur-2", thumbnailUrl: "", reason: "Soft focus" }], copy: "I've set aside 2 blurry shots. Your originals are untouched.", showButton: true },
+    { name: "one near-duplicate", leftOut: [{ shotId: "dup-1", thumbnailUrl: "", reason: "Near duplicate" }], copy: "I've set aside 1 near-duplicate. Your originals are untouched.", showButton: true },
+    { name: "several near-duplicates", leftOut: [{ shotId: "dup-1", thumbnailUrl: "", reason: "Near duplicate" }, { shotId: "dup-2", thumbnailUrl: "", reason: "Near duplicate" }], copy: "I've set aside 2 near-duplicates. Your originals are untouched.", showButton: true },
+  ])("uses accurate set-aside copy for $name", async ({ leftOut, copy, showButton }) => {
+    const previous = planFixture.leftOut;
+    planFixture.leftOut = leftOut as any;
+    try {
+      await openMoments();
+      expect(hasText(copy)).toBe(true);
+      expect([...host.querySelectorAll("button")].some((button) => button.textContent?.trim() === "See what's set aside")).toBe(showButton);
+    } finally {
+      planFixture.leftOut = previous;
+    }
   });
 
   it("saves Keep and Leave out choices in one constraints update when Done is pressed", async () => {
