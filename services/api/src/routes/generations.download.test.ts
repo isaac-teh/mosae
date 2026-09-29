@@ -55,6 +55,8 @@ const { generationsRouter } = await import("./generations.js");
 function buildApp(db: Firestore, fakeBucket: ReturnType<typeof makeBucket>, sourceDeps: {
   loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
   loadSoundtrack?: (soundtrackId: string) => Promise<string | null>;
+  loadSoundtrackLibrary?: () => Promise<{ id: string; path: string }[]>;
+  loadUnusedMedia?: (projectId: string, timeline: unknown) => Promise<{ shotId: string; kind: "photo" | "video"; thumbnailUrl: string; previewUrl: string; date: string; eventLabel: string; sourceInSec?: number; sourceOutSec?: number }[]>;
   signReadUrl?: (path: string, expiresAt: number) => Promise<string>;
 } = {}) {
   currentBucket = fakeBucket.bucket;
@@ -93,6 +95,11 @@ describe("GET /download — emulator branch", () => {
     const app = buildApp(makeDb(storedGeneration), makeBucket(), {
       loadSource: async (_projectId, shotId) => ({ storagePath: `original/${shotId}.jpg`, derivatives: { thumbPath: `thumb/${shotId}.jpg`, proxyPath: `proxy/${shotId}.mp4` } }),
       loadSoundtrack: async (id) => id === "lyria-energetic" ? "library/music/lyria-energetic.mp3" : null,
+      loadSoundtrackLibrary: async () => ["lyria-tender", "lyria-reflective", "lyria-playful", "lyria-energetic", "lyria-celebratory", "lyria-journey"].map((id) => ({ id, path: `library/music/${id}.mp3` })),
+      loadUnusedMedia: async (_projectId, timeline) => {
+        expect(timeline).toEqual(storedTimeline);
+        return [{ shotId: "shot-c", kind: "photo", thumbnailUrl: "http://127.0.0.1:9199/download/thumb/shot-c.jpg", previewUrl: "http://127.0.0.1:9199/download/thumb/shot-c.jpg", date: "2026-06-03", eventLabel: "Day 3, morning" }];
+      },
       signReadUrl: async (path) => { signed.push(path); return `http://127.0.0.1:9199/download/${path}`; },
     });
 
@@ -101,13 +108,19 @@ describe("GET /download — emulator branch", () => {
     expect(res.status).toBe(200);
     expect(res.body.timeline.videoClips).toHaveLength(2);
     expect(res.body.timeline.audioClips).toHaveLength(1);
+    expect(res.body.unusedMedia).toEqual([{ shotId: "shot-c", kind: "photo", thumbnailUrl: "http://127.0.0.1:9199/download/thumb/shot-c.jpg", previewUrl: "http://127.0.0.1:9199/download/thumb/shot-c.jpg", date: "2026-06-03", eventLabel: "Day 3, morning" }]);
     expect(res.body.sources).toEqual({
       "shot-a": "http://127.0.0.1:9199/download/thumb/shot-a.jpg",
       "shot-b": "http://127.0.0.1:9199/download/thumb/shot-b.jpg",
       "lyria-energetic": "http://127.0.0.1:9199/download/library/music/lyria-energetic.mp3",
+      "lyria-tender": "http://127.0.0.1:9199/download/library/music/lyria-tender.mp3",
+      "lyria-reflective": "http://127.0.0.1:9199/download/library/music/lyria-reflective.mp3",
+      "lyria-playful": "http://127.0.0.1:9199/download/library/music/lyria-playful.mp3",
+      "lyria-celebratory": "http://127.0.0.1:9199/download/library/music/lyria-celebratory.mp3",
+      "lyria-journey": "http://127.0.0.1:9199/download/library/music/lyria-journey.mp3",
     });
-    expect(signed).toHaveLength(3);
-    expect(signed).toEqual(expect.arrayContaining(["thumb/shot-a.jpg", "thumb/shot-b.jpg", "library/music/lyria-energetic.mp3"]));
+    expect(signed).toHaveLength(8);
+    expect(signed).toEqual(expect.arrayContaining(["thumb/shot-a.jpg", "thumb/shot-b.jpg", ...["lyria-tender", "lyria-reflective", "lyria-playful", "lyria-energetic", "lyria-celebratory", "lyria-journey"].map((id) => `library/music/${id}.mp3`)]));
   });
 
   it("prefers the current edited render over the first cut", async () => {

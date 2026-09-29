@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import type { EditOp } from "@mosae/contracts";
 import type { Moment } from "@mosae/core";
 
@@ -14,6 +14,6 @@ export function AddSheet({ visible, moments, selectedClipId, onApply, onClose }:
       onApply({ op: "add", shotId: moment.shotId!, kind: moment.kind, afterClipId: selectedClipId, durationSec,
         ...(moment.kind === "video" && sourceInSec !== undefined && sourceOutSec !== undefined ? { sourceInSec, sourceOutSec } : {}) });
       onClose();
-    }} className="mb-2 min-h-[60px] justify-center rounded-xl bg-[#1a2c38] px-4"><Text className="font-sans-semibold text-button text-on-screen">{moment.title}</Text><Text className="font-sans text-caption text-on-screen-muted">{moment.meta}</Text></Pressable>)}</ScrollView> : <Text className="font-sans text-caption text-on-screen-muted">No left out moments to add.</Text>}
+    }} className="mb-2 min-h-[68px] flex-row items-center gap-3 rounded-xl bg-[#1a2c38] px-3"><Image source={{ uri: moment.imageKey }} accessibilityLabel={`${moment.title} thumbnail`} className="h-12 w-12 rounded-lg" resizeMode="cover" /><View className="min-w-0 flex-1"><Text numberOfLines={1} className="font-sans-semibold text-button text-on-screen">{moment.title}</Text><Text numberOfLines={1} className="font-sans text-caption text-on-screen-muted">{moment.meta}</Text></View><Text className="font-sans-medium text-caption text-on-screen-muted">Add</Text></Pressable>)}</ScrollView> : <Text className="font-sans text-caption text-on-screen-muted">No left out moments to add.</Text>}
   </View></View>;
 }

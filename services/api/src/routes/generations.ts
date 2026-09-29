@@ -6,6 +6,7 @@ import { createGeneration, getGeneration, StoreError } from "../store/generation
 import { enqueueRender } from "../store/enqueueRender.js";
 import { newOutboxTask } from "../domain/outbox.js";
 import { safeParseDirectionSettings, type Generation } from "@mosae/contracts";
+import type { UnusedProjectMedia } from "./editorMedia.js";
 
 const STATUS: Record<StoreError["code"], number> = {
   not_found: 404,
@@ -32,6 +33,9 @@ export function generationsRouter(deps: {
   signReadUrl?: (path: string, expiresAt: number) => Promise<string>;
   /** Resolve a selected library track to its object path. */
   loadSoundtrack?: (soundtrackId: string) => Promise<string | null>;
+  /** Resolve every selectable soundtrack so the editor can switch tracks without reloading. */
+  loadSoundtrackLibrary?: () => Promise<{ id: string; path: string }[]>;
+  loadUnusedMedia?: (projectId: string, timeline: Generation["timeline"]) => Promise<UnusedProjectMedia[]>;
   /** Drains the outbox after a task is written; the dispatcher does it in production. */
   dispatch?: () => Promise<unknown>;
 }): Router {
@@ -158,12 +162,14 @@ export function generationsRouter(deps: {
       // Resolve preview-mode sources if timeline exists
       let sources: Record<string, string> | undefined;
       if (generation.timeline) {
+        if (deps.loadUnusedMedia) response.unusedMedia = await deps.loadUnusedMedia(projectId, generation.timeline);
         const { resolveSources } = await import("../compose/resolveSources.js");
         try {
           const paths = await resolveSources(generation.timeline, {
             loadAsset: resolve,
             ...(deps.loadSoundtrack ? { loadSoundtrack: deps.loadSoundtrack } : {}),
           }, projectId, "preview");
+          for (const track of await deps.loadSoundtrackLibrary?.() ?? []) paths[track.id] = track.path;
           const signReadUrl = deps.signReadUrl;
           if (!signReadUrl) throw new Error("preview URL signer is not configured");
           sources = Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([id, objectPath]) => [

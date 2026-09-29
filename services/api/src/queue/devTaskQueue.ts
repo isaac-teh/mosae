@@ -83,7 +83,12 @@ export class DevTaskQueue implements TaskQueue {
         console.log("dev compose", task.name, result);
       } else if (task.path === "/tasks/render") {
         if (!this.deps.render) throw new Error("render_not_configured");
-        const result = await this.deps.render({ projectId: task.body.projectId, generationId: task.body.subjectId });
+        const editRevision = /^edit-([1-9]\d*)$/.exec(task.body.generation);
+        const result = await this.deps.render({
+          projectId: task.body.projectId,
+          generationId: task.body.subjectId,
+          ...(editRevision ? { revision: Number(editRevision[1]) } : {}),
+        });
         console.log("dev render", task.name, result);
       } else if (task.path === "/tasks/cluster") {
         const result = await this.deps.cluster(task.body.projectId);

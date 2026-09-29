@@ -4,10 +4,11 @@ import { Player, type PlayerRef } from "@remotion/player";
 import { MosaeTimeline } from "@mosae/video/timeline";
 import type { Timeline } from "@mosae/contracts";
 
-export function EditorPreview({ timeline, sources, onTimeChange }: {
+export function EditorPreview({ timeline, sources, onTimeChange, seekRequest }: {
   timeline: Timeline;
   sources: Record<string, string>;
   onTimeChange?: (seconds: number) => void;
+  seekRequest?: { seconds: number } | null;
 }) {
   const player = useRef<PlayerRef>(null);
   const [playing, setPlaying] = useState(false);
@@ -18,16 +19,24 @@ export function EditorPreview({ timeline, sources, onTimeChange }: {
     const play = () => setPlaying(true);
     const pause = () => setPlaying(false);
     current.addEventListener("timeupdate", time);
+    current.addEventListener("frameupdate", time);
     current.addEventListener("play", play);
     current.addEventListener("pause", pause);
     current.addEventListener("ended", pause);
     return () => {
       current.removeEventListener("timeupdate", time);
+      current.removeEventListener("frameupdate", time);
       current.removeEventListener("play", play);
       current.removeEventListener("pause", pause);
       current.removeEventListener("ended", pause);
     };
   }, [timeline.fps, onTimeChange]);
+
+  useEffect(() => {
+    if (!seekRequest || !player.current) return;
+    player.current.seekTo(Math.max(0, Math.min(Math.ceil(timeline.durationSec * timeline.fps) - 1, Math.round(seekRequest.seconds * timeline.fps))));
+  }, [seekRequest, timeline.durationSec, timeline.fps]);
+
 
   return <View className="relative size-full overflow-hidden rounded-[14px] bg-[#18211d]">
     <Player ref={player} component={MosaeTimeline} inputProps={{ timeline, sources }} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}

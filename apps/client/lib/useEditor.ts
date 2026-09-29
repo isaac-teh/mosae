@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Asset } from "expo-asset";
 import { applyEdits, mergeOps, type EditOp, type Timeline } from "@mosae/contracts";
-import { getStoryRepository, type StoryRepository } from "@mosae/core";
+import { getStoryRepository, type EditorMediaItem, type StoryRepository } from "@mosae/core";
 import { demoImage } from "./demoAssets";
 
 type SaveState = { state: "saved" | "saving" | "retrying" | "conflict" | "rendering" | "ready" };
@@ -14,6 +14,7 @@ const sourceUri = (value: string) => value.startsWith("demo:") ? Asset.fromModul
 export function useEditor(projectId: string, generationId: string, repository: StoryRepository = getStoryRepository()) {
   const [firstCut, setFirstCut] = useState<Timeline | null>(null);
   const [sources, setSources] = useState<Record<string, string>>({});
+  const [unusedMedia, setUnusedMedia] = useState<EditorMediaItem[]>([]);
   const [history, setHistory] = useState<History>({ snapshots: [[]], index: 0 });
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -42,7 +43,11 @@ export function useEditor(projectId: string, generationId: string, repository: S
       .then(([film, edits]) => {
         if (!active) return;
         setFirstCut(film.timeline);
-        setSources(Object.fromEntries(Object.entries(film.sources).map(([id, path]) => [id, sourceUri(path)])));
+        setSources(Object.fromEntries([
+          ...Object.entries(film.sources),
+          ...(film.unusedMedia ?? []).map((media) => [media.shotId, media.previewUrl] as const),
+        ].map(([id, path]) => [id, sourceUri(path)])));
+        setUnusedMedia(film.unusedMedia ?? []);
         setHistory({ snapshots: [edits.ops], index: 0 });
         setSelectedClipId(clipId(film.timeline.videoClips[0]));
         revisionRef.current = edits.revision;
@@ -171,7 +176,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
   }, [renderRequest, projectId, generationId, repository]);
 
   return {
-    timeline, firstCut, sources, setSource, ops, selectedClipId, select: setSelectedClipId,
+    timeline, firstCut, sources, unusedMedia, setSource, ops, selectedClipId, select: setSelectedClipId,
     apply, applyMany, undo, redo, reset, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
     save, savedRevision, downloadUrl, reloadAfterConflict, render, loaded, error, editError,
   };
