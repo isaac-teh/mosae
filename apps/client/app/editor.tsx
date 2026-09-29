@@ -18,6 +18,7 @@ import { SoundtrackSheet } from "@/components/editor/SoundtrackSheet";
 import { RemoveConfirm } from "@/components/editor/RemoveConfirm";
 import { EditorMenu } from "@/components/editor/EditorMenu";
 import { AskSheet } from "@/components/editor/AskSheet";
+import { RedoIcon, UndoIcon } from "@/components/icons";
 
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 type Tool = "Swap" | "Trim" | "Move" | "Remove" | "Add" | "Ask" | "Collage" | "Soundtrack" | null;
@@ -39,15 +40,20 @@ export default function EditorScreen() {
   const onTimeChange = useCallback((seconds: number) => setPlayhead(seconds), []);
   const previewHeight = Math.max(280, Math.min(720, height - 390));
   const soundtrack = editor.timeline?.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
-  const soundtrackLabel = soundtrack?.source.kind === "soundtrack"
-    ? soundtrack.source.soundtrackId.replace(/[-_]/g, " ")
-    : "No soundtrack";
+  const soundtrackId = soundtrack?.source.kind === "soundtrack" ? soundtrack.source.soundtrackId : null;
+  const soundtrackName = soundtrackId
+    ? directions?.soundtracks.find((track) => track.id === soundtrackId)?.name ?? "Soundtrack"
+    : null;
+  const soundtrackLabel = soundtrackName ? `${soundtrackName} · paced to the film` : "No soundtrack";
   useEffect(() => {
     let active = true;
     if (!params.planId) return () => { active = false; };
-    void Promise.all([repository.getPlan(params.planId), repository.getDirectionOptions(params.planId)])
-      .then(([nextPlan, nextDirections]) => { if (active) { setPlan(nextPlan); setDirections(nextDirections); } })
-      .catch(() => { if (active) { setPlan(null); setDirections(null); } });
+    void repository.getPlan(params.planId)
+      .then((nextPlan) => { if (active) setPlan(nextPlan); })
+      .catch(() => { if (active) setPlan(null); });
+    void repository.getDirectionOptions(params.planId)
+      .then((nextDirections) => { if (active) setDirections(nextDirections); })
+      .catch(() => { if (active) setDirections(null); });
     return () => { active = false; };
   }, [params.planId, repository]);
   const selectedClip = editor.timeline?.videoClips.find((clip) => clipId(clip) === editor.selectedClipId) ?? null;
@@ -112,8 +118,8 @@ export default function EditorScreen() {
         <View className="mt-4 flex-row items-center justify-between">
           <Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text>
           <View className="flex-row gap-4">
-            <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="min-h-10 min-w-10 items-center justify-center"><Text className={`font-sans text-[27px] ${editor.canUndo ? "text-on-screen" : "text-on-screen-muted/45"}`}>↶</Text></Pressable>
-            <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="min-h-10 min-w-10 items-center justify-center"><Text className={`font-sans text-[27px] ${editor.canRedo ? "text-on-screen" : "text-on-screen-muted/45"}`}>↷</Text></Pressable>
+            <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="min-h-10 min-w-10 items-center justify-center"><UndoIcon disabled={!editor.canUndo} /></Pressable>
+            <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="min-h-10 min-w-10 items-center justify-center"><RedoIcon disabled={!editor.canRedo} /></Pressable>
           </View>
         </View>
         <TimelineStrip timeline={editor.timeline} sources={editor.sources} selectedClipId={editor.selectedClipId} onSelect={chooseClip} />

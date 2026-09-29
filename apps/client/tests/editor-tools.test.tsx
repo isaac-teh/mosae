@@ -6,8 +6,8 @@ import type { Moment, Soundtrack } from "@mosae/core";
 import type { StoryRepository } from "@mosae/core";
 
 vi.mock("react-native", () => {
-  const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, ...props }: any) =>
-    React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
+  const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, numberOfLines, ...props }: any) =>
+    React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), ...(numberOfLines ? { "data-number-of-lines": numberOfLines } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
   return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }) };
 });
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
@@ -22,6 +22,7 @@ import { SoundtrackSheet } from "../components/editor/SoundtrackSheet";
 import { RemoveConfirm } from "../components/editor/RemoveConfirm";
 import { EditorMenu } from "../components/editor/EditorMenu";
 import { AskSheet } from "../components/editor/AskSheet";
+import { TimelineStrip } from "../components/editor/TimelineStrip";
 
 const clips = ["a", "b", "c"].map((id, index) => ({
   id, source: { kind: "photo" as const, shotId: `shot-${id}` }, startSec: index * 3, durationSec: 3,
@@ -96,6 +97,20 @@ describe("editor tool operations", () => {
     await render(<AddSheet visible moments={[videoMoment]} selectedClipId="b" onApply={apply} onClose={() => {}} />);
     await click("Add Video moment");
     expect(apply).toHaveBeenCalledWith({ op: "add", shotId: "shot-left", kind: "video", afterClipId: "b", durationSec: 6, sourceInSec: 2, sourceOutSec: 10 });
+  });
+
+  it("keeps long chapter names to one line inside their chapter widths", async () => {
+    const chapterTimeline: Timeline = {
+      ...timeline,
+      chapters: [
+        { title: "A very long opening chapter title that needs truncating", startSec: 0, durationSec: 3 },
+        { title: "A second chapter title that also must stay on one line", startSec: 3, durationSec: 6 },
+      ],
+    };
+    await render(<TimelineStrip timeline={chapterTimeline} sources={{}} selectedClipId={null} onSelect={() => {}} />);
+    const labels = [...host.querySelectorAll('[data-number-of-lines="1"]')];
+    expect(labels).toHaveLength(2);
+    expect(labels.every((label) => Number.parseFloat((label.parentElement as HTMLElement).style.width) > 0)).toBe(true);
   });
 
   it("shows selected collage chips, every allowed layout, and only motions allowed by the selected layout", async () => {

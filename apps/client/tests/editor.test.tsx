@@ -3,12 +3,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 
-const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", repository: "fixture", request: undefined as string | undefined }, back: vi.fn() }));
+const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", planId: undefined as string | undefined, repository: "fixture", request: undefined as string | undefined }, back: vi.fn() }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ back: boundary.back }) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: boundary.repository }) }));
 vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: () => React.createElement("div", { "data-testid": "preview" }) }));
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
-vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circle: () => null }));
+vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circle: () => null, G: () => null }));
 vi.mock("react-native", () => {
   const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, accessibilityState, ...props }: any) =>
     React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), ...(accessibilityState?.selected !== undefined ? { "aria-pressed": String(accessibilityState.selected) } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
@@ -30,6 +30,8 @@ function repository() {
   return {
     getFilmTimeline: vi.fn(async () => ({ timeline: firstCut, sources: { "shot-a": "a.jpg", "shot-b": "b.jpg", "shot-c": "c.jpg" } })),
     getEdits: vi.fn(async () => ({ revision: 0, ops: [], updatedAt: null })),
+    getPlan: vi.fn(async (planId: string) => ({ planId, moments: [], leftOut: [] })),
+    getDirectionOptions: vi.fn(async () => ({ soundtracks: [{ id: "lyria-playful", name: "Sandcastle Days", description: "Upbeat" }] })),
     interpretEdit: vi.fn(async () => ({ reply: "Move the last photo earlier?", ops: [{ op: "move" as const, clipId: "c", toIndex: 0 }] })),
     saveEdits: vi.fn(async (_projectId: string, _generationId: string, revision: number, ops: unknown[]) => ({ revision, ops, updatedAt: 1 })),
     renderRevision: vi.fn(async () => ({ renderId: "render-1" })),
@@ -67,7 +69,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   boundary.repository = repository();
-  boundary.params = { projectId: "p1", generationId: "g1", repository: "fixture", request: undefined };
+  boundary.params = { projectId: "p1", generationId: "g1", planId: undefined, repository: "fixture", request: undefined };
   boundary.back.mockReset();
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
@@ -119,6 +121,22 @@ describe("film editor", () => {
     expect(Number.parseFloat(clip.style.width)).toBeLessThan(widthBefore);
     await advance(1500);
     expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "setPhotoDuration", clipId: "a", sec: 2 }]);
+  });
+
+  it("shows the soundtrack catalog name and pacing label instead of its id", async () => {
+    boundary.params = { ...boundary.params, planId: "proposal-1" };
+    boundary.repository.getPlan.mockRejectedValue(new Error("proposal is unavailable"));
+    boundary.repository.getFilmTimeline.mockResolvedValue({
+      timeline: {
+        ...firstCut,
+        audioClips: [{ id: "music", source: { kind: "soundtrack", soundtrackId: "lyria-playful", sourceInSec: 0, sourceOutSec: 9 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0.5, fadeOutSec: 0.5 }],
+      },
+      sources: { "shot-a": "a.jpg", "shot-b": "b.jpg", "shot-c": "c.jpg" },
+    });
+    await render(<EditorScreen />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain("Sandcastle Days · paced to the film");
+    expect(host.textContent).not.toContain("lyria-playful");
   });
 
   it("moves clips immediately and supports undo and redo", async () => {
