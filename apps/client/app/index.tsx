@@ -6,9 +6,12 @@ import { Button, FilmCard } from "@/components/ds";
 import { SettingsIcon } from "@/components/icons";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
 import { useStoryFlow } from "@/lib/storyFlow";
+import { startDemoTrip } from "@/lib/startDemoTrip";
 
 export default function Home() {
   const [films, setFilms] = useState<FilmListItem[] | null>(null);
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
   const router = useRouter();
   const { repository } = useStoryFlow();
   const pickerRef = useRef<MediaPickerHandle>(null);
@@ -20,6 +23,13 @@ export default function Home() {
   }, [repository]));
 
   function createFilm() { pickerRef.current?.open(); }
+  async function tryDemo() {
+    if (demoBusy) return;
+    setDemoBusy(true); setDemoError(null);
+    try { await startDemoTrip(router); }
+    catch { setDemoError("Could not start the demo trip. Try again."); }
+    finally { setDemoBusy(false); }
+  }
   function startWithMedia(files: File[]) {
     const media = files.filter(isMedia);
     if (media.length === 0) return;
@@ -69,6 +79,8 @@ export default function Home() {
               <Text role="heading" aria-level={1} className="font-title text-title text-ink">Many moments.{"\n"}One story.</Text>
               <Text className="mt-3 font-sans text-body leading-6 text-ink-muted">Bring in the photos and clips from a trip or celebration. You say what mattered. Mosaé shapes it into a film you can change at every step.</Text>
               <View className="mt-5"><Button label="＋  Create a new film" onPress={createFilm} /></View>
+              <Pressable role="button" disabled={demoBusy} onPress={() => void tryDemo()} className="mt-3 min-h-11 items-center justify-center"><Text className="font-sans-medium text-label text-action">{demoBusy ? "Preparing demo trip…" : "Try with a demo trip"}</Text></Pressable>
+              {demoError ? <Text className="font-sans text-caption text-critical">{demoError}</Text> : null}
             </View>
             <View className="mt-[60px] border-t border-line pt-5">
               <Text role="heading" aria-level={2} className="mb-3 font-title text-heading text-ink">Your films</Text>
@@ -84,7 +96,7 @@ export default function Home() {
           </>
         )}
       </ScrollView>
-      {hasFilms ? <View className="absolute inset-x-0 bottom-0 z-20 border-t border-line bg-surface px-6 pb-8 pt-4"><Button label="＋  Create a new film" onPress={createFilm} /></View> : null}
+      {hasFilms ? <View className="absolute inset-x-0 bottom-0 z-20 border-t border-line bg-surface px-6 pb-8 pt-4"><Button label="＋  Create a new film" onPress={createFilm} /><Pressable role="button" disabled={demoBusy} onPress={() => void tryDemo()} className="min-h-11 items-center justify-center"><Text className="font-sans-medium text-label text-action">{demoBusy ? "Preparing demo trip…" : "Try with a demo trip"}</Text></Pressable></View> : null}
     </View>
   );
 }

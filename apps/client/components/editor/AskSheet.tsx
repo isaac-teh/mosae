@@ -34,8 +34,8 @@ export function AskSheet({ visible, projectId, generationId, revision, timeline,
       setReply(result.reply);
       const applied = result.ops.length ? applyEdits(timeline, result.ops) : null;
       setProposal(applied?.ok ? result.ops : []);
-    } catch {
-      setError("Could not get an edit suggestion. Try again.");
+    } catch (cause) {
+      setError((cause as { code?: string })?.code === "demo_limit_reached" ? "Demo limit reached — try the options" : "Could not get an edit suggestion. Try again.");
       setReply(null);
     } finally {
       setBusy(false);

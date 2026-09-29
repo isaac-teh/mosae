@@ -3,7 +3,7 @@ import { safeParseStoryProposal, safeParseDirectionSettings, type Generation, ty
 import type { Asset } from "../store/finalizeStore.js";
 import type { ShotAnalysis } from "../domain/understanding.js";
 import { generateStructured, type GenerateOptions } from "../gemini/client.js";
-import { createGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
+import { createProjectGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
 import { publishGeneration, failGeneration } from "../store/generationStore.js";
 import { enqueueRender } from "../store/enqueueRender.js";
 import { stripProposalEnvelope } from "../store/directingStore.js";
@@ -271,9 +271,9 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
 
     // Constructed here, not at module load, and only when a key exists.
     const call: ComposeDeps["generateStructured"] = config.generateStructured
-      ?? (geminiConfigured(config.geminiApiKey)
+      ?? (projectSnap.get("demo") === "trip1-v2" || geminiConfigured(config.geminiApiKey)
         ? (options) => generateStructured(options as GenerateOptions<unknown>, {
-            generateContent: createGeminiClient(config.geminiApiKey),
+            generateContent: createProjectGeminiClient({ db, projectId: task.projectId, apiKey: config.geminiApiKey }),
             recordUsage: recordUsageToLog(db, { projectId: task.projectId }),
           })
         : async () => { throw new Error("gemini_api_key_missing"); });

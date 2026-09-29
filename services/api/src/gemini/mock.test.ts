@@ -166,3 +166,39 @@ describe("recording skips what it already has", () => {
     expect(real).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("exact replay across project ids", () => {
+  it("replays an existing trip1-v2 plan with fresh shot ids", async () => {
+    vi.resetModules();
+    const recorder = await import("./recorder.js");
+    const fixture = JSON.parse(readFileSync(new URL("../../fixtures/gemini/direct-1dfaf625c84f.json", import.meta.url), "utf8")) as { key: string; request: string };
+    const ids = (prefix: string) => fixture.request.replace(/«(\d+)»/g, (_whole, index: string) => `${prefix}GeneratedShot${index.padStart(3, "0")}Identifier`);
+    const first = JSON.parse(ids("First"));
+    const second = JSON.parse(ids("Second"));
+    expect(recorder.normaliseRequest(first).key).toBe(fixture.key);
+    expect(recorder.normaliseRequest(second).key).toBe(fixture.key);
+    const replay = recorder.replayingExactGenerate();
+    const a = JSON.stringify(await replay(first));
+    const b = JSON.stringify(await replay(second));
+    expect(a).toContain("FirstGeneratedShot");
+    expect(b).toContain("SecondGeneratedShot");
+    expect(b).not.toContain("FirstGeneratedShot");
+  });
+  it("remaps a recorded plan to the current project's shot ids and reports a real miss", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "gemini-demo-"));
+    vi.stubEnv("GEMINI_FIXTURES", dir);
+    vi.resetModules();
+    try {
+      const recorder = await import("./recorder.js");
+      const oldShot = "PzKsKGD8UoLogudUhFh0_0000";
+      const newShot = "aB3xQ91mZpLkRt77WsEy_0000";
+      await recorder.recordingGenerate(async () => ({ text: JSON.stringify({ moments: [{ shotId: oldShot }] }), usageMetadata: {} }))(requestFor(oldShot));
+      const replay = recorder.replayingExactGenerate();
+      expect((await replay(requestFor(newShot)) as { text: string }).text).toContain(newShot);
+      await expect(replay({ ...requestFor(newShot), contents: "a different story" })).rejects.toBeInstanceOf(recorder.FixtureMissing);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      vi.unstubAllEnvs();
+    }
+  });
+});

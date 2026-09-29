@@ -305,6 +305,17 @@ export function replayingGenerate(): GenerateFn {
   };
 }
 
+/** Demo replay must only use an exact normalized request; a same-stage turn
+ * could describe another user's intent or return ids outside this working set. */
+export function replayingExactGenerate(): GenerateFn {
+  return async (request) => {
+    const { key, masked, idMap } = normaliseRequest(request);
+    const fixture = loadIndex().get(key);
+    if (!fixture || fixture.kind !== "generate") throw new FixtureMissing(key, masked);
+    return JSON.parse(unmaskIds(fixture.response, idMap));
+  };
+}
+
 // ── embedContent ─────────────────────────────────────────────────────────────
 
 type EmbedInput = { model: string; contents: string[]; taskType: "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY" };

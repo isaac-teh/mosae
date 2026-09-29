@@ -3,7 +3,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { GenerateDeps, UsageRecord } from "./client.js";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { MODE, recordingGenerate, replayingGenerate, recordingEmbed, replayingEmbed, rememberFileUri } from "./recorder.js";
+import { MODE, recordingGenerate, replayingGenerate, replayingExactGenerate, FixtureMissing, recordingEmbed, replayingEmbed, rememberFileUri } from "./recorder.js";
 import { EMBED_DIMENSIONS } from "./pricing.js";
 
 // ── Record and replay ──────────────────────────────────────────────
@@ -27,6 +27,40 @@ export function createGeminiClient(apiKey?: string): GenerateDeps["generateConte
   const real = generateContentVia(createGenAI(apiKey));
   if (MODE === "record") return recordingGenerate(real as (request: unknown) => Promise<unknown>) as GenerateDeps["generateContent"];
   return real;
+}
+
+export class DemoLimitReached extends Error {
+  constructor() { super("Demo limit reached — try the options"); this.name = "DemoLimitReached"; }
+}
+
+/** Demo projects use only exact fixtures; reserve a Firestore slot before each
+ * paid miss so concurrent requests cannot exceed the per-project limit. */
+export function createProjectGeminiClient(input: {
+  db: Firestore;
+  projectId: string;
+  apiKey?: string;
+  live?: GenerateDeps["generateContent"];
+}): GenerateDeps["generateContent"] {
+  const replay = replayingExactGenerate();
+  return async (request) => {
+    const ref = input.db.collection("projects").doc(input.projectId);
+    const project = await ref.get();
+    if (!project.exists || project.get("demo") !== "trip1-v2") return createGeminiClient(input.apiKey)(request);
+    try {
+      return await replay(request);
+    } catch (error) {
+      if (!(error instanceof FixtureMissing)) throw error;
+    }
+    if (MODE === "replay" || (!input.apiKey && !input.live)) return replay(request);
+    await input.db.runTransaction(async (tx) => {
+      const current = await tx.get(ref);
+      const used = Number(current.get("demoLiveCalls") ?? 0);
+      if (used >= 30) throw new DemoLimitReached();
+      tx.update(ref, { demoLiveCalls: used + 1 });
+    });
+    // This path never uses recordingGenerate, including under MOCK_GEMINI=record.
+    return (input.live ?? generateContentVia(createGenAI(input.apiKey!)))(request);
+  };
 }
 
 /** embedContent, wired the same way. Replay never returns a zero-length vector. */

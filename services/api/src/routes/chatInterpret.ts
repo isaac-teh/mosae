@@ -5,6 +5,7 @@ import { isValidId } from "../domain/ids.js";
 import { getOwnedProject } from "../store/projectStore.js";
 import { interpret, type ChatStep } from "../directing/interpret.js";
 import type { GenerateOptions } from "../gemini/client.js";
+import { DemoLimitReached } from "../gemini/wire.js";
 
 const steps = new Set<ChatStep>(["occasion", "people", "moments", "direction"]);
 export function chatInterpretRouter(deps: {
@@ -33,6 +34,7 @@ export function chatInterpretRouter(deps: {
       });
       return res.json(result);
     } catch (error) {
+      if (error instanceof DemoLimitReached) return res.status(429).json({ error: "demo_limit_reached", message: error.message });
       console.error("chat interpret route failed", req.params.projectId, error);
       return res.status(500).json({ error: "internal" });
     }

@@ -3,19 +3,22 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any }));
+vi.mock("@/lib/startDemoTrip", () => ({ startDemoTrip: vi.fn(async () => {}) }));
 vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms }) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: state.repository }) }));
 vi.mock("expo-router", async () => {
   const ReactModule = await import("react");
   return { useRouter: () => ({ push: state.push }), useFocusEffect: (effect: () => void | (() => void)) => ReactModule.useEffect(() => { state.focusEffect = effect; return effect(); }, [effect]) };
 });
-vi.mock("@/components/icons", () => ({ SettingsIcon: () => React.createElement("svg", { "data-settings-icon": "true" }) }));
+vi.mock("@/components/icons", () => ({ SettingsIcon: () => React.createElement("svg", { "data-settings-icon": "true" }), ChevronDownIcon: () => null, ArrowRightIcon: () => null, PlayIcon: () => null }));
 vi.mock("react-native", () => {
   const element = (tag: string) => ({ children, onPress, ...props }: any) => React.createElement(tag, { ...props, onClick: onPress }, children);
   return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), Image: (props: any) => React.createElement("img", { src: props.source?.uri, alt: props.accessibilityLabel }) };
 });
 
 import Home from "../app/index";
+import PickMemoryScreen from "../app/pick-memory";
+import { startDemoTrip } from "@/lib/startDemoTrip";
 
 let root: Root;
 let host: HTMLDivElement;
@@ -32,6 +35,19 @@ afterEach(async () => { await act(async () => root.unmount()); host.remove(); })
 async function render() { await act(async () => root.render(<Home />)); }
 
 describe("Home", () => {
+  it("starts the same demo trip from Home and the empty upload screen", async () => {
+    await render();
+    const click = async (label: string) => {
+      const button = [...host.querySelectorAll("button")].find((item) => item.textContent?.includes(label));
+      expect(button).toBeTruthy();
+      await act(async () => button!.click());
+    };
+    await click("Try with a demo trip");
+    await act(async () => root.render(<PickMemoryScreen />));
+    await click("No photos handy? Use the demo trip");
+    expect(startDemoTrip).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(startDemoTrip).mock.calls.every(([router]) => typeof router.push === "function")).toBe(true);
+  });
   it("shows the empty home invitation, body copy and editable empty film state", async () => {
     await render();
     expect(host.textContent?.replace(/\s+/g, " ")).toContain("Many moments. One story.");

@@ -19,7 +19,7 @@ import { summaryRouter } from "./routes/summary.js";
 import { chatInterpretRouter } from "./routes/chatInterpret.js";
 import { editInterpretRouter } from "./routes/editInterpret.js";
 import { generateStructured, type GenerateOptions } from "./gemini/client.js";
-import { createGeminiClient, geminiConfigured, recordUsageToLog } from "./gemini/wire.js";
+import { createProjectGeminiClient, recordUsageToLog } from "./gemini/wire.js";
 import { loadSearchableShots } from "./store/understandStore.js";
 import { rankShots } from "./understand/search.js";
 import {
@@ -220,9 +220,7 @@ app.use(
   "/api/projects",
   chatInterpretRouter({
     db: adminDb,
-    generate: (options, projectId) => geminiConfigured(config.geminiApiKey)
-      ? generateStructured(options as GenerateOptions<unknown>, { generateContent: createGeminiClient(config.geminiApiKey), recordUsage: recordUsageToLog(adminDb, { projectId: projectId ?? "unknown" }) })
-      : Promise.reject(new Error("gemini_api_key_missing")),
+    generate: (options, projectId) => generateStructured(options as GenerateOptions<unknown>, { generateContent: createProjectGeminiClient({ db: adminDb, projectId: projectId ?? "unknown", apiKey: config.geminiApiKey }), recordUsage: recordUsageToLog(adminDb, { projectId: projectId ?? "unknown" }) }),
     searchShots: async (projectId, query) => {
       const [embedding, shots] = await Promise.all([embedQuery(query), loadSearchableShots(adminDb, projectId)]);
       return rankShots(embedding, shots, 20).slice(0, 5).map((shot) => shot.id);
@@ -233,9 +231,7 @@ app.use(
   "/api/projects",
   editInterpretRouter({
     db: adminDb,
-    generate: (options, projectId) => geminiConfigured(config.geminiApiKey)
-      ? generateStructured(options as GenerateOptions<unknown>, { generateContent: createGeminiClient(config.geminiApiKey), recordUsage: recordUsageToLog(adminDb, { projectId: projectId ?? "unknown" }) })
-      : Promise.reject(new Error("gemini_api_key_missing")),
+    generate: (options, projectId) => generateStructured(options as GenerateOptions<unknown>, { generateContent: createProjectGeminiClient({ db: adminDb, projectId: projectId ?? "unknown", apiKey: config.geminiApiKey }), recordUsage: recordUsageToLog(adminDb, { projectId: projectId ?? "unknown" }) }),
   }),
 );
 app.use(

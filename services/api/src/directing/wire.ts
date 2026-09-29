@@ -13,7 +13,8 @@ import { buildWorkingSet, MustIncludeConflict, type WorkingSet } from "./working
 import { cacheKeyFor, constraintShotIds, type ProposalCache } from "./proposalCache.js";
 import { z } from "zod";
 import { estimateUsd, MODELS, type GenerateDeps } from "../gemini/client.js";
-import { createEmbedClient, createGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
+import { createEmbedClient, createProjectGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
+import { replayingEmbed } from "../gemini/recorder.js";
 import { ensureCast } from "../cast/ensureCast.js";
 import { daySummary, dayTitles, tripDays } from "./days.js";
 import { leaveOutShots } from "../cast/leaveOut.js";
@@ -233,14 +234,15 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
         }
         // Construct the SDK only during work, so a missing API key cannot
         // prevent API boot or publication recovery from a saved result.
-        const usable = !config.model && geminiConfigured(config.geminiApiKey);
+        const isDemo = (await project.get()).get("demo") === "trip1-v2";
+        const usable = !config.model && (isDemo || geminiConfigured(config.geminiApiKey));
         const unavailable = async (): Promise<never> => { throw new Error("gemini_api_key_missing"); };
         const model = config.model ?? (usable ? createPlanningModel({
-          generateContent: createGeminiClient(config.geminiApiKey), recordUsage: recordUsageToLog(db, { projectId: task.projectId }),
+          generateContent: createProjectGeminiClient({ db, projectId: task.projectId, apiKey: config.geminiApiKey }), recordUsage: recordUsageToLog(db, { projectId: task.projectId }),
         }, task.jobId) : { runTurn: unavailable });
         const tools = createPlanningTools({
           projectId: task.projectId, excludedShotIds: [...new Set([...job.constraints.excludedShotIds, ...autoExcluded])],
-          embedContent: config.embedContent ?? (usable ? createEmbedClient(config.geminiApiKey) : unavailable),
+          embedContent: config.embedContent ?? (isDemo ? replayingEmbed() : usable ? createEmbedClient(config.geminiApiKey) : unavailable),
           loadShots: async (projectId) => projectId === task.projectId ? shots : [],
           loadAsset: async (projectId, assetId) => {
             const asset = projectId === task.projectId ? assets.get(assetId) : undefined;

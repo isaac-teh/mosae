@@ -23,8 +23,12 @@ export async function createDemoProject(input: {
   await ref.update({ demo: "trip1-v2", status: "processing", demoLiveCalls: 0 });
   const sessionId = db.collection("_ids").doc().id;
   const ids = new Map<string, string>();
+  // Firestore lists shots by document id. Preserve the source catalog's order
+  // across fresh projects, including equal-score shots in one event; the
+  // recorder's positional placeholders depend on that semantic order.
+  const sourceOrder = new Map(bundle.photos.map((photo) => photo.sourceShotId).sort().map((id, index) => [id, index]));
   for (const photo of bundle.photos) {
-    const assetId = db.collection("_ids").doc().id;
+    const assetId = `${String(sourceOrder.get(photo.sourceShotId)).padStart(2, "0")}_${db.collection("_ids").doc().id}`;
     ids.set(photo.sourceAssetId, assetId);
     ids.set(photo.sourceShotId, `${assetId}_0000`);
   }

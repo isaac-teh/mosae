@@ -27,5 +27,7 @@ COPY packages/contracts packages/contracts
 COPY --from=build /app/packages/contracts/generated packages/contracts/src
 COPY --from=build /app/services/api/dist services/api/dist
 COPY services/api/fixtures/music services/api/fixtures/music
+COPY services/api/fixtures/gemini services/api/fixtures/gemini
+COPY services/api/fixtures/demo/trip1-v2/bundle.json services/api/fixtures/demo/trip1-v2/bundle.json
 EXPOSE 8080
 CMD ["node", "services/api/dist/index.js"]

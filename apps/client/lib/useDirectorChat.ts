@@ -11,6 +11,7 @@ const REQUEST_FAILURE = "I couldn't do that. Try again?";
 
 function reportFailure(cause: unknown): string {
   const error = cause as { code?: unknown; message?: unknown };
+  if (error?.code === "demo_limit_reached") return "Demo limit reached — try the options";
   console.info("Director chat request failed", error?.code ?? error?.message ?? "unknown");
   return REQUEST_FAILURE;
 }
