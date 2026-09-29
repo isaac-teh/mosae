@@ -30,6 +30,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
   const [renderEtaMinutes, setRenderEtaMinutes] = useState<number | null>(null);
   const pendingSave = useRef<Promise<boolean> | null>(null);
   const renderRequestId = useRef(0);
+  const renderStartedAt = useRef(0);
   const revisionRef = useRef(0);
   const savedOpsKeyRef = useRef("[]");
   const ops = history.snapshots[history.index] ?? [];
@@ -147,18 +148,19 @@ export function useEditor(projectId: string, generationId: string, repository: S
       if (requestId !== renderRequestId.current) return;
     }
     const revision = revisionRef.current;
+    renderStartedAt.current = Date.now();
+    setRenderProgress(0);
+    setRenderEtaMinutes(null);
     setSave({ state: "rendering" });
     try {
       if (revision === 0) {
-        const startedAt = Date.now();
-        setRenderProgress(0);
         const pollProgress = async () => {
           try {
             const film = await repository.getFilm(generationId);
             const progress = Math.max(0, Math.min(1, film.renderProgress ?? 0));
             setRenderProgress((current) => Math.max(current ?? 0, progress));
             setRenderEtaMinutes(progress > 0 && progress < 1
-              ? Math.max(1, Math.ceil(((Date.now() - startedAt) * (1 - progress) / progress) / 60_000))
+              ? Math.max(1, Math.ceil(((Date.now() - renderStartedAt.current) * (1 - progress) / progress) / 60_000))
               : null);
           } catch { /* The save promise still reports render failures. */ }
         };
@@ -191,8 +193,17 @@ export function useEditor(projectId: string, generationId: string, repository: S
       try {
         const result = await repository.getRender(projectId, generationId, renderRequest.revision);
         if (!active || renderRequest.requestId !== renderRequestId.current) return;
-        if (result.status === "ready") { setDownloadUrl(result.downloadUrl ?? null); setSave({ state: "ready" }); setRenderRequest(null); }
+        if (result.status === "ready") { setDownloadUrl(result.downloadUrl ?? null); setRenderProgress(1); setRenderEtaMinutes(null); setSave({ state: "ready" }); setRenderRequest(null); }
         if (result.status === "failed") { setSave({ state: "retrying" }); setRenderRequest(null); }
+        if (result.status === "pending" || result.status === "rendering") {
+          if (typeof result.renderProgress === "number") {
+            const progress = Math.max(0, Math.min(1, result.renderProgress));
+            setRenderProgress((current) => Math.max(current ?? 0, progress));
+            setRenderEtaMinutes(progress > 0 && progress < 1
+              ? Math.max(1, Math.ceil(((Date.now() - renderStartedAt.current) * (1 - progress) / progress) / 60_000))
+              : null);
+          }
+        }
       } catch { if (active && renderRequest.requestId === renderRequestId.current) { setSave({ state: "retrying" }); setRenderRequest(null); } }
     };
     void check();

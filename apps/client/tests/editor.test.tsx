@@ -162,6 +162,15 @@ describe("film editor", () => {
     await act(async () => finish({ downloadKey: "https://film.test/saved.mp4" }));
   });
 
+  it("shows revision renderProgress while edited MP4 is rendering", async () => {
+    boundary.repository.getEdits.mockResolvedValue({ revision: 1, ops: [], updatedAt: null });
+    boundary.repository.getRender.mockResolvedValue({ revision: 1, status: "rendering", renderProgress: 0.42 });
+    await render(<EditorScreen />);
+    await click("Save");
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain("Rendering… 42%");
+  });
+
   it("visibly applies a two second photo length and autosaves it", async () => {
     await render(<EditorScreen />);
     const clip = host.querySelector('[aria-label="Select clip a"]') as HTMLButtonElement;

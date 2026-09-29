@@ -65,7 +65,8 @@ export function editRenderRouter(deps: { db: Firestore; auth?: RequestHandler; d
       const data = snap.data()!;
       const outputPath = typeof data.outputPath === "string" ? data.outputPath : undefined;
       const downloadUrl = data.status === "ready" && outputPath && deps.downloadUrl ? await deps.downloadUrl(outputPath) : undefined;
-      return res.json({ revision: data.revision, status: data.status ?? "pending", ...(outputPath ? { outputPath } : {}), ...(downloadUrl ? { downloadUrl } : {}) });
+      const renderProgress = typeof data.renderProgress === "number" ? data.renderProgress : undefined;
+      return res.json({ revision: data.revision, status: data.status ?? "pending", ...(renderProgress === undefined ? {} : { renderProgress }), ...(outputPath ? { outputPath } : {}), ...(downloadUrl ? { downloadUrl } : {}) });
     } catch (error) {
       console.error("get edit render failed", error);
       return res.status(500).json({ error: "internal" });
