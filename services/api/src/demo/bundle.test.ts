@@ -7,7 +7,10 @@ describe("trip1-v2 demo bundle", () => {
     expect(bundle.photos).toHaveLength(15);
     expect(new Set(bundle.photos.map((photo) => photo.fileName)).size).toBe(15);
     expect(bundle.photos.every((photo) => photo.analysis.kind === "photo" && photo.media.kind === "photo")).toBe(true);
+    expect(bundle.photos.every((photo) => Number.isInteger(photo.sizeBytes) && photo.sizeBytes > 0)).toBe(true);
     expect(bundle.cast.people).toHaveLength(3);
     expect(bundle.photos.filter((photo) => photo.place).every((photo) => photo.place?.country === "Singapore")).toBe(true);
+    expect(bundle.photos.map((photo) => photo.place?.name)).not.toContain("Telok Blangah");
+    expect(bundle.photos.map((photo) => photo.place?.name)).not.toContain("Singapore Zoo");
   });
 });

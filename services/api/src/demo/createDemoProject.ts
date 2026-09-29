@@ -1,14 +1,9 @@
 import type { Firestore } from "firebase-admin/firestore";
-import sharp from "sharp";
 import { buildDerivativePath, buildOriginalPath, PIPELINE_VERSION } from "../domain/ids.js";
 import { createProject, type Project } from "../store/projectStore.js";
 import { loadDemoBundle } from "./bundle.js";
 
-type DemoFile = {
-  download(): Promise<[Buffer]>;
-  save(data: Buffer, options?: { contentType?: string }): Promise<unknown>;
-  getMetadata(): Promise<[{ generation?: string | number }, ...unknown[]]>;
-};
+type DemoFile = { copy(destination: string): Promise<unknown> };
 export type DemoBucket = { file(path: string): DemoFile };
 export type DemoProject = Project & { demo: "trip1-v2" };
 
@@ -16,6 +11,7 @@ export type DemoProject = Project & { demo: "trip1-v2" };
 export async function createDemoProject(input: {
   db: Firestore; bucket: DemoBucket; userId: string; now: number;
 }): Promise<DemoProject> {
+  const startedAt = Date.now();
   const { db, bucket, userId, now } = input;
   const bundle = loadDemoBundle();
   const project = await createProject(db, { userId, mode: "memory", now });
@@ -43,28 +39,27 @@ export async function createDemoProject(input: {
   })) as T;
 
   try {
-    const batch = db.batch();
-    for (const photo of bundle.photos) {
+    const copiedPhotos = await Promise.all(bundle.photos.map(async (photo) => {
       const assetId = ids.get(photo.sourceAssetId)!;
       const shotId = ids.get(photo.sourceShotId)!;
       const storagePath = buildOriginalPath({ userId, projectId: project.id, sessionId, assetId });
-      const [original] = await bucket.file(`library/demo/trip1-v2/${photo.fileName}`).download();
-      const target = bucket.file(storagePath);
-      await target.save(original, { contentType: "image/jpeg" });
-      const [metadata] = await target.getMetadata();
-      const generation = String(metadata.generation ?? now);
+      const generation = photo.sourceGeneration;
       const owner = { userId, projectId: project.id, assetId, generation };
       const renderPath = buildDerivativePath(owner, "render.jpg");
       const thumbPath = buildDerivativePath(owner, "thumb.jpg");
-      const render = await sharp(original).rotate().resize(2048, 2048, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 88 }).toBuffer();
-      const thumb = await sharp(render).resize(512, 512, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 78 }).toBuffer();
       await Promise.all([
-        bucket.file(renderPath).save(render, { contentType: "image/jpeg" }),
-        bucket.file(thumbPath).save(thumb, { contentType: "image/jpeg" }),
+        bucket.file(`library/demo/trip1-v2/${photo.fileName}`).copy(storagePath),
+        bucket.file(`library/demo/trip1-v2/variants/render/${photo.fileName}`).copy(renderPath),
+        bucket.file(`library/demo/trip1-v2/variants/thumb/${photo.fileName}`).copy(thumbPath),
       ]);
+      return { photo, assetId, shotId, storagePath, generation, renderPath, thumbPath };
+    }));
+
+    const batch = db.batch();
+    for (const { photo, assetId, shotId, storagePath, generation, renderPath, thumbPath } of copiedPhotos) {
       batch.set(ref.collection("assets").doc(assetId), {
         id: assetId, projectId: project.id, userId, sessionId, storagePath, generation,
-        contentType: "image/jpeg", sizeBytes: original.length, fileName: photo.fileName,
+        contentType: "image/jpeg", sizeBytes: photo.sizeBytes, fileName: photo.fileName,
         status: "understood", pipelineVersion: PIPELINE_VERSION, failureReason: null,
         createdAt: now, updatedAt: now, ingestedAt: now, understoodAt: now,
         media: photo.media, place: photo.place, quality: photo.quality,
@@ -81,9 +76,11 @@ export async function createDemoProject(input: {
     batch.set(ref.collection("cast").doc("current"), { ...remap(bundle.cast), confirmed: true });
     await batch.commit();
     await ref.update({ status: "ready", readyAt: now, dateRange: { start: "2026-06-01", end: "2026-06-03" } });
+    console.info("demo_project_created", { projectId: project.id, elapsedMs: Date.now() - startedAt });
     return { ...project, demo: "trip1-v2", status: "ready" };
   } catch (error) {
     await ref.update({ status: "failed" });
+    console.info("demo_project_failed", { projectId: project.id, elapsedMs: Date.now() - startedAt });
     throw error;
   }
 }

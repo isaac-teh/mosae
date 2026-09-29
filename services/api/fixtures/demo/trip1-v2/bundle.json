@@ -116,7 +116,8 @@
         ]
       },
       "eventId": "e002",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 1446963
     },
     {
       "fileName": "d1-02.jpg",
@@ -136,11 +137,7 @@
         },
         "camera": null
       },
-      "place": {
-        "name": "Singapore Zoo",
-        "level": "landmark",
-        "country": "Singapore"
-      },
+      "place": null,
       "quality": {
         "sharpness": 581.3742934198611,
         "exposure": 209.17587289222874,
@@ -253,7 +250,8 @@
         ]
       },
       "eventId": "e006",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 1489823
     },
     {
       "fileName": "d1-03.jpg",
@@ -394,7 +392,8 @@
         ]
       },
       "eventId": "e009",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 1685324
     },
     {
       "fileName": "d1-04.jpg",
@@ -513,7 +512,8 @@
         ]
       },
       "eventId": "e004",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 1756291
     },
     {
       "fileName": "d1-05.jpg",
@@ -648,7 +648,8 @@
         ]
       },
       "eventId": "e005",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 1794931
     },
     {
       "fileName": "d1-06.jpg",
@@ -788,7 +789,8 @@
         ]
       },
       "eventId": "e008",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 2019744
     },
     {
       "fileName": "d1-07.jpg",
@@ -808,11 +810,7 @@
         },
         "camera": null
       },
-      "place": {
-        "name": "Singapore Zoo",
-        "level": "landmark",
-        "country": "Singapore"
-      },
+      "place": null,
       "quality": {
         "sharpness": 718.8454938821233,
         "exposure": 196.41654829545453,
@@ -930,7 +928,8 @@
         ]
       },
       "eventId": "e007",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 1859998
     },
     {
       "fileName": "d1-08.jpg",
@@ -950,11 +949,7 @@
         },
         "camera": null
       },
-      "place": {
-        "name": "Telok Blangah",
-        "level": "area",
-        "country": "Singapore"
-      },
+      "place": null,
       "quality": {
         "sharpness": 422.41815018599806,
         "exposure": 169.7179710410557,
@@ -1070,7 +1065,8 @@
         ]
       },
       "eventId": "e001",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 1919929
     },
     {
       "fileName": "d1-09.jpg",
@@ -1211,7 +1207,8 @@
         ]
       },
       "eventId": "e009",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 2125130
     },
     {
       "fileName": "d1-10.jpg",
@@ -1345,7 +1342,8 @@
         ]
       },
       "eventId": "e006",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 1577823
     },
     {
       "fileName": "d1-11.jpg",
@@ -1419,7 +1417,8 @@
         ]
       },
       "eventId": "e001",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 2574812
     },
     {
       "fileName": "d1-12.jpg",
@@ -1524,7 +1523,8 @@
         ]
       },
       "eventId": "e009",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 1687908
     },
     {
       "fileName": "x-distant.jpg",
@@ -1624,7 +1624,8 @@
         ]
       },
       "eventId": "e009",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 758587
     },
     {
       "fileName": "x-photobomb.jpg",
@@ -1765,7 +1766,8 @@
         ]
       },
       "eventId": "e006",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 2548674
     },
     {
       "fileName": "x-stranger.jpg",
@@ -1931,7 +1933,8 @@
         ]
       },
       "eventId": "e003",
-      "dupOf": null
+      "dupOf": null,
+      "sizeBytes": 195917
     }
   ],
   "cast": {
