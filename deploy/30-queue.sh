@@ -25,8 +25,8 @@ scheduler_args=(
   --project "$PROJECT_ID" --location "$REGION"
   --schedule '* * * * *' --time-zone Etc/UTC
   --uri "$api_url/internal/dispatch-outbox" --http-method POST
-  --oidc-service-account "$INVOKER_SA" --oidc-token-audience "$api_url"
-  --message-body '{}' --update-headers 'Content-Type=application/json'
+  --oidc-service-account-email "$INVOKER_SA" --oidc-token-audience "$api_url"
+  --message-body '{}' --headers 'Content-Type=application/json'
   --attempt-deadline 30s
 )
 if probe gcloud scheduler jobs describe "$job_name" --project "$PROJECT_ID" --location "$REGION"; then
