@@ -168,7 +168,7 @@ app.use("/api", express.json({ limit: "2mb" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(
   "/api/projects",
-  projectsRouter({ db: adminDb, settle, embedQuery }),
+  projectsRouter({ db: adminDb, settle, embedQuery, demoBucket: getStorage(getAdminApp()).bucket(config.storageBucket) }),
 );
 app.use(
   "/api/projects",

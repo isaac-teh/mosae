@@ -22,6 +22,12 @@ async function setup() {
 }
 
 describe("recordFinalize (emulator)", () => {
+  it("ignores a finalized demo copy without scheduling ingest", async () => {
+    const { project, event } = await setup();
+    await adminDb.doc(`projects/${project.id}`).update({ demo: "trip1-v2" });
+    expect(await recordFinalize(adminDb, BUCKET, event)).toEqual({ kind: "ignored_demo" });
+    expect((await adminDb.collection(`projects/${project.id}/taskOutbox`).get()).empty).toBe(true);
+  });
   it("accepts a registered upload and atomically writes asset and outbox task", async () => {
     const { project, entry, event } = await setup();
     const result = await recordFinalize(adminDb, BUCKET, event);

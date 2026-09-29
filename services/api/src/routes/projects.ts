@@ -1,5 +1,8 @@
 import { Router, type RequestHandler, type Response } from "express";
 import type { Firestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
+import { getAdminApp } from "../firebase/admin.js";
+import { createDemoProject, type DemoBucket } from "../demo/createDemoProject.js";
 import { requireUser } from "../auth/requireUser.js";
 import { buildOriginalPath, isValidId } from "../domain/ids.js";
 import type { ManifestEntry } from "../domain/uploadSession.js";
@@ -74,6 +77,7 @@ export function projectsRouter(deps: {
   settle?: (projectId: string) => Promise<void>;
   sleep?: (ms: number) => Promise<void>;
   embedQuery?: (text: string) => Promise<number[]>;
+  demoBucket?: DemoBucket;
 }): Router {
   const { db } = deps;
   const now = deps.now ?? Date.now;
@@ -145,6 +149,16 @@ export function projectsRouter(deps: {
         mode,
         now: now(),
       });
+      res.status(201).json({ project });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  router.post("/demo", async (_req, res) => {
+    try {
+      const bucket = deps.demoBucket ?? getStorage(getAdminApp()).bucket(process.env.FIREBASE_STORAGE_BUCKET ?? "demo-mosae.appspot.com") as unknown as DemoBucket;
+      const project = await createDemoProject({ db, bucket, userId: res.locals.userId, now: now() });
       res.status(201).json({ project });
     } catch (error) {
       handleError(res, error);

@@ -20,9 +20,11 @@ vi.mock("../store/projectStore.js", async () => {
 });
 
 vi.mock("../store/understandStore.js", () => ({ loadSearchableShots: vi.fn() }));
+vi.mock("../demo/createDemoProject.js", () => ({ createDemoProject: vi.fn() }));
 
 const store = await import("../store/projectStore.js");
 const understandStore = await import("../store/understandStore.js");
+const demo = await import("../demo/createDemoProject.js");
 const { projectsRouter } = await import("./projects.js");
 const db = {} as Firestore;
 const fakeAuth: express.RequestHandler = (_req, res, next) => {
@@ -71,6 +73,13 @@ describe("projects routes", () => {
       mode: "memory",
       now: 42,
     });
+  });
+  it("creates a ready demo project for the signed-in user", async () => {
+    vi.mocked(demo.createDemoProject).mockResolvedValue({ id: "demo-1", userId: "user-1", mode: "memory", title: null, status: "ready", createdAt: 42, demo: "trip1-v2" });
+    const res = await request(await listeningServer(buildApp())).post("/api/projects/demo").send({});
+    expect(res.status).toBe(201);
+    expect(res.body.project).toMatchObject({ id: "demo-1", demo: "trip1-v2", status: "ready" });
+    expect(demo.createDemoProject).toHaveBeenCalledWith(expect.objectContaining({ db, userId: "user-1", now: 42 }));
   });
   it("rejects an invalid mode", async () => {
     const res = await request(await listeningServer(buildApp()))
