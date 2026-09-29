@@ -101,6 +101,38 @@ describe("director chat components", () => {
     await click("Add 1 moments"); expect(onConfirm).toHaveBeenCalledOnce();
   });
 
+  it("fills the viewport while scrolling moments and pinning the add footer", async () => {
+    await render(<MomentPickerSheet days={[{ label: "Day 2 · Kyoto", tiles: [{ shotId: "s1", uri: "/one.jpg" }] }]} selected={[]} onToggle={vi.fn()} onCancel={vi.fn()} onConfirm={vi.fn()} />);
+    const dialog = host.querySelector('[role="dialog"]') as HTMLElement;
+    const sheet = dialog.firstElementChild as HTMLElement;
+    const scrollArea = sheet.querySelector(".overflow-y-auto") as HTMLElement;
+    const footer = sheet.lastElementChild as HTMLElement;
+    expect(dialog.className).toContain("absolute");
+    expect(dialog.className).toContain("inset-0");
+    expect(sheet.className).toContain("mt-3");
+    expect(sheet.className).toContain("flex-1");
+    expect(scrollArea.className).toContain("min-h-0");
+    expect(scrollArea.className).toContain("flex-1");
+    expect(footer.className).toContain("shrink-0");
+  });
+
+  it("closes on a downward header drag but keeps the sheet open for short or upward touches", async () => {
+    const onCancel = vi.fn();
+    await render(<MomentPickerSheet days={[]} selected={[]} onToggle={vi.fn()} onCancel={onCancel} onConfirm={vi.fn()} />);
+    const header = host.querySelector('[aria-label="Moment picker header"]') as HTMLElement;
+    const touch = (type: string, pageY: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.defineProperty(event, "pageY", { value: pageY });
+      header.dispatchEvent(event);
+    };
+    await act(async () => { touch("touchstart", 100); touch("touchend", 130); });
+    expect(onCancel).not.toHaveBeenCalled();
+    await act(async () => { touch("touchstart", 120); touch("touchend", 40); });
+    expect(onCancel).not.toHaveBeenCalled();
+    await act(async () => { touch("touchstart", 100); touch("touchend", 190); });
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
   it("renders the direction controls and header progress", async () => {
     const onChange = vi.fn();
     await render(<><ChatDirectionCard pace="gentle" lengthSec={120} durations={[{ id: "30s", label: "30 sec", seconds: 30 }, { id: "1m", label: "1 min", seconds: 60 }, { id: "2m", label: "2 min", seconds: 120 }]} maximumDurationLabel="2 min" focus="family" collageAmount="few" motionFeel="calm" focusOptions={[{ id: "family", label: "Whole family" }, { id: "reactions", label: "Her reactions" }]} onChange={onChange} /><ChatHeader title="Japan, autumn" confirmed={3} ready={false} onBack={vi.fn()} /></>);

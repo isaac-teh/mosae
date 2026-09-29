@@ -34,7 +34,7 @@ export type ComposeConfig = {
    * outbox; the local dev runner only drains on events, so it hooks in here or
    * the render task sits undelivered and the film stays "rendering" forever.
    */
-  afterRenderEnqueued?: () => void;
+  afterRenderEnqueued?: () => void | Promise<void>;
 };
 
 /**
@@ -335,7 +335,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       generationId: task.generationId,
       schemaVersion: generation.schemaVersion,
     });
-    config.afterRenderEnqueued?.();
+    await config.afterRenderEnqueued?.();
 
     return "composed";
   };
