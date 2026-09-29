@@ -18,6 +18,7 @@ export type FinalizeInput = {
 
 export type FinalizeResult =
   | { kind: "ignored_path" }
+  | { kind: "ignored_demo" }
   | { kind: "wrong_bucket" }
   | { kind: "unregistered" }
   | { kind: "rejected"; reason: "size_mismatch" | "not_pending" }
@@ -80,6 +81,7 @@ export async function recordFinalize(db: Firestore, expectedBucket: string, inpu
       tx.get(taskRef),
     ]);
     if (!project.exists || project.get("userId") !== path.userId) return { kind: "unregistered" };
+    if (project.get("demo") === "trip1-v2") return { kind: "ignored_demo" };
     if (!session.exists || !entrySnap.exists) return { kind: "unregistered" };
 
     const entry = entrySnap.data() as ManifestEntry;

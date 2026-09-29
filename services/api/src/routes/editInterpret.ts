@@ -4,6 +4,7 @@ import { applyEdits, type EditOp, type Timeline } from "@mosae/contracts";
 import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
 import type { GenerateOptions } from "../gemini/client.js";
+import { DemoLimitReached } from "../gemini/errors.js";
 import { interpretEdit, type InterpretEditModelResult } from "../directing/interpretEdit.js";
 import { getEditDocument } from "../directing/editStore.js";
 
@@ -41,6 +42,7 @@ export function editInterpretRouter(deps: {
       });
       return res.json(result);
     } catch (error) {
+      if (error instanceof DemoLimitReached) return res.status(429).json({ error: "demo_limit_reached", message: error.message });
       console.error("edit interpretation failed", req.params.projectId, req.params.generationId, error);
       return res.status(500).json({ error: "internal" });
     }

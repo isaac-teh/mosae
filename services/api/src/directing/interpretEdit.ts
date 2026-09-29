@@ -1,6 +1,7 @@
 import { ALLOWED_COMBOS, COLLAGE_EFFECTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, EditOpSchema, applyEdits, type EditOp, type Timeline } from "@mosae/contracts";
 import type { GenerateOptions } from "../gemini/client.js";
 import { MODELS } from "../gemini/pricing.js";
+import { DemoLimitReached } from "../gemini/errors.js";
 
 export type InterpretEditRequest = { text: string; timeline: Timeline };
 export type InterpretEditModelResult = { reply?: string; ops: EditOp[] };
@@ -63,7 +64,8 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
     }));
     if (!result.ops.length || !applyEdits(req.timeline, result.ops).ok) return { reply: fallbackReply, ops: [] };
     return { reply: result.reply?.trim() || "Here are the edits I suggest.", ops: result.ops };
-  } catch {
+  } catch (error) {
+    if (error instanceof DemoLimitReached) throw error;
     return { reply: fallbackReply, ops: [] };
   }
 }

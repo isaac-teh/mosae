@@ -41,6 +41,7 @@ export function storageEventsRouter(deps: {
       } else if (
         result.kind !== "accepted" &&
         result.kind !== "ignored_path" &&
+        result.kind !== "ignored_demo" &&
         result.kind !== "duplicate"
       )
         console.warn("storage finalize not accepted", name, result);

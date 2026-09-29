@@ -6,6 +6,7 @@ import { JourneySteps, MomentTile } from "@/components/ds";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
 import { MediaThumb } from "@/components/MediaThumb";
 import { ArrowRightIcon, ChevronDownIcon, PlayIcon } from "@/components/icons";
+import { startDemoTrip } from "@/lib/startDemoTrip";
 
 type Picked = { id: string; file: File; isVideo: boolean; duration?: string; selected: boolean };
 
@@ -19,6 +20,7 @@ export default function PickMemoryScreen() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [demoBusy, setDemoBusy] = useState(false);
   const pickerRef = useRef<MediaPickerHandle>(null);
   const router = useRouter();
 
@@ -66,6 +68,14 @@ export default function PickMemoryScreen() {
     }
   }
 
+  async function tryDemo() {
+    if (demoBusy) return;
+    setDemoBusy(true); setError(null);
+    try { await startDemoTrip(router); }
+    catch { setError("Could not start the demo trip. Try again."); }
+    finally { setDemoBusy(false); }
+  }
+
   const status =
     error ??
     (uploading
@@ -111,7 +121,7 @@ export default function PickMemoryScreen() {
         </View>
 
         {items.length === 0 ? (
-          <Pressable
+          <View><Pressable
             role="button"
             onPress={() => pickerRef.current?.open()}
             className="mx-4 mt-2 h-[260px] items-center justify-center gap-2 rounded-2xl border border-dashed border-line-strong bg-surface-sunken"
@@ -120,7 +130,7 @@ export default function PickMemoryScreen() {
             <Text className="max-w-[240px] text-center font-sans text-caption leading-[18px] text-ink-muted">
               Choose the moments from your trip, celebration, or everyday life.
             </Text>
-          </Pressable>
+          </Pressable><Pressable role="button" disabled={demoBusy} onPress={() => void tryDemo()} className="mt-3 min-h-11 items-center justify-center"><Text className="font-sans text-caption text-action">{demoBusy ? "Preparing demo trip…" : "No photos handy? Use the demo trip"}</Text></Pressable></View>
         ) : (
           <View className="flex-row flex-wrap gap-0.5">
             {items.map((item) => (

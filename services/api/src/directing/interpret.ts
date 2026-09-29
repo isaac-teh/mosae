@@ -1,5 +1,6 @@
 import type { GenerateOptions } from "../gemini/client.js";
 import { MODELS } from "../gemini/pricing.js";
+import { DemoLimitReached } from "../gemini/errors.js";
 import type { ProjectSummary } from "./summary.js";
 
 export type ChatStep = "occasion" | "people" | "moments" | "direction";
@@ -74,7 +75,8 @@ export async function interpret(req: InterpretRequest, deps: {
     } else change = modelResult.change;
     const reply = modelResult.reply?.trim() || `I understood: ${change.kind === "note" ? change.note : req.text.trim()}`;
     return { reply, change };
-  } catch {
+  } catch (error) {
+    if (error instanceof DemoLimitReached) throw error;
     return { reply: fallback, change: { kind: "unclear" } };
   }
 }
