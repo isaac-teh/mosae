@@ -1,5 +1,5 @@
 import type { Request, RequestHandler, Response } from "express";
-import { parseRenderRequest, renderTimeline, resolveMediaUrls, type RenderDeps } from "./renderTimeline.js";
+import { parseRenderRequest, renderTimeline, resolveMediaUrls, type RenderDeps, type RenderRequest } from "./renderTimeline.js";
 
 /**
  * The service's one render path.
@@ -9,13 +9,86 @@ import { parseRenderRequest, renderTimeline, resolveMediaUrls, type RenderDeps }
  * reach is a render path nobody has run. The previous arrangement inlined the
  * render here and left `renderTimeline` with four tests and no caller.
  */
+export type RenderCallbackPayload = {
+  kind: "progress"; projectId: string; generationId: string; progress: number; revision?: number;
+} | {
+  kind: "complete"; projectId: string; generationId: string; outputPath: string; revision?: number;
+} | {
+  kind: "failed"; projectId: string; generationId: string; reason: string; revision?: number;
+};
+
 export type RenderRouteDeps = Omit<RenderDeps, "onProgress"> & {
   outputDir: string;
   /** Where this process serves its own `/media` mount, e.g. `http://127.0.0.1:8080`. */
   mediaBaseUrl: string;
   /** PUT the finished file to a signed URL. Omitted locally, where the file stays on disk. */
   upload?: (uploadUrl: string, filePath: string) => Promise<void>;
+  callback?: (event: RenderCallbackPayload) => Promise<void>;
 };
+
+const MAX_TASK_ATTEMPTS = 3;
+
+function safeErrorText(error: unknown): string {
+  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return text.replace(/https?:\/\/[^\s"'<>]+/g, (value) => {
+    try {
+      const url = new URL(value);
+      return `${url.origin}${url.pathname}`;
+    } catch {
+      return "[redacted-url]";
+    }
+  });
+}
+
+export async function executeQueuedRender(
+  request: RenderRequest,
+  deps: RenderRouteDeps,
+  retryCount: number,
+): Promise<{ kind: "complete" } | { kind: "retry"; reason: string }> {
+  if (!request.job) throw new Error("render request has no job metadata");
+  if (!deps.callback) throw new Error("render callback is not configured");
+  const { projectId, generationId, outputPath, revision } = request.job;
+  const revisionInfo = revision === undefined ? {} : { revision };
+  let callbackQueue = Promise.resolve();
+  let lastProgressAt = 0;
+  let latestProgress = 0;
+  try {
+    const result = await renderTimeline(
+      { ...request, sources: resolveMediaUrls(request.sources, deps.mediaBaseUrl) },
+      {
+        bundle: deps.bundle,
+        selectComposition: deps.selectComposition,
+        renderMedia: deps.renderMedia,
+        onProgress: (progress) => {
+          latestProgress = progress;
+          const now = Date.now();
+          if (now - lastProgressAt < 5_000 && progress < 0.99) return;
+          lastProgressAt = now;
+          callbackQueue = callbackQueue
+            .then(() => deps.callback!({ kind: "progress", projectId, generationId, progress: latestProgress, ...revisionInfo }))
+            .catch((error: unknown) => {
+              console.error("render progress callback failed", { errorName: error instanceof Error ? error.name : "unknown" });
+            });
+        },
+      },
+      deps.outputDir,
+    );
+    if (request.uploadUrl) {
+      if (!deps.upload) throw new Error("this render service cannot upload");
+      await deps.upload(request.uploadUrl, result.outputPath);
+    }
+    await callbackQueue;
+    await deps.callback({ kind: "complete", projectId, generationId, outputPath, ...revisionInfo });
+    return { kind: "complete" };
+  } catch (error) {
+    const reason = safeErrorText(error);
+    console.error("render failed", { errorName: error instanceof Error ? error.name : "unknown", reason });
+    if (retryCount < MAX_TASK_ATTEMPTS - 1) return { kind: "retry", reason };
+    await callbackQueue;
+    await deps.callback({ kind: "failed", projectId, generationId, reason: reason.slice(0, 500), ...revisionInfo });
+    return { kind: "complete" };
+  }
+}
 
 /**
  * Progress is streamed as newline-delimited JSON rather than returned at the
@@ -29,6 +102,20 @@ export function renderRoute(deps: RenderRouteDeps): RequestHandler {
       request = parseRenderRequest(req.body);
     } catch (error) {
       res.status(400).json({ error: "invalid_request", detail: error instanceof Error ? error.message : String(error) });
+      return;
+    }
+
+    if (request.job) {
+      const retryHeader = req.header("x-cloudtasks-taskretrycount") ?? "0";
+      const retryCount = /^\d+$/.test(retryHeader) ? Number(retryHeader) : 0;
+      try {
+        const result = await executeQueuedRender(request, deps, retryCount);
+        if (result.kind === "retry") res.status(500).json({ error: "render_failed", detail: result.reason });
+        else res.sendStatus(204);
+      } catch (error) {
+        console.error("render callback failed", { errorName: error instanceof Error ? error.name : "unknown" });
+        res.status(500).json({ error: "render_callback_failed" });
+      }
       return;
     }
 
@@ -57,7 +144,7 @@ export function renderRoute(deps: RenderRouteDeps): RequestHandler {
       // The stream is already open, so a failure is the last line rather than a
       // status code. A caller that stops at the first line it can parse would
       // otherwise read a half-written film as a finished one.
-      console.error("render failed", error);
+      console.error("render failed", { errorName: error instanceof Error ? error.name : "unknown", reason: safeErrorText(error) });
       write({ error: "render_failed", detail: error instanceof Error ? error.message : String(error) });
     } finally {
       res.end();

@@ -172,6 +172,26 @@ describe("createRender", () => {
     expect(db.docs.get("projects/p1")?.savedGenerationId).toBe("g1");
   });
 
+  it("queues prepared render work and returns without pinning the API request", async () => {
+    const db = seed();
+    const enqueueRenderJob = vi.fn(async () => "enqueued" as const);
+    const post = vi.fn(stream({ done: true, outputPath: "/tmp/g1.mp4", durationInFrames: 120 }));
+    const { render } = build(db, [], { enqueueRenderJob, post });
+
+    expect(await render({ projectId: "p1", generationId: "g1", workKey: "render:key" })).toBe("enqueued");
+
+    expect(enqueueRenderJob).toHaveBeenCalledWith(expect.objectContaining({
+      name: "render-render_key",
+      path: "/tasks/render",
+      body: expect.objectContaining({
+        outputFile: "g1.mp4",
+        job: expect.objectContaining({ projectId: "p1", generationId: "g1", userId: "owner" }),
+      }),
+    }));
+    expect(post).not.toHaveBeenCalled();
+    expect(generation(db).status).toBe("rendering");
+  });
+
   it("copies a local render to its storage path and saves that path", async () => {
     // A local render never uploads, so its done event has uploaded !== true.
     // Without storeLocalOutput the MP4 would stay on the render service's disk

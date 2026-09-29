@@ -105,10 +105,14 @@ const loadSource = async (projectId: string, shotId: string) => {
   return { storagePath: asset.get("storagePath") as string, derivatives: asset.get("derivatives") };
 };
 const renderBucket = () => getStorage(getAdminApp()).bucket(config.storageBucket);
+const renderQueue = config.tasks
+  ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.renderServiceUrl })
+  : null;
 const render = createRender({
   db: adminDb,
   renderServiceUrl: config.renderServiceUrl,
   sources: { loadAsset: loadSource, loadSoundtrack: async (soundtrackId) => soundtrackPath(musicLibrary, soundtrackId) },
+  ...(renderQueue ? { enqueueRenderJob: (task) => renderQueue.enqueuePayload(task) } : {}),
   // The render service is handed URLs it can fetch and one it can PUT to, so
   // it needs no storage credentials of its own. On the storage emulator there
   // are no credentials to sign with at all: reads use the emulator's direct
@@ -117,14 +121,14 @@ const render = createRender({
   signRead: process.env.FIREBASE_STORAGE_EMULATOR_HOST
     ? (path) => firebaseDownloadUrlStore(renderBucket()).signedDownloadUrl(path)
     : async (path) => {
-        const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "read", expires: Date.now() + 6 * 60 * 60 * 1000 });
+        const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "read", expires: Date.now() + 24 * 60 * 60 * 1000 });
         return url;
       },
   ...(process.env.FIREBASE_STORAGE_EMULATOR_HOST
     ? {}
     : {
         signUpload: async (path: string) => {
-          const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "write", contentType: "video/mp4", expires: Date.now() + 6 * 60 * 60 * 1000 });
+          const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "write", contentType: "video/mp4", expires: Date.now() + 24 * 60 * 60 * 1000 });
           return url;
         },
       }),

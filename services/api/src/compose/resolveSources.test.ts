@@ -98,6 +98,18 @@ describe("resolveSources", () => {
     expect(sources["shot-photo-1"]).toBe("uploads/alice/p1/s1/a1/original.jpg");
   });
 
+  it("uses the normalized render derivative for photo renders", async () => {
+    const timeline = makeTimeline();
+    const deps = mockDeps({
+      "shot-photo-1": {
+        storagePath: "uploads/alice/p1/s1/a1/original.heic",
+        derivatives: { thumbPath: "proxies/u/p/a/1/thumb.jpg", renderPath: "proxies/u/p/a/1/render.jpg" },
+      },
+    });
+
+    expect(await resolveSources(timeline, deps, "proj-1", "render")).toEqual({ "shot-photo-1": "proxies/u/p/a/1/render.jpg" });
+  });
+
   it("falls back to thumbPath when proxyPath is null in preview mode", async () => {
     const timeline = makeTimeline();
     const deps = mockDeps({

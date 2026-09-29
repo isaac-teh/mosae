@@ -71,6 +71,18 @@ describe("parseRenderRequest", () => {
     expect(parseRenderRequest(request).outputFile).toBe("out.mp4");
   });
 
+  it("preserves callback metadata for a queued render job", () => {
+    const parsed = parseRenderRequest({
+      ...request,
+      job: { projectId: "p1", generationId: "g1", userId: "owner", outputPath: "renders/owner/p1/g1.mp4" },
+    });
+    expect(parsed.job).toEqual({ projectId: "p1", generationId: "g1", userId: "owner", outputPath: "renders/owner/p1/g1.mp4" });
+  });
+
+  it("rejects malformed callback metadata", () => {
+    expect(() => parseRenderRequest({ ...request, job: { projectId: "p1" } })).toThrow(/job metadata/i);
+  });
+
   it("rejects a request whose timeline does not match the contract", () => {
     expect(() => parseRenderRequest({ ...request, timeline: { ...fixtureTimeline, fps: 24 } })).toThrow(/timeline/i);
   });
