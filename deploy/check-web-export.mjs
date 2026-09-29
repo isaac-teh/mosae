@@ -53,6 +53,7 @@ function localAssetPath(rawUrl, sourceFile) {
 }
 
 try {
+  collect(exportDir);
   for (const { file, relative } of files) {
     const contents = readFileSync(file);
     if (contents.includes(Buffer.from("______"))) {
