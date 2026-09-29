@@ -33,14 +33,31 @@ const examples = [
   { text: "drop the airport bits", op: "remove", clipId: "clip-airport" },
   { text: "make the temple collage calmer", op: "setCollageMotion", clipId: "collage-temple" },
 ];
+const trip1Timeline: Timeline = {
+  ...timeline,
+  durationSec: 29,
+  chapters: [
+    { title: "Day 1 · Siloso Beach", startSec: 0 },
+    { title: "Day 2 · Singapore Zoo", startSec: 9 },
+    { title: "Day 3 · Shangri-La Rasa Sentosa", startSec: 19 },
+  ],
+  videoClips: [0, 2, 4, 7, 9, 12, 14, 17, 19, 22, 24, 27].map((startSec, index) => ({
+    id: `trip1Shot${String(index).padStart(16, "0")}#still@c${index < 4 ? 0 : index < 8 ? 1 : 2}`,
+    source: { kind: "photo" as const, shotId: `shot${index}` },
+    startSec,
+    durationSec: [2, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2][index]!,
+    transitionIn: { kind: "cut" as const, durationSec: 0 },
+  })),
+  captions: [],
+};
 
 afterEach(() => { if (oldMode === undefined) delete process.env.MOCK_GEMINI; else process.env.MOCK_GEMINI = oldMode; vi.resetModules(); });
 
 describe("edit interpretation replay route (Firestore emulator)", () => {
-  it("replays the three recorded Ask examples through the owned-generation route", async () => {
+  it("replays the recorded Ask examples and the trip1 zoo edit through the owned-generation route", async () => {
     if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error("FIRESTORE_EMULATOR_HOST must point at the already-running emulator");
     const fixtures = readdirSync(fixturesDir).filter((name) => name.startsWith("edit-interpret-") && name.endsWith(".json"));
-    expect(fixtures).toHaveLength(4); // one example required a recorded schema-repair turn
+    expect(fixtures).toHaveLength(5); // four earlier turns plus the real trip1 zoo request
     process.env.MOCK_GEMINI = "replay";
     vi.resetModules();
     const [{ editInterpretRouter }, { generateStructured }, { createGeminiClient }] = await Promise.all([
@@ -58,5 +75,12 @@ describe("edit interpretation replay route (Firestore emulator)", () => {
       expect(response.status, example.text).toBe(200);
       expect(response.body.ops).toContainEqual(expect.objectContaining({ op: example.op, clipId: example.clipId }));
     }
+    const tripGenerationId = "generation-trip1-zoo";
+    await adminDb.doc(`projects/${projectId}/generations/${tripGenerationId}`).set({ timeline: { ...trip1Timeline, projectId } });
+    const tripResponse = await request(app).post(`/api/projects/${projectId}/generations/${tripGenerationId}/edits/interpret`).send({ text: "move the zoo photos earlier", revision: 0 });
+    expect(tripResponse.status).toBe(200);
+    expect(tripResponse.body.reply).toContain("Singapore Zoo");
+    expect(tripResponse.body.ops).toHaveLength(4);
+    expect(tripResponse.body.ops.map((op: { clipId: string }) => op.clipId)).toEqual(trip1Timeline.videoClips.slice(4, 8).map((clip) => "id" in clip ? clip.id : clip.clipId));
   });
 });
