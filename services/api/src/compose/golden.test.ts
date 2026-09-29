@@ -79,6 +79,10 @@ describe("golden composition", () => {
     expect(parsed.ok ? [] : parsed.errors).toEqual([]);
   });
 
+  it("emits timeline schema v2 even when the golden film has no collage candidates", async () => {
+    expect((await composeOrThrow()).schemaVersion).toBe(2);
+  });
+
   it("is unchanged by the wall clock", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2021-03-04T05:06:07.008Z"));
@@ -129,13 +133,13 @@ describe("golden composition", () => {
     const boundary = (out: typeof arrival, incoming: typeof arrival) =>
       Number(((out.startSec + out.durationSec) - incoming.startSec).toFixed(6));
 
-    expect(talking.transitionIn.kind).toBe("crossfade");
+    expect(talking.transitionIn?.kind).toBe("crossfade");
     expect(boundary(arrival, talking)).toBeCloseTo(0.5);
 
-    expect(water.transitionIn.kind).toBe("cut");
+    expect(water.transitionIn?.kind).toBe("cut");
     expect(boundary(talking, water)).toBeCloseTo(0);
 
-    expect(dusk.transitionIn.kind).toBe("crossfade");
+    expect(dusk.transitionIn?.kind).toBe("crossfade");
     expect(boundary(water, dusk)).toBeCloseTo(0.5);
   });
 

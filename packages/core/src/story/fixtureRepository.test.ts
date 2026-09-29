@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest";
 import { createFixtureStoryRepository } from "./fixtureRepository";
 
 describe("fixture story repository", () => {
+  it("provides a collage editor sample and same-event alternatives", async () => {
+    const repo = createFixtureStoryRepository({ delayMs: 0 });
+    const film = await repo.getFilmTimeline("fixture", "demo-film");
+    expect(film.timeline.videoClips.some((clip) => "kind" in clip)).toBe(true);
+    expect((await repo.getPlan("demo")).moments[0]).toMatchObject({ id: "moment-1", shotId: "fixture-1" });
+    await expect(repo.getAlternatives("demo", "moment-1")).resolves.toEqual([{ shotId: "fixture-alt", thumbnailUrl: "demo:timeline-strawberry", kind: "photo" }]);
+  });
+
+  it("provides a playable editor timeline and local image keys", async () => {
+    const { timeline, sources } = await createFixtureStoryRepository({ delayMs: 0 }).getFilmTimeline("fixture", "demo-film");
+    expect(timeline.videoClips).toHaveLength(7);
+    expect(timeline.chapters.map((chapter) => chapter.title)).toEqual(["Opening", "Candid moments", "Closing"]);
+    expect(Object.keys(sources)).toHaveLength(4);
+    expect(Object.values(sources).every((value) => value.startsWith("demo:"))).toBe(true);
+  });
+
   it("creates the Figma example plan", async () => {
     const repo = createFixtureStoryRepository({ delayMs: 0 });
     const { planId } = await repo.createPlan("our trip", ["p1"]);

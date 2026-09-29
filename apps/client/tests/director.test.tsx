@@ -43,7 +43,7 @@ const planFixture = {
   leftOut: [{ shotId: "set-aside-blur", thumbnailUrl: "https://image/blur", reason: "Blurry" }, ...Array.from({ length: 120 }, (_, index) => ({ shotId: `dup-${index}`, thumbnailUrl: "", reason: "Near duplicate" }))],
   edits: { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], excludedShotIds: ["previously-excluded", "dup-0"], momentOrder: [], photoSwaps: {} },
 } as any;
-const directionOptions = { note: "Warm, intimate story", rewrites: [], cadences: [{ id: "reflective", name: "Gentle", description: "Unhurried" }, { id: "playful", name: "Lively", description: "Energetic" }], soundtracks: [], durations: [{ id: "1m", label: "1 min", caption: "Short", seconds: 60 }, { id: "2m", label: "2 min", caption: "Balanced", seconds: 120 }, { id: "4m", label: "4 min", caption: "Long", seconds: 240 }], recommendedDuration: "2m", recommendedCadence: "reflective", cadenceReason: "The photos feel calm" };
+const directionOptions = { note: "Warm, intimate story", rewrites: [], cadences: [{ id: "reflective", name: "Gentle", description: "Unhurried" }, { id: "playful", name: "Lively", description: "Energetic" }], soundtracks: [{ id: "lyria-reflective", name: "Quiet afternoon", description: "Gentle piano" }], durations: [{ id: "1m", label: "1 min", caption: "Short", seconds: 60 }, { id: "2m", label: "2 min", caption: "Balanced", seconds: 120 }, { id: "4m", label: "4 min", caption: "Long", seconds: 240 }], recommendedDuration: "2m", recommendedCadence: "reflective", cadenceReason: "The photos feel calm" };
 const filmFixture = { filmId: "film-1", planId: "proposal-1", version: 1, title: "Japan, autumn", subtitle: "A family trip", place: "Japan", dateLabel: "October", durationSec: 124, posterKey: "poster", savePosterKey: "poster", videoKey: "video", momentCount: 419, audioLabel: "Soft piano", shortcuts: [], status: "ready", videoUrl: "https://film.example/first-cut.mp4", rendering: false, reasons: ["Opens on the train window in Tokyo.", "Mia's reactions lead each day.", "Both moments you kept are in.", "I left out repeated scenery shots."] } as any;
 function setup(options: { faces?: boolean; interpret?: () => Promise<any>; createPlan?: () => Promise<any>; people?: any[]; readyPlan?: boolean; applyEdits?: (...args: any[]) => Promise<any>; getFilm?: (...args: any[]) => Promise<any>; saveFilm?: (...args: any[]) => Promise<any> } = {}) {
   const planReady = options.readyPlan ?? false;
@@ -347,7 +347,7 @@ describe("Director chat", () => {
     await click("Lively");
     await click("Whole family");
     await click("Sounds good. Shape it.");
-    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ cadenceId: "playful", durationId: "4m", focus: "family" })));
+    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ cadenceId: "playful", durationId: "4m", focus: "family", soundtrackId: "lyria-reflective" })));
   });
 
   it("maps generation polling progress to the shaping checklist from zero through three", async () => {
@@ -379,7 +379,7 @@ describe("Director chat", () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it("shows the completed film with three direction notes and opens its moments in the editor", async () => {
+  it("shows the completed film with three direction notes and opens the editor", async () => {
     planFixture.chapters = Array.from({ length: 5 }, (_, index) => ({ id: `chapter-${index}`, title: `Chapter ${index + 1}`, momentIds: [] }));
     await openMoments();
     await click("Done");
@@ -391,7 +391,7 @@ describe("Director chat", () => {
     expect(hasText("Both moments you kept are in.")).toBe(true);
     expect(hasText("I left out repeated scenery shots.")).toBe(false);
     await click("Open in editor");
-    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/review-moments", params: { planId: "proposal-1" } });
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", planId: "proposal-1", generationId: "film-1", request: "", repository: "api" } });
   });
 
   it("saves the film and opens the chat saved screen", async () => {
@@ -405,7 +405,7 @@ describe("Director chat", () => {
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/save-film", params: { filmId: "film-1", directorChat: "true", repository: "api", projectId: "project-1" } });
   });
 
-  it("sends Ask for a change to Review Moments with the request in the URL", async () => {
+  it("sends Ask for a change to the editor with the request in the URL", async () => {
     await openMoments();
     await click("Done");
     await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
@@ -414,7 +414,7 @@ describe("Director chat", () => {
     const composer = host.querySelector('input[aria-label="Ask for a change"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "Make it shorter"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("Send");
-    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/review-moments", params: { planId: "proposal-1", request: "Make it shorter" } });
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", planId: "proposal-1", generationId: "film-1", request: "Make it shorter", repository: "api" } });
     expect(mocks.repo.interpret).not.toHaveBeenCalled();
   });
 });

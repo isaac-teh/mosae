@@ -13,6 +13,7 @@ import type { AssembledClip } from "./assemble.js";
 import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
 import { applyArc, orderByChronology, type ClipTime } from "./chronology.js";
+import { loadCollageReview, placeCollages, type CollageReview, type CollageSource } from "./placeCollages.js";
 
 export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
   if (!momentOrder?.length) return clips;
@@ -53,12 +54,14 @@ export interface ComposeDeps {
   soundtrackIds: Set<string>;
   /** Assets map keyed by itemId. */
   assets: Map<string, Asset>;
+  collageReview?: CollageReview;
 }
 
 /** Input to runCompose — the job parameters and data needed for composition. */
 export interface ComposeJob {
   proposal: StoryProposal;
   projectId: string;
+  generationId: string;
   mode: "creator" | "memory";
   aspect: "16:9" | "9:16";
   durationId: keyof typeof DURATION_SECONDS;
@@ -351,6 +354,31 @@ export async function runCompose(
       : [],
   };
 
+  // Replace short contiguous bursts and event runs with seeded, reviewed collages.
+  const collageSources = new Map<string, CollageSource>();
+  for (const clip of timeline.videoClips) {
+    if (!("source" in clip)) continue;
+    const candidate = candidateMap.get(clip.id);
+    const asset = candidate && deps.assets.get(candidate.itemId);
+    const chapter = candidate && job.proposal.chapters[candidate.chapterIndex];
+    if (!asset || !chapter) continue;
+    collageSources.set(clip.id, {
+      assetId: asset.assetId ?? candidate.itemId,
+      chapterId: chapter.id,
+      eventId: asset.eventId,
+      localTime: asset.localTime,
+      dHash: asset.dHash,
+      dupOf: asset.dupOf,
+      hasSpeech: candidate.hasSpeech,
+    });
+  }
+  let withCollages: Timeline;
+  try {
+    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview());
+  } catch (error) {
+    return { ok: false, reasons: [`collage placement failed: ${error instanceof Error ? error.message : String(error)}`] };
+  }
+
   // Validate the assembled timeline
   const validationCtx: import("./validateTimeline.js").ValidationContext = {
     chapters: job.proposal.chapters.map((ch, i) => ({ index: i, itemIds: ch.momentIds })),
@@ -359,17 +387,17 @@ export async function runCompose(
     soundtrackIds: deps.soundtrackIds,
     // The length the film is committed to after fitting — the requested target,
     // or the shortened one when the media could not reach it.
-    targetSec: fittedTargetSec,
+    targetSec: fittedTargetSec - (timeline.durationSec - withCollages.durationSec),
     fps: 30,
   };
 
   const droppedPicks = dropped.map((drop) => drop.reason);
-  const issues = validateTimeline(timeline, validationCtx);
+  const issues = validateTimeline(withCollages, validationCtx);
 
-  let final = timeline;
+  let final = withCollages;
   if (issues.length > 0) {
     // One repair pass, deterministic only. A second pass is a loop in disguise.
-    const repaired = repairOnce(timeline, issues, validationCtx);
+    const repaired = repairOnce(withCollages, issues, validationCtx);
     if (!repaired.ok) {
       return { ok: false, reasons: [`validation failed: ${repaired.reasons.join("; ")}`] };
     }

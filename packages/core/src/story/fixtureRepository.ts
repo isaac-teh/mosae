@@ -12,6 +12,8 @@ import type {
   DurationChoice,
 } from "./types";
 import type { StoryRepository } from "./repository";
+import type { FilmEdits, FilmRender } from "./repository";
+import { parseTimeline } from "@mosae/contracts";
 
 const PLAN_ID = "demo";
 const FILM_ID = "demo-film";
@@ -126,7 +128,7 @@ const basePlan: StoryPlan = {
     sequence: "4 Trip Chapters • Narita to Fushimi Inari • Emotional Arc preserved",
   },
   chapters,
-  moments: moments.map((m) => ({ ...m, selected: true, favorite: false })),
+  moments: moments.map((m, index) => ({ ...m, shotId: `fixture-${index + 1}`, selected: true, favorite: false })),
   otherPhotoCount: 216,
   albumName: "Japan Trip",
   suggestions: [
@@ -211,6 +213,18 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
 
   let planState: StoryPlan = structuredClone(basePlan);
   let filmState: Film = structuredClone(baseFilm);
+  const editDocuments = new Map<string, FilmEdits>();
+  const editRenders = new Map<string, FilmRender>();
+  const browserEditKey = (projectId: string, generationId: string) => `mosae:fixture-editor:${projectId}/${generationId}`;
+  const browserRenderKey = (projectId: string, generationId: string, revision: number) => `${browserEditKey(projectId, generationId)}/render/${revision}`;
+  const readBrowserValue = <T,>(key: string): T | undefined => {
+    try {
+      return typeof window === "undefined" ? undefined : JSON.parse(window.localStorage.getItem(key) ?? "null") as T | undefined;
+    } catch { return undefined; }
+  };
+  const writeBrowserValue = (key: string, value: unknown) => {
+    try { if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage is optional in restricted browser contexts */ }
+  };
 
   function delayed<T>(fn: () => T): Promise<T> {
     return new Promise<T>((resolve) => {
@@ -255,8 +269,10 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
       return delayed(() => structuredClone(planState));
     },
 
-    // Fixture moments have no burst siblings to swap in.
-    getAlternatives: async () => [],
+    getAlternatives: async (planId: string, momentId: string) => {
+      if (planId !== PLAN_ID || !planState.moments.some((moment) => moment.id === momentId)) return [];
+      return [{ shotId: "fixture-alt", thumbnailUrl: "demo:timeline-strawberry", kind: "photo" as const }];
+    },
 
     setMomentFavorite: async (planId: string, momentId: string, favorite: boolean) => {
       if (planId !== PLAN_ID) throw new Error(`Unknown plan ${planId}`);
@@ -290,6 +306,44 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
       if (filmId !== FILM_ID) throw new Error(`Unknown film ${filmId}`);
       return structuredClone(filmState);
     },
+
+    getFilmTimeline: async (projectId) => {
+      const sourceIds = ["fixture-1", "fixture-2", "fixture-3", "fixture-4"];
+      const photos = ["timeline-birthday", "timeline-strawberry", "timeline-torii", "timeline-lantern-stroll"];
+      return {
+        timeline: parseTimeline({
+          schemaVersion: 2, projectId: projectId || "fixture", mode: "memory", aspect: "9:16", fps: 30,
+          durationSec: 22,
+          chapters: [{ title: "Opening", startSec: 0 }, { title: "Candid moments", startSec: 7 }, { title: "Closing", startSec: 16 }],
+          videoClips: [
+            { id: "clip-1", source: { kind: "photo", shotId: "fixture-1" }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } },
+            { kind: "collage", clipId: "collage-1", startSec: 3, durationSec: 4, transitionIn: { kind: "cut", durationSec: 0 }, spec: { layoutId: "photo-table", slots: sourceIds.map((shotId, index) => ({ slotId: `slot-${index + 1}`, shotId, kind: "photo" })), motionId: "stack-deal", effectId: "vignette", seed: "editor-fixture", durationSec: 4 } },
+            ...["fixture-2", "fixture-3", "fixture-4", "fixture-1", "fixture-3"].map((shotId, index) => ({ id: `clip-${index + 3}`, source: { kind: "photo", shotId }, startSec: index * 3 + 7, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } })),
+          ],
+          audioClips: [], captions: [],
+        }),
+        sources: Object.fromEntries(sourceIds.map((shotId, index) => [shotId, `demo:${photos[index]}`])),
+      };
+    },
+
+    getEdits: async (projectId, generationId) => structuredClone(editDocuments.get(`${projectId}/${generationId}`) ?? readBrowserValue<FilmEdits>(browserEditKey(projectId, generationId)) ?? { revision: 0, ops: [], updatedAt: null }),
+    interpretEdit: async () => ({ reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] }),
+    saveEdits: async (projectId, generationId, revision, ops) => {
+      const key = `${projectId}/${generationId}`;
+      const current = editDocuments.get(key) ?? { revision: 0, ops: [], updatedAt: null };
+      if (revision !== current.revision + 1) throw new Error("stale_revision");
+      const document = { revision, ops: structuredClone(ops), updatedAt: Date.now() };
+      editDocuments.set(key, document);
+      writeBrowserValue(browserEditKey(projectId, generationId), document);
+      return structuredClone(document);
+    },
+    renderRevision: async (projectId, generationId, revision) => {
+      const result = { revision, status: "ready" as const, downloadUrl: "film" };
+      editRenders.set(`${projectId}/${generationId}/${revision}`, result);
+      writeBrowserValue(browserRenderKey(projectId, generationId, revision), result);
+      return { renderId: `${generationId}-edit-${revision}` };
+    },
+    getRender: async (projectId, generationId, revision) => structuredClone(editRenders.get(`${projectId}/${generationId}/${revision}`) ?? readBrowserValue<FilmRender>(browserRenderKey(projectId, generationId, revision)) ?? { revision, status: "pending" }),
 
     reviseFilm: async (filmId: string, request: string) => {
       if (filmId !== FILM_ID) throw new Error(`Unknown film ${filmId}`);

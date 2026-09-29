@@ -1,4 +1,4 @@
-import { reflow, type AudioClip, type Caption, type ClipPlan, type Timeline } from "@mosae/contracts";
+import { applyEdits, reflow, type AudioClip, type Caption, type ClipPlan, type Timeline, type VideoClip } from "@mosae/contracts";
 import type { Candidate } from "./buildCandidates.js";
 
 /** A semantic issue found during validation. */
@@ -38,6 +38,7 @@ export interface ValidationContext {
 }
 
 const TEN_PERCENT = 0.1;
+const visualId = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
 
 /** Validate a composed timeline against semantic rules. Returns issues found. */
 export function validateTimeline(
@@ -45,8 +46,18 @@ export function validateTimeline(
   ctx: ValidationContext,
 ): TimelineIssue[] {
   const issues: TimelineIssue[] = [];
+  const videoClips = timeline.videoClips.filter((clip): clip is VideoClip => "source" in clip);
 
   for (const clip of timeline.videoClips) {
+    if (!("kind" in clip)) continue;
+    for (const slot of clip.spec.slots) {
+      if (!slot.shotId || !ctx.shotIds.has(slot.shotId)) {
+        issues.push({ path: `videoClips[${clip.clipId}].spec.slots[${slot.slotId}]`, message: `unknown shot ${slot.shotId ?? ""}`, severity: "fatal" });
+      }
+    }
+  }
+
+  for (const clip of videoClips) {
     // Rule 1: the clip traces back to a candidate this composition offered, the
     // shot it names is a real shot in this project, and the moment behind it is
     // one the accepted proposal still contains. The shot is checked directly —
@@ -101,12 +112,12 @@ export function validateTimeline(
     const gap = incoming.startSec - currentEnd;
 
     if (gap > 0.05) {
-      issues.push({ path: `videoClips[${sortedClips[i].id}]→[${incoming.id}]`, message: `gap of ${gap.toFixed(2)}s between clips`, severity: "fixable" });
+      issues.push({ path: `videoClips[${visualId(sortedClips[i])}]→[${visualId(incoming)}]`, message: `gap of ${gap.toFixed(2)}s between clips`, severity: "fixable" });
     } else if (gap < -0.05) {
-      if (incoming.transitionIn.kind !== "crossfade") {
-        issues.push({ path: `videoClips[${sortedClips[i].id}]→[${incoming.id}]`, message: `overlap of ${Math.abs(gap).toFixed(2)}s without a crossfade into ${incoming.id}`, severity: "fixable" });
+      if (incoming.transitionIn?.kind !== "crossfade") {
+        issues.push({ path: `videoClips[${visualId(sortedClips[i])}]→[${visualId(incoming)}]`, message: `overlap of ${Math.abs(gap).toFixed(2)}s without a crossfade into ${visualId(incoming)}`, severity: "fixable" });
       } else if (Math.abs(gap) - incoming.transitionIn.durationSec > 0.05) {
-        issues.push({ path: `videoClips[${sortedClips[i].id}]→[${incoming.id}]`, message: `overlap of ${Math.abs(gap).toFixed(2)}s exceeds the declared crossfade of ${incoming.transitionIn.durationSec}s`, severity: "fixable" });
+        issues.push({ path: `videoClips[${visualId(sortedClips[i])}]→[${visualId(incoming)}]`, message: `overlap of ${Math.abs(gap).toFixed(2)}s exceeds the declared crossfade of ${incoming.transitionIn.durationSec}s`, severity: "fixable" });
       }
     }
   }
@@ -173,18 +184,39 @@ export function repairOnce(
 
   const fixableIssues = issues.filter(i => i.severity === "fixable");
   if (fixableIssues.length === 0) return { ok: true, timeline };
+  if (timeline.videoClips.some((clip) => "kind" in clip)) {
+    const adjusted = structuredClone(timeline);
+    adjusted.videoClips = adjusted.videoClips.filter((clip) => {
+      if (!("source" in clip) || clip.source.kind !== "video") return true;
+      const candidate = ctx.candidates.get(clip.id);
+      return !candidate || !(clip.source.sourceInSec < (candidate.inSec ?? 0) - 0.01 || clip.source.sourceOutSec > (candidate.outSec ?? Infinity) + 0.01);
+    });
+    if (!adjusted.videoClips.length) return { ok: false, reasons: ["repair dropped every clip — no film left"] };
+    adjusted.videoClips.forEach((clip) => {
+      if (!("source" in clip) || clip.source.kind !== "photo") return;
+      const candidate = ctx.candidates.get(clip.id);
+      if (candidate?.minHoldSec != null && candidate.maxHoldSec != null) {
+        clip.durationSec = Math.max(candidate.minHoldSec, Math.min(candidate.maxHoldSec, clip.durationSec));
+      }
+    });
+    adjusted.durationSec = Math.max(adjusted.durationSec, ...adjusted.videoClips.map((clip) => clip.startSec + clip.durationSec));
+    const relaid = applyEdits(adjusted, [{ op: "move", clipId: visualId(adjusted.videoClips[0]), toIndex: 0 }]);
+    return relaid.ok ? { ok: true, timeline: relaid.timeline } : { ok: false, reasons: [relaid.error] };
+  }
 
+  const videoClips = timeline.videoClips.filter((clip): clip is VideoClip => "source" in clip);
   const repaired = JSON.parse(JSON.stringify(timeline)) as Timeline;
+  let repairedVideoClips = repaired.videoClips.filter((clip): clip is VideoClip => "source" in clip);
   const fps = ctx.fps ?? timeline.fps;
 
   // What the picture looked like before the repair, so everything laid over it
   // can be moved with it rather than guessed at afterwards.
   const before = new Map<string, Geometry>(
-    timeline.videoClips.map((clip) => [clip.id, { startSec: clip.startSec, durationSec: clip.durationSec }]),
+    videoClips.map((clip) => [clip.id, { startSec: clip.startSec, durationSec: clip.durationSec }]),
   );
 
   // Fix 1: Clamp photo holds to cadence bounds
-  for (const clip of repaired.videoClips) {
+  for (const clip of repairedVideoClips) {
     if (clip.source.kind === "photo") {
       const candidate = ctx.candidates.get(clip.id);
       if (!candidate || candidate.minHoldSec == null || candidate.maxHoldSec == null) continue;
@@ -198,7 +230,7 @@ export function repairOnce(
   }
 
   // Fix 2: Drop clips with ranges outside their shot bounds
-  repaired.videoClips = repaired.videoClips.filter(clip => {
+  repairedVideoClips = repairedVideoClips.filter(clip => {
     const candidate = ctx.candidates.get(clip.id);
     if (!candidate || clip.source.kind !== "video") return true;
 
@@ -207,14 +239,14 @@ export function repairOnce(
     return !(inSec < (candidate.inSec ?? 0) - 0.01 || outSec > (candidate.outSec ?? Infinity) + 0.01);
   });
 
-  if (repaired.videoClips.length === 0) {
+  if (repairedVideoClips.length === 0) {
     return { ok: false, reasons: ["repair dropped every clip — no film left"] };
   }
 
   // Fix 3: re-run the shared reflow over what survived.
   const flowed = reflow({
     fps,
-    plans: repaired.videoClips.map((clip): ClipPlan => {
+    plans: repairedVideoClips.map((clip): ClipPlan => {
       const candidate = ctx.candidates.get(clip.id);
       return {
         id: clip.id,
@@ -233,7 +265,7 @@ export function repairOnce(
   });
 
   const after = new Map<string, Geometry>();
-  repaired.videoClips = repaired.videoClips.map((clip, index) => {
+  repairedVideoClips = repairedVideoClips.map((clip, index) => {
     const flowedClip = flowed.clips[index];
     after.set(clip.id, { startSec: flowedClip.startSec, durationSec: flowedClip.durationSec });
     return { ...clip, startSec: flowedClip.startSec, durationSec: flowedClip.durationSec };
@@ -243,7 +275,7 @@ export function repairOnce(
   // Chapters: each chapter starts at the first surviving clip belonging to one
   // of its moments. A chapter that lost every clip is no longer in the film.
   const survivingByChapter = ctx.chapters.map((chapter) => {
-    const starts = repaired.videoClips
+    const starts = repairedVideoClips
       .filter((clip) => {
         const candidate = ctx.candidates.get(clip.id);
         return candidate ? chapter.itemIds.includes(candidate.itemId) : false;
@@ -265,7 +297,7 @@ export function repairOnce(
       return [{ ...audio, startSec: 0, source: { ...audio.source, sourceInSec: 0, sourceOutSec: repaired.durationSec } }];
     }
     const assetId = audio.source.assetId;
-    const owner = timeline.videoClips.find(
+    const owner = videoClips.find(
       (clip) => clip.source.shotId === assetId && Math.abs(clip.startSec - audio.startSec) < 0.05,
     );
     const moved = owner ? after.get(owner.id) : undefined;
@@ -282,7 +314,7 @@ export function repairOnce(
 
   // Captions ride the clip they were written over.
   repaired.captions = repaired.captions.flatMap((caption): Caption[] => {
-    const owner = timeline.videoClips.find(
+    const owner = videoClips.find(
       (clip) => caption.startSec >= clip.startSec - 0.01 && caption.endSec <= clip.startSec + clip.durationSec + 0.01,
     );
     const moved = owner ? after.get(owner.id) : undefined;
@@ -295,5 +327,6 @@ export function repairOnce(
     return [{ ...caption, startSec, endSec }];
   });
 
+  repaired.videoClips = repairedVideoClips;
   return { ok: true, timeline: repaired };
 }

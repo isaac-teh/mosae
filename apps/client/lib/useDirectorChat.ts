@@ -40,7 +40,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const cadenceId = options.recommendedCadence;
     const durationId = options.recommendedDuration;
     const lengthSec = options.durations.find(({ id }) => id === durationId)?.seconds ?? 120;
-    setDirectionSelection((current) => ({ ...current, cadenceId, durationId }));
+    setDirectionSelection((current) => ({ ...current, cadenceId, durationId, soundtrackId: current.soundtrackId ?? options.soundtracks[0]?.id ?? null }));
     setInput((current) => ({ ...current, direction: { confirmed: false, pace: /gentle|reflective/i.test(cadenceId) ? "gentle" : "lively", lengthSec, focus: "family" } }));
   }, [repository]);
 
@@ -217,8 +217,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       finally { setSaving(false); }
     },
     askForChange(text: string) {
-      if (!input.plan || !text.trim()) return;
-      router.push({ pathname: "/review-moments", params: { planId: input.plan.planId, request: text.trim() } } as any);
+      const film = input.generation?.film;
+      if (!film || !text.trim()) return;
+      router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", planId: film.planId, generationId: film.filmId, request: text.trim(), ...(storyFlow ?? {}) } } as any);
     },
     async send(text: string) {
       if (!summary) return;

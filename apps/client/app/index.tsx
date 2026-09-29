@@ -1,21 +1,23 @@
 import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { type Href, useFocusEffect, useRouter } from "expo-router";
-import { getStoryRepository, isMedia, setPendingMedia, type FilmListItem } from "@mosae/core";
+import { isMedia, setPendingMedia, type FilmListItem } from "@mosae/core";
 import { Button, FilmCard } from "@/components/ds";
 import { SettingsIcon } from "@/components/icons";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
+import { useStoryFlow } from "@/lib/storyFlow";
 
 export default function Home() {
   const [films, setFilms] = useState<FilmListItem[] | null>(null);
   const router = useRouter();
+  const { repository } = useStoryFlow();
   const pickerRef = useRef<MediaPickerHandle>(null);
 
   useFocusEffect(useCallback(() => {
     let active = true;
-    void getStoryRepository().listFilms().then((result) => { if (active) setFilms(result); }).catch(() => { if (active) setFilms([]); });
+    void repository.listFilms().then((result) => { if (active) setFilms(result); }).catch(() => { if (active) setFilms([]); });
     return () => { active = false; };
-  }, []));
+  }, [repository]));
 
   function createFilm() { pickerRef.current?.open(); }
   function startWithMedia(files: File[]) {

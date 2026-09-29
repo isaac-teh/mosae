@@ -74,6 +74,42 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
 }
 
 describe("createApiStoryRepository", () => {
+  it("loads the generation timeline and preview sources for editing", async () => {
+    const timeline = { schemaVersion: 1, projectId: "project-1", mode: "memory", aspect: "9:16", fps: 30, durationSec: 3, chapters: [{ title: "Opening", startSec: 0 }], videoClips: [{ id: "c1", source: { kind: "photo", shotId: "s1" }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }], audioClips: [], captions: [] };
+    const deps = dependencies({ request: vi.fn(async () => ({ timeline, sources: { s1: "preview.jpg" } })) });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getFilmTimeline("project-1", "g1")).resolves.toEqual({ timeline, sources: { s1: "preview.jpg" } });
+    expect(deps.request).toHaveBeenCalledWith("GET", "/api/projects/project-1/generations/g1");
+  });
+
+  it("reads and saves edit revisions through the authenticated API", async () => {
+    const document = { revision: 2, ops: [{ op: "remove" as const, clipId: "clip-1" }], updatedAt: 123 };
+    const deps = dependencies({ request: vi.fn(async () => document) });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.getEdits("project-1", "gen-1")).resolves.toEqual(document);
+    await expect(repository.saveEdits("project-1", "gen-1", 2, document.ops)).resolves.toEqual(document);
+    expect(deps.request).toHaveBeenNthCalledWith(1, "GET", "/api/projects/project-1/generations/gen-1/edits");
+    expect(deps.request).toHaveBeenNthCalledWith(2, "PUT", "/api/projects/project-1/generations/gen-1/edits", { revision: 2, ops: document.ops });
+  });
+
+  it("asks the generation edit interpreter at the requested revision", async () => {
+    const response = { reply: "Move the second photo earlier?", ops: [{ op: "move" as const, clipId: "clip-2", toIndex: 0 }] };
+    const deps = dependencies({ request: vi.fn(async () => response) });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.interpretEdit("project-1", "gen-1", "move the second photo earlier", 3)).resolves.toEqual(response);
+    expect(deps.request).toHaveBeenCalledWith("POST", "/api/projects/project-1/generations/gen-1/edits/interpret", { text: "move the second photo earlier", revision: 3 });
+  });
+
+  it("requests and reads an edited render", async () => {
+    const deps = dependencies({ request: vi.fn(async (method) => method === "POST"
+      ? { renderId: "g1-edit-3" }
+      : { revision: 3, status: "ready", downloadUrl: "https://storage.test/edit.mp4" }) });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.renderRevision("project-1", "g1", 3)).resolves.toEqual({ renderId: "g1-edit-3" });
+    await expect(repository.getRender("project-1", "g1", 3)).resolves.toMatchObject({ revision: 3, status: "ready" });
+    expect(deps.request).toHaveBeenNthCalledWith(1, "POST", "/api/projects/project-1/generations/g1/edits/3/render");
+    expect(deps.request).toHaveBeenNthCalledWith(2, "GET", "/api/projects/project-1/generations/g1/edits/3/render");
+  });
+
   it("reads summary and interprets text through the project endpoints", async () => {
     const deps = dependencies();
     vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/summary")
@@ -383,6 +419,12 @@ function filmDependencies(generations: Record<string, unknown>, overrides: Parti
 
 describe("film adapters", () => {
   const genPath = "projects/project-1/generations/gen-1";
+
+  it("keeps the media kind on alternatives so collage slots can enforce one video", async () => {
+    const deps = dependencies({ request: vi.fn(async () => ({ shots: [{ shotId: "video-2", thumbUrl: "thumb:video", kind: "video" }] })) });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getAlternatives("proposal-1", "moment-1"))
+      .resolves.toEqual([{ shotId: "video-2", thumbnailUrl: "thumb:video", kind: "video" }]);
+  });
 
   it("returns the direction options route body unchanged", async () => {
     const body = { note: "n", rewrites: [], cadences: [], soundtracks: [], durations: [], recommendedDuration: "30s", recommendedCadence: "playful", cadenceReason: "kids laughing" };

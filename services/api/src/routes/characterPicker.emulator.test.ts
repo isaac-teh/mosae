@@ -353,7 +353,7 @@ describe("character picker routes", () => {
 
       const alternatives = await fetch(`${url}/api/projects/${projectId}/proposals/${proposalId}/moments/${proposalId}-moment-0/alternatives`);
       expect(alternatives.status).toBe(200);
-      expect(await alternatives.json()).toEqual({ shots: [{ shotId: "shot-9", thumbUrl: `signed:${thumbPath}` }] });
+      expect(await alternatives.json()).toEqual({ shots: [{ shotId: "shot-9", thumbUrl: `signed:${thumbPath}`, kind: "photo" }] });
     } finally {
       await close();
     }

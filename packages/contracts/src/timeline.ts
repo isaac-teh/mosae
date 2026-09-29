@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CollageSpecSchema } from "./collage.js";
 
 /**
  * The only editing contract between directing and rendering.
@@ -15,6 +16,7 @@ const positiveSeconds = z.number().finite().positive();
 export const ChapterSchema = z.strictObject({
   title: z.string().min(1),
   startSec: seconds,
+  durationSec: positiveSeconds.optional(),
 });
 
 const VideoSourceSchema = z.strictObject({
@@ -58,6 +60,23 @@ export const VideoClipSchema = z.strictObject({
   motion: z.strictObject({ kind: z.literal("slow-zoom"), from: positiveSeconds, to: positiveSeconds, center: z.object({ cx: z.number().min(0).max(1), cy: z.number().min(0).max(1) }).optional() }).optional(),
 });
 
+export const CollageClipSchema = z.strictObject({
+  kind: z.literal("collage"),
+  clipId: z.string().min(1),
+  startSec: seconds,
+  durationSec: positiveSeconds,
+  chapterId: z.string().optional(),
+  transitionIn: TransitionSchema.optional(),
+  spec: CollageSpecSchema,
+}).superRefine((clip, context) => {
+  if (clip.spec.slots.some((slot) => !slot.shotId)) {
+    context.addIssue({ code: "custom", path: ["spec", "slots"], message: "timeline collage slots require shotId" });
+  }
+  if (Math.abs(clip.spec.durationSec - clip.durationSec) > 1e-6) {
+    context.addIssue({ code: "custom", path: ["spec", "durationSec"], message: "collage duration must match clip duration" });
+  }
+});
+
 const AssetAudioSourceSchema = z.strictObject({
   kind: z.literal("asset"),
   assetId: z.string().min(1),
@@ -92,17 +111,22 @@ export const CaptionSchema = z.strictObject({
 const TIMELINE_TOLERANCE_SEC = 1e-6;
 
 export const TimelineSchema = z.strictObject({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
   projectId: z.string().min(1),
   mode: z.enum(["memory", "creator"]),
   aspect: z.enum(["16:9", "9:16"]),
   fps: z.literal(30),
   durationSec: positiveSeconds,
   chapters: z.array(ChapterSchema),
-  videoClips: z.array(VideoClipSchema).min(1),
+  videoClips: z.array(z.union([VideoClipSchema, CollageClipSchema])).min(1),
   audioClips: z.array(AudioClipSchema),
   captions: z.array(CaptionSchema),
 }).superRefine((timeline, context) => {
+  if (timeline.schemaVersion === 1) {
+    timeline.videoClips.forEach((clip, index) => {
+      if ("kind" in clip) context.addIssue({ code: "custom", path: ["videoClips", index], message: "collage clips require schemaVersion 2" });
+    });
+  }
   const exceedsDuration = (endSec: number) => endSec - timeline.durationSec > TIMELINE_TOLERANCE_SEC;
 
   timeline.videoClips.forEach((clip, index) => {
@@ -132,9 +156,14 @@ export const TimelineSchema = z.strictObject({
 
 export type Chapter = z.infer<typeof ChapterSchema>;
 export type VideoClip = z.infer<typeof VideoClipSchema>;
+export type CollageClip = z.infer<typeof CollageClipSchema>;
 export type AudioClip = z.infer<typeof AudioClipSchema>;
 export type Caption = z.infer<typeof CaptionSchema>;
 export type Timeline = z.infer<typeof TimelineSchema>;
+
+export function collageShotIds(timeline: Timeline): string[] {
+  return timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []) : []);
+}
 
 export type ParseResult<T> = { ok: true; timeline: T } | { ok: false; errors: string[] };
 

@@ -7,6 +7,8 @@ export type Moment = {
   imageKey: string;
   kind: "photo" | "video";
   durationLabel?: string;
+  sourceInSec?: number;
+  sourceOutSec?: number;
   badge?: string;
   selected: boolean;
   favorite: boolean;
@@ -38,7 +40,7 @@ export type PlanEdits = {
 export type LeftOutPhoto = { shotId: string; thumbnailUrl: string; reason: string };
 
 /** Another shot of the same moment the user can swap in. */
-export type AlternativeShot = { shotId: string; thumbnailUrl: string };
+export type AlternativeShot = { shotId: string; thumbnailUrl: string; kind?: "photo" | "video" };
 
 export type Chapter = {
   id: string;

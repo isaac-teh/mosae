@@ -3,7 +3,8 @@ import { ensureSignedIn } from "../auth";
 import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
 import { getFirestoreClient } from "../firebase";
-import type { ChatInterpretRequest, DirectorPerson, FilmListItem, StoryRepository } from "./repository";
+import { parseTimeline, type EditOp } from "@mosae/contracts";
+import type { ChatInterpretRequest, DirectorPerson, FilmEdits, FilmListItem, FilmRender, StoryRepository } from "./repository";
 import type { ProjectSummary } from "../chat/types";
 import type { DirectionOptions, Film } from "./types";
 import {
@@ -26,7 +27,7 @@ export type ApiStoryRepositoryDeps = {
   listenCollection(path: string): Promise<unknown[]>;
   listenUserProjects(userId: string): Promise<unknown[]>;
   getThumbnailUrl(projectId: string, assetId: string): Promise<string>;
-  request(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<unknown>;
+  request(method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown): Promise<unknown>;
 };
 
 export type ApiStoryRepositoryOptions = { projectId: string };
@@ -418,7 +419,7 @@ export function createApiStoryRepository(
         `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/moments/${encodeURIComponent(momentId)}/alternatives`,
       ), "alternatives response");
       const shots = Array.isArray(response.shots) ? response.shots as RecordData[] : [];
-      return shots.map((shot) => ({ shotId: stringField(shot.shotId, "shot id"), thumbnailUrl: typeof shot.thumbUrl === "string" ? shot.thumbUrl : "" }));
+      return shots.map((shot) => ({ shotId: stringField(shot.shotId, "shot id"), thumbnailUrl: typeof shot.thumbUrl === "string" ? shot.thumbUrl : "", kind: shot.kind === "video" ? "video" as const : "photo" as const }));
     },
     setMomentFavorite: async (planId, momentId, favorite) => {
       const source = await loadSources(deps, projectId, planId);
@@ -465,6 +466,26 @@ export function createApiStoryRepository(
       return { filmId: await postGeneration({ proposalId: planId, settings }) };
     },
     getFilm: (filmId) => loadFilm(filmId),
+    getFilmTimeline: async (projectId, generationId) => {
+      const response = record(await deps.request("GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}`), "generation");
+      const sources = record(response.sources, "preview sources");
+      return { timeline: parseTimeline(response.timeline), sources: Object.fromEntries(Object.entries(sources).map(([id, path]) => [id, stringField(path, "preview source")])) };
+    },
+    getEdits: async (projectId, generationId) => record(await deps.request(
+      "GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`,
+    ), "edits") as FilmEdits,
+    interpretEdit: async (projectId, generationId, text, revision) => record(await deps.request(
+      "POST", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits/interpret`, { text, revision },
+    ), "edit interpretation") as { reply: string; ops: EditOp[] },
+    saveEdits: async (projectId, generationId, revision, ops) => record(await deps.request(
+      "PUT", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`, { revision, ops },
+    ), "edits") as FilmEdits,
+    renderRevision: async (projectId, generationId, revision) => record(await deps.request(
+      "POST", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits/${revision}/render`,
+    ), "render request") as { renderId: string },
+    getRender: async (projectId, generationId, revision) => record(await deps.request(
+      "GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits/${revision}/render`,
+    ), "render") as FilmRender,
     reviseFilm: async (filmId, request) => {
       const parent = await readGeneration(filmId);
       const settings = record(parent.settings, "generation settings");

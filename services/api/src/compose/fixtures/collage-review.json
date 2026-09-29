@@ -1,0 +1,7 @@
+{
+  "combos": [
+    { "layoutId": "torn-paper", "motionId": "print-drop", "verdict": "keep" },
+    { "layoutId": "torn-paper", "motionId": "tape-slap", "verdict": "block" },
+    { "layoutId": "film-negative", "motionId": "print-drop", "verdict": "block" }
+  ]
+}

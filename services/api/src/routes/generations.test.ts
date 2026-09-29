@@ -44,6 +44,7 @@ function makeDbMock(projectExists = true, genExists = false, genStatus?: string)
                 ? { exists: true, data: () => ({ status: genStatus ?? "completed", renderUrl: "/render.mp4" }) }
                 : { exists: false },
             ),
+            collection: vi.fn(() => ({ doc: vi.fn(() => ({ get: vi.fn().mockResolvedValue({ exists: false }) })) })),
             set: vi.fn().mockResolvedValue(undefined),
           }),
         })),

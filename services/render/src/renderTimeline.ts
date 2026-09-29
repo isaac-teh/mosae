@@ -1,4 +1,4 @@
-import { parseTimeline, type Timeline } from "@mosae/contracts";
+import { collageShotIds, parseTimeline, type Timeline } from "@mosae/contracts";
 import { resolve } from "node:path";
 
 export type RenderRequest = {
@@ -45,7 +45,8 @@ export function resolveOutputPath(dir: string, outputFile: string): string {
  */
 export function missingSources(timeline: Timeline, sources: Record<string, string>): string[] {
   const needed = new Set<string>();
-  for (const clip of timeline.videoClips) needed.add(clip.source.shotId);
+  for (const clip of timeline.videoClips) if ("source" in clip) needed.add(clip.source.shotId);
+  for (const shotId of collageShotIds(timeline)) needed.add(shotId);
   for (const clip of timeline.audioClips) {
     if (clip.source.kind === "asset") needed.add(clip.source.assetId);
   }

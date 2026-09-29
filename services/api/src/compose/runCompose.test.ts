@@ -73,6 +73,7 @@ function makeJob(overrides?: Partial<ComposeJob>): ComposeJob {
   return {
     proposal: makeProposal(),
     projectId: "proj-1",
+    generationId: "generation-1",
     mode: "creator" as const,
     aspect: "9:16" as const,
     durationId: "30s" as const,
@@ -84,6 +85,38 @@ function makeJob(overrides?: Partial<ComposeJob>): ComposeJob {
     ...overrides,
   };
 }
+
+describe("runCompose — collages", () => {
+  it("places a four-photo event burst in the composed v2 film", async () => {
+    const moments = Array.from({ length: 7 }, (_, index) => ({
+      id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const,
+      title: `Photo ${index}`, description: "", rationale: "",
+    }));
+    const proposal = makeProposal({
+      moments,
+      chapters: [{ id: "chapter-1", title: "The day", summary: "", momentIds: moments.map((moment) => moment.id) }],
+      constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+    });
+    const assets = new Map(moments.map((moment, index) => [moment.id, {
+      kind: "photo" as const, eventId: index < 4 ? "burst" : `event-${index}`,
+      assetId: `asset-${index}`, localTime: `2026-05-03T09:${String(index).padStart(2, "0")}:00`,
+      analysis: { caption: moment.title },
+    }]));
+    const result = await runCompose(makeJob({ proposal }), makeDeps({
+      assets,
+      collageReview: { combos: [{ layoutId: "torn-paper", motionId: "print-drop", verdict: "keep" }] },
+      generateStructured: async () => ({
+        clips: moments.map((moment) => ({ candidateId: `${moment.id}#still@c0`, holdSec: 4, transition: "cut", audio: "mute" })),
+        musicCues: [],
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.timeline.schemaVersion).toBe(2);
+    expect(result.timeline.videoClips.filter((clip) => "kind" in clip)).toHaveLength(1);
+    expect(safeParseTimeline(result.timeline).ok).toBe(true);
+  });
+});
 
 // --- Tests ---
 
@@ -219,7 +252,7 @@ describe("runCompose — person-anchored Ken Burns", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
 
-    const photoClip = result.timeline.videoClips.find((c) => c.source.kind === "photo")!;
+    const photoClip = result.timeline.videoClips.find((c): c is import("@mosae/contracts").VideoClip => "source" in c && c.source.kind === "photo")!;
     expect(photoClip.motion).toBeUndefined();
   });
 
@@ -234,7 +267,7 @@ describe("runCompose — person-anchored Ken Burns", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
 
-    const photoClip = result.timeline.videoClips.find((c) => c.source.kind === "photo")!;
+    const photoClip = result.timeline.videoClips.find((c): c is import("@mosae/contracts").VideoClip => "source" in c && c.source.kind === "photo")!;
     expect(photoClip.motion).toMatchObject({ kind: "slow-zoom", from: 1 });
     expect((photoClip.motion as { center?: { cx: number; cy: number } }).center).toEqual({ cx: 0.4, cy: 0.35 });
   });
@@ -247,7 +280,7 @@ describe("runCompose — person-anchored Ken Burns", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
 
-    const videoClip = result.timeline.videoClips.find((c) => c.source.kind === "video")!;
+    const videoClip = result.timeline.videoClips.find((c): c is import("@mosae/contracts").VideoClip => "source" in c && c.source.kind === "video")!;
     expect(videoClip.motion).toBeUndefined();
   });
 });
@@ -292,7 +325,7 @@ describe("runCompose — arc ordering after cast guards", () => {
     }), arcDeps());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.timeline.videoClips.map((clip) => clip.id)).toEqual(["b#s0@0.15c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
+    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["b#s0@0.15c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
   });
 
   it("orders a cast replacement by time while keeping the chapter peak last", async () => {
@@ -302,6 +335,6 @@ describe("runCompose — arc ordering after cast guards", () => {
     }), arcDeps());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.timeline.videoClips.map((clip) => clip.id)).toEqual(["new#still@c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
+    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
   });
 });

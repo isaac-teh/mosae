@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import type { Generation } from "@mosae/contracts";
+import { applyEdits, type EditOp, type Generation } from "@mosae/contracts";
 import { resolveSources, type SourceDeps } from "../compose/resolveSources.js";
 import { failGeneration, markSaved, resetRender, setRenderProgress } from "../store/generationStore.js";
 import { throttleProgress } from "./throttleProgress.js";
@@ -7,7 +7,8 @@ import { throttleProgress } from "./throttleProgress.js";
 export type RenderTask = {
   projectId: string;
   generationId: string;
-  /** Set when retries are exhausted: settle the generation, do not render. */
+  revision?: number;
+  /** Set when retries are exhausted: settle the generation or edit revision. */
   giveUp?: string;
 };
 
@@ -45,9 +46,9 @@ export type RenderConfig = {
   now?: () => number;
 };
 
-/** `renders/{userId}/{projectId}/{generationId}.mp4`, as the spec names it. */
-export function renderOutputPath(userId: string, projectId: string, generationId: string): string {
-  return `renders/${userId}/${projectId}/${generationId}.mp4`;
+/** A stable output path for the first cut or a particular edit revision. */
+export function renderOutputPath(userId: string, projectId: string, generationId: string, revision?: number): string {
+  return `renders/${userId}/${projectId}/${generationId}${revision === undefined ? "" : `-edit-${revision}`}.mp4`;
 }
 
 /** Read the render service's newline-delimited response one event at a time. */
@@ -94,6 +95,7 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
   const post = config.post ?? postForEvents;
 
   return async (task) => {
+    if (task.revision !== undefined) return renderEditRevision(config, { ...task, revision: task.revision }, post);
     const project = db.collection("projects").doc(task.projectId);
     const genRef = project.collection("generations").doc(task.generationId);
     const genSnap = await genRef.get();
@@ -191,4 +193,80 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
     await markSaved(db, { ...identity, outputPath });
     return "rendered";
   };
+}
+
+async function renderEditRevision(
+  config: RenderConfig,
+  task: RenderTask & { revision: number },
+  post: (url: string, body: unknown) => AsyncIterable<RenderEvent>,
+): Promise<RenderTaskResult> {
+  const db = config.db;
+  const revision = task.revision;
+  const project = db.collection("projects").doc(task.projectId);
+  const generationRef = project.collection("generations").doc(task.generationId);
+  const currentRef = generationRef.collection("edits").doc("current");
+  const revisionRef = currentRef.collection("revisions").doc(String(revision));
+  const [generationSnap, projectSnap, revisionSnap] = await Promise.all([
+    generationRef.get(), project.get(), revisionRef.get(),
+  ]);
+  if (!generationSnap.exists || !projectSnap.exists || !revisionSnap.exists || revisionSnap.get("status") !== "rendering") return "skipped";
+
+  const settle = async (status: "ready" | "failed", fields: Record<string, unknown>): Promise<RenderTaskResult> => {
+    await db.runTransaction(async (tx) => {
+      const [latest, revisionLatest] = await Promise.all([tx.get(currentRef), tx.get(revisionRef)]);
+      if (!revisionLatest.exists || revisionLatest.get("status") !== "rendering") return;
+      tx.update(revisionRef, { status, ...fields });
+      if (latest.exists && latest.get("renderRevision") === revision) tx.update(currentRef, { status, ...fields });
+    });
+    return status === "ready" ? "rendered" : "failed";
+  };
+  const fail = (reason: string) => settle("failed", { error: reason });
+  if (task.giveUp) return fail(task.giveUp);
+  const generation = generationSnap.data() as Generation;
+  if (!generation.timeline) return fail("render requested for a generation with no timeline");
+  const applied = applyEdits(generation.timeline, revisionSnap.get("ops") as EditOp[]);
+  if (!applied.ok) return fail(`invalid revision ${revision}: ${applied.error}`);
+
+  let sources: Record<string, string>;
+  try {
+    sources = await resolveSources(applied.timeline, config.sources, task.projectId, "render");
+    if (config.signRead) sources = Object.fromEntries(await Promise.all(
+      Object.entries(sources).map(async ([id, path]) => [id, await config.signRead!(path)] as const),
+    ));
+  } catch (error) {
+    return fail(`source resolution failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const userId = projectSnap.get("userId") as string;
+  const outputPath = renderOutputPath(userId, task.projectId, task.generationId, revision);
+  let uploadUrl: string | undefined;
+  try {
+    uploadUrl = await config.signUpload?.(outputPath);
+  } catch (error) {
+    return fail(`could not sign the render destination: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  let done: Extract<RenderEvent, { done: true }> | undefined;
+  try {
+    for await (const event of post(`${config.renderServiceUrl.replace(/\/$/, "")}/tasks/render`, {
+      timeline: applied.timeline,
+      sources,
+      outputFile: `${task.generationId}-edit-${revision}.mp4`,
+      ...(uploadUrl ? { uploadUrl } : {}),
+    })) {
+      if ("error" in event) return fail(`render failed: ${event.error}${event.detail ? `: ${event.detail}` : ""}`);
+      if ("done" in event) done = event;
+    }
+  } catch (error) {
+    return fail(`render service unreachable: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!done) return fail("render service closed the stream without finishing");
+  if (done.uploaded !== true && config.storeLocalOutput) {
+    try {
+      await config.storeLocalOutput(done.outputPath, outputPath);
+    } catch (error) {
+      return fail(`could not store the render: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return settle("ready", { outputPath });
 }

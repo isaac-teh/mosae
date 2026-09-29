@@ -303,6 +303,39 @@ describe("validateTimeline — semantic rules", () => {
 });
 
 describe("repairOnce — deterministic fixes", () => {
+  it("repairs a gap beside a collage without dropping the collage", () => {
+    const timeline = makeTimeline({
+      schemaVersion: 2,
+      durationSec: 8,
+      videoClips: [
+        {
+          kind: "collage", clipId: "collage-1", startSec: 0, durationSec: 4,
+          spec: {
+            layoutId: "torn-paper", motionId: "print-drop", effectId: null,
+            seed: "fixture", durationSec: 4,
+            slots: [
+              { slotId: "one", shotId: "shot-photo-1" },
+              { slotId: "two", shotId: "shot-photo-2" },
+              { slotId: "three", shotId: "shot-video-1" },
+            ],
+          },
+        },
+        {
+          id: "cand-photo-1", source: { kind: "photo", shotId: "shot-photo-1" },
+          startSec: 6, durationSec: 2, transitionIn: { kind: "cut", durationSec: 0 },
+        },
+      ],
+    });
+    const ctx = makeCtx({ targetSec: 6 });
+    const issues = validateTimeline(timeline, ctx);
+    expect(issues.some((issue) => issue.message.includes("gap"))).toBe(true);
+    const result = repairOnce(timeline, issues, ctx);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.timeline.videoClips.map((clip) => clip.startSec)).toEqual([0, 4]);
+    expect(result.timeline.videoClips[0]).toMatchObject({ kind: "collage", clipId: "collage-1", spec: { durationSec: 4 } });
+    expect(validateTimeline(result.timeline, ctx)).toEqual([]);
+  });
   it("a repairable film passes on the second pass", () => {
     // The film this repairs to is one 6s photo, so 6s is the target it is
     // committed to. Leaving it at 4 would make Rule 5 fire on the repaired film.
@@ -382,7 +415,7 @@ describe("repairOnce — deterministic fixes", () => {
 
     const repaired = repairOnce(timeline, issues, ctx);
     if (!repaired.ok) throw new Error(repaired.reasons.join("; "));
-    expect(repaired.timeline.videoClips.map(c => c.id)).toEqual(["cand-photo-1"]);
+    expect(repaired.timeline.videoClips.map(c => "id" in c ? c.id : c.clipId)).toEqual(["cand-photo-1"]);
     // The survivor is re-flowed to the head of the film, not left where the
     // dropped clip had put it.
     expect(repaired.timeline.videoClips[0].startSec).toBe(0);

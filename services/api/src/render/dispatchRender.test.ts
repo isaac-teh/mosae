@@ -40,6 +40,13 @@ function seed(status: Generation["status"] = "rendering", timeline: Timeline | n
 }
 
 const generation = (db: FakeFirestore) => db.docs.get("projects/p1/generations/g1") as unknown as Generation;
+const editPath = "projects/p1/generations/g1/edits/current";
+const revisionPath = (revision: number) => `${editPath}/revisions/${revision}`;
+function seedRevision(db: FakeFirestore, revision: number, sec: number) {
+  const ops = [{ op: "setPhotoDuration", clipId: "c1", sec }];
+  db.docs.set(editPath, { revision, ops, updatedAt: 1, renderRevision: revision, status: "rendering" });
+  db.docs.set(revisionPath(revision), { revision, ops, updatedAt: 1, status: "rendering" });
+}
 
 function stream(...events: RenderEvent[]) {
   return async function* (_url: string, _body: unknown): AsyncIterable<RenderEvent> {
@@ -63,6 +70,45 @@ function build(db: FakeFirestore, events: RenderEvent[], overrides: Record<strin
 }
 
 describe("createRender", () => {
+  it("renders revision 3 from the first cut and resolves its render sources", async () => {
+    const db = seed("saved");
+    seedRevision(db, 3, 5);
+    const { render, post } = build(db, [{ done: true, outputPath: "/tmp/edit3.mp4", durationInFrames: 150 }]);
+
+    expect(await render({ projectId: "p1", generationId: "g1", revision: 3 })).toBe("rendered");
+    const body = post.mock.calls[0][1] as { timeline: Timeline; sources: Record<string, string>; outputFile: string };
+    expect(body.timeline.durationSec).toBe(5);
+    expect(body.timeline.videoClips[0].durationSec).toBe(5);
+    expect(body.sources["shot-1"]).toBe("uploads/owner/p1/s/a/original.jpg");
+    expect(body.outputFile).toBe("g1-edit-3.mp4");
+    expect(db.docs.get(revisionPath(3))).toMatchObject({ status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" });
+    expect(db.docs.get(editPath)).toMatchObject({ renderRevision: 3, status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" });
+  });
+
+  it("records an older completion without replacing a newer render request", async () => {
+    const db = seed("saved");
+    seedRevision(db, 3, 5);
+    let finish!: () => void;
+    const waiting = new Promise<void>((resolve) => { finish = resolve; });
+    let started!: () => void;
+    const posting = new Promise<void>((resolve) => { started = resolve; });
+    const post = async function* (): AsyncIterable<RenderEvent> {
+      started();
+      await waiting;
+      yield { done: true, outputPath: "/tmp/edit3.mp4", durationInFrames: 150 };
+    };
+    const { render } = build(db, [], { post });
+    const pending = render({ projectId: "p1", generationId: "g1", revision: 3 });
+    await posting;
+    db.docs.set(editPath, { ...db.docs.get(editPath), renderRevision: 4, status: "rendering", outputPath: null });
+    db.docs.set(revisionPath(4), { revision: 4, ops: [], updatedAt: 2, status: "rendering" });
+    finish();
+
+    expect(await pending).toBe("rendered");
+    expect(db.docs.get(revisionPath(3))).toMatchObject({ status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" });
+    expect(db.docs.get(editPath)).toMatchObject({ renderRevision: 4, status: "rendering", outputPath: null });
+  });
+
   it("renders the film and marks the generation saved at the spec's path", async () => {
     const db = seed();
     const { render, post } = build(db, [{ progress: 0.5 }, { done: true, outputPath: "/tmp/g1.mp4", durationInFrames: 120 }]);

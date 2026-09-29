@@ -44,6 +44,11 @@ export interface Asset {
   analysis?: AssetAnalysis;
   file?: string;
   keyMomentScore?: number;
+  assetId?: string;
+  eventId?: string | null;
+  localTime?: string | null;
+  dHash?: string | null;
+  dupOf?: string | null;
 }
 
 export interface ChapterCandidateInput {

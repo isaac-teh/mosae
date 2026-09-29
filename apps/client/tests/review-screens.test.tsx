@@ -14,7 +14,7 @@ vi.mock("@mosae/core", () => ({
     return repository;
   },
 }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ navigate: boundary.navigate, setParams: boundary.setParams }) }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ navigate: boundary.navigate, push: boundary.navigate, setParams: boundary.setParams }) }));
 vi.mock("@/lib/useStepBack", () => ({ useStepBack: () => vi.fn() }));
 vi.mock("@/lib/demoAssets", () => ({ demoImage: (key: string) => {
   if (key.includes(":")) throw new Error("URI used as demo key");
@@ -119,12 +119,14 @@ describe("review screens", () => {
     await render(SaveFilmScreen);
     expect(host.textContent).toContain("✓ Saved to your films");
     expect(host.textContent).toContain("419 moments · Still editable anytime");
+    await click("Still editable anytime");
+    expect(boundary.navigate).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "fixture", planId: "plan-1", generationId: "saved-film", request: "", repository: "fixture" } });
     expect(host.querySelectorAll('[aria-label="Share options"] button')).toHaveLength(4);
     for (const label of ["Download", "WhatsApp", "Facebook", "Instagram"]) expect(host.querySelector(`button[aria-label="${label}"]`)).not.toBeNull();
     await click("WhatsApp");
     expect(boundary.share).toHaveBeenCalledWith({ message: "https://film.example/saved.mp4" });
     await click("Back to your films");
-    expect(boundary.navigate).toHaveBeenCalledWith("/");
+    expect(boundary.navigate).toHaveBeenCalledWith("/?repository=fixture");
   });
   it("returns to a fixture review after a live review without retaining its repository", async () => {
     boundary.params = { planId: "initial", repository: "api", projectId: "live-project" };
@@ -324,6 +326,14 @@ describe("downstream story screens", () => {
     const calls = repo.getFilm.mock.calls.length;
     await act(async () => { await new Promise((done) => setTimeout(done, 2100)); });
     expect(repo.getFilm.mock.calls.length).toBe(calls);
+  });
+
+  it("opens the film editor from the review screen", async () => {
+    boundary.apiRepositories = new Map([["project-a", { getFilm: vi.fn(async () => film("film-1", "plan-a", "poster")) }]]);
+    boundary.params = { filmId: "film-1", repository: "api", projectId: "project-a" };
+    await render(ReviewFilmScreen);
+    await click("Manual Editor");
+    expect(boundary.navigate).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-a", planId: "plan-a", generationId: "film-1", request: "", repository: "api" } });
   });
 
   it("does not navigate when directing the previous project finishes", async () => {

@@ -30,7 +30,7 @@ function firestore() {
     { id: "s9", data: { assetId: "a9", assetGeneration: "1", analysis: { kind: "photo", caption: "swap" } } },
   ];
   const assets = [
-    { id: "a1", data: { generation: "1", fileName: "one.jpg" } },
+    { id: "a1", data: { generation: "1", fileName: "one.jpg", eventId: "burst", dupOf: "a0", media: { localTime: "2026-05-03T09:00:00" }, quality: { dHash: "0000000000000001" } } },
     { id: "a2", data: { generation: "1", fileName: "two.jpg" } },
     { id: "a9", data: { generation: "1", fileName: "replacement.jpg" } },
   ];
@@ -58,6 +58,14 @@ describe("loadComposeCatalog review edits", () => {
 
   it("uses the selected alternative's asset for a visible swap", async () => {
     const catalog = await loadComposeCatalog(firestore(), "project1", proposal({ photoSwaps: { m1: "s9" } }));
-    expect(catalog.get("m1")).toEqual({ kind: "photo", file: "replacement.jpg", analysis: { caption: "swap", keyMomentScore: undefined } });
+    expect(catalog.get("m1")).toEqual({ kind: "photo", file: "replacement.jpg", assetId: "a9", eventId: null, localTime: null, dHash: null, dupOf: null, analysis: { caption: "swap", keyMomentScore: undefined } });
+  });
+
+  it("carries event, duplicate, capture-time, and hash metadata into the collage catalog", async () => {
+    const catalog = await loadComposeCatalog(firestore(), "project1", proposal());
+    expect(catalog.get("m1")).toMatchObject({
+      assetId: "a1", eventId: "burst", dupOf: "a0",
+      localTime: "2026-05-03T09:00:00", dHash: "0000000000000001",
+    });
   });
 });
