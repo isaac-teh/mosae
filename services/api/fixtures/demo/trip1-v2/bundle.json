@@ -1,0 +1,2006 @@
+{
+  "version": 1,
+  "source": "trip1-v2",
+  "photos": [
+    {
+      "fileName": "d1-01.jpg",
+      "sourceAssetId": "Mh6GcAgca4PChbF8AIHz",
+      "sourceShotId": "Mh6GcAgca4PChbF8AIHz_0000",
+      "sourceGeneration": "1790574793567",
+      "media": {
+        "kind": "photo",
+        "width": 4082,
+        "height": 6123,
+        "durationSec": null,
+        "localTime": "2026-06-01T16:00:00",
+        "timeSource": "exif",
+        "gps": {
+          "lat": 1.2494,
+          "lng": 103.8303
+        },
+        "camera": null
+      },
+      "place": {
+        "name": "Siloso Beach",
+        "level": "landmark"
+      },
+      "quality": {
+        "sharpness": 589.7901869914441,
+        "exposure": 216.78208623533723,
+        "blurry": false,
+        "dHash": "6c2010b1391b19f9"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "A pair stands together on a sandy beach by the ocean during the day, with soft lighting and waves in the background.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "Sandy beach near ocean waters",
+        "activities": [
+          "standing together",
+          "embracing"
+        ],
+        "mood": "romantic",
+        "shotType": "full-body shot",
+        "aesthetics": 4,
+        "keyMomentScore": 5,
+        "tags": [
+          "beach",
+          "ocean",
+          "couple",
+          "vacation",
+          "embrace"
+        ],
+        "faces": [
+          {
+            "faceId": "Mh6GcAgca4PChbF8AIHz_0000-0",
+            "bbox": [
+              0.411,
+              0.377,
+              0.508,
+              0.456
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "long dark hair, white clothing",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": false,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "Mh6GcAgca4PChbF8AIHz_0000-1",
+            "bbox": [
+              0.38,
+              0.499,
+              0.472,
+              0.563
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "short dark hair, wearing a straw fedora hat, white collared shirt",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": false,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "Mh6GcAgca4PChbF8AIHz_0000-0",
+            "to": "Mh6GcAgca4PChbF8AIHz_0000-1",
+            "kind": "hugging"
+          },
+          {
+            "from": "Mh6GcAgca4PChbF8AIHz_0000-1",
+            "to": "Mh6GcAgca4PChbF8AIHz_0000-0",
+            "kind": "hugging"
+          }
+        ]
+      },
+      "eventId": "e002",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-02.jpg",
+      "sourceAssetId": "UFjLVL8I6oC6n4jM7wNW",
+      "sourceShotId": "UFjLVL8I6oC6n4jM7wNW_0000",
+      "sourceGeneration": "1790574793554",
+      "media": {
+        "kind": "photo",
+        "width": 6456,
+        "height": 4304,
+        "durationSec": null,
+        "localTime": "2026-06-02T10:00:00",
+        "timeSource": "exif",
+        "gps": {
+          "lat": 1.4043,
+          "lng": 103.793
+        },
+        "camera": null
+      },
+      "place": {
+        "name": "Singapore Zoo",
+        "level": "landmark"
+      },
+      "quality": {
+        "sharpness": 581.3742934198611,
+        "exposure": 209.17587289222874,
+        "blurry": false,
+        "dHash": "c40839a1ed099d96"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "Three individuals on a beach: one standing person facing a person carrying another person on their back.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "child"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "Sandy beach with ocean and sky in background",
+        "activities": [
+          "kissing",
+          "piggyback ride"
+        ],
+        "mood": "Affectionate",
+        "shotType": "Medium shot",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "beach",
+          "family",
+          "vacation",
+          "outdoor"
+        ],
+        "faces": [
+          {
+            "faceId": "UFjLVL8I6oC6n4jM7wNW_0000-0",
+            "bbox": [
+              0.3,
+              0.377,
+              0.426,
+              0.456
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "long dark hair, white halter dress",
+            "prominence": "primary",
+            "expression": "eyes closed, kissing",
+            "lookingAtCamera": false
+          },
+          {
+            "faceId": "UFjLVL8I6oC6n4jM7wNW_0000-1",
+            "bbox": [
+              0.268,
+              0.479,
+              0.419,
+              0.542
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "short dark hair, tan fedora, white short-sleeve button-down shirt, tattoos on left arm, beige shorts",
+            "prominence": "primary",
+            "expression": "eyes closed, kissing",
+            "lookingAtCamera": false,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "UFjLVL8I6oC6n4jM7wNW_0000-2",
+            "bbox": [
+              0.238,
+              0.57,
+              0.342,
+              0.617
+            ],
+            "confidence": 0.98,
+            "ageBand": "child",
+            "appearance": "shoulder-length dark hair, white dress",
+            "prominence": "primary",
+            "expression": "hand covering eyes/forehead, smiling",
+            "lookingAtCamera": false,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "UFjLVL8I6oC6n4jM7wNW_0000-0",
+            "to": "UFjLVL8I6oC6n4jM7wNW_0000-1",
+            "kind": "kissing"
+          },
+          {
+            "from": "UFjLVL8I6oC6n4jM7wNW_0000-1",
+            "to": "UFjLVL8I6oC6n4jM7wNW_0000-2",
+            "kind": "carrying on back"
+          }
+        ]
+      },
+      "eventId": "e006",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-03.jpg",
+      "sourceAssetId": "Xg4ppht8vHzKxp6IYGUF",
+      "sourceShotId": "Xg4ppht8vHzKxp6IYGUF_0000",
+      "sourceGeneration": "1790574793547",
+      "media": {
+        "kind": "photo",
+        "width": 6083,
+        "height": 4211,
+        "durationSec": null,
+        "localTime": "2026-06-03T15:00:00",
+        "timeSource": "exif",
+        "gps": {
+          "lat": 1.2566,
+          "lng": 103.821
+        },
+        "camera": null
+      },
+      "place": {
+        "name": "Shangri-La Rasa Sentosa",
+        "level": "lodging"
+      },
+      "quality": {
+        "sharpness": 599.7922664124586,
+        "exposure": 202.86744608274648,
+        "blurry": false,
+        "dHash": "c012a9b113053630"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "Three people stand in a line on a sandy beach, holding hands and forming heart shapes with their arms against the ocean background.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "person in hat and white shirt"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "person in white dress"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "person in white dress"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "Sandy beach with ocean in the background",
+        "activities": [
+          "forming heart shapes with arms",
+          "standing on sand",
+          "posing for photo"
+        ],
+        "mood": "Joyful",
+        "shotType": "Full body shot",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "beach",
+          "ocean",
+          "heart shape",
+          "white clothing",
+          "sunshine"
+        ],
+        "faces": [
+          {
+            "faceId": "Xg4ppht8vHzKxp6IYGUF_0000-0",
+            "bbox": [
+              0.256,
+              0.377,
+              0.374,
+              0.434
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "wearing tan fedora, short-sleeved white button-down shirt, dark hair",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "Xg4ppht8vHzKxp6IYGUF_0000-1",
+            "bbox": [
+              0.356,
+              0.482,
+              0.456,
+              0.532
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "wearing white sleeveless dress, shoulder-length dark hair",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          },
+          {
+            "faceId": "Xg4ppht8vHzKxp6IYGUF_0000-2",
+            "bbox": [
+              0.292,
+              0.596,
+              0.408,
+              0.645
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "wearing white dress, long dark hair",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "Xg4ppht8vHzKxp6IYGUF_0000-0",
+            "to": "Xg4ppht8vHzKxp6IYGUF_0000-1",
+            "kind": "holding hands"
+          },
+          {
+            "from": "Xg4ppht8vHzKxp6IYGUF_0000-1",
+            "to": "Xg4ppht8vHzKxp6IYGUF_0000-2",
+            "kind": "holding hands"
+          }
+        ]
+      },
+      "eventId": "e009",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-04.jpg",
+      "sourceAssetId": "oF1yZNc16XIr8YTTMhSR",
+      "sourceShotId": "oF1yZNc16XIr8YTTMhSR_0000",
+      "sourceGeneration": "1790574793560",
+      "media": {
+        "kind": "photo",
+        "width": 4480,
+        "height": 6720,
+        "durationSec": null,
+        "localTime": "2026-06-01T23:30:00",
+        "timeSource": "exif",
+        "gps": null,
+        "camera": null
+      },
+      "place": null,
+      "quality": {
+        "sharpness": 901.0393574946052,
+        "exposure": 209.15530493951613,
+        "blurry": false,
+        "dHash": "00b20d32b3136570"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "Three people stand together in an embrace on a sandy beach by the ocean, posing for a family portrait.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "three people"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "beach, ocean, bright sky",
+        "activities": [
+          "posing for photo",
+          "embracing"
+        ],
+        "mood": "happy, serene, vacation",
+        "shotType": "full-body shot",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "beach",
+          "family",
+          "vacation",
+          "embrace",
+          "ocean"
+        ],
+        "faces": [
+          {
+            "faceId": "oF1yZNc16XIr8YTTMhSR_0000-0",
+            "bbox": [
+              0.416,
+              0.354,
+              0.485,
+              0.448
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "tan hat, light collared shirt, short hair",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "oF1yZNc16XIr8YTTMhSR_0000-1",
+            "bbox": [
+              0.508,
+              0.4,
+              0.566,
+              0.479
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "white sundress, dark hair",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          },
+          {
+            "faceId": "oF1yZNc16XIr8YTTMhSR_0000-2",
+            "bbox": [
+              0.458,
+              0.478,
+              0.527,
+              0.56
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "white dress, dark hair",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "oF1yZNc16XIr8YTTMhSR_0000-0",
+            "to": "oF1yZNc16XIr8YTTMhSR_0000-1",
+            "kind": "embracing"
+          },
+          {
+            "from": "oF1yZNc16XIr8YTTMhSR_0000-2",
+            "to": "oF1yZNc16XIr8YTTMhSR_0000-1",
+            "kind": "embracing"
+          }
+        ]
+      },
+      "eventId": "e004",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-05.jpg",
+      "sourceAssetId": "wilVFUddScYIUX05P2QU",
+      "sourceShotId": "wilVFUddScYIUX05P2QU_0000",
+      "sourceGeneration": "1790574793652",
+      "media": {
+        "kind": "photo",
+        "width": 4340,
+        "height": 6606,
+        "durationSec": null,
+        "localTime": "2026-06-02T00:30:00",
+        "timeSource": "exif",
+        "gps": null,
+        "camera": null
+      },
+      "place": null,
+      "quality": {
+        "sharpness": 645.4302840501939,
+        "exposure": 202.88646298363096,
+        "blurry": false,
+        "dHash": "ffeffb6b63b3b378"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "A family unit standing on a sunny beach, with a man lifting a child while a woman stands beside them, all smiling and interacting.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "man"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "woman"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "child"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "A sandy beach by the ocean on a bright, sunny day",
+        "activities": [
+          "standing on beach",
+          "man holding and lifting child",
+          "smiling and interacting"
+        ],
+        "mood": "Joyful, serene, and affectionate",
+        "shotType": "Full body shot",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "beach",
+          "family",
+          "ocean",
+          "sunny",
+          "vacation",
+          "love"
+        ],
+        "faces": [
+          {
+            "faceId": "wilVFUddScYIUX05P2QU_0000-0",
+            "bbox": [
+              0.449,
+              0.252,
+              0.597,
+              0.396
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "long dark hair, white dress",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": false,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "wilVFUddScYIUX05P2QU_0000-1",
+            "bbox": [
+              0.412,
+              0.362,
+              0.533,
+              0.48
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "short hair, straw fedora hat, white short-sleeve shirt, beige shorts",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": false,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "wilVFUddScYIUX05P2QU_0000-2",
+            "bbox": [
+              0.363,
+              0.503,
+              0.502,
+              0.63
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "long dark hair, white dress",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": false,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "wilVFUddScYIUX05P2QU_0000-1",
+            "to": "wilVFUddScYIUX05P2QU_0000-2",
+            "kind": "lifting"
+          },
+          {
+            "from": "wilVFUddScYIUX05P2QU_0000-0",
+            "to": "wilVFUddScYIUX05P2QU_0000-1",
+            "kind": "leaning on"
+          }
+        ]
+      },
+      "eventId": "e005",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-06.jpg",
+      "sourceAssetId": "ze3AcO4CmQEZ6LzDodMk",
+      "sourceShotId": "ze3AcO4CmQEZ6LzDodMk_0000",
+      "sourceGeneration": "1790574793675",
+      "media": {
+        "kind": "photo",
+        "width": 6720,
+        "height": 4480,
+        "durationSec": null,
+        "localTime": "2026-06-03T09:00:00",
+        "timeSource": "exif",
+        "gps": {
+          "lat": 1.2494,
+          "lng": 103.8303
+        },
+        "camera": null
+      },
+      "place": {
+        "name": "Siloso Beach",
+        "level": "landmark"
+      },
+      "quality": {
+        "sharpness": 398.7757453554147,
+        "exposure": 204.78975554435485,
+        "blurry": false,
+        "dHash": "024e67616661f0b2"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "A family of three sitting together on a sandy beach, posing for a portrait.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "child"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "Sandy beach by the ocean on a bright day.",
+        "activities": [
+          "sitting",
+          "posing for photo"
+        ],
+        "mood": "Happy, peaceful, familial",
+        "shotType": "Medium shot",
+        "aesthetics": 4,
+        "keyMomentScore": 5,
+        "tags": [
+          "beach",
+          "family",
+          "portrait",
+          "ocean",
+          "vacation"
+        ],
+        "faces": [
+          {
+            "faceId": "ze3AcO4CmQEZ6LzDodMk_0000-0",
+            "bbox": [
+              0.179,
+              0.307,
+              0.371,
+              0.391
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "wearing tan fedora hat, white collared shirt",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "ze3AcO4CmQEZ6LzDodMk_0000-1",
+            "bbox": [
+              0.32,
+              0.377,
+              0.472,
+              0.444
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "wearing white spaghetti strap dress, long dark hair",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          },
+          {
+            "faceId": "ze3AcO4CmQEZ6LzDodMk_0000-2",
+            "bbox": [
+              0.248,
+              0.438,
+              0.415,
+              0.513
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "wearing white sleeveless top, long dark hair",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "ze3AcO4CmQEZ6LzDodMk_0000-0",
+            "to": "ze3AcO4CmQEZ6LzDodMk_0000-1",
+            "kind": "holding"
+          },
+          {
+            "from": "ze3AcO4CmQEZ6LzDodMk_0000-2",
+            "to": "ze3AcO4CmQEZ6LzDodMk_0000-1",
+            "kind": "hugging"
+          }
+        ]
+      },
+      "eventId": "e008",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-07.jpg",
+      "sourceAssetId": "3tVV2IAflql226K93GCx",
+      "sourceShotId": "3tVV2IAflql226K93GCx_0000",
+      "sourceGeneration": "1790574793659",
+      "media": {
+        "kind": "photo",
+        "width": 6720,
+        "height": 4480,
+        "durationSec": null,
+        "localTime": "2026-06-02T19:00:00",
+        "timeSource": "exif",
+        "gps": {
+          "lat": 1.4043,
+          "lng": 103.793
+        },
+        "camera": null
+      },
+      "place": {
+        "name": "Singapore Zoo",
+        "level": "landmark"
+      },
+      "quality": {
+        "sharpness": 718.8454938821233,
+        "exposure": 196.41654829545453,
+        "blurry": false,
+        "dHash": "684b69e9e9693010"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "Three people seated together on a beach at the water's edge, two adults flanking a child.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult wearing hat"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "child"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "A sandy beach near the ocean shoreline during the day.",
+        "activities": [
+          "kissing on cheeks",
+          "sitting in sand",
+          "posing for photo"
+        ],
+        "mood": "Joyful and affectionate",
+        "shotType": "Medium shot",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "beach",
+          "family",
+          "portrait",
+          "outdoors",
+          "affectionate",
+          "white clothing"
+        ],
+        "faces": [
+          {
+            "faceId": "3tVV2IAflql226K93GCx_0000-0",
+            "bbox": [
+              0.087,
+              0.233,
+              0.431,
+              0.463
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "beige fedora hat, short dark hair, light-colored collared shirt",
+            "prominence": "primary",
+            "expression": "smiling while eyes are closed",
+            "lookingAtCamera": false,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "3tVV2IAflql226K93GCx_0000-1",
+            "bbox": [
+              0.256,
+              0.399,
+              0.551,
+              0.513
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "dark hair, white sleeveless dress with shoulder ties",
+            "prominence": "primary",
+            "expression": "very wide, happy smile showing teeth",
+            "lookingAtCamera": true,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          },
+          {
+            "faceId": "3tVV2IAflql226K93GCx_0000-2",
+            "bbox": [
+              0.146,
+              0.493,
+              0.463,
+              0.641
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "long dark straight hair, white sleeveless top",
+            "prominence": "primary",
+            "expression": "smiling while eyes are closed",
+            "lookingAtCamera": false,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "3tVV2IAflql226K93GCx_0000-0",
+            "to": "3tVV2IAflql226K93GCx_0000-1",
+            "kind": "kissing on cheek"
+          },
+          {
+            "from": "3tVV2IAflql226K93GCx_0000-2",
+            "to": "3tVV2IAflql226K93GCx_0000-1",
+            "kind": "kissing on cheek"
+          }
+        ]
+      },
+      "eventId": "e007",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-08.jpg",
+      "sourceAssetId": "6sONuGV9EtImxKaVJOcI",
+      "sourceShotId": "6sONuGV9EtImxKaVJOcI_0000",
+      "sourceGeneration": "1790574793684",
+      "media": {
+        "kind": "photo",
+        "width": 4480,
+        "height": 6720,
+        "durationSec": null,
+        "localTime": "2026-06-01T08:00:00",
+        "timeSource": "exif",
+        "gps": {
+          "lat": 1.2755,
+          "lng": 103.8073
+        },
+        "camera": null
+      },
+      "place": {
+        "name": "Telok Blangah",
+        "level": "area"
+      },
+      "quality": {
+        "sharpness": 422.41815018599806,
+        "exposure": 169.7179710410557,
+        "blurry": false,
+        "dHash": "58733be3121ad16b"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "Three people walking hand-in-hand along the shoreline of a beach under a blue sky.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult female"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "child"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult male"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "beach, shoreline, sunny day",
+        "activities": [
+          "walking along the beach",
+          "holding hands"
+        ],
+        "mood": "happy, peaceful, connection",
+        "shotType": "full body",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "family",
+          "beach",
+          "walking",
+          "summer",
+          "vacation"
+        ],
+        "faces": [
+          {
+            "faceId": "6sONuGV9EtImxKaVJOcI_0000-0",
+            "bbox": [
+              0.504,
+              0.286,
+              0.561,
+              0.323
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "long dark hair, white dress",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": false,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "6sONuGV9EtImxKaVJOcI_0000-1",
+            "bbox": [
+              0.525,
+              0.485,
+              0.573,
+              0.518
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "dark hair, white dress",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": false,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          },
+          {
+            "faceId": "6sONuGV9EtImxKaVJOcI_0000-2",
+            "bbox": [
+              0.433,
+              0.577,
+              0.493,
+              0.617
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "tan fedora hat, short dark hair, white button-down shirt, shorts",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": false,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "6sONuGV9EtImxKaVJOcI_0000-0",
+            "to": "6sONuGV9EtImxKaVJOcI_0000-1",
+            "kind": "holding hands"
+          },
+          {
+            "from": "6sONuGV9EtImxKaVJOcI_0000-2",
+            "to": "6sONuGV9EtImxKaVJOcI_0000-1",
+            "kind": "holding hands"
+          }
+        ]
+      },
+      "eventId": "e001",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-09.jpg",
+      "sourceAssetId": "GZx0LxiCNrwZBDiwiZ6u",
+      "sourceShotId": "GZx0LxiCNrwZBDiwiZ6u_0000",
+      "sourceGeneration": "1790574793728",
+      "media": {
+        "kind": "photo",
+        "width": 6531,
+        "height": 4466,
+        "durationSec": null,
+        "localTime": "2026-06-03T20:00:00",
+        "timeSource": "exif",
+        "gps": {
+          "lat": 1.2566,
+          "lng": 103.821
+        },
+        "camera": null
+      },
+      "place": {
+        "name": "Shangri-La Rasa Sentosa",
+        "level": "lodging"
+      },
+      "quality": {
+        "sharpness": 831.0395253043115,
+        "exposure": 177.5856138392857,
+        "blurry": false,
+        "dHash": "a624e2351b838b27"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "A family of three standing on a beach, holding hands in a line with arms outstretched towards the ocean.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "man"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "girl"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "woman"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "A sandy beach with the ocean and a blue sky in the background.",
+        "activities": [
+          "holding hands",
+          "standing",
+          "posing"
+        ],
+        "mood": "joyful",
+        "shotType": "wide shot",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "beach",
+          "family",
+          "vacation",
+          "ocean",
+          "summer"
+        ],
+        "faces": [
+          {
+            "faceId": "GZx0LxiCNrwZBDiwiZ6u_0000-0",
+            "bbox": [
+              0.379,
+              0.313,
+              0.461,
+              0.375
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "wearing a fedora hat, short-sleeved white button-up shirt",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "GZx0LxiCNrwZBDiwiZ6u_0000-1",
+            "bbox": [
+              0.483,
+              0.537,
+              0.545,
+              0.571
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "long dark hair, white dress",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          },
+          {
+            "faceId": "GZx0LxiCNrwZBDiwiZ6u_0000-2",
+            "bbox": [
+              0.426,
+              0.731,
+              0.498,
+              0.769
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "long dark hair, white sundress",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "GZx0LxiCNrwZBDiwiZ6u_0000-0",
+            "to": "GZx0LxiCNrwZBDiwiZ6u_0000-1",
+            "kind": "holding hands"
+          },
+          {
+            "from": "GZx0LxiCNrwZBDiwiZ6u_0000-1",
+            "to": "GZx0LxiCNrwZBDiwiZ6u_0000-2",
+            "kind": "holding hands"
+          }
+        ]
+      },
+      "eventId": "e009",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-10.jpg",
+      "sourceAssetId": "TXYAOrEmNjTBjWjp8rVL",
+      "sourceShotId": "TXYAOrEmNjTBjWjp8rVL_0000",
+      "sourceGeneration": "1790574793719",
+      "media": {
+        "kind": "photo",
+        "width": 4401,
+        "height": 6602,
+        "durationSec": null,
+        "localTime": "2026-06-02T13:00:00",
+        "timeSource": "exif",
+        "gps": {
+          "lat": 1.2494,
+          "lng": 103.8303
+        },
+        "camera": null
+      },
+      "place": {
+        "name": "Siloso Beach",
+        "level": "landmark"
+      },
+      "quality": {
+        "sharpness": 799.2873607046794,
+        "exposure": 180.02159892778593,
+        "blurry": false,
+        "dHash": "480730305b551434"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "Three people stand together in a grassy park in front of a large resort hotel at dusk.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "person 0"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "person 1"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "person 2"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "Outdoor park with a large resort hotel in the background during golden hour.",
+        "activities": [
+          "posing for a photograph"
+        ],
+        "mood": "Peaceful and harmonious.",
+        "shotType": "Medium shot.",
+        "aesthetics": 4,
+        "keyMomentScore": 5,
+        "tags": [
+          "family",
+          "resort",
+          "vacation",
+          "outdoors",
+          "white clothing"
+        ],
+        "faces": [
+          {
+            "faceId": "TXYAOrEmNjTBjWjp8rVL_0000-0",
+            "bbox": [
+              0.418,
+              0.417,
+              0.508,
+              0.503
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "wearing a fedora hat, short-sleeved white button-up shirt",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "TXYAOrEmNjTBjWjp8rVL_0000-1",
+            "bbox": [
+              0.513,
+              0.452,
+              0.571,
+              0.515
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "long dark hair, white sleeveless dress",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          },
+          {
+            "faceId": "TXYAOrEmNjTBjWjp8rVL_0000-2",
+            "bbox": [
+              0.454,
+              0.521,
+              0.517,
+              0.597
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "long dark hair, white sleeveless top",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "TXYAOrEmNjTBjWjp8rVL_0000-2",
+            "to": "TXYAOrEmNjTBjWjp8rVL_0000-1",
+            "kind": "placing hand on shoulder"
+          }
+        ]
+      },
+      "eventId": "e006",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-11.jpg",
+      "sourceAssetId": "z2HKSFUcV4QjofAHQ6Vg",
+      "sourceShotId": "z2HKSFUcV4QjofAHQ6Vg_0000",
+      "sourceGeneration": "1790574793758",
+      "media": {
+        "kind": "photo",
+        "width": 4480,
+        "height": 6720,
+        "durationSec": null,
+        "localTime": "2026-06-01T11:00:00",
+        "timeSource": "exif",
+        "gps": null,
+        "camera": null
+      },
+      "place": null,
+      "quality": {
+        "sharpness": 964.10392822059,
+        "exposure": 178.35215817448682,
+        "blurry": false,
+        "dHash": "036070374d0f3762"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "A young person smiling and posing on a lush green lawn in front of a resort building.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "one person"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "An outdoor lawn with a large, modern hotel or resort building and palm trees in the background.",
+        "activities": [
+          "posing for a portrait",
+          "standing"
+        ],
+        "mood": "Cheerful and serene",
+        "shotType": "Full body shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "outdoors",
+          "resort",
+          "vacation",
+          "summer",
+          "sunny",
+          "greenery"
+        ],
+        "faces": [
+          {
+            "faceId": "z2HKSFUcV4QjofAHQ6Vg_0000-0",
+            "bbox": [
+              0.336,
+              0.426,
+              0.427,
+              0.532
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "long straight dark hair, white dress",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          }
+        ]
+      },
+      "eventId": "e001",
+      "dupOf": null
+    },
+    {
+      "fileName": "d1-12.jpg",
+      "sourceAssetId": "SdIHQ965PHyyoM8LOrF7",
+      "sourceShotId": "SdIHQ965PHyyoM8LOrF7_0000",
+      "sourceGeneration": "1790574793739",
+      "media": {
+        "kind": "photo",
+        "width": 4354,
+        "height": 6532,
+        "durationSec": null,
+        "localTime": "2026-06-03T13:00:00",
+        "timeSource": "exif",
+        "gps": null,
+        "camera": null
+      },
+      "place": null,
+      "quality": {
+        "sharpness": 698.5220537250544,
+        "exposure": 190.25097942631965,
+        "blurry": false,
+        "dHash": "0007087815130307"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "Two individuals in matching white dresses running across a green lawn holding hands in front of a resort building.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "child"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "A manicured lawn in front of a large resort hotel with palm trees under a bright sky.",
+        "activities": [
+          "running",
+          "holding hands"
+        ],
+        "mood": "Joyful and energetic",
+        "shotType": "Full body shot",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "outdoors",
+          "resort",
+          "running",
+          "white dresses",
+          "family vacation",
+          "joyful"
+        ],
+        "faces": [
+          {
+            "faceId": "SdIHQ965PHyyoM8LOrF7_0000-0",
+            "bbox": [
+              0.393,
+              0.276,
+              0.461,
+              0.357
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "long dark hair, white dress",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "SdIHQ965PHyyoM8LOrF7_0000-1",
+            "bbox": [
+              0.428,
+              0.526,
+              0.482,
+              0.595
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "long dark hair, white dress",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          }
+        ],
+        "interactions": [
+          {
+            "from": "SdIHQ965PHyyoM8LOrF7_0000-0",
+            "to": "SdIHQ965PHyyoM8LOrF7_0000-1",
+            "kind": "holding hands"
+          }
+        ]
+      },
+      "eventId": "e009",
+      "dupOf": null
+    },
+    {
+      "fileName": "x-distant.jpg",
+      "sourceAssetId": "OjOoDE1HXnZ3b27QfXRw",
+      "sourceShotId": "OjOoDE1HXnZ3b27QfXRw_0000",
+      "sourceGeneration": "1790574793779",
+      "media": {
+        "kind": "photo",
+        "width": 1880,
+        "height": 1253,
+        "durationSec": null,
+        "localTime": "2026-06-03T18:00:00",
+        "timeSource": "exif",
+        "gps": null,
+        "camera": null
+      },
+      "place": null,
+      "quality": {
+        "sharpness": 3126.3315522268804,
+        "exposure": 165.08922516495602,
+        "blurry": false,
+        "dHash": "5d9992f39e4c230f"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "Two individuals wearing traditional kimono sitting on the grassy bank of a river.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "individual in purple kimono"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "individual in orange and yellow kimono"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "Outdoor riverside with a green embankment and a grassy path",
+        "activities": [
+          "sitting",
+          "viewing the river"
+        ],
+        "mood": "Peaceful and serene",
+        "shotType": "Long shot",
+        "aesthetics": 4,
+        "keyMomentScore": 4,
+        "tags": [
+          "river",
+          "kimono",
+          "traditional clothing",
+          "outdoors",
+          "scenic"
+        ],
+        "faces": [
+          {
+            "faceId": "OjOoDE1HXnZ3b27QfXRw_0000-0",
+            "bbox": [
+              0.561,
+              0.463,
+              0.597,
+              0.479
+            ],
+            "confidence": 0.85,
+            "ageBand": "adult",
+            "appearance": "dark hair pulled up in a bun with decorative clip",
+            "prominence": "primary",
+            "expression": "neutral",
+            "lookingAtCamera": false
+          },
+          {
+            "faceId": "OjOoDE1HXnZ3b27QfXRw_0000-1",
+            "bbox": [
+              0.561,
+              0.529,
+              0.596,
+              0.544
+            ],
+            "confidence": 0.85,
+            "ageBand": "adult",
+            "appearance": "dark hair pulled up in a bun with decorative clip",
+            "prominence": "primary",
+            "expression": "neutral",
+            "lookingAtCamera": false
+          }
+        ],
+        "interactions": [
+          {
+            "from": "OjOoDE1HXnZ3b27QfXRw_0000-0",
+            "to": "OjOoDE1HXnZ3b27QfXRw_0000-1",
+            "kind": "sitting side-by-side"
+          }
+        ]
+      },
+      "eventId": "e009",
+      "dupOf": null
+    },
+    {
+      "fileName": "x-photobomb.jpg",
+      "sourceAssetId": "G3mRU1NCTwUygn45AxFi",
+      "sourceShotId": "G3mRU1NCTwUygn45AxFi_0000",
+      "sourceGeneration": "1790574793793",
+      "media": {
+        "kind": "photo",
+        "width": 6720,
+        "height": 4480,
+        "durationSec": null,
+        "localTime": "2026-06-02T08:00:00",
+        "timeSource": "exif",
+        "gps": null,
+        "camera": null
+      },
+      "place": null,
+      "quality": {
+        "sharpness": 872.2358399761782,
+        "exposure": 196.3822225531525,
+        "blurry": false,
+        "dHash": "144466606661f0b2"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "A family portrait sitting on a sandy beach by the ocean, with an inset close-up of a person in traditional clothing.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "three people sitting on the beach"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "one person in an inset frame"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "sandy beach with ocean waves in background",
+        "activities": [
+          "sitting",
+          "posing for a photo"
+        ],
+        "mood": "happy and relaxed",
+        "shotType": "full-body group shot with inset",
+        "aesthetics": 4,
+        "keyMomentScore": 5,
+        "tags": [
+          "family",
+          "beach",
+          "portrait",
+          "vacation"
+        ],
+        "faces": [
+          {
+            "faceId": "G3mRU1NCTwUygn45AxFi_0000-0",
+            "bbox": [
+              0.217,
+              0.307,
+              0.307,
+              0.363
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "short hair, wearing a fedora hat",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-dad",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "G3mRU1NCTwUygn45AxFi_0000-1",
+            "bbox": [
+              0.322,
+              0.392,
+              0.418,
+              0.452
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "long dark hair",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-daughter",
+            "role": "MAIN"
+          },
+          {
+            "faceId": "G3mRU1NCTwUygn45AxFi_0000-2",
+            "bbox": [
+              0.248,
+              0.452,
+              0.335,
+              0.508
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "long dark wavy hair",
+            "prominence": "primary",
+            "expression": "smiling",
+            "lookingAtCamera": true,
+            "characterId": "p-mom",
+            "role": "SUPPORTING"
+          },
+          {
+            "faceId": "G3mRU1NCTwUygn45AxFi_0000-3",
+            "bbox": [
+              0.03,
+              0.717,
+              0.185,
+              0.768
+            ],
+            "confidence": 0.99,
+            "ageBand": "teen",
+            "appearance": "dark hair, wearing a light-colored floral kimono",
+            "prominence": "secondary",
+            "expression": "smiling",
+            "lookingAtCamera": false,
+            "stranger": true
+          }
+        ],
+        "interactions": [
+          {
+            "from": "G3mRU1NCTwUygn45AxFi_0000-0",
+            "to": "G3mRU1NCTwUygn45AxFi_0000-1",
+            "kind": "hugging"
+          },
+          {
+            "from": "G3mRU1NCTwUygn45AxFi_0000-2",
+            "to": "G3mRU1NCTwUygn45AxFi_0000-1",
+            "kind": "holding"
+          }
+        ]
+      },
+      "eventId": "e006",
+      "dupOf": null
+    },
+    {
+      "fileName": "x-stranger.jpg",
+      "sourceAssetId": "WN6McxvTmxubIwQiCiyq",
+      "sourceShotId": "WN6McxvTmxubIwQiCiyq_0000",
+      "sourceGeneration": "1790574793756",
+      "media": {
+        "kind": "photo",
+        "width": 1880,
+        "height": 1253,
+        "durationSec": null,
+        "localTime": "2026-06-01T20:00:00",
+        "timeSource": "exif",
+        "gps": null,
+        "camera": "Apple iPhone 16 Pro"
+      },
+      "place": null,
+      "quality": {
+        "sharpness": 284.42929057201655,
+        "exposure": 70.83628688599707,
+        "blurry": false,
+        "dHash": "3755949623182c4c"
+      },
+      "analysis": {
+        "kind": "photo",
+        "caption": "A young child is blowing out candles on a chocolate birthday cake, while other people watch in the background.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "child blowing out candles"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "adult looking on"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "small child standing with adult"
+            ],
+            "attributes": []
+          },
+          {
+            "peopleCount": 1,
+            "roles": [
+              "older children standing in background"
+            ],
+            "attributes": []
+          }
+        ],
+        "setting": "Indoor kitchen or dining room with wooden table and cake.",
+        "activities": [
+          "celebrating birthday",
+          "blowing out candles",
+          "looking at cake"
+        ],
+        "mood": "Celebratory and warm",
+        "shotType": "Medium shot",
+        "aesthetics": 4,
+        "keyMomentScore": 5,
+        "tags": [
+          "birthday",
+          "celebration",
+          "cake",
+          "candles",
+          "family",
+          "indoor"
+        ],
+        "faces": [
+          {
+            "faceId": "WN6McxvTmxubIwQiCiyq_0000-0",
+            "bbox": [
+              0.13,
+              0.259,
+              0.457,
+              0.431
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "short light hair, green patterned t-shirt",
+            "prominence": "primary",
+            "expression": "focused, lips pursed",
+            "lookingAtCamera": false,
+            "stranger": true
+          },
+          {
+            "faceId": "WN6McxvTmxubIwQiCiyq_0000-1",
+            "bbox": [
+              0,
+              0.377,
+              0.185,
+              0.533
+            ],
+            "confidence": 0.99,
+            "ageBand": "adult",
+            "appearance": "dark hair tied back, dark patterned top",
+            "prominence": "secondary",
+            "expression": "smiling",
+            "lookingAtCamera": false,
+            "stranger": true
+          },
+          {
+            "faceId": "WN6McxvTmxubIwQiCiyq_0000-2",
+            "bbox": [
+              0.025,
+              0.508,
+              0.415,
+              0.632
+            ],
+            "confidence": 0.99,
+            "ageBand": "child",
+            "appearance": "short dark hair, red t-shirt with black dots",
+            "prominence": "secondary",
+            "expression": "serious",
+            "lookingAtCamera": false,
+            "stranger": true
+          },
+          {
+            "faceId": "WN6McxvTmxubIwQiCiyq_0000-3",
+            "bbox": [
+              0.132,
+              0.715,
+              0.358,
+              0.811
+            ],
+            "confidence": 0.95,
+            "ageBand": "child",
+            "appearance": "dark hair, dark t-shirt",
+            "prominence": "background",
+            "expression": "neutral",
+            "lookingAtCamera": false,
+            "stranger": true
+          },
+          {
+            "faceId": "WN6McxvTmxubIwQiCiyq_0000-4",
+            "bbox": [
+              0.161,
+              0.912,
+              0.377,
+              0.999
+            ],
+            "confidence": 0.98,
+            "ageBand": "child",
+            "appearance": "short hair, party hat, green graphic t-shirt",
+            "prominence": "background",
+            "expression": "neutral",
+            "lookingAtCamera": true,
+            "stranger": true
+          }
+        ],
+        "interactions": [
+          {
+            "from": "WN6McxvTmxubIwQiCiyq_0000-1",
+            "to": "WN6McxvTmxubIwQiCiyq_0000-2",
+            "kind": "holding"
+          }
+        ]
+      },
+      "eventId": "e003",
+      "dupOf": null
+    }
+  ],
+  "cast": {
+    "people": [
+      {
+        "personId": "p-dad",
+        "subjectCount": 11,
+        "ageBand": "adult",
+        "role": "parent",
+        "appearances": 11,
+        "faceIds": [
+          "3tVV2IAflql226K93GCx_0000-0",
+          "6sONuGV9EtImxKaVJOcI_0000-2",
+          "G3mRU1NCTwUygn45AxFi_0000-0",
+          "GZx0LxiCNrwZBDiwiZ6u_0000-0",
+          "Mh6GcAgca4PChbF8AIHz_0000-1",
+          "TXYAOrEmNjTBjWjp8rVL_0000-0",
+          "UFjLVL8I6oC6n4jM7wNW_0000-1",
+          "Xg4ppht8vHzKxp6IYGUF_0000-0",
+          "oF1yZNc16XIr8YTTMhSR_0000-0",
+          "wilVFUddScYIUX05P2QU_0000-1",
+          "ze3AcO4CmQEZ6LzDodMk_0000-0"
+        ],
+        "confidence": "high"
+      },
+      {
+        "personId": "p-daughter",
+        "subjectCount": 12,
+        "ageBand": "child",
+        "role": "child",
+        "appearances": 12,
+        "faceIds": [
+          "3tVV2IAflql226K93GCx_0000-1",
+          "6sONuGV9EtImxKaVJOcI_0000-1",
+          "G3mRU1NCTwUygn45AxFi_0000-1",
+          "GZx0LxiCNrwZBDiwiZ6u_0000-1",
+          "SdIHQ965PHyyoM8LOrF7_0000-1",
+          "TXYAOrEmNjTBjWjp8rVL_0000-1",
+          "UFjLVL8I6oC6n4jM7wNW_0000-2",
+          "Xg4ppht8vHzKxp6IYGUF_0000-1",
+          "oF1yZNc16XIr8YTTMhSR_0000-1",
+          "wilVFUddScYIUX05P2QU_0000-2",
+          "z2HKSFUcV4QjofAHQ6Vg_0000-0",
+          "ze3AcO4CmQEZ6LzDodMk_0000-1"
+        ],
+        "confidence": "high"
+      },
+      {
+        "personId": "p-mom",
+        "subjectCount": 11,
+        "ageBand": "adult",
+        "role": "parent",
+        "appearances": 11,
+        "faceIds": [
+          "3tVV2IAflql226K93GCx_0000-2",
+          "6sONuGV9EtImxKaVJOcI_0000-0",
+          "G3mRU1NCTwUygn45AxFi_0000-2",
+          "GZx0LxiCNrwZBDiwiZ6u_0000-2",
+          "Mh6GcAgca4PChbF8AIHz_0000-0",
+          "SdIHQ965PHyyoM8LOrF7_0000-0",
+          "TXYAOrEmNjTBjWjp8rVL_0000-2",
+          "Xg4ppht8vHzKxp6IYGUF_0000-2",
+          "oF1yZNc16XIr8YTTMhSR_0000-2",
+          "wilVFUddScYIUX05P2QU_0000-0",
+          "ze3AcO4CmQEZ6LzDodMk_0000-2"
+        ],
+        "confidence": "high"
+      }
+    ],
+    "core": [
+      "p-dad",
+      "p-daughter",
+      "p-mom"
+    ],
+    "focus": [
+      "p-daughter"
+    ],
+    "source": "labelled"
+  }
+}
