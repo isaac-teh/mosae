@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Img, OffthreadVideo, interpolate, random, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { CollageSpec, CollageSlot } from "./schema";
-import { redactImageSource } from "../imageDiagnostic.js";
+import { redactImageSource } from "../imageDiagnostic";
 
 export type CollageProps = { spec: CollageSpec; sources?: Record<string, string> };
 const WOOD = ["radial-gradient(75% 55% at 32% 26%,rgba(255,238,205,.2),transparent 60%)", "radial-gradient(110% 85% at 50% 45%,transparent 35%,rgba(24,14,6,.42))", "repeating-linear-gradient(92deg,rgba(20,10,2,.05) 0 2px,transparent 4px 17px)", "linear-gradient(163deg,#96704a,#7d5a3a 45%,#5f422a)"].join(",");

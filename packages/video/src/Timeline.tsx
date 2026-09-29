@@ -3,7 +3,7 @@ import type { AudioClip, VideoClip } from "@mosae/contracts";
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { audioTrimFrames, gainToVolume, type TimelineProps } from "./timelineMetadata";
 import { Collage } from "./collage/Collage";
-import { redactImageSource } from "./imageDiagnostic.js";
+import { redactImageSource } from "./imageDiagnostic";
 
 /**
  * Clips carry explicit output-relative start times, so they render as absolute
