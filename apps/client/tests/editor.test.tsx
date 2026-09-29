@@ -145,10 +145,11 @@ describe("film editor", () => {
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
   });
 
-  it("opens the Saved screen when the render completes", async () => {
+  it("keeps the editor's rendered film ready for download", async () => {
     await render(<EditorScreen />);
     await click("Save");
-    expect(boundary.push).toHaveBeenCalledWith({ pathname: "/save-film", params: { filmId: "g1", projectId: "p1", repository: "api" } });
+    expect(host.querySelector('[aria-label="Download rendered film"]')).not.toBeNull();
+    expect(boundary.push).not.toHaveBeenCalled();
   });
 
   it("shows renderProgress while waiting for the saved film render", async () => {

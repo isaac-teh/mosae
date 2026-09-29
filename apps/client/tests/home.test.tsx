@@ -2,10 +2,10 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any }));
+const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any, flow: { repository: "api" as const, projectId: "" } }));
 vi.mock("@/lib/startDemoTrip", () => ({ startDemoTrip: vi.fn(async () => {}) }));
 vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms }) }));
-vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: state.repository }) }));
+vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: state.repository, flow: state.flow }) }));
 vi.mock("expo-router", async () => {
   const ReactModule = await import("react");
   return { useRouter: () => ({ push: state.push }), useFocusEffect: (effect: () => void | (() => void)) => ReactModule.useEffect(() => { state.focusEffect = effect; return effect(); }, [effect]) };
@@ -65,7 +65,7 @@ describe("Home", () => {
   });
 
   it("shows a two-column film grid, marks the newest just saved, and pins Create at the bottom", async () => {
-    state.films = Array.from({ length: 6 }, (_, i) => ({ projectId: `p${i}`, filmId: `g${i}`, title: `Film ${i}`, month: "Jun 2026", duration: "1:30", posterUrl: `https://image/${i}`, justSaved: i === 0 }));
+    state.films = Array.from({ length: 6 }, (_, i) => ({ projectId: `p${i}`, filmId: `g${i}`, planId: `plan${i}`, title: `Film ${i}`, month: "Jun 2026", duration: "1:30", posterUrl: `https://image/${i}`, status: "saved", justSaved: i === 0 }));
     await render();
     expect(host.textContent).toContain("Your films");
     expect(host.textContent).toContain("6 films");
@@ -93,6 +93,30 @@ describe("Home", () => {
     expect(state.listFilms).toHaveBeenCalledTimes(3);
     expect(host.textContent).toContain("Just saved");
     expect(host.textContent).toContain("Singapore Trip");
+  });
+
+  it("lists saved, ready, rendering, and in-progress projects with the right destinations", async () => {
+    state.films = [
+      { projectId: "saved-project", filmId: "saved-gen", planId: "saved-plan", title: "Saved", month: "Sep 2026", duration: "0:30", posterUrl: "", status: "saved", justSaved: false },
+      { projectId: "ready-project", filmId: "ready-gen", planId: "ready-plan", title: "Ready", month: "Sep 2026", duration: "0:30", posterUrl: "", status: "film-ready", justSaved: false, demo: true },
+      { projectId: "render-project", filmId: "render-gen", planId: "render-plan", title: "Rendering", month: "Sep 2026", duration: "0:30", posterUrl: "", status: "rendering", justSaved: false },
+      { projectId: "active-project", filmId: null, planId: "active-plan", title: "In progress", month: "Sep 2026", duration: "", posterUrl: "", status: "in-progress", justSaved: false },
+    ];
+    await render();
+
+    expect(host.textContent).toContain("Film ready");
+    expect(host.textContent).toContain("Rendering");
+    expect(host.textContent).toContain("In progress");
+    expect(host.textContent).toContain("Demo");
+    const card = (title: string) => [...host.querySelectorAll('[data-film-grid] button')].find((button) => [...button.querySelectorAll("span")].some((span) => span.textContent === title)) as HTMLButtonElement;
+    await act(async () => card("Saved").click());
+    expect(state.push).toHaveBeenLastCalledWith("/save-film?repository=api&projectId=saved-project&filmId=saved-gen");
+    await act(async () => card("Ready").click());
+    expect(state.push).toHaveBeenLastCalledWith("/director?repository=api&projectId=ready-project");
+    await act(async () => card("Rendering").click());
+    expect(state.push).toHaveBeenLastCalledWith("/editor?repository=api&projectId=render-project&planId=render-plan&generationId=render-gen");
+    await act(async () => card("In progress").click());
+    expect(state.push).toHaveBeenLastCalledWith("/director?repository=api&projectId=active-project");
   });
 
 });

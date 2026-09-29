@@ -1,30 +1,20 @@
 import { useEffect, useState } from "react";
 import { Linking, Pressable, ScrollView, Share, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import type { Href } from "expo-router";
-import { useStepBack } from "@/lib/useStepBack";
 import { Asset } from "expo-asset";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Path } from "react-native-svg";
 import { useStoryFlow, useStoryScreenGuard } from "@/lib/storyFlow";
 import { type Film, type StoryRepository } from "@mosae/core";
 import { FilmPlayer } from "@/components/FilmPlayer";
-import { StepHeader } from "@/components/StepHeader";
-import { demoImage } from "@/lib/demoAssets";
+import { downloadFilm } from "@/lib/downloadFilm";
 import { storyImage } from "@/lib/storyImage";
 
 function PinIcon() { return <Svg width={13} height={13} viewBox="0 0 13 13"><Path d="M6.5 11.5s4-3.13 4-6.1a4 4 0 1 0-8 0c0 2.97 4 6.1 4 6.1Z" fill="none" stroke="rgb(var(--color-accent))" strokeWidth={1.3} /><Circle cx={6.5} cy={5.25} r={1.2} fill="rgb(var(--color-accent))" /></Svg>; }
-function DownloadIcon() { return <Svg width={21} height={21} viewBox="0 0 21 21"><Path d="M10.5 3v10m0 0 3.5-3.5M10.5 13 7 9.5M4 14.5v2.2c0 .72.58 1.3 1.3 1.3h10.4c.72 0 1.3-.58 1.3-1.3v-2.2" fill="none" stroke="rgb(var(--color-accent))" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></Svg>; }
-function WhatsAppIcon() { return <Svg width={22} height={22} viewBox="0 0 22 22"><Path d="M18 10.4a7 7 0 0 1-10.33 6.16L4 17.5l1.05-3.48A7 7 0 1 1 18 10.4Z" fill="none" stroke="rgb(var(--color-positive))" strokeWidth={1.8} strokeLinejoin="round" /><Path d="M8.2 7.5c.25 2 1.48 3.2 3.45 3.55l.8-1.02 1.35.65c-.18.9-.72 1.35-1.35 1.35-2.8-.26-4.35-1.8-4.65-4.55 0-.68.45-1.17 1.35-1.4l.68 1.42-1 .7Z" fill="rgb(var(--color-positive))" /></Svg>; }
-function InstagramIcon() { return <Svg width={22} height={22} viewBox="0 0 22 22"><Rect x={3.2} y={3.2} width={15.6} height={15.6} rx={4.2} fill="none" stroke="rgb(var(--color-accent))" strokeWidth={1.8} /><Circle cx={11} cy={11} r={3.55} fill="none" stroke="rgb(var(--color-accent))" strokeWidth={1.8} /><Circle cx={16.25} cy={5.9} r={1} fill="rgb(var(--color-accent))" /></Svg>; }
-function FacebookIcon() { return <Svg width={22} height={22} viewBox="0 0 22 22"><Circle cx={11} cy={11} r={9} fill="rgb(var(--color-tile))" /><Path d="M12.15 17v-5.1h1.72l.26-2h-1.98V8.62c0-.58.16-.97.99-.97h1.05V5.86c-.18-.02-.8-.08-1.53-.08-1.51 0-2.55.92-2.55 2.62V9.9H8.4v2h1.7V17h2.05Z" fill="white" /></Svg>; }
-function GalleryIcon() { return <Svg width={20} height={20} viewBox="0 0 20 20"><Rect x={2.5} y={3} width={12.5} height={12.5} rx={1.2} fill="none" stroke="rgb(var(--color-ink))" strokeWidth={1.5} /><Path d="m4.5 13 3.1-3.1 2.25 2.25 1.7-1.7 2.45 2.55M10.5 3V1.8h6.8v12.6h-2.3" fill="none" stroke="rgb(var(--color-ink))" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></Svg>; }
-
-function OpenStreetMapCredit() { return <Pressable accessibilityRole="link" onPress={() => void Linking.openURL("https://www.openstreetmap.org/copyright")} className="items-center py-2"><Text className="font-sans text-[11px] text-ink-muted">© OpenStreetMap contributors</Text></Pressable>; }
 
 export default function SaveFilmScreen() {
-  const { filmId, directorChat } = useLocalSearchParams<{ filmId: string; directorChat?: string }>();
+  const params = useLocalSearchParams<{ filmId: string; directorChat?: string }>();
   const story = useStoryFlow();
-  return <SaveFilmScreenContent key={`${story.identityKey}:film:${filmId}`} filmId={filmId} directorChat={directorChat === "true"} storyFlow={story.flow} repository={story.repository} route={story.route} />;
+  return <SaveFilmScreenContent key={`${story.identityKey}:film:${params.filmId}`} filmId={params.filmId} directorChat={params.directorChat === "true"} storyFlow={story.flow} repository={story.repository} route={story.route} />;
 }
 
 function SaveFilmScreenContent({ filmId, directorChat, storyFlow, repository, route }: {
@@ -36,63 +26,41 @@ function SaveFilmScreenContent({ filmId, directorChat, storyFlow, repository, ro
 }) {
   const router = useRouter();
   const isCurrent = useStoryScreenGuard();
-  const goBack = useStepBack(route("/review-film", { filmId: filmId }) as Href);
   const [film, setFilm] = useState<Film | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [comingSoon, setComingSoon] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [preparingDownload, setPreparingDownload] = useState(false);
   useEffect(() => { void repository.getFilm(filmId)
     .then((value) => { if (isCurrent()) setFilm(value); })
     .catch((cause: Error) => { if (isCurrent()) setError(cause.message); }); }, [filmId, isCurrent, repository]);
-  const download = async () => {
-    if (!film) return;
-    // The rendered film lives on another origin (storage), where the browser
-    // ignores `download` and just opens the video. Fetching it into a blob
-    // keeps it a save, under the film's own name.
-    let href = Asset.fromModule(require("../assets/demo/film.mp4")).uri;
-    let objectUrl: string | null = null;
-    if (film.videoUrl) {
-      try {
-        objectUrl = URL.createObjectURL(await (await fetch(film.videoUrl)).blob());
-        href = objectUrl;
-      } catch {
-        href = film.videoUrl;
-      }
-    }
-    const anchor = document.createElement("a");
-    anchor.href = href;
-    anchor.download = `${film.title.replace(/[\\/:*?"<>|]/g, "")}.mp4`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl!), 1000);
+
+  const onDownload = async () => {
+    if (!film || preparingDownload) return;
+    setDownloadError(null);
+    try { await downloadFilm(film.videoUrl ?? Asset.fromModule(require("../assets/demo/film.mp4")).uri, film.title, setPreparingDownload); }
+    catch { setDownloadError("Could not prepare the film download. Try again."); }
   };
-  if (error) return <View className="flex-1 items-center justify-center bg-surface"><Text className="text-action">{error}</Text></View>;
-  if (!film) return <View className="flex-1 bg-surface"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => goBack()} backLabel="Go back to your film" /></View>;
-  if (directorChat) return <View className="flex-1 bg-surface px-5">
-    <View className="flex-row items-center justify-center gap-2 py-4"><Text className="font-sans-semibold text-button text-positive">✓ Saved to your films</Text></View>
-    <ScrollView className="flex-1" contentContainerClassName="gap-4 pb-4">
-      <FilmPlayer source={film.videoUrl ?? require("../assets/demo/film.mp4")} poster={storyImage(film.savePosterKey)} durationSec={film.durationSec} aspect="landscape" compact />
-      <View className="gap-1"><Text className="font-title text-heading text-ink">{film.title}</Text><Pressable role="button" aria-label="Still editable anytime" onPress={() => router.push({ pathname: "/editor", params: { projectId: "projectId" in storyFlow ? storyFlow.projectId : "fixture", planId: film.planId, generationId: film.filmId, request: "", ...storyFlow } } as never)}><Text className="font-sans text-caption text-ink-muted">{film.momentCount} moments · Still editable anytime</Text></Pressable></View>
-      <Text className="font-sans-semibold text-button text-ink">Save or share</Text>
-      <View accessibilityLabel="Share options" className="flex-row flex-wrap justify-between gap-y-3">
-        <Pressable role="button" aria-label="Download" onPress={() => void download()} className="min-h-12 min-w-[72px] items-center justify-center rounded-full border border-line-strong px-3"><Text className="font-sans text-caption text-ink">Download</Text></Pressable>
-        {["WhatsApp", "Facebook", "Instagram"].map((service) => <Pressable key={service} role="button" aria-label={service} onPress={() => void Share.share({ message: film.videoUrl ?? film.title })} className="min-h-12 min-w-[72px] items-center justify-center rounded-full border border-line-strong px-3"><Text className="font-sans text-caption text-ink">{service}</Text></Pressable>)}
+  const poster = film ? storyImage(film.posterKey || film.savePosterKey) : {};
+  const projectId = storyFlow.repository === "api" ? storyFlow.projectId : "fixture";
+
+  if (error) return <View className="flex-1 items-center justify-center bg-surface px-6"><Text accessibilityRole="alert" className="font-sans text-body text-critical">{error}</Text></View>;
+  if (!film) return <View className="flex-1 items-center justify-center bg-surface"><Text className="font-sans text-body text-ink-muted">Opening saved film…</Text></View>;
+
+  return <View className="flex-1 bg-surface px-5 pt-4">
+    <View className="mb-3 flex-row items-center justify-between"><Pressable role="button" aria-label="Back to your films" onPress={() => router.navigate(route("/") as never)} className="min-h-11 min-w-11 justify-center"><Text className="font-sans text-[28px] text-ink">‹</Text></Pressable><Text className="font-sans-semibold text-heading text-ink">Saved film</Text><View className="min-w-11" /></View>
+    {directorChat ? <Text className="mb-3 self-center font-sans-semibold text-button text-positive">✓ Saved to your films</Text> : null}
+    <ScrollView className="flex-1" contentContainerClassName="gap-4 pb-5" showsVerticalScrollIndicator={false}>
+      <FilmPlayer source={film.videoUrl ?? require("../assets/demo/film.mp4")} poster={poster} durationSec={film.durationSec} aspect="landscape" compact />
+      <View className="gap-1"><Text className="font-title text-title text-ink">{film.title}</Text><View className="flex-row items-center gap-1"><PinIcon /><Text className="font-sans text-caption text-ink-muted">{film.dateLabel}</Text></View><Text className="font-sans text-caption text-ink-muted">{film.momentCount} moments · Still editable anytime</Text></View>
+      <View accessibilityLabel="Film actions" className="flex-row gap-3">
+        <Pressable role="button" aria-label="Download" disabled={preparingDownload} onPress={() => void onDownload()} className="min-h-12 flex-1 items-center justify-center rounded-full bg-accent px-4"><Text className="font-sans-semibold text-button text-on-accent">{preparingDownload ? "Preparing download…" : "Download"}</Text></Pressable>
+        <Pressable role="button" aria-label="Share" onPress={() => void Share.share({ message: film.videoUrl ?? film.title })} className="min-h-12 flex-1 items-center justify-center rounded-full border border-line-strong px-4"><Text className="font-sans-semibold text-button text-ink">Share</Text></Pressable>
       </View>
-      <OpenStreetMapCredit />
-    </ScrollView>
-    <Pressable role="button" aria-label="Back to your films" onPress={() => router.navigate(route("/") as never)} className="mb-5 min-h-12 items-center justify-center rounded-md border border-line-strong"><Text className="font-sans-semibold text-button text-ink">Back to your films</Text></Pressable>
-  </View>;
-  const share = (name: string, icon: React.ReactNode, onPress: () => void) => <Pressable key={name} role="button" aria-label={name} onPress={onPress} className="w-[72px] items-center"><View className="size-12 items-center justify-center rounded-full bg-surface-raised shadow-[0_2px_10px_rgba(66,50,40,0.06)]">{icon}</View><Text className="mt-1.5 font-sans-medium text-[11px] text-ink">{name}</Text></Pressable>;
-  return <View className="flex-1 bg-surface"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => goBack()} backLabel="Go back to your film" />
-    <ScrollView className="flex-1" contentContainerClassName="min-h-[845px] px-4 pb-3" showsVerticalScrollIndicator={false}>
-      <View className="pt-[23px]"><Text className="font-sans-semibold text-[15px] leading-5 text-ink">Your memory is ready</Text><Text className="mt-1 font-sans text-body leading-[22px] text-ink-muted">Crafted with love and safeguarded in your memory{`\n`}gallery.</Text></View>
-      <View className="mt-[14px] rounded-[38px] bg-surface-raised px-4 pb-[18px] pt-3 shadow-[0_8px_24px_rgba(66,50,40,0.07)]"><View><FilmPlayer source={film.videoUrl ?? require("../assets/demo/film.mp4")} poster={storyImage(film.savePosterKey)} durationSec={film.durationSec} aspect="landscape" compact /><View className="absolute bottom-2.5 left-2.5 flex-row items-center rounded-full bg-black/75 px-2 py-1"><Text className="mr-1 text-[10px] text-on-screen">▣</Text><Text className="font-sans-medium text-[11px] text-on-screen">{film.audioLabel}</Text></View></View><Text className="mt-4 font-sans text-[19px] leading-6 text-ink">{film.title}</Text><View className="mt-1 flex-row items-center"><PinIcon /><Text className="ml-1 font-sans text-caption text-ink-muted">{film.dateLabel}</Text></View></View>
-      <Text className="mt-[23px] px-1 font-sans-medium text-[11px] tracking-[.35px] text-ink-muted">CHOOSE WHERE TO SHARE</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4 -mr-5"><View className="flex-row gap-2 pr-2">{share("Download", <DownloadIcon />, () => void download())}{share("WhatsApp", <WhatsAppIcon />, () => setComingSoon(true))}{share("Instagram", <InstagramIcon />, () => setComingSoon(true))}{share("Facebook", <FacebookIcon />, () => setComingSoon(true))}{share("More", <Text className="text-lg text-ink-muted">•••</Text>, () => setComingSoon(true))}</View></ScrollView>
-      {comingSoon && <Text className="mt-2 px-1 font-sans text-caption text-ink-muted">Coming soon</Text>}
-      <View className="box-border mt-[37px] h-[142px] flex-row overflow-hidden rounded-[26px] bg-surface-sunken p-4"><View className="h-24 w-20 self-center overflow-hidden rounded-sm bg-surface-sunken"><img src={Asset.fromModule(demoImage("archive-print")).uri} alt="Linen Bound keepsake folio" style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scale(1.55)" }} /><View className="absolute bottom-1 left-0 right-0 items-center"><Text className="rounded bg-black/80 px-1 font-sans-medium text-[8px] text-on-screen">Linen Bound</Text></View></View><View className="flex-1 px-4 py-1"><Text className="font-sans-medium text-[11px] text-accent">▰ ARTISANAL ARCHIVE</Text><Text className="font-sans text-[18px] leading-5 text-ink">Fine-Art Print Edition</Text><Text numberOfLines={2} className="mt-2 font-sans text-caption leading-[17px] text-ink-muted">Hand-crafted Japanese mulberry{`\n`}paper booklet of Mei’s birthday...</Text><Pressable role="button" aria-label="Order keepsake folio" onPress={() => setComingSoon(true)} className="mt-2"><Text className="font-sans-medium text-[11px] text-action">Order keepsake folio →</Text></Pressable></View></View>
-      <Pressable role="button" aria-label="Go back to memory gallery" onPress={() => router.navigate("/" as never)} className="mt-[47px] h-12 flex-row items-center justify-center gap-2 rounded-full bg-surface-sunken"><GalleryIcon /><Text className="font-sans-medium text-[15px] text-ink">Go back to memory gallery</Text></Pressable>
-      <OpenStreetMapCredit />
+      {preparingDownload ? <Text accessibilityRole="progressbar" className="font-sans text-caption text-ink-muted">Preparing your MP4…</Text> : null}
+      {downloadError ? <Text accessibilityRole="alert" className="font-sans text-caption text-critical">{downloadError}</Text> : null}
+      <Pressable role="button" aria-label="Edit film" onPress={() => router.push({ pathname: "/editor", params: { projectId, planId: film.planId, generationId: film.filmId, request: "", ...storyFlow } } as never)} className="min-h-12 items-center justify-center rounded-full border border-line-strong"><Text className="font-sans-semibold text-button text-ink">Edit film</Text></Pressable>
+      <Pressable role="button" aria-label="Back to your films" onPress={() => router.navigate(route("/") as never)} className="min-h-12 items-center justify-center"><Text className="font-sans-medium text-button text-ink-muted">Back to your films</Text></Pressable>
+      <Pressable accessibilityRole="link" onPress={() => void Linking.openURL("https://www.openstreetmap.org/copyright")} className="items-center py-2"><Text className="font-sans text-[11px] text-ink-muted">© OpenStreetMap contributors</Text></Pressable>
     </ScrollView>
   </View>;
 }

@@ -14,8 +14,8 @@ test("opens a saved film in the editor, edits it, restores the saved revision, a
   await mkdir(screenshots, { recursive: true });
   await page.goto("/save-film?filmId=demo-film&directorChat=true&repository=fixture");
   await expect(page.getByText("Saved to your films")).toBeVisible();
-  await page.getByRole("button", { name: "Still editable anytime" }).click();
-  await expect(page.getByText("Edit film")).toBeVisible();
+  await page.getByRole("button", { name: "Edit film" }).click();
+  await expect(page).toHaveURL(/\/editor\?/);
   await expect(page.getByRole("button", { name: "Select clip clip-1" })).toBeVisible();
   await capture(page, "editor-e2e-01-open.png");
 
@@ -62,9 +62,10 @@ test("opens a saved film in the editor, edits it, restores the saved revision, a
   const download = page.getByRole("button", { name: "Download rendered film" });
   await expect(download).toBeVisible();
   await capture(page, "editor-e2e-08-render-ready.png");
-  const downloadPage = await Promise.all([page.waitForEvent("popup"), download.click()]).then(([popup]) => popup);
-  await expect.poll(() => downloadPage.url()).toContain("/film");
-  await downloadPage.close();
+  const beforeDownloadUrl = page.url();
+  const [downloadFile] = await Promise.all([page.waitForEvent("download"), download.click()]);
+  expect(downloadFile.suggestedFilename()).toMatch(/\.mp4$/);
+  expect(page.url()).toBe(beforeDownloadUrl);
 });
 
 test("opens Ask from a change request URL", async ({ page }) => {
@@ -77,11 +78,16 @@ test("opens Ask from a change request URL", async ({ page }) => {
 });
 
 test("shows one aligned timeline on mobile and desktop", async ({ page }) => {
+  const passiveTouchWarnings: string[] = [];
+  page.on("console", (message) => {
+    if (/passive event listener|preventDefault\(\).*passive/i.test(message.text())) passiveTouchWarnings.push(message.text());
+  });
   await mkdir(screenshots, { recursive: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/editor?projectId=fixture&generationId=demo-film&planId=demo&repository=fixture");
   const timeline = page.getByLabel("Unified timeline");
   await expect(timeline).toBeVisible();
+  await expect(timeline.locator(".." )).toHaveCSS("touch-action", "none");
   await expect(page.getByLabel("Timeline ruler tick 2 seconds")).toBeVisible();
   await expect(page.getByRole("button", { name: "Select clip clip-1" })).toBeVisible();
   await page.getByRole("button", { name: "Open soundtrack picker" }).click();
@@ -100,4 +106,5 @@ test("shows one aligned timeline on mobile and desktop", async ({ page }) => {
   await page.getByRole("button", { name: /Choose / }).first().click();
   await expect(page.getByRole("button", { name: /Music track/ })).toBeVisible();
   await page.screenshot({ path: path.join(screenshots, "timeline-unified-1280x800.png"), fullPage: false, scale: "css" });
+  expect(passiveTouchWarnings).toEqual([]);
 });

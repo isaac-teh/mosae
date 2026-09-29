@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Linking, Pressable, ScrollView, Share, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, Share, Text, View, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Asset } from "expo-asset";
 import type { EditOp, Timeline } from "@mosae/contracts";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { useEditor } from "@/lib/useEditor";
@@ -19,6 +20,7 @@ import { RemoveConfirm } from "@/components/editor/RemoveConfirm";
 import { EditorMenu } from "@/components/editor/EditorMenu";
 import { AskSheet } from "@/components/editor/AskSheet";
 import { RedoIcon, UndoIcon } from "@/components/icons";
+import { downloadFilm } from "@/lib/downloadFilm";
 
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 type Tool = "Swap" | "Trim" | "Move" | "Remove" | "Add" | "Ask" | "Collage" | "Soundtrack" | null;
@@ -37,6 +39,8 @@ export default function EditorScreen() {
   const [playhead, setPlayhead] = useState(0);
   const [seekRequest, setSeekRequest] = useState<{ seconds: number } | null>(null);
   const [pauseRequest, setPauseRequest] = useState(0);
+  const [preparingDownload, setPreparingDownload] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool>(params.request ? "Ask" : null);
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [directions, setDirections] = useState<DirectionOptions | null>(null);
@@ -47,11 +51,6 @@ export default function EditorScreen() {
     setPlayhead(target);
     setSeekRequest({ seconds: target });
   }, [editor.timeline?.durationSec]);
-  useEffect(() => {
-    if (editor.save.state === "ready" && editor.downloadUrl) {
-      router.push({ pathname: "/save-film", params: { filmId: params.generationId || "demo-film", projectId: params.projectId || "fixture", repository: "api" } } as never);
-    }
-  }, [editor.downloadUrl, editor.save.state, params.generationId, params.projectId, router]);
   const previewHeight = Math.max(280, Math.min(720, height - 440));
   const soundtrack = editor.timeline?.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   const soundtrackId = soundtrack?.source.kind === "soundtrack" ? soundtrack.source.soundtrackId : null;
@@ -122,6 +121,13 @@ export default function EditorScreen() {
     if ((next === "Swap" || next === "Trim") && selectedClip && "kind" in selectedClip) { setTool("Collage"); return; }
     setTool(next);
   };
+  const downloadRenderedFilm = async () => {
+    if (!editor.downloadUrl || preparingDownload) return;
+    setDownloadError(null);
+    const source = editor.downloadUrl === "film" ? Asset.fromModule(require("../assets/demo/film.mp4")).uri : editor.downloadUrl;
+    try { await downloadFilm(source, plan?.title ?? "Your film", setPreparingDownload); }
+    catch { setDownloadError("Could not prepare the film download. Try again."); }
+  };
 
   return <View className="flex-1 bg-screen">
     <View className="h-[60px] flex-row items-center justify-between px-5">
@@ -131,7 +137,7 @@ export default function EditorScreen() {
     </View>
     <View className="min-h-[29px] justify-center px-5"><SaveState save={editor.save} renderProgress={editor.renderProgress} renderEtaMinutes={editor.renderEtaMinutes} onReload={() => void editor.reloadAfterConflict()} /></View>
     {editor.editError ? <Text accessibilityRole="alert" className="px-5 pb-2 font-sans text-caption text-on-screen">{editor.editError}</Text> : null}
-    {editor.save.state === "ready" && editor.downloadUrl ? <View className="flex-row gap-2 px-5 pb-2"><Pressable role="button" accessibilityLabel="Download rendered film" onPress={() => void Linking.openURL(editor.downloadUrl!)} className="min-h-10 justify-center rounded-full bg-[#294655] px-4"><Text className="font-sans-medium text-caption text-on-screen">Download</Text></Pressable><Pressable role="button" accessibilityLabel="Share rendered film" onPress={() => void Share.share({ message: editor.downloadUrl! })} className="min-h-10 justify-center rounded-full border border-on-screen-muted px-4"><Text className="font-sans-medium text-caption text-on-screen">Share</Text></Pressable></View> : null}
+    {editor.save.state === "ready" && editor.downloadUrl ? <View className="px-5 pb-2"><View className="flex-row gap-2"><Pressable role="button" accessibilityLabel="Download rendered film" disabled={preparingDownload} onPress={() => void downloadRenderedFilm()} className="min-h-10 justify-center rounded-full bg-[#294655] px-4"><Text className="font-sans-medium text-caption text-on-screen">{preparingDownload ? "Preparing download…" : "Download"}</Text></Pressable><Pressable role="button" accessibilityLabel="Share rendered film" onPress={() => void Share.share({ message: editor.downloadUrl! })} className="min-h-10 justify-center rounded-full border border-on-screen-muted px-4"><Text className="font-sans-medium text-caption text-on-screen">Share</Text></Pressable></View>{preparingDownload ? <Text accessibilityRole="progressbar" className="pt-1 font-sans text-caption text-on-screen-muted">Preparing your MP4…</Text> : null}{downloadError ? <Text accessibilityRole="alert" className="pt-1 font-sans text-caption text-critical">{downloadError}</Text> : null}</View> : null}
     {editor.error ? <View className="flex-1 items-center justify-center px-6"><Text className="text-center font-sans text-body text-on-screen">{editor.error}</Text></View>
       : !editor.timeline ? <View className="flex-1 items-center justify-center"><Text className="font-sans text-body text-on-screen-muted">Opening your film…</Text></View>
       : <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4" showsVerticalScrollIndicator={false}>

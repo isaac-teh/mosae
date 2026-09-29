@@ -3,7 +3,9 @@ import type { ProjectSummary } from "../chat/types";
 import type { EditOp, Timeline } from "@mosae/contracts";
 
 export type DirectorPerson = { personId: string; name: string | null; role: string | null; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[] };
-export type FilmListItem = { projectId: string; filmId: string; title: string; month: string; duration: string; posterUrl: string; justSaved: boolean };
+export type FilmListStatus = "saved" | "film-ready" | "rendering" | "in-progress";
+export type FilmListItem = { projectId: string; filmId: string | null; planId: string | null; title: string; month: string; duration: string; posterUrl: string; justSaved: boolean; status: FilmListStatus; demo?: boolean };
+export type ProjectResumeState = { proposalId: string | null; storyText: string | null; generationId: string | null; generationStatus: "composing" | "playable" | "rendering" | "saved" | "failed" | null };
 export type ChatInterpretRequest = { step: "occasion" | "people" | "moments" | "direction"; text: string; context: { summary?: ProjectSummary; people?: { personId: string; name: string | null; role: string | null }[] } };
 export type ChatInterpretResult = { reply: string; change: { kind: string; [key: string]: unknown } };
 export type FilmEdits = { revision: number; ops: EditOp[]; updatedAt: number | null };
@@ -14,6 +16,7 @@ export type EditInterpretation = { reply: string; ops: EditOp[] };
 
 export interface StoryRepository {
   listFilms(): Promise<FilmListItem[]>;
+  getProjectResume(projectId: string): Promise<ProjectResumeState>;
   getSummary(projectId: string): Promise<ProjectSummary>;
   interpret(projectId: string, req: ChatInterpretRequest): Promise<ChatInterpretResult>;
   getPeople(projectId: string): Promise<DirectorPerson[]>;

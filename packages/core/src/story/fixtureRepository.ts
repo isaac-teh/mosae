@@ -233,8 +233,11 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
   }
 
   return {
-    listFilms: async () => [],
-    getSummary: async () => ({ total: 0, photos: 0, clips: 0, days: 0, dateRange: null, places: [], country: null, season: null, processed: { ingested: 0, understood: 0, faces: 0 }, ready: { summary: false, faces: false, plan: false } }),
+    listFilms: async () => [{ projectId: "fixture", filmId: FILM_ID, planId: PLAN_ID, title: baseFilm.title, month: "Mar 2026", duration: "2:10", posterUrl: "", justSaved: false, status: "film-ready", demo: true }],
+    getProjectResume: async (projectId) => projectId === "fixture"
+      ? { proposalId: PLAN_ID, storyText: "Yes, our Japan trip", generationId: FILM_ID, generationStatus: "playable" }
+      : { proposalId: null, storyText: null, generationId: null, generationStatus: null },
+    getSummary: async () => ({ total: 52, photos: 52, clips: 0, days: 4, dateRange: null, places: ["Tokyo", "Kyoto"], country: "Japan", season: "March", processed: { ingested: 52, understood: 52, faces: 52 }, ready: { summary: true, faces: true, plan: true } }),
     interpret: async () => ({ reply: "I didn't catch that. Pick one below, or say it another way.", change: { kind: "unclear" } }),
     getPeople: async () => [],
     createPlan: async (storyText: string, mediaRefs: string[]) => {

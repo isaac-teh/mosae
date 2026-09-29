@@ -29,10 +29,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const proposalId = useRef<string | null>(null);
   const personSaving = useRef(false);
   const planLoad = useRef(false);
+  const resumeProjectId = useRef<string | null>(null);
   const peopleEdits = useRef(new Map<string, { name: string | null; role: string | null; skipped: boolean }>());
   const skipPeopleForNow = useRef(false);
   const mounted = useRef(true);
   const generationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollFilmRef = useRef<(filmId: string) => void>(() => {});
   const compositionStartedAt = useRef<number | null>(null);
   const router = useRouter();
   const state: ChatState = deriveChat(input);
@@ -58,7 +60,45 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const edit = peopleEdits.current.get(person.personId);
       return { ...person, ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
     });
-    setInput((current) => ({ ...current, summary: nextSummary, people: nextSummary.ready.faces ? mapped : null, peopleConfirmed: nextSummary.ready.faces && (skipPeopleForNow.current || mapped.length === 0) }));
+    if (resumeProjectId.current !== projectId) {
+      resumeProjectId.current = projectId;
+      try {
+        const resume = repository.getProjectResume
+          ? await repository.getProjectResume(projectId)
+          : { proposalId: null, storyText: null, generationId: null, generationStatus: null };
+        if (!mounted.current) return;
+        proposalId.current = resume.proposalId;
+        const [plan, film] = await Promise.all([
+          resume.proposalId ? repository.getPlan(resume.proposalId).catch(() => null) : Promise.resolve(null),
+          resume.generationId ? repository.getFilm(resume.generationId).catch(() => null) : Promise.resolve(null),
+        ]);
+        if (!mounted.current) return;
+        const confirmedStory = resume.storyText ?? (nextSummary.country ? `Yes, our ${nextSummary.country} trip` : `Yes, that's our story`);
+        const hasGeneration = Boolean(resume.generationId && film);
+        const isFilmReady = resume.generationStatus === "playable" || resume.generationStatus === "saved";
+        const generation = hasGeneration ? isFilmReady
+          ? { status: "done" as const, stage: resume.generationStatus!, progress: 1, stepsDone: 3, film }
+          : { status: "running" as const, stage: resume.generationStatus === "rendering" ? "rendering" as const : "composing" as const, progress: 0, stepsDone: 2, film: null }
+          : null;
+        setInput((current) => ({
+          ...current,
+          summary: nextSummary,
+          intent: resume.proposalId || hasGeneration ? { text: confirmedStory } : current.intent,
+          people: nextSummary.ready.faces ? mapped : null,
+          peopleConfirmed: Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && (skipPeopleForNow.current || mapped.length === 0)),
+          plan,
+          momentsConfirmed: hasGeneration,
+          direction: hasGeneration ? { confirmed: true, pace: "gentle", lengthSec: Math.max(30, film?.durationSec ?? 120), focus: "family" } : null,
+          generation,
+        }));
+        if (resume.generationId && hasGeneration && !isFilmReady) void pollFilmRef.current(resume.generationId);
+      } catch (cause) {
+        resumeProjectId.current = null;
+        throw cause;
+      }
+      return;
+    }
+    setInput((current) => ({ ...current, summary: nextSummary, people: nextSummary.ready.faces ? mapped : null, peopleConfirmed: current.peopleConfirmed || (nextSummary.ready.faces && (skipPeopleForNow.current || mapped.length === 0)) }));
     if (proposalId.current && nextSummary.ready.plan && !planLoad.current && !input.plan) {
       planLoad.current = true;
       try {
@@ -119,6 +159,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       setError(reportFailure(cause));
     }
   }, [repository]);
+  pollFilmRef.current = (filmId) => { void pollFilm(filmId); };
 
   const actions = {
     async confirmOccasion(answer?: string, storyTextOverride?: string) {

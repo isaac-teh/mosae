@@ -148,9 +148,53 @@ describe("createApiStoryRepository", () => {
     });
     const films = await createApiStoryRepository({ projectId: "unused" }, deps).listFilms();
     expect(films).toEqual([
-      { projectId: "new", filmId: "g-new", title: "New", month: "Sep 2026", duration: "1:30", posterUrl: "https://storage.test/new/new-asset?signed=true", justSaved: true },
-      { projectId: "old", filmId: "g-old", title: "Old", month: "Jun 2025", duration: "2:05", posterUrl: "https://storage.test/old/old-asset?signed=true", justSaved: true },
+      { projectId: "new", filmId: "g-new", planId: "p-new", title: "New", month: "Sep 2026", duration: "1:30", posterUrl: "https://storage.test/new/new-asset?signed=true", justSaved: true, status: "saved" },
+      { projectId: "old", filmId: "g-old", planId: "p-old", title: "Old", month: "Jun 2025", duration: "2:05", posterUrl: "https://storage.test/old/old-asset?signed=true", justSaved: true, status: "saved" },
     ]);
+  });
+
+  it("includes playable, rendering, and in-progress projects in the Home list", async () => {
+    const projects = [
+      { id: "saved", createdAt: 1, savedGenerationId: "gs", currentPlayableGenerationId: "gs", latestRequestedGenerationId: "gs" },
+      { id: "ready", createdAt: 4, currentPlayableGenerationId: "gp", latestRequestedGenerationId: "gp", currentProposalId: "pp" },
+      { id: "render", createdAt: 3, currentPlayableGenerationId: "gr", latestRequestedGenerationId: "gr", currentProposalId: "pr" },
+      { id: "working", createdAt: 2, currentProposalId: "pw" },
+    ];
+    const docs: Record<string, unknown> = Object.fromEntries(projects.map((project) => [`projects/${project.id}`, project]));
+    for (const [id, status] of [["gs", "saved"], ["gp", "playable"], ["gr", "rendering"]]) {
+      const proposalId = ({ gs: "ps", gp: "pp", gr: "pr" } as Record<string, string>)[id]!;
+      docs[`projects/${id === "gs" ? "saved" : id === "gp" ? "ready" : "render"}/generations/${id}`] = { id, status, proposalId, timeline: { durationSec: 32, videoClips: [] } };
+      docs[`projects/${id === "gs" ? "saved" : id === "gp" ? "ready" : "render"}/storyProposals/${proposalId}`] = { title: `${id} title` };
+    }
+    docs["projects/working/storyProposals/pw"] = { title: "Working title" };
+    const deps = dependencies({
+      listenUserProjects: vi.fn(async () => projects),
+      listenDocument: vi.fn(async (path) => docs[path] ?? null),
+      listenCollection: vi.fn(async () => []),
+    });
+
+    const items = await createApiStoryRepository({ projectId: "unused" }, deps).listFilms();
+
+    expect(items.map(({ projectId, filmId, planId, status, title }) => ({ projectId, filmId, planId, status, title }))).toEqual([
+      { projectId: "ready", filmId: "gp", planId: "pp", status: "film-ready", title: "gp title" },
+      { projectId: "render", filmId: "gr", planId: "pr", status: "rendering", title: "gr title" },
+      { projectId: "working", filmId: null, planId: "pw", status: "in-progress", title: "Working title" },
+      { projectId: "saved", filmId: "gs", planId: "ps", status: "saved", title: "gs title" },
+    ]);
+  });
+
+  it("restores the current project proposal, original story answer, and generation status", async () => {
+    const docs: Record<string, unknown> = {
+      "projects/p1": { id: "p1", currentProposalId: "proposal-1", currentPlayableGenerationId: "gen-1", savedGenerationId: "gen-old" },
+      "projects/p1/generations/gen-1": { id: "gen-1", status: "playable", proposalId: "proposal-1" },
+      "projects/p1/storyProposals/proposal-1": { storyIntentId: "intent-1" },
+      "projects/p1/storyIntents/intent-1": { text: "Our family trip to Japan" },
+    };
+    const deps = dependencies({ listenDocument: vi.fn(async (path) => docs[path] ?? null) });
+
+    await expect(createApiStoryRepository({ projectId: "p1" }, deps).getProjectResume("p1")).resolves.toEqual({
+      proposalId: "proposal-1", storyText: "Our family trip to Japan", generationId: "gen-1", generationStatus: "playable",
+    });
   });
 
   it("groups repeated faces by character and counts distinct shots", async () => {
