@@ -10,7 +10,14 @@ if probe gcloud eventarc triggers describe "$EVENTARC_TRIGGER" --project "$PROJE
     "${filter_args[@]}" --destination-run-service "$API_SERVICE" --destination-run-region "$REGION" \
     --destination-run-path /events/storage-finalize --service-account "$INVOKER_SA"
 else
-  run gcloud eventarc triggers create "$EVENTARC_TRIGGER" --project "$PROJECT_ID" --location "$REGION" \
-    "${filter_args[@]}" --destination-run-service "$API_SERVICE" --destination-run-region "$REGION" \
-    --destination-run-path /events/storage-finalize --service-account "$INVOKER_SA"
+  # On first use, Eventarc's service agent IAM role may still be propagating.
+  for attempt in {1..8}; do
+    if run gcloud eventarc triggers create "$EVENTARC_TRIGGER" --project "$PROJECT_ID" --location "$REGION" \
+      "${filter_args[@]}" --destination-run-service "$API_SERVICE" --destination-run-region "$REGION" \
+      --destination-run-path /events/storage-finalize --service-account "$INVOKER_SA"; then
+      break
+    fi
+    if (( attempt == 8 )); then exit 1; fi
+    sleep 30
+  done
 fi
