@@ -230,6 +230,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       } catch (cause) { setError(reportFailure(cause)); }
     },
     confirmInterpret() { if (pendingInterpret) void actions.confirmOccasion(pendingInterpret.text); },
+    discardInterpret() { setPendingInterpret(null); },
   };
   return { state, actions, error, retry: () => { setError(null); void refresh(); }, pendingInterpret, saving, summary, plan: input.plan, momentState, pickerOpen, directionOptions, people: input.people ?? [], setPickerOpen };
 }

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => {
   const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityRole, accessibilityLabel, accessibilityState, accessibilityValue, accessibilityLiveRegion, accessibilityHint, editable, resizeMode, textAlignVertical, ...props }: any) =>
     React.createElement(tag, { ...props, role: props.role ?? accessibilityRole, "aria-label": props["aria-label"] ?? accessibilityLabel, "aria-disabled": accessibilityState?.disabled, "aria-pressed": accessibilityState?.selected, "aria-valuemin": accessibilityValue?.min, "aria-valuemax": accessibilityValue?.max, disabled: props.disabled ?? (editable === false ? true : undefined), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
-  return { View: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, accessibilityLabel, resizeMode, ...props }: any) => React.createElement("img", { ...props, src: source?.uri, alt: accessibilityLabel }) };
+  return { View: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, accessibilityLabel, resizeMode, onLoad, ...props }: any) => React.createElement("img", { ...props, onLoad: onLoad ? () => onLoad({ nativeEvent: { source: { width: 400, height: 200 } } }) : undefined, src: source?.uri, alt: accessibilityLabel }) };
 });
 
 import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatMomentGrid, ChatPeoplePick, ChatPersonQuestion, ChatProposal, ChatShaping, ChatTyping, MomentPickerSheet } from "../components/chat";
@@ -58,7 +58,11 @@ describe("director chat components", () => {
     expect(host.textContent).toContain("4 of 212 shown · Day 2, 3, 5 and 6");
     expect(host.querySelectorAll('[data-face-preview="true"]')).toHaveLength(4);
     expect(host.querySelector('[data-face-preview="true"]')?.className).toContain("rounded-md");
-    expect((host.querySelector('[data-face-preview="true"] img') as HTMLImageElement)?.style.marginLeft).toBeTruthy();
+    const firstImage = host.querySelector('[data-face-preview="true"] img') as HTMLImageElement;
+    await act(async () => firstImage.dispatchEvent(new Event("load")));
+    expect(parseFloat(firstImage.style.width) / parseFloat(firstImage.style.height)).toBe(2);
+    expect(firstImage.style.left).not.toBe("");
+    expect(firstImage.style.top).not.toBe("");
     await click("My daughter"); expect(onPick).toHaveBeenCalledWith("My daughter");
     await click("Type a name"); expect(onTypeName).toHaveBeenCalledOnce();
     expect(host.querySelectorAll("[role=button]")).toHaveLength(5);

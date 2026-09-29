@@ -2,9 +2,12 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), push: vi.fn() }));
+const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)) }));
 vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms }) }));
-vi.mock("expo-router", () => ({ useRouter: () => ({ push: state.push }) }));
+vi.mock("expo-router", async () => {
+  const ReactModule = await import("react");
+  return { useRouter: () => ({ push: state.push }), useFocusEffect: (effect: () => void | (() => void)) => ReactModule.useEffect(() => { state.focusEffect = effect; return effect(); }, [effect]) };
+});
 vi.mock("@/components/icons", () => ({ SettingsIcon: () => React.createElement("svg", { "data-settings-icon": "true" }) }));
 vi.mock("react-native", () => {
   const element = (tag: string) => ({ children, onPress, ...props }: any) => React.createElement(tag, { ...props, onClick: onPress }, children);
@@ -19,6 +22,7 @@ beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
   state.films = [];
+  state.focusEffect = null;
   state.listFilms.mockImplementation(async () => state.films);
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
@@ -55,4 +59,20 @@ describe("Home", () => {
     expect(createButtons[0]?.parentElement?.className).toContain("bottom-0");
     expect(host.querySelector('[data-testid="home-mosaic"]')).toBeNull();
   });
+
+  it("refreshes the film list when Home regains focus after a film is saved", async () => {
+    await render();
+    expect(host.textContent).toContain("No films yet");
+    state.films = [{ projectId: "p1", filmId: "f1", title: "Singapore Trip", month: "Jun 2026", duration: "0:30", justSaved: true }];
+    await act(async () => {
+      const cleanup = state.focusEffect?.();
+      cleanup?.();
+      state.focusEffect?.();
+      await Promise.resolve();
+    });
+    expect(state.listFilms).toHaveBeenCalledTimes(3);
+    expect(host.textContent).toContain("Just saved");
+    expect(host.textContent).toContain("Singapore Trip");
+  });
+
 });
