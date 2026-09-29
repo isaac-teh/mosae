@@ -64,11 +64,18 @@ export default function DirectorScreen() {
         if (item.kind === "direction") {
           const focusOptions = [{ id: "family", label: "Whole family" }, ...people.filter((person) => person.name).map((person) => ({ id: person.personId, label: person.name as string }))];
           const focusLabel = focusOptions.find((option) => option.id === item.focus)?.label ?? "Whole family";
-          const minutes = item.lengthSec / 60;
-          const explanation = item.lengthSec <= 120
-            ? `${item.momentCount} moments is more than ${minutes} minutes can hold. I'll keep ${focusLabel === "Whole family" ? "your family moments" : `${focusLabel}'s reactions`} and the strongest scenery, and tell you what I left out.`
-            : `For ${minutes} minutes, I'll keep ${focusLabel === "Whole family" ? "your family moments" : `${focusLabel}'s reactions`} and the strongest scenery, and tell you what I left out.`;
-          return <View key={item.id} className="gap-4"><ChatMessage from="mosae" text={`For a ${projectSummary?.days ?? 1}-day trip I'd suggest this. ${directionOptions?.note ?? "Change anything that doesn't feel right."}`} /><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={actions.setDirection} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good. Shape it." disabled={saving || !directionOptions} onPress={() => void actions.shapeIt()} /></View>;
+          const durationMinutes = item.lengthSec / 60;
+          const durationLabel = item.lengthSec < 60 ? `${item.lengthSec} seconds` : `${durationMinutes} ${durationMinutes === 1 ? "minute" : "minutes"}`;
+          const maximumDurationSec = directionOptions?.maximumDurationSecByCadence?.[directionSelection.cadenceId] ?? directionOptions?.maximumDurationSec ?? Infinity;
+          const durationChoices = directionOptions?.durations.filter(({ seconds }) => seconds <= maximumDurationSec) ?? [];
+          const maximumDurationLabel = durationChoices.at(-1)?.label ?? (Number.isFinite(maximumDurationSec) ? `about ${Math.round(maximumDurationSec)} sec` : undefined);
+          const focusText = focusLabel === "Whole family" ? "your family moments" : `${focusLabel}'s reactions`;
+          const explanation = durationChoices.length === 0 && Number.isFinite(maximumDurationSec)
+            ? `These moments can make about ${Math.round(maximumDurationSec)} seconds. Add more photos for a longer film.`
+            : item.lengthSec > maximumDurationSec
+            ? `With these moments, I can make up to ${maximumDurationLabel ?? "the available length"}. I've selected that achievable length.`
+            : `For ${durationLabel}, I'll keep ${focusText} and the strongest scenery, and tell you what I left out.`;
+          return <View key={item.id} className="gap-4"><ChatMessage from="mosae" text={`For a ${projectSummary?.days ?? 1}-day trip I'd suggest this. ${directionOptions?.note ?? "Change anything that doesn't feel right."}`} /><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} durations={durationChoices} maximumDurationLabel={maximumDurationLabel} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={actions.setDirection} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good. Shape it." disabled={saving || !directionOptions || durationChoices.length === 0} onPress={() => void actions.shapeIt()} /></View>;
         }
         if (item.kind === "film") return <View key={item.id} className="gap-4">
           <ChatMessage from="mosae" text="Here's your first cut. Tap to watch." />

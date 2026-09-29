@@ -27,7 +27,7 @@ async function seedProject(userId: string) {
  * Seeds an accepted proposal with 12 photo moments and a recommendedCadence,
  * plus the story intent that holds the `note` text the route returns.
  */
-async function seedProposal(projectId: string) {
+async function seedProposal(projectId: string, constraints: { excludedShotIds: string[]; deselectedMomentIds: string[]; hiddenShotIds: string[] } = { excludedShotIds: [], deselectedMomentIds: [], hiddenShotIds: [] }) {
   const intentId = "intent-dir-opts";
   await adminDb.doc(`projects/${projectId}/storyIntents/${intentId}`).set({
     schemaVersion: 1,
@@ -60,7 +60,7 @@ async function seedProposal(projectId: string) {
     title: "Summer trip",
     moments,
     chapters: [{ id: `${proposalId}-ch0`, title: "The trip", summary: "", momentIds: moments.map((m) => m.id) }],
-    constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+    constraints: { ...constraints, mustIncludeMomentIds: [], feedback: [] },
     openQuestions: [],
     recommendedCadence: "playful",
     cadenceReason: "The kids were laughing all day",
@@ -101,6 +101,8 @@ describe("direction-options route", () => {
     expect(res.status).toBe(200);
     // 12 photos × 3s = 36s → snapped down to "30s"
     expect(res.body.recommendedDuration).toBe("30s");
+    expect(res.body.maximumDurationSec).toBe(60);
+    expect(res.body.maximumDurationSecByCadence).toMatchObject({ reflective: 60, playful: 42 });
     expect(res.body.recommendedCadence).toBe("playful");
     expect(res.body).toMatchObject({ collageAmount: "few", motionFeel: "calm" });
     expect(res.body.cadenceReason).toBe("The kids were laughing all day");
@@ -113,6 +115,15 @@ describe("direction-options route", () => {
     // note comes from the story intent text
     expect(res.body.note).toBe("A summer trip with the family");
     expect(res.body.rewrites).toEqual([]);
+  });
+
+  it("bases the achievable length on moments the user has not left out", async () => {
+    const projectId = await seedProject("u1");
+    const proposalId = await seedProposal(projectId, { excludedShotIds: Array.from({ length: 10 }, (_, index) => `shot-${index}`), deselectedMomentIds: [], hiddenShotIds: [] });
+    const app = await buildApp("u1");
+    const res = await request(app).get(`/api/projects/${projectId}/proposals/${proposalId}/direction-options`);
+    expect(res.status).toBe(200);
+    expect(res.body.maximumDurationSecByCadence.reflective).toBe(10);
   });
 
   it("returns 403 for a project the requesting user does not own", async () => {

@@ -91,6 +91,10 @@ export type DirectionOptions = {
   soundtracks: Soundtrack[];
   durations: DurationChoice[];
   recommendedDuration: DurationChoice["id"];
+  /** Estimated capacity across the kept proposal media, in seconds. */
+  maximumDurationSec?: number;
+  /** Estimated capacity by pace, using each cadence's maximum clip hold. */
+  maximumDurationSecByCadence?: Record<string, number>;
   /** The tone the planner suggests from the photos' mood; preselected on Direct Film. */
   recommendedCadence: string;
   cadenceReason: string | null;

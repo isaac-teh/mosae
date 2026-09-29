@@ -40,8 +40,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const options = await repository.getDirectionOptions(planId);
     setDirectionOptions(options);
     const cadenceId = options.recommendedCadence;
-    const durationId = options.recommendedDuration;
-    const lengthSec = options.durations.find(({ id }) => id === durationId)?.seconds ?? 120;
+    const maximumDurationSec = options.maximumDurationSecByCadence?.[cadenceId] ?? options.maximumDurationSec ?? Infinity;
+    const availableDurations = options.durations.filter(({ seconds }) => seconds <= maximumDurationSec);
+    const duration = availableDurations.find(({ id }) => id === options.recommendedDuration) ?? availableDurations.at(-1) ?? options.durations.find(({ id }) => id === options.recommendedDuration);
+    const durationId = duration?.id ?? options.recommendedDuration;
+    const lengthSec = duration?.seconds ?? 120;
     setDirectionSelection((current) => ({ ...current, cadenceId, durationId, soundtrackId: current.soundtrackId ?? options.soundtracks[0]?.id ?? null, collageAmount: options.collageAmount ?? current.collageAmount, motionFeel: options.motionFeel ?? current.motionFeel }));
     setInput((current) => ({ ...current, direction: { confirmed: false, pace: /gentle|reflective/i.test(cadenceId) ? "gentle" : "lively", lengthSec, focus: "family" } }));
   }, [repository]);
@@ -209,16 +212,20 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       setInput((current) => ({ ...current, conflict: null }));
     },
     setDirection(patch: { pace?: "gentle" | "lively"; lengthSec?: number; focus?: string; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" }) {
-      setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, ...patch } : { confirmed: false, pace: patch.pace ?? "gentle", lengthSec: patch.lengthSec ?? 120, focus: patch.focus ?? "family" } }));
-      setDirectionSelection((current) => {
-        const next = { ...current };
-        if (patch.pace) next.cadenceId = directionOptions?.cadences.find((cadence) => /gentle|reflective/i.test(`${cadence.id} ${cadence.name}`) === (patch.pace === "gentle"))?.id ?? current.cadenceId;
-        if (patch.lengthSec) next.durationId = directionOptions?.durations.find(({ seconds }) => seconds === patch.lengthSec)?.id ?? directionOptions?.durations.reduce((closest, option) => Math.abs(option.seconds - patch.lengthSec!) < Math.abs(closest.seconds - patch.lengthSec!) ? option : closest, directionOptions.durations[0]!)?.id ?? current.durationId;
-        if (patch.focus) next.focus = patch.focus;
-        if (patch.collageAmount) next.collageAmount = patch.collageAmount;
-        if (patch.motionFeel) next.motionFeel = patch.motionFeel;
-        return next;
-      });
+      const next = { ...directionSelection };
+      if (patch.pace) next.cadenceId = directionOptions?.cadences.find((cadence) => /gentle|reflective/i.test(`${cadence.id} ${cadence.name}`) === (patch.pace === "gentle"))?.id ?? next.cadenceId;
+      if (patch.lengthSec) next.durationId = directionOptions?.durations.find(({ seconds }) => seconds === patch.lengthSec)?.id ?? directionOptions?.durations.reduce((closest, option) => Math.abs(option.seconds - patch.lengthSec!) < Math.abs(closest.seconds - patch.lengthSec!) ? option : closest, directionOptions.durations[0]!)?.id ?? next.durationId;
+      if (patch.focus) next.focus = patch.focus;
+      if (patch.collageAmount) next.collageAmount = patch.collageAmount;
+      if (patch.motionFeel) next.motionFeel = patch.motionFeel;
+      const maximumDurationSec = directionOptions?.maximumDurationSecByCadence?.[next.cadenceId] ?? directionOptions?.maximumDurationSec ?? Infinity;
+      const availableDurations = directionOptions?.durations.filter(({ seconds }) => seconds <= maximumDurationSec) ?? [];
+      const selectedDuration = availableDurations.find(({ id }) => id === next.durationId) ?? availableDurations.at(-1);
+      if (selectedDuration) next.durationId = selectedDuration.id;
+      setDirectionSelection(next);
+      setInput((current) => ({ ...current, direction: current.direction
+        ? { ...current.direction, ...patch, ...(selectedDuration ? { lengthSec: selectedDuration.seconds } : {}) }
+        : { confirmed: false, pace: patch.pace ?? "gentle", lengthSec: selectedDuration?.seconds ?? patch.lengthSec ?? 120, focus: patch.focus ?? "family" } }));
     },
     async shapeIt() {
       if (!input.plan || !input.direction) return;

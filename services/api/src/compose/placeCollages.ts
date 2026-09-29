@@ -125,7 +125,10 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     const choices = varied.length ? varied : motionChoices;
     const chosen = choices[hash(`${seed}:${index}:combo`) % choices.length];
     const effect = COLLAGE_EFFECTS[hash(`${seed}:${index}:effect`) % COLLAGE_EFFECTS.length];
-    const durationSec = Math.min(5, Math.max(3, group.length));
+    // A collage stands in for this whole run of clips. Keep the run's timeline
+    // span so substituting a collage does not silently shorten the film.
+    const groupEndSec = group.at(-1)!.startSec + group.at(-1)!.durationSec;
+    const durationSec = Math.max(0.1, groupEndSec - first.startSec);
     const spec = CollageSpecSchema.parse({
       layoutId: chosen.layoutId, motionId: chosen.motionId, effectId: effect.id,
       seed: `${seed}:${idOf(first)}`, durationSec,

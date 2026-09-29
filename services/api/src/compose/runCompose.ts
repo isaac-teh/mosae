@@ -6,7 +6,7 @@ import { assemble, isEmptyResult } from "./assemble.js";
 import { fitDuration } from "./fitDuration.js";
 import { craftBrief, holdsFor } from "./brief.js";
 import { buildAudioClips, gainToDb } from "./audio.js";
-import { TRANSITION_SECONDS } from "./transitions.js";
+import { TRANSITION_SECONDS, overlapSec } from "./transitions.js";
 import { validateTimeline, repairOnce } from "./validateTimeline.js";
 import { applyCastGuards } from "./castGuards.js";
 import type { AssembledClip } from "./assemble.js";
@@ -93,10 +93,58 @@ export interface ComposeJob {
   timeOf?: Map<string, ClipTime>;
 }
 
-/** Preserve the pre-collage fit's relative tolerance after collage compression. */
-export function collageAdjustedTargetSec(fittedTargetSec: number, beforeCollagesSec: number, afterCollagesSec: number): number {
-  if (beforeCollagesSec <= 0 || afterCollagesSec >= beforeCollagesSec) return fittedTargetSec;
-  return fittedTargetSec * afterCollagesSec / beforeCollagesSec;
+function maximumClipDuration(clip: AssembledClip, maxHoldSec: number): number {
+  if (clip.holdSec != null) return maxHoldSec;
+  if (clip.sourceInSec != null && clip.sourceOutSec != null) return clip.sourceOutSec - clip.sourceInSec;
+  return 0;
+}
+
+/** Add proposal media only when the model's edit cannot reach the requested duration. */
+function completeDurationMaterial(
+  selected: AssembledClip[],
+  candidates: Candidate[],
+  shotIdByMoment: Map<string, string>,
+  hiddenShotIds: Set<string>,
+  deselectedMomentIds: Set<string>,
+  excludedShotIds: Set<string>,
+  mustIncludeMomentIds: string[],
+  targetSec: number,
+  maxHoldSec: number,
+  baseHoldSec: number,
+): AssembledClip[] {
+  const output = [...selected];
+  const usedItems = new Set(output.map((clip) => clip.itemId));
+  const usedShots = new Set(output.map((clip) => shotIdByMoment.get(clip.itemId)).filter((id): id is string => Boolean(id)));
+
+  const projectedMaxSec = () => Math.max(0, output.reduce((sum, clip, index) =>
+    sum + maximumClipDuration(clip, maxHoldSec) - (index ? overlapSec(clip.transition) : 0), 0));
+
+  const available = candidates.filter((candidate) => {
+    const shotId = shotIdByMoment.get(candidate.itemId);
+    return Boolean(shotId) && !usedItems.has(candidate.itemId) && !deselectedMomentIds.has(candidate.itemId) && !hiddenShotIds.has(shotId!) && !excludedShotIds.has(shotId!);
+  });
+  const ordered = [
+    ...available.filter((candidate) => mustIncludeMomentIds.includes(candidate.itemId)),
+    ...available.filter((candidate) => !mustIncludeMomentIds.includes(candidate.itemId)),
+  ];
+
+  for (const candidate of ordered) {
+    if (projectedMaxSec() >= targetSec * 0.9) break;
+    if (usedItems.has(candidate.itemId)) continue;
+    const shotId = shotIdByMoment.get(candidate.itemId)!;
+    if (usedShots.has(shotId)) continue;
+    usedItems.add(candidate.itemId);
+    usedShots.add(shotId);
+    const isPhoto = candidate.kind === "photo";
+    output.push({
+      ...candidate,
+      order: output.length + 1,
+      transition: "cut",
+      audio: isPhoto || !candidate.hasSpeech ? "mute" : "keep",
+      ...(isPhoto ? { holdSec: baseHoldSec } : { sourceInSec: candidate.inSec, sourceOutSec: candidate.outSec, hasSpeech: candidate.hasSpeech }),
+    });
+  }
+  return output;
 }
 
 /**
@@ -177,6 +225,23 @@ export async function runCompose(
   if (isEmptyResult(dropped, parsed.picks.clips.length)) {
     return { ok: false, reasons: ["every pick was dropped — no film possible"] };
   }
+  if (assembledClips.length === 0) {
+    return { ok: false, reasons: ["composition selected no media — no film possible"] };
+  }
+
+  const holds = holdsFor(job.cadenceId);
+  const durationCompleteClips = completeDurationMaterial(
+    assembledClips,
+    candidates,
+    shotIdByMoment,
+    hiddenShotIds,
+    new Set(job.proposal.constraints.deselectedMomentIds ?? []),
+    new Set(job.proposal.constraints.excludedShotIds ?? []),
+    job.proposal.constraints.mustIncludeMomentIds,
+    targetSec,
+    holds.max,
+    holds.base,
+  );
 
   // Stage 4: assemble → orderByChronology → applyArc → applyCastGuards
   // (coverage, focus, closing-in-last-chapter, opening-from-first-chapter)
@@ -184,14 +249,13 @@ export async function runCompose(
   // boundaries → fitDuration.
   const timeOf = job.timeOf ?? new Map<string, ClipTime>();
   const chapterOf = job.chapterOf ?? new Map<string, number>();
-  const chronological = orderByChronology(assembledClips, timeOf);
+  const chronological = orderByChronology(durationCompleteClips, timeOf);
   const arc = applyArc(chronological, timeOf);
   let selectedClips = arc.clips;
   let castReasons: string[] = arc.reasons;
   const guardPinned = new Set<string>();
   if (job.cast) {
-    const pickedItems = new Set(assembledClips.map((clip) => clip.itemId));
-    const holds = holdsFor(job.cadenceId);
+    const pickedItems = new Set(durationCompleteClips.map((clip) => clip.itemId));
     const unused: AssembledClip[] = candidates.filter((candidate) => candidate.kind === "photo" && !pickedItems.has(candidate.itemId)).map((candidate) => ({
       ...candidate, order: -1, transition: "crossfade", audio: "mute", holdSec: holds.base,
     }));
@@ -395,7 +459,7 @@ export async function runCompose(
     soundtrackIds: deps.soundtrackIds,
     // The length the film is committed to after fitting — the requested target,
     // or the shortened one when the media could not reach it.
-    targetSec: collageAdjustedTargetSec(fittedTargetSec, timeline.durationSec, withCollages.durationSec),
+    targetSec: fittedTargetSec,
     fps: 30,
   };
 
