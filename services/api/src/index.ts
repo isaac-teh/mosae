@@ -1,5 +1,6 @@
 import express from "express";
 import { ensureLibraryUploaded, loadLibrary, soundtrackPath } from "./music/library.js";
+import { loadUnusedProjectMedia } from "./routes/editorMedia.js";
 import { adminDb } from "./firebase/admin.js";
 import { loadConfig } from "./config.js";
 import { requireServiceCaller } from "./auth/requireServiceCaller.js";
@@ -194,6 +195,9 @@ app.use(
       const path = soundtrackPath(musicLibrary, track.id);
       return path ? [{ id: track.id, path }] : [];
     }),
+    loadUnusedMedia: (projectId, timeline) => timeline
+      ? loadUnusedProjectMedia(adminDb, projectId, timeline, (path, expiresAt) => firebaseThumbnailUrlStore(renderBucket()).signedReadUrl(path, expiresAt))
+      : Promise.resolve([]),
     signReadUrl: (path, expiresAt) => firebaseThumbnailUrlStore(renderBucket()).signedReadUrl(path, expiresAt),
     dispatch: () => dispatchDue(adminDb, queue, Date.now()),
   }),

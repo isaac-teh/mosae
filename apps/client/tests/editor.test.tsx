@@ -12,7 +12,7 @@ vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circ
 vi.mock("react-native", () => {
   const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, accessibilityState, ...props }: any) =>
     React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), ...(accessibilityState?.selected !== undefined ? { "aria-pressed": String(accessibilityState.selected) } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
-  return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: element("img"), Share: { share: vi.fn() }, Linking: { openURL: vi.fn() }, useWindowDimensions: () => ({ width: 390, height: 844 }) };
+  return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }), Share: { share: vi.fn() }, Linking: { openURL: vi.fn() }, useWindowDimensions: () => ({ width: 390, height: 844 }) };
 });
 
 import EditorScreen from "../app/editor";
@@ -87,6 +87,21 @@ describe("film editor", () => {
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
     expect(host.textContent).toContain("Opening");
     expect(host.textContent).toContain("Edit film");
+  });
+
+  it("adds an unused uploaded shot with its thumbnail after the selected clip", async () => {
+    boundary.repository.getFilmTimeline.mockResolvedValue({
+      timeline: firstCut,
+      sources: { "shot-a": "a.jpg", "shot-b": "b.jpg", "shot-c": "c.jpg" },
+      unusedMedia: [{ shotId: "shot-unused", kind: "photo", thumbnailUrl: "unused-thumb.jpg", previewUrl: "unused-thumb.jpg", date: "2026-06-03", eventLabel: "Day 3, evening" }],
+    });
+    await render(<EditorScreen />);
+    await click("Add");
+    expect(host.querySelector('img[src="unused-thumb.jpg"]')).not.toBeNull();
+    await click("Add Photo · Day 3, evening");
+    expect(host.querySelector('[aria-label="Select clip add:shot-unused:1"]')).not.toBeNull();
+    await advance(1500);
+    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "add", shotId: "shot-unused", kind: "photo", afterClipId: "a", durationSec: 3 }]);
   });
 
   it("prefills Ask from request= and applies its proposal in a single undo step", async () => {

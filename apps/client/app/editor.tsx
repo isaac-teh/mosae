@@ -78,14 +78,22 @@ export default function EditorScreen() {
     return () => { active = false; };
   }, [tool, selectedClip, plan, repository]);
   const addMoments = useMemo(() => {
-    if (!plan || !editor.timeline) return [];
+    if (!editor.timeline) return [];
     const used = shotIdsIn(editor.timeline);
-    const unselected = plan.moments.filter((moment) => !moment.selected && moment.shotId && !used.has(moment.shotId));
-    const leftOut: Moment[] = (plan.leftOut ?? []).filter((photo) => !used.has(photo.shotId) && !unselected.some((moment) => moment.shotId === photo.shotId)).map((photo, index) => ({
+    const projectMedia: Moment[] = editor.unusedMedia.filter((media) => !used.has(media.shotId)).map((media) => ({
+      id: `unused-${media.shotId}`, title: `${media.kind === "video" ? "Video clip" : "Photo"} · ${media.eventLabel}`, meta: media.date,
+      tag: { emoji: media.kind === "video" ? "🎬" : "📷", label: media.kind === "video" ? "Video" : "Photo" },
+      imageKey: media.thumbnailUrl, kind: media.kind, selected: false, favorite: false, shotId: media.shotId,
+      ...(media.sourceInSec !== undefined ? { sourceInSec: media.sourceInSec } : {}),
+      ...(media.sourceOutSec !== undefined ? { sourceOutSec: media.sourceOutSec } : {}),
+    }));
+    const usedOrListed = new Set([...used, ...projectMedia.map((moment) => moment.shotId!)]);
+    const unselected = (plan?.moments ?? []).filter((moment) => !moment.selected && moment.shotId && !usedOrListed.has(moment.shotId));
+    const leftOut: Moment[] = (plan?.leftOut ?? []).filter((photo) => !usedOrListed.has(photo.shotId) && !unselected.some((moment) => moment.shotId === photo.shotId)).map((photo, index) => ({
       id: `left-out-${index}`, title: "Left out photo", meta: photo.reason, tag: { emoji: "📷", label: "Left out" }, imageKey: photo.thumbnailUrl, kind: "photo", selected: false, favorite: false, shotId: photo.shotId,
     }));
-    return [...unselected, ...leftOut];
-  }, [plan, editor.timeline]);
+    return [...projectMedia, ...unselected, ...leftOut];
+  }, [plan, editor.timeline, editor.unusedMedia]);
   const onApply = (op: EditOp) => {
     const applied = editor.apply(op);
     if (applied) setTool(null);

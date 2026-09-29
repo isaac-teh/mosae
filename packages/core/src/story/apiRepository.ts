@@ -4,7 +4,7 @@ import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
 import { getFirestoreClient } from "../firebase";
 import { parseTimeline, type EditOp } from "@mosae/contracts";
-import type { ChatInterpretRequest, DirectorPerson, FilmEdits, FilmListItem, FilmRender, StoryRepository } from "./repository";
+import type { ChatInterpretRequest, DirectorPerson, EditorMediaItem, FilmEdits, FilmListItem, FilmRender, StoryRepository } from "./repository";
 import type { ProjectSummary } from "../chat/types";
 import type { DirectionOptions, Film } from "./types";
 import {
@@ -469,7 +469,18 @@ export function createApiStoryRepository(
     getFilmTimeline: async (projectId, generationId) => {
       const response = record(await deps.request("GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}`), "generation");
       const sources = record(response.sources, "preview sources");
-      return { timeline: parseTimeline(response.timeline), sources: Object.fromEntries(Object.entries(sources).map(([id, path]) => [id, stringField(path, "preview source")])) };
+      const unusedMedia: EditorMediaItem[] = Array.isArray(response.unusedMedia) ? response.unusedMedia.flatMap((value) => {
+        const media = record(value, "unused media");
+        if (media.kind !== "photo" && media.kind !== "video") return [];
+        return [{
+          shotId: stringField(media.shotId, "unused shot id"), kind: media.kind,
+          thumbnailUrl: stringField(media.thumbnailUrl, "unused thumbnail URL"), previewUrl: stringField(media.previewUrl, "unused preview URL"),
+          date: stringField(media.date, "unused media date"), eventLabel: stringField(media.eventLabel, "unused event label"),
+          ...(typeof media.sourceInSec === "number" ? { sourceInSec: media.sourceInSec } : {}),
+          ...(typeof media.sourceOutSec === "number" ? { sourceOutSec: media.sourceOutSec } : {}),
+        }];
+      }) : [];
+      return { timeline: parseTimeline(response.timeline), sources: Object.fromEntries(Object.entries(sources).map(([id, path]) => [id, stringField(path, "preview source")])), unusedMedia };
     },
     getEdits: async (projectId, generationId) => record(await deps.request(
       "GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`,

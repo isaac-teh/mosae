@@ -94,6 +94,14 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledWith({ op: "add", shotId: "shot-left", kind: "photo", afterClipId: "b", durationSec: 3 });
   });
 
+  it("shows uploaded-media thumbnails in newest-day order", async () => {
+    const next = { ...moments[0], id: "newer", title: "Photo · Day 3, evening", meta: "2026-06-03", imageKey: "newer.jpg" };
+    const older = { ...moments[0], id: "older", title: "Photo · Day 2, morning", meta: "2026-06-02", imageKey: "older.jpg" };
+    await render(<AddSheet visible moments={[next, older]} selectedClipId="b" onApply={apply} onClose={() => {}} />);
+    expect([...host.querySelectorAll('button[aria-label^="Add Photo"]')].map((button) => button.getAttribute("aria-label"))).toEqual(["Add Photo · Day 3, evening", "Add Photo · Day 2, morning"]);
+    expect([...host.querySelectorAll("img")].map((image) => image.getAttribute("src"))).toEqual(["newer.jpg", "older.jpg"]);
+  });
+
   it("adds a video moment with its source bounds", async () => {
     const videoMoment = { ...moments[0], id: "m-video", title: "Video moment", kind: "video" as const, sourceInSec: 2, sourceOutSec: 10 };
     await render(<AddSheet visible moments={[videoMoment]} selectedClipId="b" onApply={apply} onClose={() => {}} />);

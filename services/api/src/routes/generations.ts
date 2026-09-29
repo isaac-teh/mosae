@@ -6,6 +6,7 @@ import { createGeneration, getGeneration, StoreError } from "../store/generation
 import { enqueueRender } from "../store/enqueueRender.js";
 import { newOutboxTask } from "../domain/outbox.js";
 import { safeParseDirectionSettings, type Generation } from "@mosae/contracts";
+import type { UnusedProjectMedia } from "./editorMedia.js";
 
 const STATUS: Record<StoreError["code"], number> = {
   not_found: 404,
@@ -34,6 +35,7 @@ export function generationsRouter(deps: {
   loadSoundtrack?: (soundtrackId: string) => Promise<string | null>;
   /** Resolve every selectable soundtrack so the editor can switch tracks without reloading. */
   loadSoundtrackLibrary?: () => Promise<{ id: string; path: string }[]>;
+  loadUnusedMedia?: (projectId: string, timeline: Generation["timeline"]) => Promise<UnusedProjectMedia[]>;
   /** Drains the outbox after a task is written; the dispatcher does it in production. */
   dispatch?: () => Promise<unknown>;
 }): Router {
@@ -160,6 +162,7 @@ export function generationsRouter(deps: {
       // Resolve preview-mode sources if timeline exists
       let sources: Record<string, string> | undefined;
       if (generation.timeline) {
+        if (deps.loadUnusedMedia) response.unusedMedia = await deps.loadUnusedMedia(projectId, generation.timeline);
         const { resolveSources } = await import("../compose/resolveSources.js");
         try {
           const paths = await resolveSources(generation.timeline, {
