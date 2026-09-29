@@ -212,6 +212,8 @@ describe("Director chat", () => {
     expect(hasText("Did I get that right?")).toBe(false);
     expect(hasText("Not quite")).toBe(true);
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+    expect(host.querySelector('button[aria-label="Yes, our Japan trip"]')).toBeFalsy();
+    expect(host.textContent?.match(/0 of 4 confirmed/g) ?? []).toHaveLength(1);
     await click("Yes, that's right");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("our family trip", []));
   });

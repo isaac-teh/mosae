@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { faceCropGeometry, imageSizeFromLoadEvent, normalizeFaceBbox } from "./faceCrop";
+import { faceCropGeometry, imageSizeFromLoadEvent, normalizeFaceBbox } from "../lib/faceCrop";
 
 describe("face crop geometry", () => {
   it("normalizes Gemini boxes on a 0–1000 grid in ymin, xmin, ymax, xmax order", () => {
@@ -12,18 +12,27 @@ describe("face crop geometry", () => {
     expect(imageSizeFromLoadEvent({})).toBeNull();
   });
 
+  it("calculates an exact padded square crop for a known portrait box", () => {
+    const crop = faceCropGeometry([0.2, 0.25, 0.4, 0.35], 800, 600, 64);
+    expect(crop.width).toBeCloseTo(266.666667, 5);
+    expect(crop.height).toBe(200);
+    expect(crop.left).toBe(-48);
+    expect(crop.top).toBeCloseTo(-28, 5);
+  });
+
   it("centres a padded square crop in source pixels without stretching landscape thumbnails", () => {
     const crop = faceCropGeometry([0.2, 0.6, 0.4, 0.8], 400, 200, 72);
     expect(crop.width / crop.height).toBe(2);
-    expect(crop.left + 72 / 2).toBeCloseTo(200); // (0.6 + 0.8) / 2 * 400
-    expect(crop.top + 72 / 2).toBeCloseTo(60); // (0.2 + 0.4) / 2 * 200
+    const scale = crop.width / 400;
+    expect(crop.left + ((0.6 + 0.8) / 2) * 400 * scale).toBeCloseTo(72 / 2);
+    expect(crop.top + 64 * scale).toBeCloseTo(72 / 2); // face center is clamped to the image edge
     expect(crop.width).toBeGreaterThan(72);
     expect(crop.height).toBeGreaterThan(72);
   });
 
-  it("keeps an edge face inside the image while retaining a square crop", () => {
+  it("keeps an edge face inside the image while preserving its aspect ratio", () => {
     const crop = faceCropGeometry([0.05, 0.82, 0.25, 0.98], 400, 200, 72);
-    expect(crop.width).toBe(crop.height);
+    expect(crop.width / crop.height).toBe(2);
     expect(crop.left).toBeGreaterThanOrEqual(-crop.width);
     expect(crop.left).toBeLessThanOrEqual(0);
   });

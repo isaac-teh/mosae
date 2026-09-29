@@ -11,7 +11,11 @@ function FacePreviewTile({ sample, index }: { sample: FacePreview; index: number
   const [sourceSize, setSourceSize] = useState<{ width: number; height: number } | null>(null);
   const crop = sourceSize ? faceCropGeometry(sample.bbox, sourceSize.width, sourceSize.height, size) : null;
   return <View data-face-preview="true" className="h-[72px] w-[72px] overflow-hidden rounded-md bg-surface-sunken">
-    <Image source={{ uri: sample.uri }} accessibilityLabel={`Person photo ${index + 1}`} resizeMode={crop ? "stretch" : "cover"} onLoad={(event: any) => { const dimensions = imageSizeFromLoadEvent(event); if (dimensions) setSourceSize(dimensions); }} style={crop ? { position: "absolute", width: crop.width, height: crop.height, left: crop.left, top: crop.top } : { width: size, height: size }} />
+    <Image source={{ uri: sample.uri }} accessibilityLabel={`Person photo ${index + 1}`} resizeMode={crop ? "stretch" : "cover"} onLoad={(event: any) => {
+      const dimensions = imageSizeFromLoadEvent(event);
+      if (dimensions) setSourceSize(dimensions);
+      else Image.getSize(sample.uri, (width, height) => setSourceSize({ width, height }), () => {});
+    }} style={crop ? { position: "absolute", width: crop.width, height: crop.height, left: crop.left, top: crop.top } : { width: size, height: size }} />
   </View>;
 }
 

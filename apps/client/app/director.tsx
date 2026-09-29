@@ -81,7 +81,9 @@ export default function DirectorScreen() {
           const country = projectSummary?.country;
           const answer = country ? `Yes, our ${country} trip` : "Yes, that's our story";
           const storyText = country ? `${country} trip` : projectSummary?.places[0] ?? "Our story";
-          if (saving) return null;
+          // The occasion chip is only an available answer until the user has
+          // typed a free-text answer; then the confirmation card owns the turn.
+          if (saving || pendingInterpret) return null;
           return <Pressable key={item.id} role="button" aria-label={answer} onPress={() => void actions.confirmOccasion(answer, storyText)} className="max-w-[80%] self-end rounded-md bg-bubble-you px-4 py-3"><Text className="font-sans text-body text-ink">{answer}</Text></Pressable>;
         }
         if (item.kind === "person") return <View key={item.id} className="gap-3">
