@@ -1,6 +1,7 @@
 import express, { type RequestHandler } from "express";
 import { FieldValue } from "firebase-admin/firestore";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import { describe, expect, it } from "vitest";
 import { StoryProposalSchema } from "@mosae/contracts";
 import { adminDb } from "../firebase/admin.js";
@@ -124,7 +125,7 @@ async function seedUnderstoodProject() {
 }
 
 async function postIntent(server: express.Express, projectId: string, text = "Tell our park day warmly.") {
-  const response = await request(server)
+  const response = await request(await listeningServer(server))
     .post(`/api/projects/${projectId}/story-intents`)
     .send({ text, focus: ["family"] });
   expect(response.status).toBe(202);
@@ -206,10 +207,10 @@ describe("directing route and worker flow (emulator)", () => {
     await adminDb.doc(`projects/${projectId}`).update({ currentProposalId: baselineId, proposalVersionCounter: 1 });
 
     let requestedModelBackedPlan = 0;
-    const response = await request(app(async () => {
+    const response = await request(await listeningServer(app(async () => {
       requestedModelBackedPlan += 1;
       throw new Error("constraint revisions must not plan");
-    }))
+    })))
       .patch(`/api/projects/${projectId}/proposals/${baselineId}/constraints`)
       .send({ deselectedMomentIds: [`${baselineId}-moment-0`], mustIncludeMomentIds: [] });
 
@@ -232,7 +233,7 @@ describe("directing route and worker flow (emulator)", () => {
     await expect(runJob(projectId, initial.job, scriptedModel().instance)).resolves.toBe("published");
 
     const feedback = "Keep the grandparents at the emotional center.";
-    const feedbackResponse = await request(server)
+    const feedbackResponse = await request(await listeningServer(server))
       .post(`/api/projects/${projectId}/proposals/${initial.job.proposalId}/feedback`)
       .send({ feedback });
     expect(feedbackResponse.status).toBe(202);
@@ -246,7 +247,7 @@ describe("directing route and worker flow (emulator)", () => {
       state: "draft",
       constraints: { ...constraints, feedback: [feedback] },
     });
-    const acceptResponse = await request(server)
+    const acceptResponse = await request(await listeningServer(server))
       .post(`/api/projects/${projectId}/proposals/${revised.id}/accept`);
     expect(acceptResponse.status).toBe(200);
     expect(acceptResponse.body.proposal).toMatchObject({ id: revised.id, state: "accepted" });

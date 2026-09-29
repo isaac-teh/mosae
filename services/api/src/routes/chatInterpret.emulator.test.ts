@@ -1,5 +1,6 @@
 import express, { type RequestHandler } from "express";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import { describe, expect, it, vi } from "vitest";
 import { adminDb } from "../firebase/admin.js";
 import type { GenerateOptions } from "../gemini/client.js";
@@ -21,16 +22,16 @@ async function project(userId: string) {
 describe("chat interpret route (Firestore emulator)", () => {
   it("rejects empty text and unknown steps", async () => {
     const id = await project("chat-owner"); const server = await app("chat-owner");
-    expect((await request(server).post(`/api/projects/${id}/chat/interpret`).send({ step: "occasion", text: " " })).status).toBe(400);
-    expect((await request(server).post(`/api/projects/${id}/chat/interpret`).send({ step: "unknown", text: "hello" })).status).toBe(400);
+    expect((await request(await listeningServer(server)).post(`/api/projects/${id}/chat/interpret`).send({ step: "occasion", text: " " })).status).toBe(400);
+    expect((await request(await listeningServer(server)).post(`/api/projects/${id}/chat/interpret`).send({ step: "unknown", text: "hello" })).status).toBe(400);
   });
   it("returns 404 for a non-owner", async () => {
     const id = await project("chat-owner");
-    expect((await request(await app("chat-other")).post(`/api/projects/${id}/chat/interpret`).send({ step: "direction", text: "more upbeat" })).status).toBe(404);
+    expect((await request(await listeningServer(await app("chat-other"))).post(`/api/projects/${id}/chat/interpret`).send({ step: "direction", text: "more upbeat" })).status).toBe(404);
   });
   it("returns the interpreted result to the owner", async () => {
     const id = await project("chat-owner");
-    const response = await request(await app("chat-owner")).post(`/api/projects/${id}/chat/interpret`).send({ step: "direction", text: "more upbeat" });
+    const response = await request(await listeningServer(await app("chat-owner"))).post(`/api/projects/${id}/chat/interpret`).send({ step: "direction", text: "more upbeat" });
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ reply: "I understood: more upbeat.", change: { kind: "direction", pace: "lively" } });
   });

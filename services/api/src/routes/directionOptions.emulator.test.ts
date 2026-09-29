@@ -1,6 +1,7 @@
 import express from "express";
 import type { RequestHandler } from "express";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { adminDb } from "../firebase/admin.js";
 
@@ -95,7 +96,7 @@ describe("direction-options route", () => {
     const proposalId = await seedProposal(projectId);
 
     const app = await buildApp("u1");
-    const res = await request(app)
+    const res = await request(await listeningServer(app))
       .get(`/api/projects/${projectId}/proposals/${proposalId}/direction-options`);
 
     expect(res.status).toBe(200);
@@ -121,7 +122,7 @@ describe("direction-options route", () => {
     const projectId = await seedProject("u1");
     const proposalId = await seedProposal(projectId, { excludedShotIds: Array.from({ length: 10 }, (_, index) => `shot-${index}`), deselectedMomentIds: [], hiddenShotIds: [] });
     const app = await buildApp("u1");
-    const res = await request(app).get(`/api/projects/${projectId}/proposals/${proposalId}/direction-options`);
+    const res = await request(await listeningServer(app)).get(`/api/projects/${projectId}/proposals/${proposalId}/direction-options`);
     expect(res.status).toBe(200);
     expect(res.body.maximumDurationSecByCadence.reflective).toBe(10);
   });
@@ -131,7 +132,7 @@ describe("direction-options route", () => {
     const proposalId = await seedProposal(projectId);
 
     const app = await buildApp("u2");
-    const res = await request(app)
+    const res = await request(await listeningServer(app))
       .get(`/api/projects/${projectId}/proposals/${proposalId}/direction-options`);
 
     expect(res.status).toBe(403);
@@ -173,7 +174,7 @@ describe("direction-options route", () => {
     });
 
     const app = await buildApp("u1");
-    const res = await request(app)
+    const res = await request(await listeningServer(app))
       .get(`/api/projects/${projectId}/proposals/${proposalId}/direction-options`);
 
     expect(res.status).toBe(200);

@@ -2,6 +2,7 @@ import type { StoryIntent, StoryProposal } from "@mosae/contracts";
 import express from "express";
 import type { Firestore } from "firebase-admin/firestore";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../store/projectStore.js", async () => {
@@ -94,7 +95,7 @@ describe("directing routes", () => {
   });
 
   it("saves a versioned intent and queues planning for a ready project", async () => {
-    const response = await request(buildApp())
+    const response = await request(await listeningServer(buildApp()))
       .post("/api/projects/project-1/story-intents")
       .send({ text: "Keep the family reunion warm.", focus: ["family"] });
 
@@ -116,7 +117,7 @@ describe("directing routes", () => {
   });
 
   it("allocates story intent identity and initial version on the server", async () => {
-    const response = await request(buildApp())
+    const response = await request(await listeningServer(buildApp()))
       .post("/api/projects/project-1/story-intents")
       .send({ id: "reused-client-id", version: 99, text: "Keep this version immutable.", focus: [] });
 
@@ -131,7 +132,7 @@ describe("directing routes", () => {
   ] as const)("refuses a %s project with a readable reason", async (status, error, reason) => {
     vi.mocked(projectStore.getOwnedProject).mockResolvedValue(ownedProject(status));
 
-    const response = await request(buildApp())
+    const response = await request(await listeningServer(buildApp()))
       .post("/api/projects/project-1/story-intents")
       .send({ text: "Tell the story", focus: [] });
 
@@ -147,7 +148,7 @@ describe("directing routes", () => {
   ] as const)("accepts a %s project with the right readiness behavior", async (status, waitForReady) => {
     vi.mocked(projectStore.getOwnedProject).mockResolvedValue(ownedProject(status));
 
-    const response = await request(buildApp())
+    const response = await request(await listeningServer(buildApp()))
       .post("/api/projects/project-1/story-intents")
       .send({ text: "Tell the story", focus: [] });
 
@@ -156,7 +157,7 @@ describe("directing routes", () => {
   });
 
   it("revises constraints synchronously against the exact proposal without queueing planning", async () => {
-    const response = await request(buildApp())
+    const response = await request(await listeningServer(buildApp()))
       .patch("/api/projects/project-1/proposals/proposal-1/constraints")
       .send({ deselectedMomentIds: ["moment-1"], mustIncludeMomentIds: [] });
 
@@ -173,7 +174,7 @@ describe("directing routes", () => {
   });
 
   it("persists excluded shot ids from the director chat alongside its must-includes", async () => {
-    const response = await request(buildApp())
+    const response = await request(await listeningServer(buildApp()))
       .patch("/api/projects/project-1/proposals/proposal-1/constraints")
       .send({ mustIncludeMomentIds: ["shot-keep"], excludedShotIds: ["shot-leave"] });
 
@@ -189,7 +190,7 @@ describe("directing routes", () => {
       constraints: { ...constraints, deselectedMomentIds: ["moment-1"] },
     });
 
-    const response = await request(buildApp())
+    const response = await request(await listeningServer(buildApp()))
       .patch("/api/projects/project-1/proposals/proposal-1/constraints")
       .send({ deselectedMomentIds: [], mustIncludeMomentIds: ["moment-1"] });
 
@@ -204,7 +205,7 @@ describe("directing routes", () => {
   it("refuses to apply constraints to a stale proposal id", async () => {
     vi.mocked(directingStore.reviseConstraints).mockRejectedValue(new directingStore.DirectingStoreError("stale_proposal"));
 
-    const response = await request(buildApp())
+    const response = await request(await listeningServer(buildApp()))
       .patch("/api/projects/project-1/proposals/proposal-1/constraints")
       .send({ deselectedMomentIds: [], mustIncludeMomentIds: [] });
 
@@ -213,7 +214,7 @@ describe("directing routes", () => {
   });
 
   it("appends feedback to the exact current proposal and queues a new version", async () => {
-    const response = await request(buildApp())
+    const response = await request(await listeningServer(buildApp()))
       .post("/api/projects/project-1/proposals/proposal-1/feedback")
       .send({ feedback: "Give the grandparents more emphasis." });
 
@@ -233,7 +234,7 @@ describe("directing routes", () => {
   it("refuses feedback against a stale proposal rather than applying it to the newest", async () => {
     vi.mocked(projectStore.getOwnedProject).mockResolvedValue({ ...ownedProject(), currentProposalId: "proposal-newer" } as never);
 
-    const response = await request(buildApp())
+    const response = await request(await listeningServer(buildApp()))
       .post("/api/projects/project-1/proposals/proposal-1/feedback")
       .send({ feedback: "More warmth." });
 
@@ -244,8 +245,8 @@ describe("directing routes", () => {
 
   it("accepts an already accepted proposal idempotently", async () => {
     const app = buildApp();
-    const first = await request(app).post("/api/projects/project-1/proposals/proposal-1/accept");
-    const second = await request(app).post("/api/projects/project-1/proposals/proposal-1/accept");
+    const first = await request(await listeningServer(app)).post("/api/projects/project-1/proposals/proposal-1/accept");
+    const second = await request(await listeningServer(app)).post("/api/projects/project-1/proposals/proposal-1/accept");
 
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
@@ -261,7 +262,7 @@ describe("directing routes", () => {
     ["accept", "post", "/api/projects/project-1/proposals/proposal-1/accept", undefined],
   ] as const)("enforces project ownership on the %s route", async (_name, method, path, body) => {
     vi.mocked(projectStore.getOwnedProject).mockResolvedValue(null);
-    const pending = request(buildApp())[method](path);
+    const pending = request(await listeningServer(buildApp()))[method](path);
     const response = body === undefined ? await pending : await pending.send(body);
 
     expect(response.status).toBe(404);
@@ -279,7 +280,7 @@ describe("directing routes", () => {
   ] as const)("checks ownership before validating the %s body", async (_name, path, body) => {
     vi.mocked(projectStore.getOwnedProject).mockResolvedValue(null);
 
-    const response = await request(buildApp()).post(path).send(body);
+    const response = await request(await listeningServer(buildApp())).post(path).send(body);
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: "not_found" });

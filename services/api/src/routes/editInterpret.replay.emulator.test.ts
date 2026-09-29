@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 import { adminDb } from "../firebase/admin.js";
 
 const fixturesDir = fileURLToPath(new URL("../../fixtures/gemini/", import.meta.url));
-const oldMode = process.env.MOCK_GEMINI;
 const owner = "editor-ask-replay-owner";
 const auth: RequestHandler = (_req, res, next) => { res.locals.userId = owner; next(); };
 const timeline: Timeline = {
@@ -51,14 +51,14 @@ const trip1Timeline: Timeline = {
   captions: [],
 };
 
-afterEach(() => { if (oldMode === undefined) delete process.env.MOCK_GEMINI; else process.env.MOCK_GEMINI = oldMode; vi.resetModules(); });
+afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
 
 describe("edit interpretation replay route (Firestore emulator)", () => {
   it("replays the recorded Ask examples and the trip1 zoo edit through the owned-generation route", async () => {
     if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error("FIRESTORE_EMULATOR_HOST must point at the already-running emulator");
     const fixtures = readdirSync(fixturesDir).filter((name) => name.startsWith("edit-interpret-") && name.endsWith(".json"));
     expect(fixtures).toHaveLength(5); // four earlier turns plus the real trip1 zoo request
-    process.env.MOCK_GEMINI = "replay";
+    vi.stubEnv("MOCK_GEMINI", "replay");
     vi.resetModules();
     const [{ editInterpretRouter }, { generateStructured }, { createGeminiClient }] = await Promise.all([
       import("./editInterpret.js"), import("../gemini/client.js"), import("../gemini/wire.js"),
@@ -71,13 +71,13 @@ describe("edit interpretation replay route (Firestore emulator)", () => {
     for (const [index, example] of examples.entries()) {
       const generationId = `generation-${index}`;
       await adminDb.doc(`projects/${projectId}/generations/${generationId}`).set({ timeline: { ...timeline, projectId } });
-      const response = await request(app).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: example.text, revision: 0 });
+      const response = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: example.text, revision: 0 });
       expect(response.status, example.text).toBe(200);
       expect(response.body.ops).toContainEqual(expect.objectContaining({ op: example.op, clipId: example.clipId }));
     }
     const tripGenerationId = "generation-trip1-zoo";
     await adminDb.doc(`projects/${projectId}/generations/${tripGenerationId}`).set({ timeline: { ...trip1Timeline, projectId } });
-    const tripResponse = await request(app).post(`/api/projects/${projectId}/generations/${tripGenerationId}/edits/interpret`).send({ text: "move the zoo photos earlier", revision: 0 });
+    const tripResponse = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${tripGenerationId}/edits/interpret`).send({ text: "move the zoo photos earlier", revision: 0 });
     expect(tripResponse.status).toBe(200);
     expect(tripResponse.body.reply).toContain("Singapore Zoo");
     expect(tripResponse.body.ops).toHaveLength(4);

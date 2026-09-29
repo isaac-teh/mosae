@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import type { Firestore } from "firebase-admin/firestore";
 
 vi.mock("../store/projectStore.js", async () => {
@@ -61,7 +62,7 @@ describe("projects routes", () => {
       status: "collecting",
       createdAt: 42,
     });
-    const res = await request(buildApp())
+    const res = await request(await listeningServer(buildApp()))
       .post("/api/projects")
       .send({ mode: "memory" });
     expect(res.status).toBe(201);
@@ -72,7 +73,7 @@ describe("projects routes", () => {
     });
   });
   it("rejects an invalid mode", async () => {
-    const res = await request(buildApp())
+    const res = await request(await listeningServer(buildApp()))
       .post("/api/projects")
       .send({ mode: "album" });
     expect(res.status).toBe(400);
@@ -89,7 +90,7 @@ describe("projects routes", () => {
       },
       entries: [entry as never],
     });
-    const res = await request(buildApp())
+    const res = await request(await listeningServer(buildApp()))
       .post("/api/projects/p1/upload-sessions")
       .send({
         entries: [
@@ -102,13 +103,13 @@ describe("projects routes", () => {
     );
   });
   it("rejects an empty entries array", async () => {
-    const res = await request(buildApp()).post("/api/projects/p1/upload-sessions").send({ entries: [] });
+    const res = await request(await listeningServer(buildApp())).post("/api/projects/p1/upload-sessions").send({ entries: [] });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "invalid_entry" });
     expect(store.openSession).not.toHaveBeenCalled();
   });
   it("rejects encoded slashes in project IDs before calling the store", async () => {
-    const res = await request(buildApp())
+    const res = await request(await listeningServer(buildApp()))
       .post("/api/projects/p1%2FuploadSessions%2Fs1/upload-sessions")
       .send({
         entries: [
@@ -120,7 +121,7 @@ describe("projects routes", () => {
     expect(store.openSession).not.toHaveBeenCalled();
   });
   it("rejects encoded slashes in session IDs before calling the store", async () => {
-    const res = await request(buildApp())
+    const res = await request(await listeningServer(buildApp()))
       .post("/api/projects/p1/upload-sessions/s1%2Fentries%2Fa1/entries")
       .send({
         entries: [
@@ -135,7 +136,7 @@ describe("projects routes", () => {
     vi.mocked(store.addEntries).mockRejectedValue(
       new store.StoreError("session_closed"),
     );
-    const closed = await request(buildApp())
+    const closed = await request(await listeningServer(buildApp()))
       .post("/api/projects/p1/upload-sessions/s1/entries")
       .send({
         entries: [
@@ -146,13 +147,13 @@ describe("projects routes", () => {
     vi.mocked(store.closeSession).mockRejectedValue(
       new store.StoreError("not_found"),
     );
-    const missing = await request(buildApp()).post(
+    const missing = await request(await listeningServer(buildApp())).post(
       "/api/projects/p1/upload-sessions/s1/close",
     );
     expect(missing.status).toBe(404);
   });
   it("validates client outcome bodies", async () => {
-    const res = await request(buildApp())
+    const res = await request(await listeningServer(buildApp()))
       .post("/api/projects/p1/upload-sessions/s1/entries/a1/outcome")
       .send({ kind: "finalized" });
     expect(res.status).toBe(400);
@@ -162,7 +163,7 @@ describe("projects routes", () => {
   it("settles the project after a session is closed", async () => {
     const settle = vi.fn().mockResolvedValue(undefined);
     const app = buildApp({ settle });
-    const res = await request(app).post("/api/projects/p1/upload-sessions/s1/close");
+    const res = await request(await listeningServer(app)).post("/api/projects/p1/upload-sessions/s1/close");
     expect(res.status).toBe(200);
     expect(settle).toHaveBeenCalledWith("p1");
   });
@@ -170,7 +171,7 @@ describe("projects routes", () => {
   it("settles the project after a client cancels an upload", async () => {
     const settle = vi.fn().mockResolvedValue(undefined);
     const app = buildApp({ settle });
-    const res = await request(app)
+    const res = await request(await listeningServer(app))
       .post("/api/projects/p1/upload-sessions/s1/entries/a1/outcome")
       .send({ kind: "cancelled" });
     expect(res.status).toBe(200);
@@ -181,7 +182,7 @@ describe("projects routes", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const settle = vi.fn().mockRejectedValue(new Error("firestore unavailable"));
     const app = buildApp({ settle });
-    const res = await request(app).post("/api/projects/p1/upload-sessions/s1/close");
+    const res = await request(await listeningServer(app)).post("/api/projects/p1/upload-sessions/s1/close");
     expect(res.status).toBe(200);
     await new Promise((resolve) => setImmediate(resolve));
     expect(error).toHaveBeenCalled();
@@ -192,7 +193,7 @@ describe("projects routes", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const sleep = vi.fn().mockResolvedValue(undefined);
     const settle = vi.fn().mockRejectedValueOnce(new Error("one")).mockRejectedValueOnce(new Error("two")).mockResolvedValue(undefined);
-    const res = await request(buildApp({ settle, sleep })).post("/api/projects/p1/upload-sessions/s1/close");
+    const res = await request(await listeningServer(buildApp({ settle, sleep }))).post("/api/projects/p1/upload-sessions/s1/close");
     expect(res.status).toBe(200);
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
@@ -205,7 +206,7 @@ describe("projects routes", () => {
   it("does not settle when the close is rejected", async () => {
     const settle = vi.fn();
     const app = buildApp({ settle, closeFails: true });
-    const res = await request(app).post("/api/projects/p1/upload-sessions/missing/close");
+    const res = await request(await listeningServer(app)).post("/api/projects/p1/upload-sessions/missing/close");
     expect(res.status).toBe(404);
     expect(settle).not.toHaveBeenCalled();
   });
@@ -214,19 +215,19 @@ describe("projects routes", () => {
     vi.mocked(store.getOwnedProject).mockResolvedValue({ id: "p1", userId: "user-1", mode: "memory", title: null, status: "ready", createdAt: 1 });
     vi.mocked(understandStore.loadSearchableShots).mockResolvedValue([{ id: "s1", assetId: "a1", embedding: [1, 0] }, { id: "s2", assetId: "a2", embedding: [0, 1] }]);
     const embedQuery = vi.fn().mockResolvedValue([1, 0]);
-    const res = await request(buildApp({ embedQuery })).get("/api/projects/p1/shots/search?q=beach");
+    const res = await request(await listeningServer(buildApp({ embedQuery }))).get("/api/projects/p1/shots/search?q=beach");
     expect(res.status).toBe(200);
     expect(res.body.results[0]).toMatchObject({ id: "s1", assetId: "a1" });
   });
 
   it("rejects an empty query before ownership lookup", async () => {
-    const res = await request(buildApp({ embedQuery: async () => [1, 0] })).get("/api/projects/p1/shots/search?q=");
+    const res = await request(await listeningServer(buildApp({ embedQuery: async () => [1, 0] }))).get("/api/projects/p1/shots/search?q=");
     expect(res.status).toBe(400);
     expect(store.getOwnedProject).not.toHaveBeenCalled();
   });
 
   it("does not expose search when no embedding dependency is configured", async () => {
-    const res = await request(buildApp()).get("/api/projects/p1/shots/search?q=beach");
+    const res = await request(await listeningServer(buildApp())).get("/api/projects/p1/shots/search?q=beach");
     expect(res.status).toBe(503);
   });
 });

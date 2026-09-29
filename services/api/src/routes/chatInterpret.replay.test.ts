@@ -1,5 +1,6 @@
 import express, { type RequestHandler } from "express";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -7,17 +8,14 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { GenerateOptions } from "../gemini/client.js";
 
 const fixturesDir = fileURLToPath(new URL("../../fixtures/gemini/", import.meta.url));
-const originalMockGemini = process.env.MOCK_GEMINI;
-
 afterEach(() => {
-  if (originalMockGemini === undefined) delete process.env.MOCK_GEMINI;
-  else process.env.MOCK_GEMINI = originalMockGemini;
+  vi.unstubAllEnvs();
   vi.resetModules();
 });
 
 describe("chat interpret replay route", () => {
   it("parses the four recorded answers through the route and Gemini replay adapter", async () => {
-    process.env.MOCK_GEMINI = "replay";
+    vi.stubEnv("MOCK_GEMINI", "replay");
     vi.resetModules();
     const [{ chatInterpretRouter }, { generateStructured }, { createGeminiClient }] = await Promise.all([
       import("./chatInterpret.js"), import("../gemini/client.js"), import("../gemini/wire.js"),
@@ -65,7 +63,7 @@ describe("chat interpret replay route", () => {
     ];
     for (const example of expected) {
       const input = examples.find(({ step }) => step === example.step)!;
-      const response = await request(app).post(`/api/projects/${projectId}/chat/interpret`).send(input);
+      const response = await request(await listeningServer(app)).post(`/api/projects/${projectId}/chat/interpret`).send(input);
       expect(response.status, example.step).toBe(200);
       expect(response.body.change, example.step).toMatchObject({ kind: example.kind, ...example.fields });
     }

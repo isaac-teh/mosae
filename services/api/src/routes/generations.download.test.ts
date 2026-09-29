@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
+import { listeningServer } from "../test/listeningServer.js";
 import type { Firestore } from "firebase-admin/firestore";
 
 // The route verifies ownership through requireUser; mock it so the real auth
@@ -67,8 +68,10 @@ function buildApp(db: Firestore, fakeBucket: ReturnType<typeof makeBucket>, sour
 }
 
 beforeEach(() => {
-  delete process.env.FIREBASE_STORAGE_EMULATOR_HOST;
+  vi.stubEnv("FIREBASE_STORAGE_EMULATOR_HOST", undefined);
 });
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("GET /download — emulator branch", () => {
   it("returns browser-loadable sources for every clip and the selected soundtrack in a stored generation", async () => {
@@ -103,7 +106,7 @@ describe("GET /download — emulator branch", () => {
       signReadUrl: async (path) => { signed.push(path); return `http://127.0.0.1:9199/download/${path}`; },
     });
 
-    const res = await request(app).get("/api/projects/p1/generations/g1").set("Authorization", "Bearer owner");
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/generations/g1").set("Authorization", "Bearer owner");
 
     expect(res.status).toBe(200);
     expect(res.body.timeline.videoClips).toHaveLength(2);
@@ -126,7 +129,7 @@ describe("GET /download — emulator branch", () => {
   it("prefers the current edited render over the first cut", async () => {
     const { bucket, calls } = makeBucket();
     const app = buildApp(makeDb(generation, { revision: 3, renderRevision: 3, status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" }), { bucket, calls });
-    const res = await request(app).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
     expect(res.status).toBe(200);
     expect(res.body.outputPath).toBe("renders/owner/p1/g1-edit-3.mp4");
     expect(calls[0].path).toBe("renders/owner/p1/g1-edit-3.mp4");
@@ -135,17 +138,17 @@ describe("GET /download — emulator branch", () => {
   it("falls back to the first cut when the newest edit has no render", async () => {
     const { bucket, calls } = makeBucket();
     const app = buildApp(makeDb(generation, { revision: 4, renderRevision: 3, status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" }), { bucket, calls });
-    const res = await request(app).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
     expect(res.status).toBe(200);
     expect(res.body.outputPath).toBe("renders/owner/p1/g1.mp4");
     expect(calls[0].path).toBe("renders/owner/p1/g1.mp4");
   });
 
   it("returns the GCS-style emulator download URL when FIREBASE_STORAGE_EMULATOR_HOST is set", async () => {
-    process.env.FIREBASE_STORAGE_EMULATOR_HOST = "127.0.0.1:9199";
+    vi.stubEnv("FIREBASE_STORAGE_EMULATOR_HOST", "127.0.0.1:9199");
     const app = buildApp(makeDb(generation), makeBucket());
 
-    const res = await request(app).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
     expect(res.status).toBe(200);
     expect(res.body.downloadUrl).toBe(
       "http://127.0.0.1:9199/download/storage/v1/b/demo-mosae.appspot.com/o/renders%2Fowner%2Fp1%2Fg1.mp4?alt=media",
@@ -156,30 +159,30 @@ describe("GET /download — emulator branch", () => {
     const { bucket, calls } = makeBucket();
     const app = buildApp(makeDb(generation), { bucket, calls });
 
-    const res = await request(app).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
     expect(res.status).toBe(200);
     expect(calls[0].path).toBe("renders/owner/p1/g1.mp4");
     expect(calls[0].options).toMatchObject({ version: "v4", action: "read" });
   });
 
   it("reads the configured bucket, since the admin app has no default one", async () => {
-    process.env.FIREBASE_STORAGE_EMULATOR_HOST = "127.0.0.1:9199";
+    vi.stubEnv("FIREBASE_STORAGE_EMULATOR_HOST", "127.0.0.1:9199");
     requestedBucket = undefined;
     const app = buildApp(makeDb(generation), makeBucket());
-    await request(app).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
+    await request(await listeningServer(app)).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
     expect(requestedBucket).toBe("demo-mosae.appspot.com");
   });
 
   it("returns 400 when the render is not complete", async () => {
     const incomplete = { ...generation, status: "rendering", outputPath: null };
     const app = buildApp(makeDb(incomplete), makeBucket());
-    const res = await request(app).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
     expect(res.status).toBe(400);
   });
 
   it("returns 404 when the generation is not found", async () => {
     const app = buildApp(makeDb(null), makeBucket());
-    const res = await request(app).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/generations/g1/download").set("Authorization", "Bearer owner");
     expect(res.status).toBe(404);
   });
 });
