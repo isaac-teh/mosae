@@ -10,7 +10,12 @@ vi.mock("react-native", () => {
     React.useEffect(() => { onLayout?.({ nativeEvent: { layout: { width: 100 } } }); }, [onLayout]);
     return React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), ...(numberOfLines ? { "data-number-of-lines": numberOfLines } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined, onTouchStart: onResponderGrant, onTouchMove: onResponderMove }, children);
   };
-  return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }) };
+  const ScrollView = React.forwardRef(({ children, onLayout, onScroll, onScrollBeginDrag, onScrollEndDrag, onTouchStart, onTouchMove, accessibilityLabel, ...props }: any, ref: any) => {
+    React.useEffect(() => { onLayout?.({ nativeEvent: { layout: { width: 100 } } }); }, [onLayout]);
+    React.useImperativeHandle(ref, () => ({ scrollTo: (...args: any[]) => mockScrollTo(...args) }));
+    return React.createElement("div", { ...props, "aria-label": accessibilityLabel, onPointerDown: onScrollBeginDrag, onPointerUp: onScrollEndDrag, onTouchStart, onTouchMove, onScroll: (event: any) => onScroll?.({ nativeEvent: { contentOffset: { x: event.currentTarget.scrollLeft } } }) }, children);
+  });
+  return { View: element("div"), ScrollView, Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }) };
 });
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
 vi.mock("@/lib/demoAssets", () => ({ demoImage: () => 1 }));
@@ -25,6 +30,9 @@ import { RemoveConfirm } from "../components/editor/RemoveConfirm";
 import { EditorMenu } from "../components/editor/EditorMenu";
 import { AskSheet } from "../components/editor/AskSheet";
 import { TimelineStrip } from "../components/editor/TimelineStrip";
+import { xToTime } from "../components/editor/timelineScale";
+
+const mockScrollTo = vi.fn();
 
 const clips = ["a", "b", "c"].map((id, index) => ({
   id, source: { kind: "photo" as const, shotId: `shot-${id}` }, startSec: index * 3, durationSec: 3,
@@ -118,35 +126,73 @@ describe("editor tool operations", () => {
       ],
     };
     await render(<TimelineStrip timeline={chapterTimeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} />);
-    const labels = [...host.querySelectorAll('[data-number-of-lines="1"]')];
+    const labels = [...host.querySelectorAll('[aria-label^="Chapter "] [data-number-of-lines="1"]')];
     expect(labels).toHaveLength(2);
     expect(labels.every((label) => Number.parseFloat((label.parentElement as HTMLElement).style.width) > 0)).toBe(true);
   });
 
-  it("selects a strip clip at its actual timeline start and shows the current playhead", async () => {
+  it("selects a clip at its timeline start while the playhead stays fixed in the centre", async () => {
     const onSelect = vi.fn();
     await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={4.5} onSelect={onSelect} onScrub={() => {}} />);
     await click("Select clip b");
     expect(onSelect).toHaveBeenCalledWith("b", 3);
-    expect(host.querySelector('[aria-label="Timeline playhead"]')?.getAttribute("style")).toContain("left: 50%");
+    expect(host.querySelector('[aria-label="Timeline playhead"]')?.getAttribute("style")).toContain("left: 49px");
   });
 
-  it("maps scrub bar touch positions to timeline seconds", async () => {
-    const onScrub = vi.fn();
-    await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={onScrub} />);
-    const scrubber = host.querySelector('[aria-label="Scrub timeline"]') as HTMLElement;
-    await act(async () => scrubber.dispatchEvent(Object.assign(new Event("touchstart", { bubbles: true }), { locationX: 25 })));
-    await act(async () => scrubber.dispatchEvent(Object.assign(new Event("touchmove", { bubbles: true }), { locationX: 75 })));
-    expect(onScrub).toHaveBeenLastCalledWith(6.75);
+  it("centres a tapped clip start under the playhead after its seek request", async () => {
+    mockScrollTo.mockClear();
+    function Harness() {
+      const [playhead, setPlayhead] = React.useState(0);
+      const [selected, setSelected] = React.useState<string | null>(null);
+      return <TimelineStrip timeline={timeline} sources={{}} selectedClipId={selected} playheadSec={playhead} onSelect={(id, startSec) => { setSelected(id); setPlayhead(startSec); }} onScrub={setPlayhead} />;
+    }
+    await render(<Harness />);
+    await click("Select clip b");
+    expect(mockScrollTo).toHaveBeenLastCalledWith({ x: 120, animated: false });
   });
 
-  it("uses page coordinates when a browser touch has no locationX", async () => {
+  it("uses one scale for ruler ticks, chapters, clip bounds and the music bar", async () => {
+    const withRows: Timeline = {
+      ...timeline,
+      chapters: [{ title: "Zoo day", startSec: 0, durationSec: 3 }],
+      audioClips: [{ id: "music-1", role: "music", source: { kind: "soundtrack", soundtrackId: "track-1", sourceInSec: 0, sourceOutSec: 9 }, startSec: 0, gainDb: 0, fadeInSec: 0, fadeOutSec: 0 }],
+    };
+    await render(<TimelineStrip timeline={withRows} sources={{ "shot-a": "a.jpg" }} selectedClipId="a" playheadSec={0} soundtrackName="Sandcastle Days" onSelect={() => {}} onScrub={() => {}} onSoundtrack={() => {}} />);
+    expect(host.querySelector('[aria-label="Timeline ruler tick 2 seconds"]')?.getAttribute("style")).toContain("left: 130px");
+    expect(host.querySelector('[aria-label="Timeline ruler label 0:02"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Chapter Zoo day"]')?.getAttribute("style")).toContain("left: 50px");
+    expect(host.querySelector('[aria-label="Select clip a"]')?.getAttribute("style")).toContain("left: 50px");
+    expect(host.querySelector('[aria-label="Music track Sandcastle Days"]')?.getAttribute("style")).toContain("width: 360px");
+  });
+
+  it("seeks by the time under the centre playhead when the user scrolls", async () => {
     const onScrub = vi.fn();
     await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={onScrub} />);
-    const scrubber = host.querySelector('[aria-label="Scrub timeline"]') as HTMLElement;
-    vi.spyOn(scrubber, "getBoundingClientRect").mockReturnValue({ x: 40, y: 0, left: 40, right: 140, top: 0, bottom: 10, width: 100, height: 10, toJSON: () => ({}) });
-    await act(async () => scrubber.dispatchEvent(Object.assign(new Event("touchmove", { bubbles: true }), { pageX: 115 })));
-    expect(onScrub).toHaveBeenCalledWith(6.75);
+    const scroller = host.querySelector('[aria-label="Unified timeline"]')!;
+    await act(async () => scroller.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+    Object.defineProperty(scroller, "scrollLeft", { configurable: true, value: 110 });
+    await act(async () => scroller.dispatchEvent(new Event("scroll", { bubbles: true })));
+    expect(onScrub).toHaveBeenLastCalledWith(xToTime(160, 40, 50));
+  });
+
+  it("moves under the fixed playhead on playback updates without seeking", async () => {
+    const onScrub = vi.fn();
+    const props = { timeline, sources: {}, selectedClipId: null, onSelect: () => {}, onScrub };
+    await render(<TimelineStrip {...props} playheadSec={0} />);
+    mockScrollTo.mockClear();
+    await render(<TimelineStrip {...props} playheadSec={3} />);
+    expect(mockScrollTo).toHaveBeenCalled();
+    expect(onScrub).not.toHaveBeenCalled();
+  });
+
+  it("supports zoom controls at the allowed limits", async () => {
+    await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} />);
+    await click("Zoom in timeline");
+    expect(host.querySelector('[aria-label="Timeline zoom 44 pixels per second"]')).not.toBeNull();
+    for (let i = 0; i < 20; i++) await click("Zoom out timeline");
+    expect(host.querySelector('[aria-label="Timeline zoom 20 pixels per second"]')).not.toBeNull();
+    for (let i = 0; i < 25; i++) await click("Zoom in timeline");
+    expect(host.querySelector('[aria-label="Timeline zoom 120 pixels per second"]')).not.toBeNull();
   });
 
   it("shows selected collage chips, every allowed layout, and only motions allowed by the selected layout", async () => {

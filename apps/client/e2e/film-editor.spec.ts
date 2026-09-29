@@ -75,3 +75,29 @@ test("opens Ask from a change request URL", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Ask for an edit" })).toHaveValue("Make it shorter");
   await capture(page, "editor-e2e-09-ask-prefilled.png");
 });
+
+test("shows one aligned timeline on mobile and desktop", async ({ page }) => {
+  await mkdir(screenshots, { recursive: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/editor?projectId=fixture&generationId=demo-film&planId=demo&repository=fixture");
+  const timeline = page.getByLabel("Unified timeline");
+  await expect(timeline).toBeVisible();
+  await expect(page.getByLabel("Timeline ruler tick 2 seconds")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select clip clip-1" })).toBeVisible();
+  await page.getByRole("button", { name: "Open soundtrack picker" }).click();
+  await page.getByRole("button", { name: /Choose / }).first().click();
+  await expect(page.getByRole("button", { name: /Music track/ })).toBeVisible();
+  await page.getByRole("button", { name: "Zoom in timeline" }).click();
+  await expect(page.getByLabel("Timeline zoom 44 pixels per second")).toBeVisible();
+  await page.getByRole("button", { name: "Zoom out timeline" }).click();
+  await expect(page.getByLabel("Timeline zoom 40 pixels per second")).toBeVisible();
+  await page.screenshot({ path: path.join(screenshots, "timeline-unified-390x844.png"), fullPage: false, scale: "css" });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.reload();
+  await expect(page.getByLabel("Unified timeline")).toBeVisible();
+  await page.getByRole("button", { name: "Open soundtrack picker" }).click();
+  await page.getByRole("button", { name: /Choose / }).first().click();
+  await expect(page.getByRole("button", { name: /Music track/ })).toBeVisible();
+  await page.screenshot({ path: path.join(screenshots, "timeline-unified-1280x800.png"), fullPage: false, scale: "css" });
+});
