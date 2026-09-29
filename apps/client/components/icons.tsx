@@ -90,3 +90,19 @@ export function SettingsIcon() {
     </Svg>
   );
 }
+
+function HistoryArrow({ direction, disabled = false }: { direction: "undo" | "redo"; disabled?: boolean }) {
+  const color = disabled ? "rgb(var(--color-ink-muted))" : "rgb(var(--color-on-screen))";
+  const mirror = direction === "redo" ? "translate(24 0) scale(-1 1)" : undefined;
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+      <G transform={mirror}>
+        <Path d="M20 15 A8 8 0 0 0 4 15" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+        <Path d="M4 15 L5 17 M5 17 L10 11 M5 17 L12 17" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      </G>
+    </Svg>
+  );
+}
+
+export const UndoIcon = ({ disabled = false }: { disabled?: boolean }) => <HistoryArrow direction="undo" disabled={disabled} />;
+export const RedoIcon = ({ disabled = false }: { disabled?: boolean }) => <HistoryArrow direction="redo" disabled={disabled} />;

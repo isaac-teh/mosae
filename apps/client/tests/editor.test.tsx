@@ -3,15 +3,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 
-const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", repository: "fixture", request: undefined as string | undefined }, back: vi.fn() }));
+const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", planId: undefined as string | undefined, repository: "fixture", request: undefined as string | undefined }, back: vi.fn() }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ back: boundary.back }) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: boundary.repository }) }));
 vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: () => React.createElement("div", { "data-testid": "preview" }) }));
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
-vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circle: () => null }));
+vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circle: () => null, G: () => null }));
 vi.mock("react-native", () => {
-  const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, ...props }: any) =>
-    React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
+  const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, accessibilityState, ...props }: any) =>
+    React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), ...(accessibilityState?.selected !== undefined ? { "aria-pressed": String(accessibilityState.selected) } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
   return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: element("img"), Share: { share: vi.fn() }, Linking: { openURL: vi.fn() }, useWindowDimensions: () => ({ width: 390, height: 844 }) };
 });
 
@@ -30,6 +30,8 @@ function repository() {
   return {
     getFilmTimeline: vi.fn(async () => ({ timeline: firstCut, sources: { "shot-a": "a.jpg", "shot-b": "b.jpg", "shot-c": "c.jpg" } })),
     getEdits: vi.fn(async () => ({ revision: 0, ops: [], updatedAt: null })),
+    getPlan: vi.fn(async (planId: string) => ({ planId, moments: [], leftOut: [] })),
+    getDirectionOptions: vi.fn(async () => ({ soundtracks: [{ id: "lyria-playful", name: "Sandcastle Days", description: "Upbeat" }] })),
     interpretEdit: vi.fn(async () => ({ reply: "Move the last photo earlier?", ops: [{ op: "move" as const, clipId: "c", toIndex: 0 }] })),
     saveEdits: vi.fn(async (_projectId: string, _generationId: string, revision: number, ops: unknown[]) => ({ revision, ops, updatedAt: 1 })),
     renderRevision: vi.fn(async () => ({ renderId: "render-1" })),
@@ -45,11 +47,13 @@ function Harness() {
     <span data-testid="ops">{JSON.stringify(editor.ops)}</span>
     <span data-testid="state">{editor.save.state}</span>
     <span data-testid="download-url">{editor.downloadUrl}</span>
+    <span role="alert">{editor.editError}</span>
     <SaveState save={editor.save} onReload={() => void editor.reloadAfterConflict()} />
     <button aria-label="Move c first" onClick={() => editor.apply({ op: "move", clipId: "c", toIndex: 0 })}>Move c first</button>
     <button aria-label="Move c second" onClick={() => editor.apply({ op: "move", clipId: "c", toIndex: 1 })}>Move c second</button>
     <button aria-label="Move b first" onClick={() => editor.apply({ op: "move", clipId: "b", toIndex: 0 })}>Move b first</button>
     <button aria-label="Apply two edits" onClick={() => editor.applyMany([{ op: "move", clipId: "c", toIndex: 0 }, { op: "move", clipId: "b", toIndex: 0 }])}>Apply two edits</button>
+    <button aria-label="Apply rejected edit" onClick={() => editor.apply({ op: "remove", clipId: "missing" })}>Apply rejected edit</button>
     <button aria-label="Undo" onClick={editor.undo}>Undo</button>
     <button aria-label="Redo" onClick={editor.redo}>Redo</button>
     <button aria-label="Reload" onClick={() => void editor.reloadAfterConflict()}>Reload</button>
@@ -65,7 +69,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   boundary.repository = repository();
-  boundary.params = { projectId: "p1", generationId: "g1", repository: "fixture", request: undefined };
+  boundary.params = { projectId: "p1", generationId: "g1", planId: undefined, repository: "fixture", request: undefined };
   boundary.back.mockReset();
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
@@ -105,6 +109,36 @@ describe("film editor", () => {
     expect(host.querySelector('[aria-label="Share rendered film"]')).not.toBeNull();
   });
 
+  it("visibly applies a two second photo length and autosaves it", async () => {
+    await render(<EditorScreen />);
+    const clip = host.querySelector('[aria-label="Select clip a"]') as HTMLButtonElement;
+    const widthBefore = Number.parseFloat(clip.style.width);
+    await click("Select clip a");
+    await click("Trim");
+    await click("Photo duration 2 seconds");
+    expect(host.textContent).toContain("0:00 / 0:08");
+    expect(host.querySelector('[aria-label="Photo duration 2 seconds"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(Number.parseFloat(clip.style.width)).toBeLessThan(widthBefore);
+    await advance(1500);
+    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "setPhotoDuration", clipId: "a", sec: 2 }]);
+  });
+
+  it("shows the soundtrack catalog name and pacing label instead of its id", async () => {
+    boundary.params = { ...boundary.params, planId: "proposal-1" };
+    boundary.repository.getPlan.mockRejectedValue(new Error("proposal is unavailable"));
+    boundary.repository.getFilmTimeline.mockResolvedValue({
+      timeline: {
+        ...firstCut,
+        audioClips: [{ id: "music", source: { kind: "soundtrack", soundtrackId: "lyria-playful", sourceInSec: 0, sourceOutSec: 9 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0.5, fadeOutSec: 0.5 }],
+      },
+      sources: { "shot-a": "a.jpg", "shot-b": "b.jpg", "shot-c": "c.jpg" },
+    });
+    await render(<EditorScreen />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain("Sandcastle Days · paced to the film");
+    expect(host.textContent).not.toContain("lyria-playful");
+  });
+
   it("moves clips immediately and supports undo and redo", async () => {
     await render(<Harness />);
     await click("Move c first");
@@ -121,6 +155,13 @@ describe("film editor", () => {
     expect(host.querySelector('[data-testid="order"]')?.textContent).toBe("b,c,a");
     await click("Undo");
     expect(host.querySelector('[data-testid="order"]')?.textContent).toBe("a,b,c");
+  });
+
+  it("shows a message when applyEdits rejects an operation", async () => {
+    await render(<Harness />);
+    await click("Apply rejected edit");
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("That change couldn’t be applied. Try another edit.");
+    expect(host.querySelector('[data-testid="ops"]')?.textContent).toBe("[]");
   });
 
   it("autosaves merged operations once after 1.5 seconds", async () => {
