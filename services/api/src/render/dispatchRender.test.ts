@@ -66,6 +66,17 @@ function seedRevision(db: FakeFirestore, revision: number, sec: number) {
   db.docs.set(revisionPath(revision), { revision, ops, updatedAt: 1, status: "rendering" });
 }
 
+function seedSoundtrackRevision(db: FakeFirestore, revision: number, soundtrackId: string) {
+  const ops = [{ op: "setSoundtrack", soundtrackId }];
+  db.docs.set(editPath, { revision, ops, updatedAt: 1, renderRevision: revision, status: "rendering" });
+  db.docs.set(revisionPath(revision), { revision, ops, updatedAt: 1, status: "rendering" });
+  const generation = db.docs.get("projects/p1/generations/g1")!;
+  db.docs.set("projects/p1/generations/g1", {
+    ...generation,
+    timeline: { ...TIMELINE, audioClips: [{ id: "music", role: "music", source: { kind: "soundtrack", soundtrackId: "lyria-tender", sourceInSec: 0, sourceOutSec: 4 }, startSec: 0, gainDb: -12, fadeInSec: 0, fadeOutSec: 0 }] },
+  });
+}
+
 function stream(...events: RenderEvent[]) {
   return async function* (_url: string, _body: unknown): AsyncIterable<RenderEvent> {
     void _url;
@@ -101,6 +112,22 @@ describe("createRender", () => {
     expect(body.outputFile).toBe("g1-edit-3.mp4");
     expect(db.docs.get(revisionPath(3))).toMatchObject({ status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" });
     expect(db.docs.get(editPath)).toMatchObject({ renderRevision: 3, status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" });
+  });
+
+  it("renders an edited soundtrack from the selected library id", async () => {
+    const db = seed("saved");
+    seedSoundtrackRevision(db, 8, "lyria-playful");
+    const { render, post } = build(db, [{ done: true, outputPath: "/tmp/edit8.mp4", durationInFrames: 120 }], {
+      sources: {
+        loadAsset: async () => ({ storagePath: "uploads/owner/p1/s/a/original.jpg", derivatives: { thumbPath: "t.jpg" } }),
+        loadSoundtrack: async (id: string) => `library/music/${id}.mp3`,
+      },
+    });
+
+    expect(await render({ projectId: "p1", generationId: "g1", revision: 8 })).toBe("rendered");
+    const body = post.mock.calls[0][1] as { timeline: Timeline; sources: Record<string, string> };
+    expect(body.timeline.audioClips[0]?.source).toMatchObject({ kind: "soundtrack", soundtrackId: "lyria-playful" });
+    expect(body.sources["lyria-playful"]).toBe("library/music/lyria-playful.mp3");
   });
 
   it("records an older completion without replacing a newer render request", async () => {

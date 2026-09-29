@@ -190,6 +190,10 @@ app.use(
     loadSource,
     storageBucket: config.storageBucket,
     loadSoundtrack: async (soundtrackId) => soundtrackPath(musicLibrary, soundtrackId),
+    loadSoundtrackLibrary: async () => musicLibrary.flatMap((track) => {
+      const path = soundtrackPath(musicLibrary, track.id);
+      return path ? [{ id: track.id, path }] : [];
+    }),
     signReadUrl: (path, expiresAt) => firebaseThumbnailUrlStore(renderBucket()).signedReadUrl(path, expiresAt),
     dispatch: () => dispatchDue(adminDb, queue, Date.now()),
   }),

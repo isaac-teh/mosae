@@ -32,6 +32,8 @@ export function generationsRouter(deps: {
   signReadUrl?: (path: string, expiresAt: number) => Promise<string>;
   /** Resolve a selected library track to its object path. */
   loadSoundtrack?: (soundtrackId: string) => Promise<string | null>;
+  /** Resolve every selectable soundtrack so the editor can switch tracks without reloading. */
+  loadSoundtrackLibrary?: () => Promise<{ id: string; path: string }[]>;
   /** Drains the outbox after a task is written; the dispatcher does it in production. */
   dispatch?: () => Promise<unknown>;
 }): Router {
@@ -164,6 +166,7 @@ export function generationsRouter(deps: {
             loadAsset: resolve,
             ...(deps.loadSoundtrack ? { loadSoundtrack: deps.loadSoundtrack } : {}),
           }, projectId, "preview");
+          for (const track of await deps.loadSoundtrackLibrary?.() ?? []) paths[track.id] = track.path;
           const signReadUrl = deps.signReadUrl;
           if (!signReadUrl) throw new Error("preview URL signer is not configured");
           sources = Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([id, objectPath]) => [

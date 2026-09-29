@@ -122,4 +122,16 @@ describe("DevTaskQueue", () => {
     await flush();
     expect(render).toHaveBeenCalledWith({ projectId: "p", generationId: "g" });
   });
+
+  it("passes the requested edit revision through to the local renderer", async () => {
+    const render = vi.fn().mockResolvedValue("rendered");
+    const queue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), render });
+    await queue.enqueue({
+      name: "p_generation_g_edit-8_render_1",
+      path: "/tasks/render",
+      body: { projectId: "p", subjectKind: "generation", subjectId: "g", generation: "edit-8", workKey: "p:generation:g:edit-8:render:1" },
+    });
+    await flush();
+    expect(render).toHaveBeenCalledWith({ projectId: "p", generationId: "g", revision: 8 });
+  });
 });
