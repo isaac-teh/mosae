@@ -38,8 +38,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // reach anything. Locally it defaults to the render service's own port.
     renderServiceUrl: production ? required(env, "RENDER_SERVICE_URL") : (env.RENDER_SERVICE_URL ?? "http://127.0.0.1:8081"),
     serviceUrl: required(env, "SERVICE_URL"),
-    // Cloud Run gives a service two URLs, and Eventarc signs its token for the
-    // project-number one, so accept any listed in SERVICE_AUDIENCES as well.
+    // Eventarc signs for the full handler URL; accept every configured Cloud
+    // Run URL form listed in SERVICE_AUDIENCES as well.
     serviceAudiences: [required(env, "SERVICE_URL"), ...(env.SERVICE_AUDIENCES ?? "").split(",").map((s) => s.trim()).filter(Boolean)],
     invokerEmails: invokers.split(",").map((s) => s.trim()).filter(Boolean),
     allowedOrigins,

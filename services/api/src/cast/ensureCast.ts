@@ -11,6 +11,21 @@ import { castSummary } from "./castSummary.js";
 import { labelledIdentity, labelsCover, type LabelFile } from "./labelledIdentity.js";
 import type { Cast, FaceRef, Interaction } from "./types.js";
 
+export async function loadCastLabels(photoHashes: string[], fixtureDirectory = fileURLToPath(new URL("../../fixtures/cast/", import.meta.url))): Promise<LabelFile | undefined> {
+  let files: string[];
+  try {
+    files = (await readdir(fixtureDirectory)).filter((file) => file.endsWith(".json")).sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+  for (const file of files) {
+    const candidate = JSON.parse(await readFile(resolve(fixtureDirectory, file), "utf8")) as LabelFile;
+    if (labelsCover(candidate, photoHashes)) return candidate;
+  }
+  return undefined;
+}
+
 export async function ensureCast(
   db: Firestore,
   projectId: string,
@@ -57,12 +72,7 @@ export async function ensureCast(
 
   let labels = opts.labels;
   if (!labels) {
-    const fixtureDirectory = fileURLToPath(new URL("../../fixtures/cast/", import.meta.url));
-    const files = (await readdir(fixtureDirectory)).filter((file) => file.endsWith(".json")).sort();
-    for (const file of files) {
-      const candidate = JSON.parse(await readFile(resolve(fixtureDirectory, file), "utf8")) as LabelFile;
-      if (labelsCover(candidate, [...photoHashes.values()])) { labels = candidate; break; }
-    }
+    labels = await loadCastLabels([...photoHashes.values()]);
   }
   const resolver = labels ? labelledIdentity(labels) : null;
   const identities = resolver?.resolve(faces) ?? new Map<string, string>();
