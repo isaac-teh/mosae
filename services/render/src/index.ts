@@ -2,11 +2,12 @@ import express from "express";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { createBundleOnce } from "./renderTimeline.js";
-import { renderRoute } from "./renderRoute.js";
+import { renderRoute, type RenderCallbackPayload } from "./renderRoute.js";
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { loadConfig } from "./config.js";
 import { requireServiceCaller } from "./auth/requireServiceCaller.js";
+import { GoogleAuth } from "google-auth-library";
 
 const config = loadConfig();
 // The API expects render on 8081 (`services/api/src/config.ts:37`), not the
@@ -33,12 +34,27 @@ const renderMiddleware = config.serviceCaller
   // Local development runs without service identity tokens.
   : (_req: express.Request, _res: express.Response, next: express.NextFunction) => next();
 
+const reportToApi = config.apiServiceUrl
+  ? async (event: RenderCallbackPayload): Promise<void> => {
+      const audience = config.apiServiceUrl!;
+      const client = await new GoogleAuth().getIdTokenClient(audience);
+      const token = await client.idTokenProvider.fetchIdToken(audience);
+      const response = await fetch(`${audience}/internal/render-callback`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify(event),
+      });
+      if (!response.ok) throw new Error(`API render callback failed with ${response.status}`);
+    }
+  : undefined;
+
 app.post("/tasks/render", renderMiddleware, renderRoute({
   bundle: bundleOnce,
   selectComposition: (args) => selectComposition(args as never) as never,
   renderMedia: (args) => renderMedia(args as never) as never,
   outputDir: config.outputDir,
   mediaBaseUrl: `http://127.0.0.1:${port}`,
+  ...(reportToApi ? { callback: reportToApi } : {}),
   upload: async (uploadUrl, filePath) => {
     const body = await readFile(filePath);
     const response = await fetch(uploadUrl, { method: "PUT", headers: { "content-type": "video/mp4" }, body });

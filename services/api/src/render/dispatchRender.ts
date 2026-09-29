@@ -9,11 +9,24 @@ export type RenderTask = {
   projectId: string;
   generationId: string;
   revision?: number;
+  workKey?: string;
   /** Set when retries are exhausted: settle the generation or edit revision. */
   giveUp?: string;
 };
 
-export type RenderTaskResult = "rendered" | "failed" | "skipped";
+export type RenderTaskResult = "rendered" | "enqueued" | "failed" | "skipped";
+
+export type RenderWorkerTask = {
+  name: string;
+  path: "/tasks/render";
+  body: {
+    timeline: Generation["timeline"];
+    sources: Record<string, string>;
+    outputFile: string;
+    uploadUrl?: string;
+    job: { projectId: string; generationId: string; userId: string; outputPath: string; revision?: number };
+  };
+};
 
 /** One line of the render service's newline-delimited response. */
 export type RenderEvent =
@@ -42,6 +55,8 @@ export type RenderConfig = {
    * run can still `/download` a file the emulator holds.
    */
   storeLocalOutput?: (localFile: string, storagePath: string) => Promise<void>;
+  /** Production handoff: queue the fully prepared request on mosae-render. */
+  enqueueRenderJob?: (task: RenderWorkerTask) => Promise<"enqueued" | "already_exists">;
   /** Test seam: POST the request and yield the service's events. */
   post?: (url: string, body: unknown) => AsyncIterable<RenderEvent>;
   now?: () => number;
@@ -156,6 +171,26 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
       return giveBack([`could not sign the render destination: ${error instanceof Error ? error.message : String(error)}`]);
     }
 
+    if (config.enqueueRenderJob) {
+      try {
+        const workKey = task.workKey ?? `${task.projectId}-${task.generationId}`;
+        await config.enqueueRenderJob({
+          name: `render-${workKey.replace(/[^A-Za-z0-9_-]/g, "_")}`,
+          path: "/tasks/render",
+          body: {
+            timeline: generation.timeline,
+            sources,
+            outputFile: `${task.generationId}.mp4`,
+            ...(uploadUrl ? { uploadUrl } : {}),
+            job: { projectId: task.projectId, generationId: task.generationId, userId, outputPath },
+          },
+        });
+        return "enqueued";
+      } catch (error) {
+        return giveBack([`could not enqueue render: ${error instanceof Error ? error.message : String(error)}`]);
+      }
+    }
+
     const progress = throttleProgress(
       (value) => setRenderProgress(db, { ...identity, progress: value }),
       { now: config.now },
@@ -255,6 +290,26 @@ async function renderEditRevision(
     uploadUrl = await config.signUpload?.(outputPath);
   } catch (error) {
     return fail(`could not sign the render destination: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (config.enqueueRenderJob) {
+    try {
+      const workKey = task.workKey ?? `${task.projectId}-${task.generationId}-edit-${revision}`;
+      await config.enqueueRenderJob({
+        name: `render-${workKey.replace(/[^A-Za-z0-9_-]/g, "_")}`,
+        path: "/tasks/render",
+        body: {
+          timeline: applied.timeline,
+          sources,
+          outputFile: `${task.generationId}-edit-${revision}.mp4`,
+          ...(uploadUrl ? { uploadUrl } : {}),
+          job: { projectId: task.projectId, generationId: task.generationId, userId, outputPath, revision },
+        },
+      });
+      return "enqueued";
+    } catch (error) {
+      return fail(`could not enqueue render: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   let done: Extract<RenderEvent, { done: true }> | undefined;

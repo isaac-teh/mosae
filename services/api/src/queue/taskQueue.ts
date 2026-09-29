@@ -34,13 +34,16 @@ export class InMemoryTaskQueue implements TaskQueue {
 const ALREADY_EXISTS = 6;
 
 export class CloudTasksQueue implements TaskQueue {
-  private client = new CloudTasksClient();
-
   constructor(
     private config: { project: string; location: string; queue: string; serviceUrl: string; invokerServiceAccount: string },
+    private client: Pick<CloudTasksClient, "queuePath" | "createTask"> = new CloudTasksClient(),
   ) {}
 
   async enqueue(task: QueuedTask): Promise<"enqueued" | "already_exists"> {
+    return this.enqueuePayload(task);
+  }
+
+  async enqueuePayload(task: { name: string; path: string; body: Record<string, unknown> }): Promise<"enqueued" | "already_exists"> {
     const parent = this.client.queuePath(this.config.project, this.config.location, this.config.queue);
     try {
       await this.client.createTask({

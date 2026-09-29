@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
-import { renderRoute } from "./renderRoute.js";
+import { executeQueuedRender, renderRoute, type RenderCallbackPayload } from "./renderRoute.js";
 import { createBundleOnce } from "./renderTimeline.js";
 import { fixtureSources, fixtureTimeline } from "@mosae/video/fixture";
 
@@ -25,6 +25,78 @@ function app(overrides: Record<string, unknown> = {}) {
 }
 
 const body = { timeline: fixtureTimeline, sources: fixtureSources, outputFile: "out.mp4" };
+
+describe("executeQueuedRender", () => {
+  it("reports progress and completion without calling back through the API request path", async () => {
+    const callback = vi.fn(async (_event: RenderCallbackPayload) => {});
+    const renderMedia = vi.fn(async (args: Record<string, unknown>) => {
+      (args.onProgress as ((value: { progress: number }) => void) | undefined)?.({ progress: 0.5 });
+    });
+    const result = await executeQueuedRender({
+      ...body,
+      job: { projectId: "p1", generationId: "g1", userId: "owner", outputPath: "renders/owner/p1/g1.mp4" },
+    }, {
+      bundle: vi.fn().mockResolvedValue("bundle"),
+      selectComposition: vi.fn().mockResolvedValue({ durationInFrames: 180 }),
+      renderMedia,
+      outputDir: "/tmp/renders",
+      mediaBaseUrl: "https://render.example",
+      callback,
+    }, 0);
+
+    expect(result).toEqual({ kind: "complete" });
+    expect(callback.mock.calls.map(([event]) => event)).toEqual([
+      { kind: "progress", projectId: "p1", generationId: "g1", progress: 0.5 },
+      { kind: "complete", projectId: "p1", generationId: "g1", outputPath: "renders/owner/p1/g1.mp4" },
+    ]);
+  });
+
+  it("retries transient failures and reports a terminal failure on the final attempt", async () => {
+    const callback = vi.fn(async (_event: RenderCallbackPayload) => {});
+    const error = new Error("fetch https://storage.example/photo.jpg?signature=secret failed");
+    const deps = {
+      bundle: vi.fn().mockResolvedValue("bundle"),
+      selectComposition: vi.fn().mockResolvedValue({ durationInFrames: 180 }),
+      renderMedia: vi.fn().mockRejectedValue(error),
+      outputDir: "/tmp/renders",
+      mediaBaseUrl: "https://render.example",
+      callback,
+    };
+    const requestBody = { ...body, job: { projectId: "p1", generationId: "g1", userId: "owner", outputPath: "renders/owner/p1/g1.mp4" } };
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(executeQueuedRender(requestBody, deps, 0)).resolves.toMatchObject({ kind: "retry", reason: "Error: fetch https://storage.example/photo.jpg failed" });
+    expect(callback).not.toHaveBeenCalled();
+    await expect(executeQueuedRender(requestBody, deps, 2)).resolves.toEqual({ kind: "complete" });
+    expect(callback).toHaveBeenCalledWith({ kind: "failed", projectId: "p1", generationId: "g1", reason: "Error: fetch https://storage.example/photo.jpg failed" });
+    log.mockRestore();
+  });
+
+  it("continues to completion when a progress callback fails", async () => {
+    const callback = vi.fn()
+      .mockRejectedValueOnce(new Error("temporarily unavailable"))
+      .mockResolvedValue(undefined);
+    const renderMedia = vi.fn(async (args: Record<string, unknown>) => {
+      (args.onProgress as ((value: { progress: number }) => void) | undefined)?.({ progress: 0.5 });
+    });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(executeQueuedRender({
+      ...body,
+      job: { projectId: "p1", generationId: "g1", userId: "owner", outputPath: "renders/owner/p1/g1.mp4" },
+    }, {
+      bundle: vi.fn().mockResolvedValue("bundle"),
+      selectComposition: vi.fn().mockResolvedValue({ durationInFrames: 180 }),
+      renderMedia,
+      outputDir: "/tmp/renders",
+      mediaBaseUrl: "https://render.example",
+      callback,
+    }, 0)).resolves.toEqual({ kind: "complete" });
+
+    expect(callback).toHaveBeenNthCalledWith(2, { kind: "complete", projectId: "p1", generationId: "g1", outputPath: "renders/owner/p1/g1.mp4" });
+    log.mockRestore();
+  });
+});
 
 /** Parse the newline-delimited response the route streams. */
 function lines(text: string): Array<Record<string, unknown>> {

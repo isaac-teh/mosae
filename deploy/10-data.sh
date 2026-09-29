@@ -63,3 +63,8 @@ done
 for photo in services/api/fixtures/demo/trip1-v2/photos/*.jpg; do
   run gcloud storage cp "$photo" "gs://$BUCKET/library/demo/trip1-v2/$(basename "$photo")" --project "$PROJECT_ID"
 done
+for variant in render thumb; do
+  for photo in "services/api/fixtures/demo/trip1-v2/photos/variants/$variant"/*.jpg; do
+    run gcloud storage cp "$photo" "gs://$BUCKET/library/demo/trip1-v2/variants/$variant/$(basename "$photo")" --project "$PROJECT_ID"
+  done
+done

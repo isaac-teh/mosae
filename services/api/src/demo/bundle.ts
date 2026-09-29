@@ -7,6 +7,7 @@ import type { Cast } from "../cast/types.js";
 
 export type DemoPhoto = {
   fileName: string;
+  sizeBytes: number;
   sourceAssetId: string;
   sourceShotId: string;
   sourceGeneration: string;

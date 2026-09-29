@@ -232,14 +232,14 @@ describe("internal routes", () => {
     const render = vi.fn().mockResolvedValue("rendered");
     const res = await request(await listeningServer(buildApp({ render }))).post("/tasks/render").send(renderTask);
     expect(res.status).toBe(204);
-    expect(render).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1" });
+    expect(render).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1", revision: undefined, workKey: "k" });
   });
 
   it("delivers an edit outbox task with its revision", async () => {
     const render = vi.fn().mockResolvedValue("rendered");
     const res = await request(await listeningServer(buildApp({ render }))).post("/tasks/render").send({ ...renderTask, generation: "edit-3" });
     expect(res.status).toBe(204);
-    expect(render).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1", revision: 3 });
+    expect(render).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1", revision: 3, workKey: "k" });
   });
 
   it("rejects a malformed render task with non-generation subjectKind", async () => {
@@ -270,6 +270,6 @@ describe("internal routes", () => {
     const render = vi.fn().mockResolvedValue("failed");
     const res = await request(await listeningServer(buildApp({ render }))).post("/tasks/render").set("x-cloudtasks-taskretrycount", "3").send(renderTask);
     expect(res.status).toBe(204);
-    expect(render).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1", giveUp: "exceeded 3 render attempts" });
+    expect(render).toHaveBeenCalledWith({ projectId: "p1", generationId: "g1", revision: undefined, workKey: "k", giveUp: "exceeded 3 render attempts" });
   });
 });

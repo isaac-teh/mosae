@@ -77,8 +77,12 @@ export async function resolveSources(
           ? asset.derivatives?.thumbPath || asset.storagePath
           : asset.storagePath;
     } else {
-      // Render mode: use original storage path
-      sources[id] = asset.storagePath;
+      // Photo originals may be HEIC, CMYK, or far larger than the renderer
+      // needs. Ingest normalizes them to a bounded JPEG render derivative.
+      // Videos still render from their original container.
+      sources[id] = kind === "photo"
+        ? asset.derivatives?.renderPath || asset.storagePath
+        : asset.storagePath;
     }
   }
 

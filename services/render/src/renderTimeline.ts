@@ -11,6 +11,8 @@ export type RenderRequest = {
    * the destination path. Omitted for a local render, which stays on disk.
    */
   uploadUrl?: string;
+  /** Present for Cloud Tasks jobs that report status back to the API. */
+  job?: { projectId: string; generationId: string; userId: string; outputPath: string; revision?: number };
 };
 
 export type RenderDeps = {
@@ -94,6 +96,13 @@ export function parseRenderRequest(body: unknown): RenderRequest {
   resolveOutputPath("/unused", input.outputFile);
   const sources = input.sources;
   if (!sources || typeof sources !== "object") throw new Error("render request requires a sources map");
+  if (input.job !== undefined) {
+    const job = input.job as Partial<NonNullable<RenderRequest["job"]>> | null;
+    if (!job || ![job.projectId, job.generationId, job.userId, job.outputPath].every((value) => typeof value === "string" && value.length > 0)) {
+      throw new Error("render request job metadata is invalid");
+    }
+    if (job.revision !== undefined && (!Number.isSafeInteger(job.revision) || job.revision < 1)) throw new Error("render request job revision is invalid");
+  }
 
   let timeline: Timeline;
   try {
@@ -110,6 +119,7 @@ export function parseRenderRequest(body: unknown): RenderRequest {
     sources: sources as Record<string, string>,
     outputFile: input.outputFile,
     ...(input.uploadUrl ? { uploadUrl: input.uploadUrl } : {}),
+    ...(input.job ? { job: input.job as RenderRequest["job"] } : {}),
   };
 }
 

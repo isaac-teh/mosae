@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Img, OffthreadVideo, interpolate, random, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { CollageSpec, CollageSlot } from "./schema";
+import { redactImageSource } from "../imageDiagnostic";
 
 export type CollageProps = { spec: CollageSpec; sources?: Record<string, string> };
 const WOOD = ["radial-gradient(75% 55% at 32% 26%,rgba(255,238,205,.2),transparent 60%)", "radial-gradient(110% 85% at 50% 45%,transparent 35%,rgba(24,14,6,.42))", "repeating-linear-gradient(92deg,rgba(20,10,2,.05) 0 2px,transparent 4px 17px)", "linear-gradient(163deg,#96704a,#7d5a3a 45%,#5f422a)"].join(",");
@@ -50,7 +51,7 @@ const Cell: React.FC<{spec:CollageSpec;slot:CollageSlot;index:number;sources?:Re
   const photoPad=print?"3.5% 3.5% 15%":id==="film-negative"?"8% 8%":"2.2%";
   return <div style={{position:"absolute",boxSizing:"border-box",...placement(id,index,spec.slots.length,seed,width>height),zIndex:10+Math.floor(random(`${seed}:${index}:z`)*30),transform,opacity,filter:"drop-shadow(3px 8px 8px rgba(20,22,24,.34))"}}>
     <div style={{position:"absolute",inset:0,background:frameColor,padding:photoPad,boxSizing:"border-box",overflow:"hidden",border:id==="film-negative"?"2px solid #d7ca9f":"1px solid rgba(65,54,40,.12)",boxShadow:print?"2px 4px 8px rgba(21,16,12,.26), 9px 18px 25px rgba(18,12,7,.2)":"0 5px 18px rgba(16,22,24,.2)",clipPath:mask}}>
-      {src?(slot.kind==="video"?<OffthreadVideo src={src} muted style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:slot.crop?`${slot.crop.x*100}% ${slot.crop.y*100}%`:"center",display:"block"}}/>:<Img src={src} style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:slot.crop?`${slot.crop.x*100}% ${slot.crop.y*100}%`:"center",display:"block"}}/>):<div style={{height:"100%",background:"linear-gradient(145deg,#a5b8b1,#c97756 52%,#304858)"}} />}
+      {src?(slot.kind==="video"?<OffthreadVideo src={src} muted style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:slot.crop?`${slot.crop.x*100}% ${slot.crop.y*100}%`:"center",display:"block"}}/>:<Img src={src} onImageError={(error) => console.error("render_image_decode_failed", { source: redactImageSource(src), error: error.name })} style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:slot.crop?`${slot.crop.x*100}% ${slot.crop.y*100}%`:"center",display:"block"}}/>):<div style={{height:"100%",background:"linear-gradient(145deg,#a5b8b1,#c97756 52%,#304858)"}} />}
       {id==="film-negative"&&<div style={{position:"absolute",inset:"0 0 auto",height:"6%",background:"repeating-linear-gradient(90deg,#e9debd 0 8px,transparent 8px 16px)"}}/>}
     </div>
     {spec.motionId==="tape-slap"&&(index===0||index%2===0)&&<div style={{position:"absolute",zIndex:2,width:"36%",height:"11%",top:"-4%",left:"32%",transform:`rotate(${rotate*.45}deg)`,background:"linear-gradient(100deg,rgba(214,191,143,.84),rgba(246,230,188,.88),rgba(205,180,131,.86))",boxShadow:"0 2px 4px rgba(30,20,10,.16)"}}/>}

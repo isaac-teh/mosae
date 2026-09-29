@@ -8,6 +8,7 @@ import type { PlanTask } from "../directing/wire.js";
 import { isValidId } from "../domain/ids.js";
 import type { ComposeTask } from "../compose/wire.js";
 import type { RenderTask } from "../render/dispatchRender.js";
+import { applyRenderCallback, type RenderCallbackEvent } from "../render/renderCallback.js";
 
 const MAX_COMPOSE_ATTEMPTS = 3;
 // A render is the most expensive thing in the pipeline: Chromium, several GB,
@@ -51,6 +52,36 @@ export function internalRouter(deps: {
     } catch (error) {
       console.error("outbox dispatch run failed", error);
       res.status(500).json({ error: "internal" });
+    }
+  });
+  router.post("/internal/render-callback", deps.auth, async (req, res) => {
+    const body = req.body ?? {};
+    const { kind, projectId, generationId } = body;
+    const revision = body.revision;
+    if (![projectId, generationId].every((value) => typeof value === "string" && isValidId(value))) {
+      res.status(400).json({ error: "invalid_callback" });
+      return;
+    }
+    if (revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1)) {
+      res.status(400).json({ error: "invalid_callback" });
+      return;
+    }
+    let event: RenderCallbackEvent;
+    if (kind === "progress" && typeof body.progress === "number" && Number.isFinite(body.progress) && body.progress >= 0 && body.progress <= 1) {
+      event = { kind, projectId, generationId, progress: body.progress, ...(revision === undefined ? {} : { revision }) };
+    } else if (kind === "complete" && typeof body.outputPath === "string") {
+      event = { kind, projectId, generationId, outputPath: body.outputPath, ...(revision === undefined ? {} : { revision }) };
+    } else if (kind === "failed" && typeof body.reason === "string" && body.reason.length > 0) {
+      event = { kind, projectId, generationId, reason: body.reason.slice(0, 500), ...(revision === undefined ? {} : { revision }) };
+    } else {
+      res.status(400).json({ error: "invalid_callback" });
+      return;
+    }
+    try {
+      res.json({ result: await applyRenderCallback(deps.db, event) });
+    } catch (error) {
+      console.error("render callback failed", error);
+      res.status(500).json({ error: "render_callback_failed" });
     }
   });
   router.post("/tasks/ingest", deps.auth, async (req, res) => {
@@ -164,12 +195,12 @@ export function internalRouter(deps: {
       if (!deps.render) throw new Error("render_not_configured");
 
       if (attempt >= MAX_RENDER_ATTEMPTS) {
-        await deps.render({ projectId, generationId: subjectId, revision, giveUp: `exceeded ${MAX_RENDER_ATTEMPTS} render attempts` });
+        await deps.render({ projectId, generationId: subjectId, revision, workKey, giveUp: `exceeded ${MAX_RENDER_ATTEMPTS} render attempts` });
         res.sendStatus(204);
         return;
       }
 
-      const result = await deps.render({ projectId, generationId: subjectId, revision });
+      const result = await deps.render({ projectId, generationId: subjectId, revision, workKey });
       console.log("render", workKey, result);
       // A render that gave the film back is a settled outcome recorded on the
       // generation, not a delivery failure for Cloud Tasks to repeat.

@@ -3,6 +3,7 @@ import type { AudioClip, VideoClip } from "@mosae/contracts";
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { audioTrimFrames, gainToVolume, type TimelineProps } from "./timelineMetadata";
 import { Collage } from "./collage/Collage";
+import { redactImageSource } from "./imageDiagnostic";
 
 /**
  * Clips carry explicit output-relative start times, so they render as absolute
@@ -26,7 +27,7 @@ function ClipBody({ clip, sources }: { clip: VideoClip; sources: Record<string, 
       {clip.source.kind === "video" ? (
         <OffthreadVideo src={src} trimBefore={Math.round(clip.source.sourceInSec * fps)} style={style} />
       ) : (
-        <Img src={src} style={style} />
+        <Img src={src} style={style} onImageError={(error) => console.error("render_image_decode_failed", { source: redactImageSource(src), error: error.name })} />
       )}
     </AbsoluteFill>
   );
