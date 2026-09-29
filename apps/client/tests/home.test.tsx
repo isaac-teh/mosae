@@ -76,6 +76,8 @@ describe("Home", () => {
     expect(createButtons[0]?.className).toContain("rounded-md");
     expect(createButtons[0]?.parentElement?.className).toContain("bottom-0");
     expect(host.querySelector('[data-testid="home-mosaic"]')).toBeNull();
+    await act(async () => (host.querySelector('[data-film-grid="true"] button') as HTMLButtonElement).click());
+    expect(state.push).toHaveBeenCalledWith("/save-film?repository=api&projectId=p0&filmId=g0");
   });
 
   it("refreshes the film list when Home regains focus after a film is saved", async () => {

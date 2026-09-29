@@ -3,10 +3,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 
-const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", planId: undefined as string | undefined, repository: "fixture", request: undefined as string | undefined }, back: vi.fn() }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ back: boundary.back }) }));
+const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", planId: undefined as string | undefined, repository: "fixture", request: undefined as string | undefined }, back: vi.fn(), push: vi.fn() }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ back: boundary.back, push: boundary.push }) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: boundary.repository }) }));
-vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: () => React.createElement("div", { "data-testid": "preview" }) }));
+vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ playheadSec, pauseRequest }: any) => React.createElement("div", { "data-testid": "preview", "data-playhead-sec": playheadSec, "data-pause-request": pauseRequest }) }));
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
 vi.mock("react-native-svg", () => {
   const element = (tag: string) => ({ children, ...props }: any) => React.createElement(tag, props, children);
@@ -15,7 +15,8 @@ vi.mock("react-native-svg", () => {
 vi.mock("react-native", () => {
   const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, accessibilityState, ...props }: any) =>
     React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), ...(accessibilityState?.selected !== undefined ? { "aria-pressed": String(accessibilityState.selected) } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
-  return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }), Share: { share: vi.fn() }, Linking: { openURL: vi.fn() }, useWindowDimensions: () => ({ width: 390, height: 844 }) };
+  const ScrollView = ({ children, accessibilityLabel, onScrollBeginDrag, onScroll, ...props }: any) => React.createElement("div", { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), onDoubleClick: accessibilityLabel === "Unified timeline" ? () => { onScrollBeginDrag?.(); onScroll?.({ nativeEvent: { contentOffset: { x: 160 } } }); } : undefined }, children);
+  return { View: element("div"), ScrollView, Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }), Share: { share: vi.fn() }, Linking: { openURL: vi.fn() }, useWindowDimensions: () => ({ width: 390, height: 844 }) };
 });
 
 import EditorScreen from "../app/editor";
@@ -74,6 +75,7 @@ beforeEach(() => {
   boundary.repository = repository();
   boundary.params = { projectId: "p1", generationId: "g1", planId: undefined, repository: "fixture", request: undefined };
   boundary.back.mockReset();
+  boundary.push.mockReset();
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
 async function render(component: React.ReactNode) { await act(async () => root.render(component)); }
@@ -90,6 +92,14 @@ describe("film editor", () => {
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
     expect(host.textContent).toContain("Opening");
     expect(host.textContent).toContain("Edit film");
+  });
+
+  it("pauses playback and follows the centre playhead when a timeline drag begins", async () => {
+    await render(<EditorScreen />);
+    const timeline = host.querySelector('[aria-label="Unified timeline"]') as HTMLDivElement;
+    await act(async () => timeline.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-pause-request")).toBe("1");
+    expect(Number(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec"))).toBe(4);
   });
 
   it("renders prominent undo and redo arrows in 44px disabled header controls", async () => {
@@ -135,11 +145,21 @@ describe("film editor", () => {
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
   });
 
-  it("offers Download and Share after the latest render is ready", async () => {
+  it("opens the Saved screen when the render completes", async () => {
     await render(<EditorScreen />);
     await click("Save");
-    expect(host.querySelector('[aria-label="Download rendered film"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Share rendered film"]')).not.toBeNull();
+    expect(boundary.push).toHaveBeenCalledWith({ pathname: "/save-film", params: { filmId: "g1", projectId: "p1", repository: "api" } });
+  });
+
+  it("shows renderProgress while waiting for the saved film render", async () => {
+    let finish!: (value: { downloadKey: string }) => void;
+    await render(<EditorScreen />);
+    boundary.repository.getFilm = vi.fn(async () => ({ renderProgress: 0.45 }));
+    boundary.repository.saveFilm = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    await click("Save");
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain("Rendering… 45%");
+    await act(async () => finish({ downloadKey: "https://film.test/saved.mp4" }));
   });
 
   it("visibly applies a two second photo length and autosaves it", async () => {

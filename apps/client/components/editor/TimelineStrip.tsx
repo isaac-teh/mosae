@@ -65,7 +65,7 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedCli
 type TouchPoint = { pageX?: number; clientX?: number; locationX?: number };
 type PinchState = { distance: number; scale: number; timeAtCenter: number; centerX: number } | null;
 
-export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, soundtrackName = null, onSelect, onScrub, onSoundtrack = () => {} }: {
+export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onSoundtrack = () => {} }: {
   timeline: Timeline;
   sources: Record<string, string>;
   selectedClipId: string | null;
@@ -73,6 +73,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   soundtrackName?: string | null;
   onSelect: (clipId: string, startSec: number) => void;
   onScrub: (seconds: number) => void;
+  onScrubStart?: () => void;
   onSoundtrack?: () => void;
 }) {
   const [pixelsPerSecond, setPixelsPerSecond] = useState(DEFAULT_PIXELS_PER_SECOND);
@@ -111,6 +112,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   const touchX = (touch: TouchPoint, left: number) => touch.locationX ?? (touch.clientX !== undefined ? touch.clientX - left : touch.pageX !== undefined ? touch.pageX - left - (typeof window === "undefined" ? 0 : window.scrollX) : 0);
   const onTouchStart = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } } }) => {
     const touches = (event.nativeEvent ?? event).touches;
+    if (touches?.length === 1) onScrubStart();
     if (!touches || touches.length < 2 || !viewportWidth) return;
     const left = event.currentTarget?.getBoundingClientRect?.().left ?? 0;
     const first = touchX(touches[0], left);
@@ -139,7 +141,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
       <Pressable role="button" accessibilityLabel="Zoom in timeline" disabled={pixelsPerSecond >= MAX_PIXELS_PER_SECOND} onPress={() => zoom(4)} className="size-8 items-center justify-center rounded-full border border-on-screen-muted"><Text className="font-sans text-body text-on-screen">+</Text></Pressable>
     </View>
     <View className="relative overflow-hidden" onTouchStart={onTouchStart} onTouchMove={onTouchMove}>
-      <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={() => { isUserScrolling.current = true; }} onScrollEndDrag={() => { isUserScrolling.current = false; }} onMomentumScrollBegin={() => { isUserScrolling.current = true; }} onMomentumScrollEnd={() => { isUserScrolling.current = false; }} onScroll={onScroll} scrollEventThrottle={16} onTouchStart={onTouchStart} onTouchMove={onTouchMove} style={{ width: "100%" }}>
+      <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={() => { isUserScrolling.current = true; onScrubStart(); }} onScrollEndDrag={() => { isUserScrolling.current = false; }} onMomentumScrollBegin={() => { isUserScrolling.current = true; }} onMomentumScrollEnd={() => { isUserScrolling.current = false; }} onScroll={onScroll} scrollEventThrottle={16} onTouchStart={onTouchStart} onTouchMove={onTouchMove} style={{ width: "100%" }}>
         <TimelineRows timeline={timeline} sources={sources} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={onSelect} onSoundtrack={onSoundtrack} />
       </ScrollView>
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />

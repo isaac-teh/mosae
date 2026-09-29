@@ -36,6 +36,7 @@ export default function EditorScreen() {
   const selectEditorClip = editor.select;
   const [playhead, setPlayhead] = useState(0);
   const [seekRequest, setSeekRequest] = useState<{ seconds: number } | null>(null);
+  const [pauseRequest, setPauseRequest] = useState(0);
   const [tool, setTool] = useState<Tool>(params.request ? "Ask" : null);
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [directions, setDirections] = useState<DirectionOptions | null>(null);
@@ -46,6 +47,11 @@ export default function EditorScreen() {
     setPlayhead(target);
     setSeekRequest({ seconds: target });
   }, [editor.timeline?.durationSec]);
+  useEffect(() => {
+    if (editor.save.state === "ready" && editor.downloadUrl) {
+      router.push({ pathname: "/save-film", params: { filmId: params.generationId || "demo-film", projectId: params.projectId || "fixture", repository: "api" } } as never);
+    }
+  }, [editor.downloadUrl, editor.save.state, params.generationId, params.projectId, router]);
   const previewHeight = Math.max(280, Math.min(720, height - 440));
   const soundtrack = editor.timeline?.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   const soundtrackId = soundtrack?.source.kind === "soundtrack" ? soundtrack.source.soundtrackId : null;
@@ -123,14 +129,14 @@ export default function EditorScreen() {
       <Text className="font-sans-semibold text-[18px] text-on-screen">Edit film</Text>
       <View className="flex-row items-center gap-2"><EditorMenu onReset={(ops) => editor.reset(ops)} /><Pressable role="button" accessibilityLabel="Save" onPress={() => void editor.render()} className="min-h-11 min-w-11 items-end justify-center"><Text className="font-sans-medium text-[16px] text-on-screen">Save</Text></Pressable></View>
     </View>
-    <View className="min-h-[29px] justify-center px-5"><SaveState save={editor.save} onReload={() => void editor.reloadAfterConflict()} /></View>
+    <View className="min-h-[29px] justify-center px-5"><SaveState save={editor.save} renderProgress={editor.renderProgress} renderEtaMinutes={editor.renderEtaMinutes} onReload={() => void editor.reloadAfterConflict()} /></View>
     {editor.editError ? <Text accessibilityRole="alert" className="px-5 pb-2 font-sans text-caption text-on-screen">{editor.editError}</Text> : null}
     {editor.save.state === "ready" && editor.downloadUrl ? <View className="flex-row gap-2 px-5 pb-2"><Pressable role="button" accessibilityLabel="Download rendered film" onPress={() => void Linking.openURL(editor.downloadUrl!)} className="min-h-10 justify-center rounded-full bg-[#294655] px-4"><Text className="font-sans-medium text-caption text-on-screen">Download</Text></Pressable><Pressable role="button" accessibilityLabel="Share rendered film" onPress={() => void Share.share({ message: editor.downloadUrl! })} className="min-h-10 justify-center rounded-full border border-on-screen-muted px-4"><Text className="font-sans-medium text-caption text-on-screen">Share</Text></Pressable></View> : null}
     {editor.error ? <View className="flex-1 items-center justify-center px-6"><Text className="text-center font-sans text-body text-on-screen">{editor.error}</Text></View>
       : !editor.timeline ? <View className="flex-1 items-center justify-center"><Text className="font-sans text-body text-on-screen-muted">Opening your film…</Text></View>
       : <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4" showsVerticalScrollIndicator={false}>
         <View className="w-full overflow-hidden rounded-[14px] bg-tide-tile" style={{ height: previewHeight }}>
-          <EditorPreview timeline={editor.timeline} sources={editor.sources} onTimeChange={onTimeChange} seekRequest={seekRequest} />
+          <EditorPreview timeline={editor.timeline} sources={editor.sources} onTimeChange={onTimeChange} seekRequest={seekRequest} playheadSec={playhead} pauseRequest={pauseRequest} />
         </View>
         <View className="mt-4 flex-row items-center justify-between">
           <Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text>
@@ -140,7 +146,7 @@ export default function EditorScreen() {
           </View>
         </View>
         <TimelineStrip timeline={editor.timeline} sources={editor.sources} selectedClipId={editor.selectedClipId} playheadSec={playhead} soundtrackName={soundtrackName ? `${soundtrackName} · paced to the film` : null}
-          onSelect={onTimelineSelect} onScrub={seekTo} onSoundtrack={openSoundtrackPicker} />
+          onSelect={onTimelineSelect} onScrub={seekTo} onScrubStart={() => setPauseRequest((request) => request + 1)} onSoundtrack={openSoundtrackPicker} />
       </ScrollView>}
     <ToolBar onTool={(value) => openTool(value)} />
     {tool === "Swap" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={selectedClip.id} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} onApply={onApply} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}

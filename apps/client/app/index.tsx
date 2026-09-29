@@ -66,7 +66,7 @@ export default function Home() {
             </View>
             <View data-film-grid="true" className="flex-row flex-wrap justify-between gap-y-3">
               {films.map((film) => <View key={film.projectId + "/" + film.filmId} className="w-[48%]">
-                <FilmCard title={film.title} meta={film.month} status="Ready to watch" duration={film.duration} posterSource={film.posterUrl ? { uri: film.posterUrl } : undefined} badge={film.justSaved ? "Just saved" : undefined} onPress={() => router.push(("/review-film?repository=api&projectId=" + encodeURIComponent(film.projectId) + "&filmId=" + encodeURIComponent(film.filmId)) as Href)} />
+                <FilmCard title={film.title} meta={film.month} status="Ready to watch" duration={film.duration} posterSource={film.posterUrl ? { uri: film.posterUrl } : undefined} badge={film.justSaved ? "Just saved" : undefined} onPress={() => router.push(("/save-film?repository=api&projectId=" + encodeURIComponent(film.projectId) + "&filmId=" + encodeURIComponent(film.filmId)) as Href)} />
               </View>)}
             </View>
           </View>

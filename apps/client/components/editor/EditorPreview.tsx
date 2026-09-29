@@ -1,7 +1,7 @@
 import { Image, Text, View } from "react-native";
 import type { Timeline } from "@mosae/contracts";
 
-export function EditorPreview({ timeline, sources }: { timeline: Timeline; sources: Record<string, string>; onTimeChange?: (seconds: number) => void; seekRequest?: { seconds: number } | null }) {
+export function EditorPreview({ timeline, sources }: { timeline: Timeline; sources: Record<string, string>; onTimeChange?: (seconds: number) => void; seekRequest?: { seconds: number } | null; playheadSec?: number; pauseRequest?: number }) {
   const first = timeline.videoClips[0];
   const shotId = first && ("kind" in first ? first.spec.slots[0]?.shotId : first.source.shotId);
   const uri = shotId ? sources[shotId] : undefined;

@@ -26,6 +26,8 @@ export function useEditor(projectId: string, generationId: string, repository: S
   const [retryAttempt, setRetryAttempt] = useState(0);
   const [renderRequest, setRenderRequest] = useState<{ revision: number; requestId: number } | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [renderProgress, setRenderProgress] = useState<number | null>(null);
+  const [renderEtaMinutes, setRenderEtaMinutes] = useState<number | null>(null);
   const pendingSave = useRef<Promise<boolean> | null>(null);
   const renderRequestId = useRef(0);
   const revisionRef = useRef(0);
@@ -136,6 +138,8 @@ export function useEditor(projectId: string, generationId: string, repository: S
     if (!loaded || save.state === "conflict") return;
     const requestId = ++renderRequestId.current;
     setDownloadUrl(null);
+    setRenderProgress(null);
+    setRenderEtaMinutes(null);
     setRenderRequest(null);
     while (savedOpsKeyRef.current !== keyOf(opsRef.current)) {
       const saved = await persist(opsRef.current);
@@ -146,9 +150,30 @@ export function useEditor(projectId: string, generationId: string, repository: S
     setSave({ state: "rendering" });
     try {
       if (revision === 0) {
-        const result = await repository.saveFilm(generationId);
+        const startedAt = Date.now();
+        setRenderProgress(0);
+        const pollProgress = async () => {
+          try {
+            const film = await repository.getFilm(generationId);
+            const progress = Math.max(0, Math.min(1, film.renderProgress ?? 0));
+            setRenderProgress((current) => Math.max(current ?? 0, progress));
+            setRenderEtaMinutes(progress > 0 && progress < 1
+              ? Math.max(1, Math.ceil(((Date.now() - startedAt) * (1 - progress) / progress) / 60_000))
+              : null);
+          } catch { /* The save promise still reports render failures. */ }
+        };
+        const progressTimer = setInterval(() => { void pollProgress(); }, 1500);
+        void pollProgress();
+        let result: Awaited<ReturnType<typeof repository.saveFilm>>;
+        try {
+          result = await repository.saveFilm(generationId);
+        } finally {
+          clearInterval(progressTimer);
+        }
         if (requestId !== renderRequestId.current) return;
         setDownloadUrl(result.downloadKey);
+        setRenderProgress(1);
+        setRenderEtaMinutes(null);
         setSave({ state: "ready" });
         return;
       }
@@ -178,6 +203,6 @@ export function useEditor(projectId: string, generationId: string, repository: S
   return {
     timeline, firstCut, sources, unusedMedia, setSource, ops, selectedClipId, select: setSelectedClipId,
     apply, applyMany, undo, redo, reset, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
-    save, savedRevision, downloadUrl, reloadAfterConflict, render, loaded, error, editError,
+    save, savedRevision, downloadUrl, renderProgress, renderEtaMinutes, reloadAfterConflict, render, loaded, error, editError,
   };
 }
