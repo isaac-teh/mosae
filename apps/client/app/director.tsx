@@ -25,7 +25,7 @@ export default function DirectorScreen() {
   const params = useLocalSearchParams<{ projectId?: string }>();
   const projectId = params.projectId ?? "";
   const story = useStoryFlow();
-  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, momentState, pickerOpen, directionOptions, people } = useDirectorChat(projectId, story.repository, story.flow);
+  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, momentState, pickerOpen, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow);
   const router = useRouter();
   const [name, setName] = useState("");
   const [namingPerson, setNamingPerson] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export default function DirectorScreen() {
           const explanation = item.lengthSec <= 120
             ? `${item.momentCount} moments is more than ${minutes} minutes can hold. I'll keep ${focusLabel === "Whole family" ? "your family moments" : `${focusLabel}'s reactions`} and the strongest scenery, and tell you what I left out.`
             : `For ${minutes} minutes, I'll keep ${focusLabel === "Whole family" ? "your family moments" : `${focusLabel}'s reactions`} and the strongest scenery, and tell you what I left out.`;
-          return <View key={item.id} className="gap-4"><ChatMessage from="mosae" text={`For a ${projectSummary?.days ?? 1}-day trip I'd suggest this. ${directionOptions?.note ?? "Change anything that doesn't feel right."}`} /><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} focus={item.focus} focusOptions={focusOptions} onChange={actions.setDirection} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good. Shape it." disabled={saving || !directionOptions} onPress={() => void actions.shapeIt()} /></View>;
+          return <View key={item.id} className="gap-4"><ChatMessage from="mosae" text={`For a ${projectSummary?.days ?? 1}-day trip I'd suggest this. ${directionOptions?.note ?? "Change anything that doesn't feel right."}`} /><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={actions.setDirection} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good. Shape it." disabled={saving || !directionOptions} onPress={() => void actions.shapeIt()} /></View>;
         }
         if (item.kind === "film") return <View key={item.id} className="gap-4">
           <ChatMessage from="mosae" text="Here's your first cut. Tap to watch." />

@@ -16,8 +16,8 @@ async function newProject(userId = `u-${crypto.randomUUID()}`) {
   return createProject(adminDb, { userId, mode: "memory", now: Date.now() });
 }
 
-function makeSettings(overrides?: Partial<{ schemaVersion: 1; id: string; projectId: string; version: number; note: string; cadenceId: string; soundtrackId: string | null; durationId: string | null; aspect: "16:9" | "9:16"; captions: boolean }>): { schemaVersion: 1; id: string; projectId: string; version: number; note: string; cadenceId: string; soundtrackId: string | null; durationId: string | null; aspect: "16:9" | "9:16"; captions: boolean } {
-  return { schemaVersion: 1, id: "dir-1", projectId: "proj-1", version: 1, note: "", cadenceId: "tender", soundtrackId: null, durationId: "30s", aspect: "9:16" as const, captions: false, ...overrides };
+function makeSettings(overrides?: Partial<{ schemaVersion: 1; id: string; projectId: string; version: number; note: string; cadenceId: string; soundtrackId: string | null; durationId: string | null; aspect: "16:9" | "9:16"; captions: boolean; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful" }>): { schemaVersion: 1; id: string; projectId: string; version: number; note: string; cadenceId: string; soundtrackId: string | null; durationId: string | null; aspect: "16:9" | "9:16"; captions: boolean; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful" } {
+  return { schemaVersion: 1, id: "dir-1", projectId: "proj-1", version: 1, note: "", cadenceId: "tender", soundtrackId: null, durationId: "30s", aspect: "9:16" as const, captions: false, collageAmount: "few", motionFeel: "calm", ...overrides };
 }
 
 describe("generationStore (emulator)", () => {

@@ -15,6 +15,11 @@ const layouts = [
 ] as const;
 type LayoutId = typeof layouts[number]["id"];
 const getLayout = (id: LayoutId) => layouts.find((item) => item.id === id)!;
+export function focusRelayInputRange(index: number, count: number): [number, number, number] {
+  const start = Math.max(0, index / count - 0.16);
+  const middle = Math.min(1, index / count + 0.2);
+  return [start, middle >= 1 ? Math.max(start + 0.01, 0.88) : middle, 1];
+}
 const sourceFor = (slot: CollageSlot, sources?: Record<string,string>) => slot.src ?? (slot.shotId ? sources?.[slot.shotId] : undefined);
 const placement = (id: LayoutId, index: number, count: number, seed: string, wide: boolean): React.CSSProperties => {
   const layout = getLayout(id); const raw = layout.pos[index % layout.pos.length];
@@ -36,7 +41,7 @@ const Cell: React.FC<{spec:CollageSpec;slot:CollageSlot;index:number;sources?:Re
     case "print-drop": case "stack-deal": case "tape-slap": transform=`translateY(${(1-eased)*-height*.18}px) rotate(${rotate+(1-eased)*-9}deg) scale(${.88+eased*.12})`; opacity=interpolate(eased,[0,.24],[0,1],{extrapolateRight:"clamp"});break;
     case "page-turn": transform=`perspective(1000px) rotateY(${(1-eased)*-78}deg) rotate(${rotate}deg)`;opacity=interpolate(eased,[0,.18],[0,1],{extrapolateRight:"clamp"});break;
     case "crash-zoom": {const hit=interpolate(progress,[0,.16,.23,1],[.55,1.10,.98,1]);transform=`scale(${hit}) rotate(${rotate*(1-progress)}deg)`;break;}
-    case "focus-relay": {const focus=interpolate(progress,[Math.max(0,index/spec.slots.length-.16),Math.min(1,index/spec.slots.length+.2),1],[.91,1.15,1]);transform=`scale(${focus})`;break;}
+    case "focus-relay": {const focus=interpolate(progress,focusRelayInputRange(index,spec.slots.length),[.91,1.15,1]);transform=`scale(${focus})`;break;}
   }
   const src=sourceFor(slot,sources); const id=spec.layoutId as LayoutId;
   const print=id==="photo-table"||id==="postcard-stack"||id==="polaroid-garland"||id==="torn-paper";

@@ -105,6 +105,8 @@ export function directionOptionsRouter(deps: {
         recommendedDuration,
         recommendedCadence,
         cadenceReason,
+        collageAmount: "few",
+        motionFeel: "calm",
       });
     } catch (error) {
       console.error("direction-options route failed", error);

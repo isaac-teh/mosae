@@ -462,6 +462,7 @@ export function createApiStoryRepository(
         schemaVersion: 1, id: newId(), projectId, version: 1, note: direction.note,
         cadenceId: direction.cadenceId, soundtrackId: direction.soundtrackId, durationId: direction.durationId,
         aspect: "9:16", captions: false,
+        collageAmount: direction.collageAmount ?? "few", motionFeel: direction.motionFeel ?? "calm",
       };
       return { filmId: await postGeneration({ proposalId: planId, settings }) };
     },

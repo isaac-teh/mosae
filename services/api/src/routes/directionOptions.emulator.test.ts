@@ -102,6 +102,7 @@ describe("direction-options route", () => {
     // 12 photos × 3s = 36s → snapped down to "30s"
     expect(res.body.recommendedDuration).toBe("30s");
     expect(res.body.recommendedCadence).toBe("playful");
+    expect(res.body).toMatchObject({ collageAmount: "few", motionFeel: "calm" });
     expect(res.body.cadenceReason).toBe("The kids were laughing all day");
     expect(res.body.cadences).toHaveLength(5);
     // The library, with the track for the suggested cadence first.

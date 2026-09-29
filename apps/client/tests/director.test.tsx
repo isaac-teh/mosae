@@ -346,8 +346,10 @@ describe("Director chat", () => {
     expect(hasText("For 4 minutes, I'll keep")).toBe(true);
     await click("Lively");
     await click("Whole family");
+    await click("Lots");
+    await click("Playful");
     await click("Sounds good. Shape it.");
-    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ cadenceId: "playful", durationId: "4m", focus: "family", soundtrackId: "lyria-reflective" })));
+    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ cadenceId: "playful", durationId: "4m", focus: "family", soundtrackId: "lyria-reflective", collageAmount: "lots", motionFeel: "playful" })));
   });
 
   it("maps generation polling progress to the shaping checklist from zero through three", async () => {

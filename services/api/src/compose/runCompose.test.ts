@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { runCompose, applyUserOrder, type ComposeJob, type ComposeDeps } from "./runCompose.js";
+import { runCompose, applyUserOrder, collageAdjustedTargetSec, type ComposeJob, type ComposeDeps } from "./runCompose.js";
 import { safeParseTimeline } from "@mosae/contracts";
 
 describe("applyUserOrder", () => {
@@ -10,6 +10,14 @@ describe("applyUserOrder", () => {
     expect(applyUserOrder(clips, ["m3", "m1", "m2"], chapterOf).map((c) => c.itemId)).toEqual(["m1", "m2", "m3"]);
   });
   it("no order leaves clips unchanged", () => expect(applyUserOrder(clips, undefined, chapterOf)).toEqual(clips));
+});
+
+describe("collageAdjustedTargetSec", () => {
+  it("preserves the fitted film's relative duration tolerance when collages compress it", () => {
+    const target = collageAdjustedTargetSec(30, 28.5, 13);
+    expect(target).toBeCloseTo(30 * 13 / 28.5);
+    expect(Math.abs(13 - target)).toBeLessThanOrEqual(target * 0.1);
+  });
 });
 
 // --- Helpers to build minimal test fixtures ---
@@ -115,6 +123,25 @@ describe("runCompose — collages", () => {
     expect(result.timeline.schemaVersion).toBe(2);
     expect(result.timeline.videoClips.filter((clip) => "kind" in clip)).toHaveLength(1);
     expect(safeParseTimeline(result.timeline).ok).toBe(true);
+  });
+
+  it("passes a none collage setting through composition without adding collage clips", async () => {
+    const moments = Array.from({ length: 4 }, (_, index) => ({
+      id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const,
+      title: `Photo ${index}`, description: "", rationale: "",
+    }));
+    const proposal = makeProposal({
+      moments,
+      chapters: [{ id: "chapter-1", title: "The day", summary: "", momentIds: moments.map((moment) => moment.id) }],
+      constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+    });
+    const assets = new Map(moments.map((moment) => [moment.id, { kind: "photo" as const, eventId: "event", assetId: moment.id, localTime: "2026-05-03T09:00:00" }]));
+    const result = await runCompose(makeJob({ proposal, collageAmount: "none" }), makeDeps({
+      assets,
+      generateStructured: async () => ({ clips: moments.map((moment) => ({ candidateId: `${moment.id}#still@c0`, holdSec: 4, transition: "cut", audio: "mute" })), musicCues: [] }),
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.timeline.videoClips.filter((clip) => "kind" in clip)).toHaveLength(0);
   });
 });
 

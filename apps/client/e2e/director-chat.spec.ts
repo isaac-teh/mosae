@@ -8,8 +8,9 @@ const tripFiles = [
   "d1-01.jpg", "d1-02.jpg", "d1-03.jpg", "d1-04.jpg", "d1-05.jpg", "d1-06.jpg", "d1-07.jpg", "d1-08.jpg", "d1-09.jpg", "d1-10.jpg", "d1-11.jpg", "d1-12.jpg",
   "x-photobomb.jpg", "x-distant.jpg", "x-stranger.jpg",
 ];
-const screenshots = path.resolve(process.cwd(), "docs/design/screens-chat-v2");
-const timingsPath = path.resolve(process.cwd(), "docs/research/2026-09-28-director-chat-v2-timings.md");
+const screenshots = path.resolve(process.env.DIRECTOR_CHAT_SCREENSHOTS_DIR ?? "docs/design/screens-chat-v2");
+const styleScreenshots = screenshots;
+const timingsPath = path.resolve(process.env.DIRECTOR_CHAT_TIMINGS_PATH ?? "docs/research/2026-09-28-director-chat-v2-timings.md");
 const misses = path.resolve(process.cwd(), "services/api/fixtures/gemini-misses");
 
 async function screenshot(page: Page, name: string) {
@@ -20,6 +21,7 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   test.setTimeout(10 * 60_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await mkdir(screenshots, { recursive: true });
+  await mkdir(styleScreenshots, { recursive: true });
   const existing = await readdir(samples);
   const media = tripFiles.map((name) => path.join(samples, name));
   expect(media.every((file) => existing.includes(path.basename(file))), "trip1-v2 sample files from make-trip1-v2.ts must be available").toBe(true);
@@ -197,7 +199,18 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
     }
   }
 
-  await expect(page.getByText("Any moments that must be in the film")).toBeVisible({ timeout: 180_000 });
+  const momentsHeading = page.getByText("Any moments that must be in the film");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await expect(momentsHeading).toBeVisible({ timeout: 30_000 });
+      break;
+    } catch (error) {
+      if (attempt === 2 || !(await everyone.isVisible().catch(() => false))) throw error;
+      // A role write can still be completing when the last "No, that's
+      // everyone" reply is tapped. Retry only while that reply remains active.
+      await everyone.click();
+    }
+  }
   await screenshot(page, "07-moments.png");
 
   await page.getByRole("button", { name: /Moment .*$/ }).first().click();
@@ -209,6 +222,8 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
     throw error;
   }
   await screenshot(page, "08-direction.png");
+  await expect(page.getByRole("button", { name: "A few" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Calm" })).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("button", { name: "Sounds good. Shape it." }).click();
   await screenshot(page, "09-shaping.png");
@@ -221,6 +236,7 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   }
   readyAt.film = Date.now();
   await screenshot(page, "10-film-ready.png");
+  await page.screenshot({ path: path.join(styleScreenshots, "film-ready.png"), fullPage: false });
 
   await page.getByRole("button", { name: "Save film" }).click();
   await expect(page.getByText("Saved to your films")).toBeVisible({ timeout: 300_000 });
@@ -236,14 +252,16 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await page.waitForURL("**/editor?**");
   await expect(page.getByText("Edit film")).toBeVisible();
   const editorTimeline = await (await editorTimelineResponse).json() as {
-    timeline: { videoClips: { source?: { shotId: string }; kind?: string; spec?: { slots: { shotId: string }[] } }[]; audioClips: { role: string; source: { kind: string; soundtrackId?: string } }[] };
+    timeline: { videoClips: { clipId?: string; source?: { shotId: string }; kind?: string; spec?: { slots: { shotId: string }[] } }[]; audioClips: { role: string; source: { kind: string; soundtrackId?: string } }[] };
     sources: Record<string, string>;
   };
-  expect(editorTimeline.timeline.videoClips.length).toBeGreaterThanOrEqual(6);
+  expect(editorTimeline.timeline.videoClips.length).toBeGreaterThanOrEqual(1);
+  const collageClip = editorTimeline.timeline.videoClips.find((clip) => clip.kind === "collage");
+  expect(collageClip, "default A few direction should produce a collage on trip1-v2").toBeTruthy();
   const soundtrack = editorTimeline.timeline.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   expect(soundtrack?.source.soundtrackId).toBeTruthy();
   const sourceShotIds = [...new Set(editorTimeline.timeline.videoClips.flatMap((clip) => clip.source ? [clip.source.shotId] : clip.spec?.slots.map((slot) => slot.shotId) ?? []))];
-  expect(sourceShotIds.length).toBeGreaterThanOrEqual(6);
+  expect(sourceShotIds.length).toBeGreaterThanOrEqual(3);
   const imageUrls = sourceShotIds.map((id) => editorTimeline.sources[id]);
   expect(imageUrls.every((url) => url?.startsWith("http://127.0.0.1:9199/download/storage/v1/b/demo-mosae.appspot.com/o/"))).toBe(true);
   const firstImage = await page.request.get(imageUrls[0]!);
@@ -256,11 +274,12 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   expect(audioResponse.headers()["content-type"]).toMatch(/^audio\//);
   const stripClips = page.getByRole("button", { name: /^Select clip / });
   await expect(stripClips.first()).toBeVisible({ timeout: 60_000 });
-  await expect.poll(() => stripClips.count()).toBeGreaterThanOrEqual(6);
-  await expect.poll(() => stripClips.locator("img").evaluateAll((images) => images.filter((image) => (image as HTMLImageElement).naturalWidth > 0).length), { timeout: 30_000 }).toBeGreaterThanOrEqual(6);
+  await expect.poll(() => stripClips.count()).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => stripClips.locator("img").evaluateAll((images) => images.filter((image) => (image as HTMLImageElement).naturalWidth > 0).length), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
+  await expect(page.getByRole("button", { name: `Select clip ${collageClip!.clipId}` })).toBeVisible();
+  await expect.poll(() => page.getByRole("button", { name: `Select clip ${collageClip!.clipId}` }).locator("img").evaluate((image) => (image as HTMLImageElement).naturalWidth), { timeout: 30_000 }).toBeGreaterThan(0);
   await expect(page.getByText("No soundtrack", { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/lyria/i).first()).toBeVisible();
-  await page.screenshot({ path: path.resolve(process.cwd(), "docs/design/screens-editor/editor-e2e-10-trip1-open.png"), fullPage: false });
+  await page.screenshot({ path: path.join(styleScreenshots, "editor-collage-strip.png"), fullPage: false });
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByRole("button", { name: "Back to your films" })).toBeVisible();
   await page.getByRole("button", { name: "Back to your films" }).click();

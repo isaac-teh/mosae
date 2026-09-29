@@ -10,7 +10,9 @@
     "seed": "golden-seed-0001",
     "soundtrackId": "soundtrack-dusk",
     "note": "Open on the arrival and let her voice carry the middle.",
-    "captions": true
+    "captions": true,
+    "collageAmount": "few",
+    "motionFeel": "calm"
   },
   "proposal": {
     "schemaVersion": 1,

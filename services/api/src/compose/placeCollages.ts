@@ -15,6 +15,7 @@ export type CollageSource = {
   dupOf?: string | null;
   hasSpeech?: boolean;
 };
+export type CollageStyle = { collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
 
 export type CollageReview = { combos: Array<{ layoutId: string; motionId: string; verdict: string }> };
 const defaultReviewPath = fileURLToPath(new URL("../../../../docs/design/collage-review.json", import.meta.url));
@@ -58,19 +59,34 @@ function related(
   return Boolean(sameEventRun || duplicateGroup || nearDuplicate);
 }
 
+function sameDayOrEvent(first: CollageSource, next: CollageSource): boolean {
+  if (first.chapterId !== next.chapterId || first.hasSpeech || next.hasSpeech) return false;
+  const firstDay = first.localTime?.slice(0, 10);
+  const nextDay = next.localTime?.slice(0, 10);
+  return Boolean((firstDay && firstDay === nextDay) || (first.eventId && first.eventId === next.eventId));
+}
+
 /** Replace eligible contiguous selected clips; never draws from unused moments. */
-export function placeCollages(timeline: Timeline, sources: Map<string, CollageSource>, seed: string, review: CollageReview): Timeline {
+export function placeCollages(timeline: Timeline, sources: Map<string, CollageSource>, seed: string, review: CollageReview, style: CollageStyle = {}): Timeline {
+  const collageAmount = style.collageAmount ?? "few";
+  const motionFeel = style.motionFeel ?? "calm";
+  if (collageAmount === "none") return { ...timeline, schemaVersion: 2 };
   const approved = review.combos.filter((combo) => combo.verdict === "keep" && ALLOWED_COMBOS.some((allowed) => allowed.layoutId === combo.layoutId && allowed.motionId === combo.motionId));
   const clips = timeline.videoClips;
   const replacements = new Map<number, { end: number; collage: CollageClip }>();
-  const usedChapters = new Set<string>();
+  const chapterCounts = new Map<string, number>();
+  const usedShots = new Set<string>();
   let removedCount = 0;
   let lastLayout: string | undefined;
+  const maxPerChapter = collageAmount === "few" ? 1 : 2;
+  const preferredMotions = motionFeel === "calm"
+    ? new Set(["page-turn", "print-drop", "focus-relay"])
+    : new Set(["stack-deal", "tape-slap", "crash-zoom"]);
 
   for (let index = 0; index < clips.length;) {
     const first = clips[index];
     const origin = sources.get(idOf(first));
-    if (!origin || "kind" in first || usedChapters.has(origin.chapterId)) { index++; continue; }
+    if (!origin || "kind" in first || (chapterCounts.get(origin.chapterId) ?? 0) >= maxPerChapter) { index++; continue; }
     const group = [first];
     let videos = first.source.kind === "video" ? 1 : 0;
     for (let nextIndex = index + 1; nextIndex < clips.length && group.length < 6; nextIndex++) {
@@ -81,16 +97,32 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
       group.push(next);
       videos += Number(next.source.kind === "video");
     }
+    // Ordinary trips rarely have sub-minute duplicate bursts. If the tight
+    // candidate set is too small for a reviewed layout, use a coherent run
+    // from one day or one event to reach its minimum slot count.
+    if (group.length < 3) {
+      group.length = 1;
+      for (let nextIndex = index + 1; nextIndex < clips.length && group.length < 6; nextIndex++) {
+        const next = clips[nextIndex];
+        const metadata = sources.get(idOf(next));
+        if (!metadata || "kind" in next || next.source.kind !== "photo" || first.source.kind !== "photo" || !sameDayOrEvent(origin, metadata)) break;
+        group.push(next);
+      }
+    }
     if (group.length < 3) { index++; continue; }
+    const shotIds = group.map((clip) => clip.source.shotId);
+    if (new Set(shotIds).size !== shotIds.length || shotIds.some((shotId) => usedShots.has(shotId))) { index++; continue; }
     const finalCount = clips.length - removedCount - (group.length - 1);
-    if ((replacements.size + 1) / finalCount > 0.25) { index += group.length; continue; }
     const combinations = approved.filter((combo) => {
       const layout = COLLAGE_LAYOUTS.find((item) => item.id === combo.layoutId);
       return layout && group.length >= layout.minSlots && group.length <= layout.maxSlots && layout.aspect.some((aspect) => aspect === timeline.aspect);
     });
     if (!combinations.length) { index += group.length; continue; }
-    const varied = combinations.filter((combo) => combo.layoutId !== lastLayout);
-    const choices = varied.length ? varied : combinations;
+    if (collageAmount === "lots" && (replacements.size + 1) / finalCount > 0.4) { index += group.length; continue; }
+    const preferred = combinations.filter((combo) => preferredMotions.has(combo.motionId));
+    const motionChoices = preferred.length ? preferred : combinations;
+    const varied = motionChoices.filter((combo) => combo.layoutId !== lastLayout);
+    const choices = varied.length ? varied : motionChoices;
     const chosen = choices[hash(`${seed}:${index}:combo`) % choices.length];
     const effect = COLLAGE_EFFECTS[hash(`${seed}:${index}:effect`) % COLLAGE_EFFECTS.length];
     const durationSec = Math.min(5, Math.max(3, group.length));
@@ -106,7 +138,8 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
       transitionIn: first.transitionIn, spec,
     };
     replacements.set(index, { end: index + group.length, collage });
-    usedChapters.add(origin.chapterId);
+    chapterCounts.set(origin.chapterId, (chapterCounts.get(origin.chapterId) ?? 0) + 1);
+    for (const shotId of shotIds) usedShots.add(shotId);
     removedCount += group.length - 1;
     lastLayout = chosen.layoutId;
     index += group.length;

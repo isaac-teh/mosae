@@ -18,6 +18,11 @@ describe("DirectionSettingsSchema", () => {
   it("accepts settings the Direct Your Film screen can produce", () => {
     const result = safeParseDirectionSettings(valid);
     expect(result.ok).toBe(true);
+    if (result.ok) expect(result.settings).toMatchObject({ collageAmount: "few", motionFeel: "calm" });
+  });
+
+  it("accepts explicit collage and motion choices", () => {
+    expect(safeParseDirectionSettings({ ...valid, collageAmount: "lots", motionFeel: "playful" })).toMatchObject({ ok: true, settings: { collageAmount: "lots", motionFeel: "playful" } });
   });
 
   it("accepts an automatic soundtrack and an empty note", () => {
