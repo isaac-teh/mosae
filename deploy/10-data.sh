@@ -12,7 +12,26 @@ else
   [[ "$(printf '%s' "$firestore_region" | tr '[:upper:]' '[:lower:]')" == "$REGION" ]] || { echo "Firestore is in $firestore_region, expected $REGION" >&2; exit 2; }
 fi
 if ! probe gcloud storage buckets describe "gs://$BUCKET" --project "$PROJECT_ID"; then
-  run gcloud storage buckets create "gs://$BUCKET" --location "$REGION" --project "$PROJECT_ID" --uniform-bucket-level-access
+  if [[ "$BUCKET" == "$PROJECT_ID.firebasestorage.app" ]]; then
+    # Firebase owns this domain; its API must provision and link the default bucket.
+    assert_command curl
+    if [[ "${DRY_RUN:-0}" == 1 ]]; then
+      print_command gcloud auth print-access-token
+      print_command curl --fail-with-body --silent --show-error --request POST \
+        --header 'Authorization: Bearer <redacted>' --header 'Content-Type: application/json' \
+        --data "{\"location\":\"$REGION\"}" \
+        "https://firebasestorage.googleapis.com/v1alpha/projects/$PROJECT_ID/defaultBucket"
+    else
+      access_token="$(gcloud auth print-access-token)"
+      curl --fail-with-body --silent --show-error --request POST \
+        --header "Authorization: Bearer $access_token" --header 'Content-Type: application/json' \
+        --data "{\"location\":\"$REGION\"}" \
+        "https://firebasestorage.googleapis.com/v1alpha/projects/$PROJECT_ID/defaultBucket"
+      unset access_token
+    fi
+  else
+    run gcloud storage buckets create "gs://$BUCKET" --location "$REGION" --project "$PROJECT_ID" --uniform-bucket-level-access
+  fi
 else
   bucket_region="$(capture "$REGION" gcloud storage buckets describe "gs://$BUCKET" --project "$PROJECT_ID" --format='value(location)')"
   [[ "$(printf '%s' "$bucket_region" | tr '[:upper:]' '[:lower:]')" == "$REGION" ]] || { echo "Storage is in $bucket_region, expected $REGION" >&2; exit 2; }
