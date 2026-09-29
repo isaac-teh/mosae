@@ -22,12 +22,13 @@ function GalleryIcon() { return <Svg width={20} height={20} viewBox="0 0 20 20">
 export default function SaveFilmScreen() {
   const { filmId, directorChat } = useLocalSearchParams<{ filmId: string; directorChat?: string }>();
   const story = useStoryFlow();
-  return <SaveFilmScreenContent key={`${story.identityKey}:film:${filmId}`} filmId={filmId} directorChat={directorChat === "true"} repository={story.repository} route={story.route} />;
+  return <SaveFilmScreenContent key={`${story.identityKey}:film:${filmId}`} filmId={filmId} directorChat={directorChat === "true"} storyFlow={story.flow} repository={story.repository} route={story.route} />;
 }
 
-function SaveFilmScreenContent({ filmId, directorChat, repository, route }: {
+function SaveFilmScreenContent({ filmId, directorChat, storyFlow, repository, route }: {
   filmId: string;
   directorChat: boolean;
+  storyFlow: ReturnType<typeof useStoryFlow>["flow"];
   repository: StoryRepository;
   route: (path: string, id?: { planId?: string; filmId?: string }) => string;
 }) {
@@ -69,14 +70,14 @@ function SaveFilmScreenContent({ filmId, directorChat, repository, route }: {
     <View className="flex-row items-center justify-center gap-2 py-4"><Text className="font-sans-semibold text-button text-positive">✓ Saved to your films</Text></View>
     <ScrollView className="flex-1" contentContainerClassName="gap-4 pb-4">
       <FilmPlayer source={film.videoUrl ?? require("../assets/demo/film.mp4")} poster={storyImage(film.savePosterKey)} durationSec={film.durationSec} aspect="landscape" compact />
-      <View className="gap-1"><Text className="font-title text-heading text-ink">{film.title}</Text><Text className="font-sans text-caption text-ink-muted">{film.momentCount} moments · Still editable anytime</Text></View>
+      <View className="gap-1"><Text className="font-title text-heading text-ink">{film.title}</Text><Pressable role="button" aria-label="Still editable anytime" onPress={() => router.push({ pathname: "/editor", params: { projectId: "projectId" in storyFlow ? storyFlow.projectId : "fixture", planId: film.planId, generationId: film.filmId, request: "", ...storyFlow } } as never)}><Text className="font-sans text-caption text-ink-muted">{film.momentCount} moments · Still editable anytime</Text></Pressable></View>
       <Text className="font-sans-semibold text-button text-ink">Save or share</Text>
       <View accessibilityLabel="Share options" className="flex-row flex-wrap justify-between gap-y-3">
         <Pressable role="button" aria-label="Download" onPress={() => void download()} className="min-h-12 min-w-[72px] items-center justify-center rounded-full border border-line-strong px-3"><Text className="font-sans text-caption text-ink">Download</Text></Pressable>
         {["WhatsApp", "Facebook", "Instagram"].map((service) => <Pressable key={service} role="button" aria-label={service} onPress={() => void Share.share({ message: film.videoUrl ?? film.title })} className="min-h-12 min-w-[72px] items-center justify-center rounded-full border border-line-strong px-3"><Text className="font-sans text-caption text-ink">{service}</Text></Pressable>)}
       </View>
     </ScrollView>
-    <Pressable role="button" aria-label="Back to your films" onPress={() => router.navigate("/" as never)} className="mb-5 min-h-12 items-center justify-center rounded-md border border-line-strong"><Text className="font-sans-semibold text-button text-ink">Back to your films</Text></Pressable>
+    <Pressable role="button" aria-label="Back to your films" onPress={() => router.navigate(route("/") as never)} className="mb-5 min-h-12 items-center justify-center rounded-md border border-line-strong"><Text className="font-sans-semibold text-button text-ink">Back to your films</Text></Pressable>
   </View>;
   const share = (name: string, icon: React.ReactNode, onPress: () => void) => <Pressable key={name} role="button" aria-label={name} onPress={onPress} className="w-[72px] items-center"><View className="size-12 items-center justify-center rounded-full bg-surface-raised shadow-[0_2px_10px_rgba(66,50,40,0.06)]">{icon}</View><Text className="mt-1.5 font-sans-medium text-[11px] text-ink">{name}</Text></Pressable>;
   return <View className="flex-1 bg-surface"><StepHeader step="STEP 6 OF 6" label="COMPLETE" progress={1} onBack={() => goBack()} backLabel="Go back to your film" />

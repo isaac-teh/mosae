@@ -215,6 +215,16 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
   let filmState: Film = structuredClone(baseFilm);
   const editDocuments = new Map<string, FilmEdits>();
   const editRenders = new Map<string, FilmRender>();
+  const browserEditKey = (projectId: string, generationId: string) => `mosae:fixture-editor:${projectId}/${generationId}`;
+  const browserRenderKey = (projectId: string, generationId: string, revision: number) => `${browserEditKey(projectId, generationId)}/render/${revision}`;
+  const readBrowserValue = <T,>(key: string): T | undefined => {
+    try {
+      return typeof window === "undefined" ? undefined : JSON.parse(window.localStorage.getItem(key) ?? "null") as T | undefined;
+    } catch { return undefined; }
+  };
+  const writeBrowserValue = (key: string, value: unknown) => {
+    try { if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage is optional in restricted browser contexts */ }
+  };
 
   function delayed<T>(fn: () => T): Promise<T> {
     return new Promise<T>((resolve) => {
@@ -316,7 +326,7 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
       };
     },
 
-    getEdits: async (projectId, generationId) => structuredClone(editDocuments.get(`${projectId}/${generationId}`) ?? { revision: 0, ops: [], updatedAt: null }),
+    getEdits: async (projectId, generationId) => structuredClone(editDocuments.get(`${projectId}/${generationId}`) ?? readBrowserValue<FilmEdits>(browserEditKey(projectId, generationId)) ?? { revision: 0, ops: [], updatedAt: null }),
     interpretEdit: async () => ({ reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] }),
     saveEdits: async (projectId, generationId, revision, ops) => {
       const key = `${projectId}/${generationId}`;
@@ -324,13 +334,16 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
       if (revision !== current.revision + 1) throw new Error("stale_revision");
       const document = { revision, ops: structuredClone(ops), updatedAt: Date.now() };
       editDocuments.set(key, document);
+      writeBrowserValue(browserEditKey(projectId, generationId), document);
       return structuredClone(document);
     },
     renderRevision: async (projectId, generationId, revision) => {
-      editRenders.set(`${projectId}/${generationId}/${revision}`, { revision, status: "ready", downloadUrl: "film" });
+      const result = { revision, status: "ready" as const, downloadUrl: "film" };
+      editRenders.set(`${projectId}/${generationId}/${revision}`, result);
+      writeBrowserValue(browserRenderKey(projectId, generationId, revision), result);
       return { renderId: `${generationId}-edit-${revision}` };
     },
-    getRender: async (projectId, generationId, revision) => structuredClone(editRenders.get(`${projectId}/${generationId}/${revision}`) ?? { revision, status: "pending" }),
+    getRender: async (projectId, generationId, revision) => structuredClone(editRenders.get(`${projectId}/${generationId}/${revision}`) ?? readBrowserValue<FilmRender>(browserRenderKey(projectId, generationId, revision)) ?? { revision, status: "pending" }),
 
     reviseFilm: async (filmId: string, request: string) => {
       if (filmId !== FILM_ID) throw new Error(`Unknown film ${filmId}`);

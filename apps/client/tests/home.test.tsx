@@ -2,8 +2,9 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)) }));
+const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any }));
 vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms }) }));
+vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: state.repository }) }));
 vi.mock("expo-router", async () => {
   const ReactModule = await import("react");
   return { useRouter: () => ({ push: state.push }), useFocusEffect: (effect: () => void | (() => void)) => ReactModule.useEffect(() => { state.focusEffect = effect; return effect(); }, [effect]) };
@@ -24,6 +25,7 @@ beforeEach(() => {
   state.films = [];
   state.focusEffect = null;
   state.listFilms.mockImplementation(async () => state.films);
+  state.repository = { listFilms: state.listFilms };
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });

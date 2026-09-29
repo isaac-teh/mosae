@@ -231,6 +231,13 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await expect(page.getByRole("button", { name: "Back to your films" })).toBeVisible();
   expect(await page.locator("body").innerText()).toContain(savedScreen.slice(-50));
   await screenshot(page, "12-saved-reload.png");
+  await page.getByRole("button", { name: "Still editable anytime" }).click();
+  await page.waitForURL("**/editor?**");
+  await expect(page.getByText("Edit film")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Select clip / }).first()).toBeVisible({ timeout: 60_000 });
+  await page.screenshot({ path: path.resolve(process.cwd(), "docs/design/screens-editor/editor-e2e-10-trip1-open.png"), fullPage: false });
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("button", { name: "Back to your films" })).toBeVisible();
   await page.getByRole("button", { name: "Back to your films" }).click();
   await expect(page.getByRole("heading", { name: "Your films" })).toBeVisible();
   await screenshot(page, "13-home-filled.png");

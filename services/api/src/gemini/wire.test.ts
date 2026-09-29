@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from "vitest";
 import { recordUsageToLog } from "./wire.js";
 
 describe("recordUsageToLog", () => {
