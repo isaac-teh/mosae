@@ -9,6 +9,7 @@ import { createPlanningTools, type PlanningShot } from "../directing/tools.js";
 import { replayingExactGenerate, replayingEmbed } from "../gemini/recorder.js";
 import { generateStructured, type GenerateOptions } from "../gemini/client.js";
 import { runCompose } from "../compose/runCompose.js";
+import { interpretEdit } from "../directing/interpretEdit.js";
 import type { Asset as CandidateAsset } from "../compose/buildCandidates.js";
 import { recommendDuration } from "@mosae/contracts";
 import type { FaceRef } from "../cast/types.js";
@@ -72,5 +73,9 @@ describe("demo chip-only fixture coverage", () => {
         peopleByMoment: new Map(), subjectsByMoment: new Map(), namesById: {} },
     }, { generateStructured: (options) => generateStructured(options as GenerateOptions<unknown>, { generateContent: replayingExactGenerate(), recordUsage: () => {} }), soundtrackIds: new Set(), assets });
     if (!composed.ok) throw new Error(composed.reasons.join("; "));
+    const edit = await interpretEdit({ text: "Make the collages calmer", timeline: composed.timeline }, {
+      generate: (options) => generateStructured(options, { generateContent: replayingExactGenerate(), recordUsage: () => {} }),
+    });
+    expect(edit.ops.length).toBeGreaterThan(0);
   });
 });
