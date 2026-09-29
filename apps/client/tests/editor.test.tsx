@@ -8,7 +8,10 @@ vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, use
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: boundary.repository }) }));
 vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: () => React.createElement("div", { "data-testid": "preview" }) }));
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
-vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circle: () => null, G: () => null }));
+vi.mock("react-native-svg", () => {
+  const element = (tag: string) => ({ children, ...props }: any) => React.createElement(tag, props, children);
+  return { default: element("svg"), Path: element("path"), Circle: element("circle"), G: element("g") };
+});
 vi.mock("react-native", () => {
   const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, accessibilityState, ...props }: any) =>
     React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), ...(accessibilityState?.selected !== undefined ? { "aria-pressed": String(accessibilityState.selected) } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
@@ -87,6 +90,21 @@ describe("film editor", () => {
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
     expect(host.textContent).toContain("Opening");
     expect(host.textContent).toContain("Edit film");
+  });
+
+  it("renders prominent undo and redo arrows in 44px disabled header controls", async () => {
+    await render(<EditorScreen />);
+    for (const label of ["Undo", "Redo"]) {
+      const button = host.querySelector(`[aria-label="${label}"]`) as HTMLButtonElement;
+      expect(button.className).toContain("min-h-11");
+      expect(button.className).toContain("min-w-11");
+      const svg = button.querySelector("svg");
+      expect(svg?.getAttribute("width")).toBe("28");
+      expect(svg?.getAttribute("height")).toBe("28");
+      const paths = [...(svg?.querySelectorAll("path") ?? [])];
+      expect(paths.some((path) => Number(path.getAttribute("stroke-width")) >= 2)).toBe(true);
+      expect(paths.every((path) => path.getAttribute("stroke") === "rgb(var(--color-ink-muted))")).toBe(true);
+    }
   });
 
   it("adds an unused uploaded shot with its thumbnail after the selected clip", async () => {

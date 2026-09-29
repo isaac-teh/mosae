@@ -132,8 +132,8 @@ export default function EditorScreen() {
         <View className="mt-4 flex-row items-center justify-between">
           <Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text>
           <View className="flex-row gap-4">
-            <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="min-h-10 min-w-10 items-center justify-center"><UndoIcon disabled={!editor.canUndo} /></Pressable>
-            <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="min-h-10 min-w-10 items-center justify-center"><RedoIcon disabled={!editor.canRedo} /></Pressable>
+            <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="min-h-11 min-w-11 items-center justify-center"><UndoIcon disabled={!editor.canUndo} /></Pressable>
+            <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="min-h-11 min-w-11 items-center justify-center"><RedoIcon disabled={!editor.canRedo} /></Pressable>
           </View>
         </View>
         <TimelineStrip timeline={editor.timeline} sources={editor.sources} selectedClipId={editor.selectedClipId} playheadSec={playhead}

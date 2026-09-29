@@ -95,10 +95,10 @@ function HistoryArrow({ direction, disabled = false }: { direction: "undo" | "re
   const color = disabled ? "rgb(var(--color-ink-muted))" : "rgb(var(--color-on-screen))";
   const mirror = direction === "redo" ? "translate(24 0) scale(-1 1)" : undefined;
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
       <G transform={mirror}>
-        <Path d="M20 15 A8 8 0 0 0 4 15" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
-        <Path d="M4 15 L5 17 M5 17 L10 11 M5 17 L12 17" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M21 12 C21 6.3 16.8 2.8 12 2.8 C6 2.8 2.8 7 2.8 12 C2.8 14.2 3.4 16.4 5 18.3" stroke={color} strokeWidth={2} strokeLinecap="round" />
+        <Path d="M10.5 11.5 L5 18.3 L12.5 18.8" stroke={color} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
       </G>
     </Svg>
   );
