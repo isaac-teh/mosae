@@ -6,7 +6,7 @@ import { requireServiceCaller } from "./requireServiceCaller.js";
 
 const config = { audience: "https://api.example", allowedEmails: ["eventarc@proj.iam.gserviceaccount.com"] };
 
-function app(verify: (t: string, a: string) => Promise<{ email?: string; email_verified?: boolean }>) {
+function app(verify: (t: string, a: string | string[]) => Promise<{ email?: string; email_verified?: boolean }>) {
   const a = express();
   a.post("/hook", requireServiceCaller(config, verify), (_req, res) => {
     res.sendStatus(204);
@@ -15,6 +15,17 @@ function app(verify: (t: string, a: string) => Promise<{ email?: string; email_v
 }
 
 describe("requireServiceCaller", () => {
+  it("passes every accepted audience to the verifier", async () => {
+    const a = express();
+    let seen: string | string[] = "";
+    a.post("/hook", requireServiceCaller({ ...config, audience: ["https://api.example", "https://api-123.region.run.app"] }, async (_t, audience) => {
+      seen = audience;
+      return { email: "eventarc@proj.iam.gserviceaccount.com", email_verified: true };
+    }), (_req, res) => { res.sendStatus(204); });
+    const res = await request(await listeningServer(a)).post("/hook").set("Authorization", "Bearer tok");
+    expect([res.status, seen]).toEqual([204, ["https://api.example", "https://api-123.region.run.app"]]);
+  });
+
   it("accepts a verified token from an allowed service account", async () => {
     const res = await request(await listeningServer(app(async (token, audience) => {
       expect([token, audience]).toEqual(["tok", "https://api.example"]);

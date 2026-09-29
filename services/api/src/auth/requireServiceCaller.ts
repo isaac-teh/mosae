@@ -2,7 +2,7 @@ import type { RequestHandler } from "express";
 import { OAuth2Client } from "google-auth-library";
 
 type Claims = { email?: string; email_verified?: boolean };
-type Verify = (token: string, audience: string) => Promise<Claims>;
+type Verify = (token: string, audience: string | string[]) => Promise<Claims>;
 
 const client = new OAuth2Client();
 
@@ -12,7 +12,7 @@ const defaultVerify: Verify = async (token, audience) => {
 };
 
 export function requireServiceCaller(
-  config: { audience: string; allowedEmails: string[] },
+  config: { audience: string | string[]; allowedEmails: string[] },
   verify: Verify = defaultVerify,
 ): RequestHandler {
   return async (req, res, next) => {
