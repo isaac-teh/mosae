@@ -158,7 +158,7 @@ if (useDevRunner)
     "Cloud Tasks not configured; running tasks in-process and polling the Storage emulator (local development only)",
   );
 const serviceAuth = requireServiceCaller({
-  audience: config.serviceUrl,
+  audience: config.serviceAudiences,
   allowedEmails: config.invokerEmails,
 });
 const app = express();
