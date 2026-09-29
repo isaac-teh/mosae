@@ -36,8 +36,9 @@ else
   bucket_region="$(capture "$REGION" gcloud storage buckets describe "gs://$BUCKET" --project "$PROJECT_ID" --format='value(location)')"
   [[ "$(printf '%s' "$bucket_region" | tr '[:upper:]' '[:lower:]')" == "$REGION" ]] || { echo "Storage is in $bucket_region, expected $REGION" >&2; exit 2; }
 fi
-# Creating the bucket activates Cloud Storage's service agent. Eventarc needs
-# that agent to publish object events to its Pub/Sub transport topic.
+# Explicitly activate Cloud Storage's service agent before granting the
+# Pub/Sub publisher role Eventarc needs for object events.
+run gcloud beta services identity create --service storage.googleapis.com --project "$PROJECT_ID" --quiet
 storage_agent="$(capture "service-123456789012@gs-project-accounts.iam.gserviceaccount.com" gcloud storage service-agent --project "$PROJECT_ID")"
 for attempt in {1..6}; do
   if run gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:$storage_agent" --role roles/pubsub.publisher --quiet; then
