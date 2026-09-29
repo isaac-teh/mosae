@@ -32,6 +32,8 @@ export default function EditorScreen() {
   const router = useRouter();
   const { height } = useWindowDimensions();
   const editor = useEditor(params.projectId || "fixture", params.generationId || "demo-film", repository);
+  const timelineForSelection = editor.timeline;
+  const selectEditorClip = editor.select;
   const [playhead, setPlayhead] = useState(0);
   const [seekRequest, setSeekRequest] = useState<{ seconds: number } | null>(null);
   const [tool, setTool] = useState<Tool>(params.request ? "Ask" : null);
@@ -39,18 +41,17 @@ export default function EditorScreen() {
   const [directions, setDirections] = useState<DirectionOptions | null>(null);
   const [slotAlternatives, setSlotAlternatives] = useState<{ clipId: string; values: Record<string, { shotId: string; thumbnailUrl: string; kind?: "photo" | "video" }[]> } | null>(null);
   const onTimeChange = useCallback((seconds: number) => setPlayhead(seconds), []);
-  const seekTo = (seconds: number) => {
+  const seekTo = useCallback((seconds: number) => {
     const target = Math.max(0, Math.min(editor.timeline?.durationSec ?? 0, seconds));
     setPlayhead(target);
     setSeekRequest({ seconds: target });
-  };
-  const previewHeight = Math.max(280, Math.min(720, height - 390));
+  }, [editor.timeline?.durationSec]);
+  const previewHeight = Math.max(280, Math.min(720, height - 440));
   const soundtrack = editor.timeline?.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   const soundtrackId = soundtrack?.source.kind === "soundtrack" ? soundtrack.source.soundtrackId : null;
   const soundtrackName = soundtrackId
     ? directions?.soundtracks.find((track) => track.id === soundtrackId)?.name ?? "Soundtrack"
     : null;
-  const soundtrackLabel = soundtrackName ? `${soundtrackName} · paced to the film` : "No soundtrack";
   useEffect(() => {
     let active = true;
     if (!params.planId) return () => { active = false; };
@@ -103,11 +104,13 @@ export default function EditorScreen() {
     return Array.isArray(op) ? editor.applyMany(op) : editor.apply(op);
   };
   const onApplyAsk = (ops: EditOp[]) => { if (editor.applyMany(ops)) setTool(null); };
-  const chooseClip = (id: string) => {
-    editor.select(id);
-    const clip = editor.timeline?.videoClips.find((item) => clipId(item) === id);
+  const chooseClip = useCallback((id: string) => {
+    selectEditorClip(id);
+    const clip = timelineForSelection?.videoClips.find((item) => clipId(item) === id);
     setTool(clip && "kind" in clip ? "Collage" : null);
-  };
+  }, [selectEditorClip, timelineForSelection]);
+  const onTimelineSelect = useCallback((id: string, startSec: number) => { chooseClip(id); seekTo(startSec); }, [chooseClip, seekTo]);
+  const openSoundtrackPicker = useCallback(() => setTool("Soundtrack"), []);
   const openTool = (next: Exclude<Tool, "Collage" | "Soundtrack" | null>) => {
     if (next === "Remove" && editor.timeline?.videoClips.length === 1) return;
     if ((next === "Swap" || next === "Trim") && selectedClip && "kind" in selectedClip) { setTool("Collage"); return; }
@@ -136,9 +139,8 @@ export default function EditorScreen() {
             <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="min-h-11 min-w-11 items-center justify-center"><RedoIcon disabled={!editor.canRedo} /></Pressable>
           </View>
         </View>
-        <TimelineStrip timeline={editor.timeline} sources={editor.sources} selectedClipId={editor.selectedClipId} playheadSec={playhead}
-          onSelect={(id, startSec) => { chooseClip(id); seekTo(startSec); }} onScrub={seekTo} />
-        <Pressable accessibilityLabel="Open soundtrack picker" onPress={() => setTool("Soundtrack")} className="mt-3 min-h-[44px] flex-row items-center rounded-md bg-[#142a39] px-4"><Text className="font-sans text-caption text-on-screen-muted">♫ &nbsp; {soundtrackLabel}</Text></Pressable>
+        <TimelineStrip timeline={editor.timeline} sources={editor.sources} selectedClipId={editor.selectedClipId} playheadSec={playhead} soundtrackName={soundtrackName ? `${soundtrackName} · paced to the film` : null}
+          onSelect={onTimelineSelect} onScrub={seekTo} onSoundtrack={openSoundtrackPicker} />
       </ScrollView>}
     <ToolBar onTool={(value) => openTool(value)} />
     {tool === "Swap" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={selectedClip.id} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} onApply={onApply} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}
