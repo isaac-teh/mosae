@@ -10,3 +10,27 @@ if probe gcloud tasks queues describe "$TASKS_QUEUE" --project "$PROJECT_ID" --l
 else
   run gcloud tasks queues create "$TASKS_QUEUE" "${settings[@]}"
 fi
+
+# A periodic sweep is the recovery path for outbox rows left behind by a
+# worker crash or a failed immediate handoff. The numbered Run URL is stable
+# and lets a first-time full deploy create the job before the API service.
+if probe gcloud run services describe "$API_SERVICE" --project "$PROJECT_ID" --region "$REGION"; then
+  api_url="$(service_url "$API_SERVICE")"
+else
+  project_number="$(capture 000000000000 gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+  api_url="https://$API_SERVICE-$project_number.$REGION.run.app"
+fi
+job_name=mosae-outbox-dispatch
+scheduler_args=(
+  --project "$PROJECT_ID" --location "$REGION"
+  --schedule '* * * * *' --time-zone Etc/UTC
+  --uri "$api_url/internal/dispatch-outbox" --http-method POST
+  --oidc-service-account "$INVOKER_SA" --oidc-token-audience "$api_url"
+  --message-body '{}' --update-headers 'Content-Type=application/json'
+  --attempt-deadline 30s
+)
+if probe gcloud scheduler jobs describe "$job_name" --project "$PROJECT_ID" --location "$REGION"; then
+  run gcloud scheduler jobs update http "$job_name" "${scheduler_args[@]}"
+else
+  run gcloud scheduler jobs create http "$job_name" "${scheduler_args[@]}"
+fi

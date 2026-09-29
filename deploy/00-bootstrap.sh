@@ -5,7 +5,7 @@ source "$(dirname "$0")/lib.sh"
 assert_command gcloud
 
 run gcloud services enable \
-  run.googleapis.com cloudtasks.googleapis.com eventarc.googleapis.com eventarcpublishing.googleapis.com \
+  run.googleapis.com cloudtasks.googleapis.com cloudscheduler.googleapis.com eventarc.googleapis.com eventarcpublishing.googleapis.com \
   artifactregistry.googleapis.com secretmanager.googleapis.com firestore.googleapis.com \
   storage.googleapis.com firebasestorage.googleapis.com firebasehosting.googleapis.com cloudbuild.googleapis.com iam.googleapis.com \
   iamcredentials.googleapis.com pubsub.googleapis.com --project "$PROJECT_ID"
