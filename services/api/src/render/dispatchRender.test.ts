@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { Firestore } from "firebase-admin/firestore";
 import type { Generation, Timeline } from "@mosae/contracts";
-import { createRender, renderOutputPath, type RenderEvent } from "./dispatchRender.js";
+import { createRender, postForEvents, renderOutputPath, type RenderEvent } from "./dispatchRender.js";
 import { FakeFirestore } from "./fakeFirestore.js";
 
 const TIMELINE: Timeline = {
@@ -42,6 +42,24 @@ function seed(status: Generation["status"] = "rendering", timeline: Timeline | n
 const generation = (db: FakeFirestore) => db.docs.get("projects/p1/generations/g1") as unknown as Generation;
 const editPath = "projects/p1/generations/g1/edits/current";
 const revisionPath = (revision: number) => `${editPath}/revisions/${revision}`;
+
+describe("postForEvents production identity", () => {
+  it("sends a service ID token for the render service origin", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response('{"done":true,"outputPath":"/tmp/x.mp4","durationInFrames":1}\n'));
+    const token = vi.fn(async () => "private-token");
+    try {
+      const events = [];
+      for await (const event of postForEvents("https://render.example/tasks/render", {}, token)) events.push(event);
+      expect(token).toHaveBeenCalledWith("https://render.example");
+      expect(fetchMock).toHaveBeenCalledWith("https://render.example/tasks/render", expect.objectContaining({ headers: expect.objectContaining({ authorization: "Bearer private-token" }) }));
+      expect(events).toHaveLength(1);
+    } finally {
+      fetchMock.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+});
 function seedRevision(db: FakeFirestore, revision: number, sec: number) {
   const ops = [{ op: "setPhotoDuration", clipId: "c1", sec }];
   db.docs.set(editPath, { revision, ops, updatedAt: 1, renderRevision: revision, status: "rendering" });

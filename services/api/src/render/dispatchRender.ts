@@ -1,4 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
+import { GoogleAuth } from "google-auth-library";
 import { applyEdits, type EditOp, type Generation } from "@mosae/contracts";
 import { resolveSources, type SourceDeps } from "../compose/resolveSources.js";
 import { failGeneration, markSaved, resetRender, setRenderProgress } from "../store/generationStore.js";
@@ -52,10 +53,20 @@ export function renderOutputPath(userId: string, projectId: string, generationId
 }
 
 /** Read the render service's newline-delimited response one event at a time. */
-export async function* postForEvents(url: string, body: unknown): AsyncIterable<RenderEvent> {
+async function renderIdToken(audience: string): Promise<string> {
+  const client = await new GoogleAuth().getIdTokenClient(audience);
+  return client.idTokenProvider.fetchIdToken(audience);
+}
+
+export async function* postForEvents(url: string, body: unknown, getIdToken = renderIdToken): AsyncIterable<RenderEvent> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (process.env.NODE_ENV === "production") {
+    const audience = new URL(url).origin;
+    headers.authorization = `Bearer ${await getIdToken(audience)}`;
+  }
   const response = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
 

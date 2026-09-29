@@ -24,5 +24,6 @@ COPY services/api/package.json services/api/
 RUN npm ci --omit=dev --workspace services/api --workspace packages/contracts --include-workspace-root
 COPY packages/contracts packages/contracts
 COPY --from=build /app/services/api/dist services/api/dist
+COPY services/api/fixtures/music services/api/fixtures/music
 EXPOSE 8080
 CMD ["node", "services/api/dist/index.js"]

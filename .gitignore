@@ -4,6 +4,8 @@ node_modules/
 dist/
 .env
 .env*.local
+deploy/env/*.env
+!deploy/env/example.env
 *.log
 .playwright-mcp/
 e2e/test-results/
