@@ -44,7 +44,13 @@ export function firebaseDownloadUrlStore(bucket: Bucket): { signedDownloadUrl(pa
         const host = emulator.startsWith("http") ? emulator : `http://${emulator}`;
         return `${host}/download/storage/v1/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media`;
       }
-      const [url] = await bucket.file(path).getSignedUrl({ version: "v4", action: "read", expires: Date.now() + 24 * 60 * 60 * 1000 });
+      const filename = (path.split("/").at(-1) || "film.mp4").replace(/["\\\r\n]/g, "_");
+      const [url] = await bucket.file(path).getSignedUrl({
+        version: "v4",
+        action: "read",
+        expires: Date.now() + 24 * 60 * 60 * 1000,
+        responseDisposition: `attachment; filename="${filename}"`,
+      });
       return url;
     },
   };

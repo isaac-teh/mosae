@@ -49,7 +49,7 @@ done
 run gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" --member "serviceAccount:$API_SA" --role roles/storage.objectAdmin --project "$PROJECT_ID" --quiet
 cors_file="$(mktemp)"
 trap 'rm -f "$cors_file"' EXIT
-printf '[{"origin":["%s"],"method":["GET","HEAD","PUT","POST"],"responseHeader":["Content-Type","Authorization","x-goog-resumable"],"maxAgeSeconds":3600}]\n' "$WEB_ORIGIN" > "$cors_file"
+printf '[{"origin":["%s"],"method":["GET","HEAD","PUT","POST"],"responseHeader":["Content-Type","Content-Disposition","Authorization","x-goog-resumable"],"maxAgeSeconds":3600}]\n' "$WEB_ORIGIN" > "$cors_file"
 if [[ "${DRY_RUN:-0}" == 1 ]]; then
   print_command gcloud storage buckets update "gs://$BUCKET" --cors-file "$cors_file" --project "$PROJECT_ID"
 else
