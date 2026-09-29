@@ -14,11 +14,14 @@ import { analyzeImage } from "./quality.js";
 import { detectShots } from "./shots.js";
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { fixturePlaceResolver, googlePlaceResolver, type GeocodeResult, type PlaceResolver } from "../understand/place.js";
+import { fixturePlaceResolver, googlePlaceResolver, nominatimPlaceResolver, type GeocodeResult, type PlaceResolver } from "../understand/place.js";
 
-async function loadPlaceResolver(): Promise<PlaceResolver> {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (apiKey) return googlePlaceResolver(apiKey);
+export async function loadPlaceResolver(db: Firestore, env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<PlaceResolver> {
+  const apiKey = env.GOOGLE_MAPS_API_KEY;
+  if (apiKey) return googlePlaceResolver(apiKey, fetchImpl);
+  const mode = env.PLACE_RESOLVER ?? (env.NODE_ENV === "production" ? "nominatim" : "fixtures");
+  if (mode === "nominatim") return nominatimPlaceResolver(db, env.NOMINATIM_CONTACT ?? "", { fetchImpl });
+  if (mode !== "fixtures") throw new Error(`Unknown PLACE_RESOLVER: ${mode}`);
   const directory = fileURLToPath(new URL("../../fixtures/places/", import.meta.url));
   const table: Record<string, GeocodeResult[]> = {};
   for (const file of (await readdir(directory)).filter((entry) => entry.endsWith(".json")).sort()) {
@@ -38,12 +41,14 @@ export function createIngest(config: {
   settle: (projectId: string) => Promise<void>;
   dispatchDue: () => Promise<void>;
 }): (task: IngestTask) => Promise<IngestResult> {
+  // One resolver per API process shares the in-flight key map and Nominatim queue.
+  let resolver: Promise<PlaceResolver> | null = null;
   return async (task) => {
     const deps: IngestDeps = {
       loadAsset: (projectId, assetId) => loadAsset(config.db, projectId, assetId),
       objects: firebaseObjectStore(getStorage(getAdminApp()).bucket(config.bucketName)),
       probe: (file, kind) => probeMedia(file, kind),
-      placeResolver: await loadPlaceResolver(),
+      placeResolver: await (resolver ??= loadPlaceResolver(config.db)),
       photoDerivatives: (input, outDir) => makePhotoDerivatives(input, outDir),
       videoDerivatives: (input, outDir, durationSec) => makeVideoDerivatives(input, outDir, durationSec),
       analyze: analyzeImage,

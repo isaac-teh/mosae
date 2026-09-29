@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Share, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Share, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
@@ -18,6 +18,8 @@ function WhatsAppIcon() { return <Svg width={22} height={22} viewBox="0 0 22 22"
 function InstagramIcon() { return <Svg width={22} height={22} viewBox="0 0 22 22"><Rect x={3.2} y={3.2} width={15.6} height={15.6} rx={4.2} fill="none" stroke="rgb(var(--color-accent))" strokeWidth={1.8} /><Circle cx={11} cy={11} r={3.55} fill="none" stroke="rgb(var(--color-accent))" strokeWidth={1.8} /><Circle cx={16.25} cy={5.9} r={1} fill="rgb(var(--color-accent))" /></Svg>; }
 function FacebookIcon() { return <Svg width={22} height={22} viewBox="0 0 22 22"><Circle cx={11} cy={11} r={9} fill="rgb(var(--color-tile))" /><Path d="M12.15 17v-5.1h1.72l.26-2h-1.98V8.62c0-.58.16-.97.99-.97h1.05V5.86c-.18-.02-.8-.08-1.53-.08-1.51 0-2.55.92-2.55 2.62V9.9H8.4v2h1.7V17h2.05Z" fill="white" /></Svg>; }
 function GalleryIcon() { return <Svg width={20} height={20} viewBox="0 0 20 20"><Rect x={2.5} y={3} width={12.5} height={12.5} rx={1.2} fill="none" stroke="rgb(var(--color-ink))" strokeWidth={1.5} /><Path d="m4.5 13 3.1-3.1 2.25 2.25 1.7-1.7 2.45 2.55M10.5 3V1.8h6.8v12.6h-2.3" fill="none" stroke="rgb(var(--color-ink))" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" /></Svg>; }
+
+function OpenStreetMapCredit() { return <Pressable accessibilityRole="link" onPress={() => void Linking.openURL("https://www.openstreetmap.org/copyright")} className="items-center py-2"><Text className="font-sans text-[11px] text-ink-muted">© OpenStreetMap contributors</Text></Pressable>; }
 
 export default function SaveFilmScreen() {
   const { filmId, directorChat } = useLocalSearchParams<{ filmId: string; directorChat?: string }>();
@@ -76,6 +78,7 @@ function SaveFilmScreenContent({ filmId, directorChat, storyFlow, repository, ro
         <Pressable role="button" aria-label="Download" onPress={() => void download()} className="min-h-12 min-w-[72px] items-center justify-center rounded-full border border-line-strong px-3"><Text className="font-sans text-caption text-ink">Download</Text></Pressable>
         {["WhatsApp", "Facebook", "Instagram"].map((service) => <Pressable key={service} role="button" aria-label={service} onPress={() => void Share.share({ message: film.videoUrl ?? film.title })} className="min-h-12 min-w-[72px] items-center justify-center rounded-full border border-line-strong px-3"><Text className="font-sans text-caption text-ink">{service}</Text></Pressable>)}
       </View>
+      <OpenStreetMapCredit />
     </ScrollView>
     <Pressable role="button" aria-label="Back to your films" onPress={() => router.navigate(route("/") as never)} className="mb-5 min-h-12 items-center justify-center rounded-md border border-line-strong"><Text className="font-sans-semibold text-button text-ink">Back to your films</Text></Pressable>
   </View>;
@@ -89,6 +92,7 @@ function SaveFilmScreenContent({ filmId, directorChat, storyFlow, repository, ro
       {comingSoon && <Text className="mt-2 px-1 font-sans text-caption text-ink-muted">Coming soon</Text>}
       <View className="box-border mt-[37px] h-[142px] flex-row overflow-hidden rounded-[26px] bg-surface-sunken p-4"><View className="h-24 w-20 self-center overflow-hidden rounded-sm bg-surface-sunken"><img src={Asset.fromModule(demoImage("archive-print")).uri} alt="Linen Bound keepsake folio" style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scale(1.55)" }} /><View className="absolute bottom-1 left-0 right-0 items-center"><Text className="rounded bg-black/80 px-1 font-sans-medium text-[8px] text-on-screen">Linen Bound</Text></View></View><View className="flex-1 px-4 py-1"><Text className="font-sans-medium text-[11px] text-accent">▰ ARTISANAL ARCHIVE</Text><Text className="font-sans text-[18px] leading-5 text-ink">Fine-Art Print Edition</Text><Text numberOfLines={2} className="mt-2 font-sans text-caption leading-[17px] text-ink-muted">Hand-crafted Japanese mulberry{`\n`}paper booklet of Mei’s birthday...</Text><Pressable role="button" aria-label="Order keepsake folio" onPress={() => setComingSoon(true)} className="mt-2"><Text className="font-sans-medium text-[11px] text-action">Order keepsake folio →</Text></Pressable></View></View>
       <Pressable role="button" aria-label="Go back to memory gallery" onPress={() => router.navigate("/" as never)} className="mt-[47px] h-12 flex-row items-center justify-center gap-2 rounded-full bg-surface-sunken"><GalleryIcon /><Text className="font-sans-medium text-[15px] text-ink">Go back to memory gallery</Text></Pressable>
+      <OpenStreetMapCredit />
     </ScrollView>
   </View>;
 }

@@ -4,7 +4,9 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 assert_command gcloud
 
-for name in GEMINI_API_KEY GOOGLE_MAPS_API_KEY; do
+names=(GEMINI_API_KEY)
+if [[ "${USE_GOOGLE_MAPS:-0}" == 1 ]]; then names+=(GOOGLE_MAPS_API_KEY); fi
+for name in "${names[@]}"; do
   if ! probe gcloud secrets describe "$name" --project "$PROJECT_ID"; then
     run gcloud secrets create "$name" --replication-policy automatic --project "$PROJECT_ID"
   fi
