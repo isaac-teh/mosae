@@ -407,6 +407,12 @@ function filmDependencies(generations: Record<string, unknown>, overrides: Parti
 describe("film adapters", () => {
   const genPath = "projects/project-1/generations/gen-1";
 
+  it("keeps the media kind on alternatives so collage slots can enforce one video", async () => {
+    const deps = dependencies({ request: vi.fn(async () => ({ shots: [{ shotId: "video-2", thumbUrl: "thumb:video", kind: "video" }] })) });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getAlternatives("proposal-1", "moment-1"))
+      .resolves.toEqual([{ shotId: "video-2", thumbnailUrl: "thumb:video", kind: "video" }]);
+  });
+
   it("returns the direction options route body unchanged", async () => {
     const body = { note: "n", rewrites: [], cadences: [], soundtracks: [], durations: [], recommendedDuration: "30s", recommendedCadence: "playful", cadenceReason: "kids laughing" };
     const deps = dependencies({ request: vi.fn(async () => body) });

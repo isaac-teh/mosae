@@ -331,7 +331,7 @@ describe("downstream story screens", () => {
     boundary.params = { filmId: "film-1", repository: "api", projectId: "project-a" };
     await render(ReviewFilmScreen);
     await click("Manual Editor");
-    expect(boundary.navigate).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-a", generationId: "film-1", request: "", repository: "api" } });
+    expect(boundary.navigate).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-a", planId: "plan-a", generationId: "film-1", request: "", repository: "api" } });
   });
 
   it("does not navigate when directing the previous project finishes", async () => {

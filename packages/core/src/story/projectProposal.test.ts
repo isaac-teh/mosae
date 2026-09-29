@@ -60,6 +60,7 @@ describe("projectProposal", () => {
     const plan = projectProposal(mixed, project, shots);
     expect(plan.estimatedFilmLabel).toBe(estimate);
     expect(plan.moments[1].durationLabel).toBe("10 sec");
+    expect(plan.moments[1]).toMatchObject({ sourceInSec: 2, sourceOutSec: 12 });
   });
 
   it("projects proposal deselections and resolved thumbnail URLs into review moments", () => {

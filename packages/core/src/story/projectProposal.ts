@@ -106,6 +106,8 @@ export function projectProposal(
       imageKey: shot.thumbnailUrl,
       kind: moment.kind,
       durationLabel: moment.kind === "video" ? `${Math.round(momentSeconds(moment))} sec` : undefined,
+      ...(moment.kind === "video" && moment.previewInSec !== undefined && moment.previewOutSec !== undefined
+        ? { sourceInSec: moment.previewInSec, sourceOutSec: moment.previewOutSec } : {}),
       selected: !deselected.has(moment.id),
       favorite: false,
       shotId: moment.shotId,

@@ -283,7 +283,7 @@ describe("Director chat", () => {
     expect(hasText("Both moments you kept are in.")).toBe(true);
     expect(hasText("I left out repeated scenery shots.")).toBe(false);
     await click("Open in editor");
-    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", generationId: "film-1", request: "", repository: "api" } });
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", planId: "proposal-1", generationId: "film-1", request: "", repository: "api" } });
   });
 
   it("saves the film and opens the chat saved screen", async () => {
@@ -306,7 +306,7 @@ describe("Director chat", () => {
     const composer = host.querySelector('input[aria-label="Ask for a change"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "Make it shorter"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("Send");
-    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", generationId: "film-1", request: "Make it shorter", repository: "api" } });
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", planId: "proposal-1", generationId: "film-1", request: "Make it shorter", repository: "api" } });
     expect(mocks.repo.interpret).not.toHaveBeenCalled();
   });
 });

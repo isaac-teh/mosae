@@ -128,7 +128,7 @@ const basePlan: StoryPlan = {
     sequence: "4 Trip Chapters • Narita to Fushimi Inari • Emotional Arc preserved",
   },
   chapters,
-  moments: moments.map((m) => ({ ...m, selected: true, favorite: false })),
+  moments: moments.map((m, index) => ({ ...m, shotId: `fixture-${index + 1}`, selected: true, favorite: false })),
   otherPhotoCount: 216,
   albumName: "Japan Trip",
   suggestions: [
@@ -259,8 +259,10 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
       return delayed(() => structuredClone(planState));
     },
 
-    // Fixture moments have no burst siblings to swap in.
-    getAlternatives: async () => [],
+    getAlternatives: async (planId: string, momentId: string) => {
+      if (planId !== PLAN_ID || !planState.moments.some((moment) => moment.id === momentId)) return [];
+      return [{ shotId: "fixture-alt", thumbnailUrl: "demo:timeline-strawberry", kind: "photo" as const }];
+    },
 
     setMomentFavorite: async (planId: string, momentId: string, favorite: boolean) => {
       if (planId !== PLAN_ID) throw new Error(`Unknown plan ${planId}`);
@@ -296,16 +298,21 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
     },
 
     getFilmTimeline: async (projectId) => {
-      const photos = ["timeline-lantern-stroll", "timeline-strawberry", "timeline-torii", "timeline-birthday", "timeline-lantern-stroll", "timeline-strawberry", "timeline-birthday"];
+      const sourceIds = ["fixture-1", "fixture-2", "fixture-3", "fixture-4"];
+      const photos = ["timeline-birthday", "timeline-strawberry", "timeline-torii", "timeline-lantern-stroll"];
       return {
         timeline: parseTimeline({
-          schemaVersion: 1, projectId: projectId || "fixture", mode: "memory", aspect: "9:16", fps: 30,
-          durationSec: photos.length * 3,
-          chapters: [{ title: "Opening", startSec: 0 }, { title: "Candid moments", startSec: 6 }, { title: "Closing", startSec: 15 }],
-          videoClips: photos.map((key, index) => ({ id: `clip-${index + 1}`, source: { kind: "photo", shotId: `fixture-${index + 1}` }, startSec: index * 3, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } })),
+          schemaVersion: 2, projectId: projectId || "fixture", mode: "memory", aspect: "9:16", fps: 30,
+          durationSec: 22,
+          chapters: [{ title: "Opening", startSec: 0 }, { title: "Candid moments", startSec: 7 }, { title: "Closing", startSec: 16 }],
+          videoClips: [
+            { id: "clip-1", source: { kind: "photo", shotId: "fixture-1" }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } },
+            { kind: "collage", clipId: "collage-1", startSec: 3, durationSec: 4, transitionIn: { kind: "cut", durationSec: 0 }, spec: { layoutId: "photo-table", slots: sourceIds.map((shotId, index) => ({ slotId: `slot-${index + 1}`, shotId, kind: "photo" })), motionId: "stack-deal", effectId: "vignette", seed: "editor-fixture", durationSec: 4 } },
+            ...["fixture-2", "fixture-3", "fixture-4", "fixture-1", "fixture-3"].map((shotId, index) => ({ id: `clip-${index + 3}`, source: { kind: "photo", shotId }, startSec: index * 3 + 7, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } })),
+          ],
           audioClips: [], captions: [],
         }),
-        sources: Object.fromEntries(photos.map((key, index) => [`fixture-${index + 1}`, `demo:${key}`])),
+        sources: Object.fromEntries(sourceIds.map((shotId, index) => [shotId, `demo:${photos[index]}`])),
       };
     },
 

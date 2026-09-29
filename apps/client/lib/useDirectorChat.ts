@@ -207,7 +207,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     askForChange(text: string) {
       const film = input.generation?.film;
       if (!film || !text.trim()) return;
-      router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", generationId: film.filmId, request: text.trim(), ...(storyFlow ?? {}) } } as any);
+      router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", planId: film.planId, generationId: film.filmId, request: text.trim(), ...(storyFlow ?? {}) } } as any);
     },
     async send(text: string) {
       if (!summary) return;

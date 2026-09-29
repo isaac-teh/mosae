@@ -101,6 +101,12 @@ export function useEditor(projectId: string, generationId: string, repository: S
   }, [firstCut]);
   const undo = useCallback(() => setHistory((current) => current.index > 0 ? { ...current, index: current.index - 1 } : current), []);
   const redo = useCallback(() => setHistory((current) => current.index < current.snapshots.length - 1 ? { ...current, index: current.index + 1 } : current), []);
+  const reset = useCallback((nextOps: EditOp[] = []) => setHistory((current) => {
+    const next = mergeOps(nextOps);
+    if (keyOf(current.snapshots[current.index] ?? []) === keyOf(next)) return current;
+    return { snapshots: [...current.snapshots.slice(0, current.index + 1), next], index: current.index + 1 };
+  }), []);
+  const setSource = useCallback((shotId: string, path: string) => setSources((current) => ({ ...current, [shotId]: sourceUri(path) })), []);
 
   const reloadAfterConflict = useCallback(async () => {
     const edits = await repository.getEdits(projectId, generationId);
@@ -151,8 +157,8 @@ export function useEditor(projectId: string, generationId: string, repository: S
   }, [renderRevision, projectId, generationId, repository]);
 
   return {
-    timeline, firstCut, sources, ops, selectedClipId, select: setSelectedClipId,
-    apply, undo, redo, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
+    timeline, firstCut, sources, setSource, ops, selectedClipId, select: setSelectedClipId,
+    apply, undo, redo, reset, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
     save, savedRevision, reloadAfterConflict, render, loaded, error,
   };
 }

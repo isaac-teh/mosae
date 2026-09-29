@@ -333,7 +333,7 @@ export function directingRouter(deps: {
         const generation = typeof path === "string" ? path.split("/")[4] : undefined;
         if (!generation || path !== buildDerivativePath({ userId, projectId, assetId: asset.id, generation }, "thumb.jpg")) continue;
         const thumbUrl = await urlStore.signedReadUrl(path, now() + 5 * 60 * 1000);
-        shots.push({ shotId: shot.id, thumbUrl });
+        shots.push({ shotId: shot.id, thumbUrl, kind: shot.get("mediaType") === "video" ? "video" : "photo" });
       }
       res.json({ shots });
     } catch (error) {

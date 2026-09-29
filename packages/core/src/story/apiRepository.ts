@@ -405,7 +405,7 @@ export function createApiStoryRepository(
         `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/moments/${encodeURIComponent(momentId)}/alternatives`,
       ), "alternatives response");
       const shots = Array.isArray(response.shots) ? response.shots as RecordData[] : [];
-      return shots.map((shot) => ({ shotId: stringField(shot.shotId, "shot id"), thumbnailUrl: typeof shot.thumbUrl === "string" ? shot.thumbUrl : "" }));
+      return shots.map((shot) => ({ shotId: stringField(shot.shotId, "shot id"), thumbnailUrl: typeof shot.thumbUrl === "string" ? shot.thumbUrl : "", kind: shot.kind === "video" ? "video" as const : "photo" as const }));
     },
     setMomentFavorite: async (planId, momentId, favorite) => {
       const source = await loadSources(deps, projectId, planId);

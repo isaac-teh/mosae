@@ -51,6 +51,7 @@ function Harness() {
     <button aria-label="Redo" onClick={editor.redo}>Redo</button>
     <button aria-label="Reload" onClick={() => void editor.reloadAfterConflict()}>Reload</button>
     <button aria-label="Save film" onClick={() => void editor.render()}>Save film</button>
+    <button aria-label="Back to first cut" onClick={() => editor.reset([])}>Back to first cut</button>
   </div>;
 }
 
@@ -130,5 +131,15 @@ describe("film editor", () => {
     expect(boundary.repository.saveFilm).toHaveBeenCalledWith("g1");
     expect(boundary.repository.renderRevision).not.toHaveBeenCalled();
     expect(host.querySelector('[data-testid="state"]')?.textContent).toBe("ready");
+  });
+
+  it("saves an empty edit revision when returning to the first cut", async () => {
+    await render(<Harness />);
+    await click("Move c first");
+    await advance(1500);
+    await click("Back to first cut");
+    expect(host.querySelector('[data-testid="order"]')?.textContent).toBe("a,b,c");
+    await advance(1500);
+    expect(boundary.repository.saveEdits).toHaveBeenNthCalledWith(2, "p1", "g1", 2, []);
   });
 });
