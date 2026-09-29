@@ -47,6 +47,7 @@ function Harness() {
     <button aria-label="Move c first" onClick={() => editor.apply({ op: "move", clipId: "c", toIndex: 0 })}>Move c first</button>
     <button aria-label="Move c second" onClick={() => editor.apply({ op: "move", clipId: "c", toIndex: 1 })}>Move c second</button>
     <button aria-label="Move b first" onClick={() => editor.apply({ op: "move", clipId: "b", toIndex: 0 })}>Move b first</button>
+    <button aria-label="Apply two edits" onClick={() => editor.applyMany([{ op: "move", clipId: "c", toIndex: 0 }, { op: "move", clipId: "b", toIndex: 0 }])}>Apply two edits</button>
     <button aria-label="Undo" onClick={editor.undo}>Undo</button>
     <button aria-label="Redo" onClick={editor.redo}>Redo</button>
     <button aria-label="Reload" onClick={() => void editor.reloadAfterConflict()}>Reload</button>
@@ -89,6 +90,14 @@ describe("film editor", () => {
     expect(host.querySelector('[data-testid="order"]')?.textContent).toBe("a,b,c");
     await click("Redo");
     expect(host.querySelector('[data-testid="order"]')?.textContent).toBe("c,a,b");
+  });
+
+  it("applies a group of edits as one undo step", async () => {
+    await render(<Harness />);
+    await click("Apply two edits");
+    expect(host.querySelector('[data-testid="order"]')?.textContent).toBe("b,c,a");
+    await click("Undo");
+    expect(host.querySelector('[data-testid="order"]')?.textContent).toBe("a,b,c");
   });
 
   it("autosaves merged operations once after 1.5 seconds", async () => {

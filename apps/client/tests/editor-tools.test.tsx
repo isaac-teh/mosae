@@ -89,16 +89,38 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledWith({ op: "add", shotId: "shot-left", kind: "video", afterClipId: "b", durationSec: 6, sourceInSec: 2, sourceOutSec: 10 });
   });
 
-  it("emits collage style, slot, and split operations", async () => {
-    await render(<CollagePanel clip={collage} slotAlternatives={{ s1: [{ shotId: "slot-alt", thumbnailUrl: "alt.jpg" }] }} onApply={apply} onSource={onSource} onClose={() => {}} />);
-    await click("Layout Postcard stack");
-    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageLayout", clipId: "collage-1", layoutId: "postcard-stack" });
-    await click("Motion Stack deal");
-    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageMotion", clipId: "collage-1", motionId: "stack-deal" });
+  it("shows selected collage chips, every allowed layout, and only motions allowed by the selected layout", async () => {
+    await render(<CollagePanel clip={collage} sources={{ "shot-1": "one.jpg", "shot-2": "two.jpg", "shot-3": "three.jpg", "shot-4": "four.jpg" }} slotAlternatives={{ s1: [{ shotId: "slot-alt", thumbnailUrl: "alt.jpg" }] }} onApply={apply} onSource={onSource} onClose={() => {}} />);
+    expect(host.querySelector('[aria-label="Layout Photo table"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('[aria-label="Motion Stack deal"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('[aria-label="Effect Vignette"]')?.getAttribute("aria-pressed")).toBe("true");
+    for (const label of ["Photo table", "Torn paper mosaic", "Polaroid garland", "Film negative", "Postcard stack", "Route map"]) {
+      expect(host.querySelector(`[aria-label="Layout ${label}"]`)).not.toBeNull();
+    }
+    await click("Layout Torn paper mosaic");
+    expect(apply).toHaveBeenLastCalledWith([
+      { op: "setCollageLayout", clipId: "collage-1", layoutId: "torn-paper" },
+      { op: "setCollageMotion", clipId: "collage-1", motionId: "print-drop" },
+    ]);
+    expect(host.querySelector('[aria-label="Motion Print drop"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Motion Tape slap"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Motion Stack deal"]')).toBeNull();
+  });
+
+  it("shows a photo thumbnail and lets the user replace a collage slot", async () => {
+    await render(<CollagePanel clip={collage} sources={{ "shot-1": "one.jpg", "shot-2": "two.jpg", "shot-3": "three.jpg", "shot-4": "four.jpg" }} slotAlternatives={{ s1: [{ shotId: "slot-alt", thumbnailUrl: "alt.jpg" }] }} onApply={apply} onSource={onSource} onClose={() => {}} />);
+    expect(host.querySelector('img[src="one.jpg"]')).not.toBeNull();
+    expect(host.textContent).toContain("Photo 1");
+    await click("Replace Photo 1");
+    await click("Replace Photo 1 with option 1");
+    expect(apply).toHaveBeenLastCalledWith({ op: "replaceCollageSlot", clipId: "collage-1", slotId: "s1", shotId: "slot-alt", kind: "photo" });
+    expect(onSource).toHaveBeenCalledWith("slot-alt", "alt.jpg");
+  });
+
+  it("emits collage effect and split operations", async () => {
+    await render(<CollagePanel clip={collage} onApply={apply} onSource={onSource} onClose={() => {}} />);
     await click("Effect Warm grade");
     expect(apply).toHaveBeenLastCalledWith({ op: "setCollageEffect", clipId: "collage-1", effectId: "warm-grade" });
-    await click("Replace s1 with slot-alt");
-    expect(apply).toHaveBeenLastCalledWith({ op: "replaceCollageSlot", clipId: "collage-1", slotId: "s1", shotId: "slot-alt", kind: "photo" });
     await click("Split into single photos");
     expect(apply).toHaveBeenLastCalledWith({ op: "splitCollage", clipId: "collage-1" });
   });
@@ -106,7 +128,8 @@ describe("editor tool operations", () => {
   it("refuses a second video in a collage slot", async () => {
     const withVideo = { ...collage, spec: { ...collage.spec, slots: collage.spec.slots.map((slot, index) => index === 0 ? { ...slot, kind: "video" as const } : slot) } };
     await render(<CollagePanel clip={withVideo} slotAlternatives={{ s2: [{ shotId: "video-alt", thumbnailUrl: "alt.jpg", kind: "video" }] }} onApply={apply} onSource={onSource} onClose={() => {}} />);
-    await click("Replace s2 with video-alt");
+    await click("Replace Photo 2");
+    await click("Replace Photo 2 with option 1");
     expect(host.textContent).toContain("A collage can hold one video.");
     expect(apply).not.toHaveBeenCalled();
   });

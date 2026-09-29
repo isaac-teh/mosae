@@ -90,15 +90,16 @@ export function useEditor(projectId: string, generationId: string, repository: S
     return () => clearTimeout(timer);
   }, [loaded, firstCut, opsKey, savedOpsKey, retryAttempt, save.state === "conflict", save.state === "rendering", persist]);
 
-  const apply = useCallback((op: EditOp) => {
+  const applyMany = useCallback((batch: EditOp[]) => {
     if (!firstCut) return;
     setHistory((current) => {
       const before = current.snapshots[current.index] ?? [];
-      const next = mergeOps([...before, op]);
+      const next = mergeOps([...before, ...batch]);
       if (!applyEdits(firstCut, next).ok) return current;
       return { snapshots: [...current.snapshots.slice(0, current.index + 1), next], index: current.index + 1 };
     });
   }, [firstCut]);
+  const apply = useCallback((op: EditOp) => applyMany([op]), [applyMany]);
   const undo = useCallback(() => setHistory((current) => current.index > 0 ? { ...current, index: current.index - 1 } : current), []);
   const redo = useCallback(() => setHistory((current) => current.index < current.snapshots.length - 1 ? { ...current, index: current.index + 1 } : current), []);
   const reset = useCallback((nextOps: EditOp[] = []) => setHistory((current) => {
@@ -158,7 +159,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
 
   return {
     timeline, firstCut, sources, setSource, ops, selectedClipId, select: setSelectedClipId,
-    apply, undo, redo, reset, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
+    apply, applyMany, undo, redo, reset, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
     save, savedRevision, reloadAfterConflict, render, loaded, error,
   };
 }

@@ -74,6 +74,10 @@ export default function EditorScreen() {
     return [...unselected, ...leftOut];
   }, [plan, editor.timeline]);
   const onApply = (op: EditOp) => { editor.apply(op); setTool(null); };
+  const onApplyCollage = (op: EditOp | EditOp[]) => {
+    if (Array.isArray(op)) editor.applyMany(op);
+    else editor.apply(op);
+  };
   const chooseClip = (id: string) => {
     editor.select(id);
     const clip = editor.timeline?.videoClips.find((item) => clipId(item) === id);
@@ -115,7 +119,7 @@ export default function EditorScreen() {
     {tool === "Move" && editor.timeline && editor.selectedClipId ? <MoveMode timeline={editor.timeline} clipId={editor.selectedClipId} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
     {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} onApply={onApply} onClose={() => setTool(null)} /> : null}
-    {tool === "Collage" && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} slotAlternatives={slotAlternatives?.clipId === selectedClip.clipId ? slotAlternatives.values : {}} onApply={onApply} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}
+    {tool === "Collage" && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} sources={editor.sources} slotAlternatives={slotAlternatives?.clipId === selectedClip.clipId ? slotAlternatives.values : {}} onApply={onApplyCollage} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}
     {tool === "Soundtrack" ? <SoundtrackSheet visible soundtracks={directions?.soundtracks ?? []} onApply={onApply} onClose={() => setTool(null)} /> : null}
   </View>;
 }
