@@ -1,10 +1,11 @@
-import { collageShotIds, parseTimeline, type Timeline } from "@mosae/contracts";
+import { collageShotIds, parseTimeline, RenderResolutionSchema, type RenderResolution, type Timeline } from "@mosae/contracts";
 import { resolve } from "node:path";
 
 export type RenderRequest = {
   timeline: Timeline;
   sources: Record<string, string>;
   outputFile: string;
+  resolution?: RenderResolution;
   /**
    * Where the finished MP4 belongs. A signed PUT URL, so the render service
    * needs no storage SDK and no credentials of its own, and the caller decides
@@ -20,9 +21,25 @@ export type RenderDeps = {
   selectComposition: (args: { serveUrl: string; id: string; inputProps: unknown }) => Promise<{ durationInFrames: number } & Record<string, unknown>>;
   renderMedia: (args: Record<string, unknown>) => Promise<void>;
   onProgress?: (fraction: number) => void;
+  now?: () => number;
 };
 
 export const COMPOSITION_ID = "MosaeTimeline";
+export type RenderTimings = { serveUrlMs: number; selectMs: number; renderMs: number; startedAt: number; frames: number; width: number; height: number; fps: number };
+
+export function formatRenderTiming(timings: RenderTimings, uploadMs: number, totalMs: number): string {
+  return `render_timing ${JSON.stringify({
+    serveUrlMs: timings.serveUrlMs,
+    selectMs: timings.selectMs,
+    renderMs: timings.renderMs,
+    uploadMs,
+    totalMs,
+    frames: timings.frames,
+    width: timings.width,
+    height: timings.height,
+    fps: timings.fps,
+  })}`;
+}
 
 const OUTPUT_FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}\.mp4$/;
 
@@ -118,6 +135,7 @@ export function parseRenderRequest(body: unknown): RenderRequest {
     timeline,
     sources: sources as Record<string, string>,
     outputFile: input.outputFile,
+    resolution: RenderResolutionSchema.parse(input.resolution),
     ...(input.uploadUrl ? { uploadUrl: input.uploadUrl } : {}),
     ...(input.job ? { job: input.job as RenderRequest["job"] } : {}),
   };
@@ -127,21 +145,41 @@ export async function renderTimeline(
   request: RenderRequest,
   deps: RenderDeps,
   outputDir: string,
-): Promise<{ outputPath: string; durationInFrames: number }> {
+): Promise<{ outputPath: string; durationInFrames: number; timings: RenderTimings }> {
+  const now = deps.now ?? Date.now;
+  const startedAt = now();
   const outputPath = resolveOutputPath(outputDir, request.outputFile);
   const entry = new URL("../../../packages/video/src/index.tsx", import.meta.url).pathname;
+  const serveStartedAt = now();
   const serveUrl = await deps.bundle(entry);
+  const serveUrlMs = now() - serveStartedAt;
   const inputProps = { timeline: request.timeline, sources: request.sources };
+  const selectStartedAt = now();
   const composition = await deps.selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps });
+  const selectMs = now() - selectStartedAt;
+  const resolution = RenderResolutionSchema.parse(request.resolution);
 
+  const renderStartedAt = now();
   await deps.renderMedia({
     serveUrl,
     composition,
     codec: "h264",
     outputLocation: outputPath,
+    scale: resolution === "1080p" ? 1 : 2 / 3,
     inputProps,
     onProgress: ({ progress }: { progress: number }) => deps.onProgress?.(progress),
   });
+  const renderMs = now() - renderStartedAt;
 
-  return { outputPath, durationInFrames: composition.durationInFrames };
+  return {
+    outputPath,
+    durationInFrames: composition.durationInFrames,
+    timings: {
+      serveUrlMs, selectMs, renderMs, startedAt,
+      frames: composition.durationInFrames,
+      width: Math.round(Number(composition.width ?? 0) * (resolution === "1080p" ? 1 : 2 / 3)),
+      height: Math.round(Number(composition.height ?? 0) * (resolution === "1080p" ? 1 : 2 / 3)),
+      fps: Number(composition.fps ?? request.timeline.fps),
+    },
+  };
 }

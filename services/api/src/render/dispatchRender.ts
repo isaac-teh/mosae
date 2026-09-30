@@ -23,6 +23,7 @@ export type RenderWorkerTask = {
     timeline: Generation["timeline"];
     sources: Record<string, string>;
     outputFile: string;
+    resolution: "720p" | "1080p";
     uploadUrl?: string;
     job: { projectId: string; generationId: string; userId: string; outputPath: string; revision?: number };
   };
@@ -181,6 +182,7 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
             timeline: generation.timeline,
             sources,
             outputFile: `${task.generationId}.mp4`,
+            resolution: "720p",
             ...(uploadUrl ? { uploadUrl } : {}),
             job: { projectId: task.projectId, generationId: task.generationId, userId, outputPath },
           },
@@ -202,6 +204,7 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
         timeline: generation.timeline,
         sources,
         outputFile: `${task.generationId}.mp4`,
+        resolution: "720p",
         ...(uploadUrl ? { uploadUrl } : {}),
       });
 
@@ -302,6 +305,7 @@ async function renderEditRevision(
           timeline: applied.timeline,
           sources,
           outputFile: `${task.generationId}-edit-${revision}.mp4`,
+          resolution: "720p",
           ...(uploadUrl ? { uploadUrl } : {}),
           job: { projectId: task.projectId, generationId: task.generationId, userId, outputPath, revision },
         },
@@ -318,6 +322,7 @@ async function renderEditRevision(
       timeline: applied.timeline,
       sources,
       outputFile: `${task.generationId}-edit-${revision}.mp4`,
+      resolution: "720p",
       ...(uploadUrl ? { uploadUrl } : {}),
     })) {
       if ("error" in event) return fail(`render failed: ${event.error}${event.detail ? `: ${event.detail}` : ""}`);

@@ -12,7 +12,7 @@ import { fixtureSources, fixtureTimeline } from "@mosae/video/fixture";
 function app(overrides: Record<string, unknown> = {}) {
   const deps = {
     bundle: vi.fn().mockResolvedValue("http://bundle"),
-    selectComposition: vi.fn().mockResolvedValue({ id: "MosaeTimeline", durationInFrames: 180 }),
+    selectComposition: vi.fn().mockResolvedValue({ id: "MosaeTimeline", durationInFrames: 180, width: 1080, height: 1920, fps: 30 }),
     renderMedia: vi.fn().mockResolvedValue(undefined),
     outputDir: "/tmp/renders",
     mediaBaseUrl: "http://127.0.0.1:8080",
@@ -165,6 +165,24 @@ describe("POST /tasks/render", () => {
 
     expect(upload).toHaveBeenCalledWith("https://signed.example/put", "/tmp/renders/out.mp4");
     expect(lines(res.text).at(-1)).toMatchObject({ done: true, uploaded: true });
+  });
+
+  it("emits one complete render_timing line including upload and output metadata", async () => {
+    const timingLogger = vi.fn();
+    let time = 0;
+    const now = () => { time += 5; return time; };
+    const deps = { bundle: vi.fn().mockResolvedValue("bundle"), selectComposition: vi.fn().mockResolvedValue({ durationInFrames: 180, width: 1080, height: 1920, fps: 30 }), renderMedia: vi.fn(), outputDir: "/tmp/renders", mediaBaseUrl: "http://127.0.0.1:18090", timingLogger, now, upload: vi.fn().mockResolvedValue(undefined) };
+    const writes: string[] = [];
+    const response = { status: vi.fn().mockReturnThis(), set: vi.fn().mockReturnThis(), write: vi.fn((line: string) => { writes.push(line); }), end: vi.fn() };
+    await renderRoute(deps as never)({ body: { ...body, uploadUrl: "https://signed.example/put" }, header: vi.fn() } as never, response as never, vi.fn());
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(JSON.parse(writes.at(-1)!.trim())).toMatchObject({ done: true, uploaded: true });
+    expect(timingLogger).toHaveBeenCalledOnce();
+    expect(timingLogger.mock.calls[0]?.[0]).toMatch(/^render_timing \{/);
+    expect(JSON.parse(timingLogger.mock.calls[0]![0].replace(/^render_timing /, ""))).toEqual({
+      serveUrlMs: 5, selectMs: 5, renderMs: 5, uploadMs: 5, totalMs: 45,
+      frames: 180, width: 720, height: 1280, fps: 30,
+    });
   });
 
   it("reports a failed upload as a failed render, not a finished one", async () => {

@@ -1,5 +1,5 @@
 import type { Request, RequestHandler, Response } from "express";
-import { parseRenderRequest, renderTimeline, resolveMediaUrls, type RenderDeps, type RenderRequest } from "./renderTimeline.js";
+import { formatRenderTiming, parseRenderRequest, renderTimeline, resolveMediaUrls, type RenderDeps, type RenderRequest, type RenderTimings } from "./renderTimeline.js";
 
 /**
  * The service's one render path.
@@ -24,7 +24,13 @@ export type RenderRouteDeps = Omit<RenderDeps, "onProgress"> & {
   /** PUT the finished file to a signed URL. Omitted locally, where the file stays on disk. */
   upload?: (uploadUrl: string, filePath: string) => Promise<void>;
   callback?: (event: RenderCallbackPayload) => Promise<void>;
+  timingLogger?: (line: string) => void;
+  now?: () => number;
 };
+
+function reportRenderTiming(timings: RenderTimings, uploadMs: number, now: () => number, logger: (line: string) => void): void {
+  logger(formatRenderTiming(timings, uploadMs, now() - timings.startedAt));
+}
 
 const MAX_TASK_ATTEMPTS = 3;
 
@@ -48,11 +54,13 @@ export async function executeQueuedRender(
   if (!request.job) throw new Error("render request has no job metadata");
   if (!deps.callback) throw new Error("render callback is not configured");
   const { projectId, generationId, outputPath, revision } = request.job;
+  const now = deps.now ?? Date.now;
   const revisionInfo = revision === undefined ? {} : { revision };
   let callbackQueue = Promise.resolve();
   let lastProgressAt = 0;
   let latestProgress = 0;
   try {
+    let timing: RenderTimings | undefined;
     const result = await renderTimeline(
       { ...request, sources: resolveMediaUrls(request.sources, deps.mediaBaseUrl) },
       {
@@ -70,13 +78,19 @@ export async function executeQueuedRender(
               console.error("render progress callback failed", { errorName: error instanceof Error ? error.name : "unknown" });
             });
         },
+        now,
       },
       deps.outputDir,
     );
+    timing = result.timings;
+    let uploadMs = 0;
     if (request.uploadUrl) {
       if (!deps.upload) throw new Error("this render service cannot upload");
+      const uploadStartedAt = now();
       await deps.upload(request.uploadUrl, result.outputPath);
+      uploadMs = now() - uploadStartedAt;
     }
+    if (timing) reportRenderTiming(timing, uploadMs, now, deps.timingLogger ?? console.info);
     await callbackQueue;
     await deps.callback({ kind: "complete", projectId, generationId, outputPath, ...revisionInfo });
     return { kind: "complete" };
@@ -126,18 +140,23 @@ export function renderRoute(deps: RenderRouteDeps): RequestHandler {
     };
 
     try {
+      const now = deps.now ?? Date.now;
       const result = await renderTimeline(
         // Remotion needs URLs. A storage path is served from this process's own
         // `/media` mount; anything already a URL is passed through untouched.
         { ...request, sources: resolveMediaUrls(request.sources, deps.mediaBaseUrl) },
-        { bundle: deps.bundle, selectComposition: deps.selectComposition, renderMedia: deps.renderMedia, onProgress: (progress) => write({ progress }) },
+        { bundle: deps.bundle, selectComposition: deps.selectComposition, renderMedia: deps.renderMedia, onProgress: (progress) => write({ progress }), now },
         deps.outputDir,
       );
 
+      let uploadMs = 0;
       if (request.uploadUrl) {
         if (!deps.upload) throw new Error("this render service cannot upload");
+        const uploadStartedAt = now();
         await deps.upload(request.uploadUrl, result.outputPath);
+        uploadMs = now() - uploadStartedAt;
       }
+      reportRenderTiming(result.timings, uploadMs, now, deps.timingLogger ?? console.info);
 
       write({ done: true, outputPath: result.outputPath, durationInFrames: result.durationInFrames, uploaded: Boolean(request.uploadUrl) });
     } catch (error) {

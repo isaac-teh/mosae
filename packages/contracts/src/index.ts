@@ -71,3 +71,4 @@ export {
 } from "./reflow.js";
 
 export { EditOpSchema, applyEdits, mergeOps, type EditOp, type EditResult } from "./edits.js";
+export { RenderResolutionSchema, type RenderResolution } from "./render.js";

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { parseRenderRequest, renderTimeline, resolveOutputPath } from "./renderTimeline.js";
+import { formatRenderTiming, parseRenderRequest, renderTimeline, resolveOutputPath } from "./renderTimeline.js";
 import { fixtureSources, fixtureTimeline } from "@mosae/video/fixture";
 
 function deps(overrides: Record<string, unknown> = {}) {
   return {
     bundle: vi.fn().mockResolvedValue("http://bundle"),
-    selectComposition: vi.fn().mockResolvedValue({ id: "MosaeTimeline", durationInFrames: 180, fps: 30, width: 1080, height: 1920 }),
+    selectComposition: vi.fn().mockImplementation(({ inputProps }: { inputProps: { timeline: { aspect: string } } }) => Promise.resolve({ id: "MosaeTimeline", durationInFrames: 180, fps: 30, width: inputProps.timeline.aspect === "9:16" ? 1080 : 1920, height: inputProps.timeline.aspect === "9:16" ? 1920 : 1080 })),
     renderMedia: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -14,12 +14,36 @@ function deps(overrides: Record<string, unknown> = {}) {
 const request = { timeline: fixtureTimeline, sources: fixtureSources, outputFile: "out.mp4" };
 
 describe("renderTimeline", () => {
+  it("formats one render_timing line with every required field", () => {
+    const line = formatRenderTiming({ serveUrlMs: 11, selectMs: 22, renderMs: 33, startedAt: 0, frames: 180, width: 1080, height: 1920, fps: 30 }, 44, 110);
+    expect(line).toBe('render_timing {"serveUrlMs":11,"selectMs":22,"renderMs":33,"uploadMs":44,"totalMs":110,"frames":180,"width":1080,"height":1920,"fps":30}');
+  });
   it("selects the MosaeTimeline composition and renders to the requested path", async () => {
     const d = deps();
     const result = await renderTimeline(request, d as never, "/tmp/renders");
     expect(result).toMatchObject({ outputPath: "/tmp/renders/out.mp4", durationInFrames: 180 });
     expect(d.selectComposition).toHaveBeenCalledWith(expect.objectContaining({ id: "MosaeTimeline", serveUrl: "http://bundle" }));
     expect(d.renderMedia).toHaveBeenCalledWith(expect.objectContaining({ outputLocation: "/tmp/renders/out.mp4", codec: "h264" }));
+  });
+
+  it.each([["720p", 2 / 3], ["1080p", 1]] as const)("renders %s at the expected scale", async (resolution, scale) => {
+    const d = deps();
+    await renderTimeline({ ...request, resolution }, d as never, "/tmp/renders");
+    expect(d.renderMedia).toHaveBeenCalledWith(expect.objectContaining({ scale }));
+  });
+
+  it("keeps a 16:9 timeline at 1280x720 in 720p", async () => {
+    const timeline = { ...fixtureTimeline, aspect: "16:9" as const };
+    const result = await renderTimeline({ ...request, timeline }, deps() as never, "/tmp/renders");
+    expect(result.timings).toMatchObject({ width: 1280, height: 720, fps: 30 });
+  });
+
+  it("defaults a missing resolution to 720p", async () => {
+    expect(parseRenderRequest(request).resolution).toBe("720p");
+    const d = deps();
+    await renderTimeline(request, d as never, "/tmp/renders");
+    expect(d.renderMedia).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 / 3 }));
+    expect((await renderTimeline(request, d as never, "/tmp/renders")).timings).toMatchObject({ width: 720, height: 1280, fps: 30 });
   });
 
   it("passes the timeline and sources through as input props, so metadata is derived from them", async () => {
