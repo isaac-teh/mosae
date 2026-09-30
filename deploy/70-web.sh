@@ -20,16 +20,18 @@ export EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET="$BUCKET"
 export EXPO_PUBLIC_USE_EMULATORS=false
 export EXPO_PUBLIC_USE_API_STORY_REPOSITORY=true
 
-# Expo loads .env*.local files even when the production variables are exported.
-# Move them aside for the build and always restore them, including on failure.
+# Expo loads ignored .env and .env*.local files even when production variables
+# are exported. Move root and client copies aside for the build and restore them.
 local_env_backup_dir="$(mktemp -d "${TMPDIR:-/tmp}/mosae-web-env.XXXXXX")"
 local_env_files=()
+local_env_backup_files=()
 restore_local_env_files() {
   local exit_status=$?
   local restore_failed=0
   trap - EXIT
-  for local_env_file in "${local_env_files[@]}"; do
-    local backup_file="$local_env_backup_dir/$(basename "$local_env_file")"
+  for local_env_index in "${!local_env_files[@]}"; do
+    local local_env_file="${local_env_files[$local_env_index]}"
+    local backup_file="${local_env_backup_files[$local_env_index]}"
     if [[ -e "$backup_file" ]]; then
       mv "$backup_file" "$local_env_file" || restore_failed=1
     fi
@@ -43,16 +45,19 @@ restore_local_env_files() {
 }
 trap restore_local_env_files EXIT
 shopt -s nullglob
-for local_env_file in "$ROOT_DIR"/apps/client/.env*.local; do
+for local_env_file in "$ROOT_DIR"/.env "$ROOT_DIR"/.env*.local "$ROOT_DIR"/apps/client/.env "$ROOT_DIR"/apps/client/.env*.local; do
   [[ -f "$local_env_file" ]] || continue
   local_env_files+=("$local_env_file")
-  mv "$local_env_file" "$local_env_backup_dir/$(basename "$local_env_file")"
+  local_env_backup_file="$local_env_backup_dir/${#local_env_backup_files[@]}"
+  local_env_backup_files+=("$local_env_backup_file")
+  mv "$local_env_file" "$local_env_backup_file"
 done
 run npm run build:web -w apps/client -- --clear
 restore_local_env_files
 node "$DEPLOY_DIR/check-web-export.mjs" "$ROOT_DIR/apps/client/dist" "$ROOT_DIR" "$EXPO_PUBLIC_API_BASE_URL"
+node "$DEPLOY_DIR/smoke-web-export.mjs" "$ROOT_DIR/apps/client/dist"
 if [[ "${BUILD_ONLY:-0}" == 1 ]]; then
-  echo 'BUILD_ONLY=1; validated web export and skipped Firebase Hosting deploy'
+  echo 'BUILD_ONLY=1; validated web export, passed boot smoke, and skipped Firebase Hosting deploy'
   exit 0
 fi
 firebase_deploy --project "$PROJECT_ID" --only hosting --non-interactive

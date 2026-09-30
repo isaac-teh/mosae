@@ -25,9 +25,9 @@ export function useStoryFlow() {
     process.env.EXPO_PUBLIC_USE_API_STORY_REPOSITORY === "true" ||
     process.env.NODE_ENV === "production" || process.env.EXPO_PUBLIC_USE_FIXTURE_STORY_REPOSITORY !== "true"
   );
-  const projectId = params.projectId ?? process.env.EXPO_PUBLIC_STORY_PROJECT_ID ?? "";
+  const projectId = params.projectId ?? "";
   const flow = useMemo<StoryFlow>(() => api ? { repository: "api", projectId } : { repository: "fixture" }, [api, projectId]);
-  const repository = useMemo(() => api ? createApiStoryRepository({ projectId }) : getFixtureRepository(), [api, projectId]);
+  const repository = useMemo(() => api ? createApiStoryRepository(projectId ? { projectId } : {}) : getFixtureRepository(), [api, projectId]);
   const identityKey = api ? `api:${projectId}` : "fixture";
   return { flow, identityKey, repository, route: (path: string, id: { planId?: string; filmId?: string } = {}) => storyRoute(path, id, flow) };
 }
