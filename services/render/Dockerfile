@@ -24,7 +24,10 @@ COPY packages/contracts packages/contracts
 COPY packages/video packages/video
 COPY apps/client/assets/demo apps/client/assets/demo
 COPY services/render/src services/render/src
+COPY services/render/scripts services/render/scripts
 # Download the browser once at image build time so the first render does not pay for it.
 RUN npx remotion browser ensure
+RUN node --import tsx services/render/scripts/buildBundle.ts
+ENV MOSAE_REMOTION_SERVE_URL=/app/remotion-bundle
 EXPOSE 8080
 CMD ["node", "--import", "tsx", "services/render/src/index.ts"]

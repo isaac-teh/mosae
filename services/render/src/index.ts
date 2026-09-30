@@ -2,6 +2,7 @@ import express from "express";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { createBundleOnce } from "./renderTimeline.js";
+import { createBundleSource } from "./bundleSource.js";
 import { renderRoute, type RenderCallbackPayload } from "./renderRoute.js";
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -24,6 +25,7 @@ mkdirSync(config.outputDir, { recursive: true });
 // The bundle is built once per process, not once per request — a webpack build
 // per film adds ten to thirty seconds to every render.
 const bundleOnce = createBundleOnce((entryPoint) => bundle({ entryPoint, publicDir }));
+const serveUrl = createBundleSource({ serveUrl: process.env.MOSAE_REMOTION_SERVE_URL, production: process.env.NODE_ENV === "production", bundle: () => bundleOnce(new URL("../../../packages/video/src/index.tsx", import.meta.url).pathname) });
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
@@ -49,7 +51,7 @@ const reportToApi = config.apiServiceUrl
   : undefined;
 
 app.post("/tasks/render", renderMiddleware, renderRoute({
-  bundle: bundleOnce,
+  bundle: () => serveUrl(),
   selectComposition: (args) => selectComposition(args as never) as never,
   renderMedia: (args) => renderMedia(args as never) as never,
   outputDir: config.outputDir,
