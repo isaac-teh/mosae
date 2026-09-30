@@ -29,7 +29,7 @@ export type ApiStoryRepositoryDeps = {
   request(method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown): Promise<unknown>;
 };
 
-export type ApiStoryRepositoryOptions = { projectId: string };
+export type ApiStoryRepositoryOptions = { projectId?: string };
 
 type ProjectionSources = {
   proposal: ProposalProjectionSource;
@@ -254,16 +254,20 @@ async function awaitPlanJob(deps: ApiStoryRepositoryDeps, projectId: string, job
 }
 
 export function createApiStoryRepository(
-  options: ApiStoryRepositoryOptions,
+  options: ApiStoryRepositoryOptions = {},
   deps: ApiStoryRepositoryDeps = firebaseDeps,
 ): StoryRepository {
-  // Home lists projects before one is selected, so the API repository may be
-  // created with an empty scope. Project operations receive their route ID.
-  const projectId = options.projectId;
-  const generationsPath = `/api/projects/${encodeURIComponent(projectId)}/generations`;
+  // Home lists projects before one is selected. Project operations require the
+  // route's project ID and fail clearly if a caller has not supplied it.
+  const projectId = options.projectId ?? "";
+  const requireProjectId = () => {
+    if (!projectId) throw new Error("A project ID is required for this story operation");
+    return projectId;
+  };
+  const generationsPath = () => `/api/projects/${encodeURIComponent(requireProjectId())}/generations`;
   const render = (source: ProjectionSources) => {
     const plan = projectProposal(source.proposal, source.project, source.shots, { totalShotCount: source.totalShotCount });
-    const favorites = favoriteMomentIds(projectId, source.proposal.id);
+    const favorites = favoriteMomentIds(requireProjectId(), source.proposal.id);
     return { ...plan, moments: plan.moments.map((moment) => ({ ...moment, favorite: favorites.has(moment.id) })) };
   };
 
@@ -429,6 +433,7 @@ export function createApiStoryRepository(
       }))).sort((a, b) => b.momentCount - a.momentCount);
     },
     createPlan: async (storyText, _mediaRefs) => {
+      requireProjectId();
       const response = record(await deps.request("POST", `/api/projects/${encodeURIComponent(projectId)}/story-intents`, {
         text: storyText,
         focus: [],
@@ -437,6 +442,7 @@ export function createApiStoryRepository(
       return { planId: stringField(job.proposalId, "proposal id") };
     },
     getPlan: async (planId) => {
+      requireProjectId();
       const source = await loadSources(deps, projectId, planId);
       // Edits make new versions, and only the current one accepts more edits.
       // A reload or an old link names an earlier version: open the current one.
@@ -445,6 +451,7 @@ export function createApiStoryRepository(
       return render(source);
     },
     setMomentSelected: async (planId, momentId, selected) => {
+      requireProjectId();
       const source = await loadSources(deps, projectId, planId);
       if (!source.proposal.moments.some((moment) => moment.id === momentId)) throw new Error(`Unknown moment ${momentId}`);
       const deselected = new Set(source.proposal.constraints.deselectedMomentIds);
@@ -463,6 +470,7 @@ export function createApiStoryRepository(
       return render({ ...source, proposal: revised });
     },
     applyEdits: async (planId, edits) => {
+      requireProjectId();
       const source = await loadSources(deps, projectId, planId);
       const response = record(await deps.request(
         "PATCH",
@@ -475,6 +483,7 @@ export function createApiStoryRepository(
       return render(needsReload ? await loadSources(deps, projectId, revised.id) : { ...source, proposal: revised });
     },
     getAlternatives: async (planId, momentId) => {
+      requireProjectId();
       const response = record(await deps.request(
         "GET",
         `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/moments/${encodeURIComponent(momentId)}/alternatives`,
@@ -483,6 +492,7 @@ export function createApiStoryRepository(
       return shots.map((shot) => ({ shotId: stringField(shot.shotId, "shot id"), thumbnailUrl: typeof shot.thumbUrl === "string" ? shot.thumbUrl : "", kind: shot.kind === "video" ? "video" as const : "photo" as const }));
     },
     setMomentFavorite: async (planId, momentId, favorite) => {
+      requireProjectId();
       const source = await loadSources(deps, projectId, planId);
       if (!source.proposal.moments.some((moment) => moment.id === momentId)) throw new Error(`Unknown moment ${momentId}`);
       const favorites = favoriteMomentIds(projectId, source.proposal.id);
@@ -491,6 +501,7 @@ export function createApiStoryRepository(
       return render(source);
     },
     reviseMoments: async (planId, request) => {
+      requireProjectId();
       const response = record(await deps.request(
         "POST",
         `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/feedback`,
@@ -503,6 +514,7 @@ export function createApiStoryRepository(
       return render(source);
     },
     chooseCreateOption: async (planId, option) => {
+      requireProjectId();
       if (option !== "film") return { available: false };
       await deps.request(
         "POST",
@@ -510,11 +522,15 @@ export function createApiStoryRepository(
       );
       return { available: true };
     },
-    getDirectionOptions: async (planId) => await deps.request(
-      "GET",
-      `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/direction-options`,
-    ) as DirectionOptions,
+    getDirectionOptions: async (planId) => {
+      requireProjectId();
+      return await deps.request(
+        "GET",
+        `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/direction-options`,
+      ) as DirectionOptions;
+    },
     directFilm: async (planId, direction) => {
+      requireProjectId();
       // Accept is idempotent on the server; a conflict only means another screen
       // got there first, which is no reason to stop directing the film.
       await deps.request("POST", `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/accept`)
@@ -570,11 +586,12 @@ export function createApiStoryRepository(
       return loadFilm(childId, true);
     },
     saveFilm: async (filmId) => {
+      requireProjectId();
       // Compose starts the render itself, so by the time Save is tapped the film
       // is usually already rendering or saved; asking again would be refused.
       // Only a film still sitting at playable needs the render requested.
       if (isStatus(await readGeneration(filmId), "playable")) {
-        await deps.request("POST", `${generationsPath}/${encodeURIComponent(filmId)}/render`);
+        await deps.request("POST", `${generationsPath()}/${encodeURIComponent(filmId)}/render`);
       }
       justSavedAtByGeneration.set(`${projectId}/${filmId}`, Date.now());
       const generation = record(await deps.listenUntil(
@@ -587,21 +604,23 @@ export function createApiStoryRepository(
   };
 
   async function postGeneration(body: unknown): Promise<string> {
-    const response = record(await deps.request("POST", generationsPath, body), "generation response");
+    const response = record(await deps.request("POST", generationsPath(), body), "generation response");
     return stringField(record(response.generation, "generation").id, "generation id");
   }
 
   async function readGeneration(filmId: string): Promise<RecordData> {
+    requireProjectId();
     return record(await deps.listenDocument(`projects/${projectId}/generations/${filmId}`), "generation");
   }
 
   async function downloadUrl(filmId: string): Promise<string> {
-    const response = record(await deps.request("GET", `${generationsPath}/${encodeURIComponent(filmId)}/download`), "download response");
+    const response = record(await deps.request("GET", `${generationsPath()}/${encodeURIComponent(filmId)}/download`), "download response");
     return stringField(response.downloadUrl, "download URL");
   }
 
   /** How many generations deep this one sits; the first film is version 1. */
   async function versionOf(generation: RecordData): Promise<number> {
+    requireProjectId();
     let version = 1;
     let parentId = generation.parentGenerationId;
     while (typeof parentId === "string" && parentId && version < 50) {
@@ -614,6 +633,7 @@ export function createApiStoryRepository(
   }
 
   async function loadFilm(filmId: string, waitForComposition = false): Promise<Film> {
+    requireProjectId();
     // Read exactly one current generation snapshot. The chat polls this method
     // throughout composition and rendering so its progress stays live.
     const generationPath = `projects/${projectId}/generations/${filmId}`;

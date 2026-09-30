@@ -28,7 +28,7 @@ export default function TellStoryScreen() {
   const params = useLocalSearchParams<{ projectId?: string; count?: string; live?: string; repository?: string }>();
   const apiEnabled = process.env.EXPO_PUBLIC_USE_API_STORY_REPOSITORY === "true";
   const live = params.repository !== "fixture" && (params.live === "1" || params.repository === "api" || apiEnabled);
-  const projectId = params.projectId ?? (apiEnabled ? process.env.EXPO_PUBLIC_STORY_PROJECT_ID : null) ?? null;
+  const projectId = params.projectId ?? null;
   // Changing flow/project disposes all pending requests, listeners and UI state.
   return <TellStoryProject key={JSON.stringify([live, projectId])} live={live} projectId={projectId} count={Number(params.count ?? 0)} />;
 }

@@ -69,7 +69,7 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
 describe("createApiStoryRepository", () => {
   it("lists the signed-in user's projects before a project is selected", async () => {
     const deps = dependencies({ request: vi.fn(async () => ({ projects: [] })) });
-    const repository = createApiStoryRepository({ projectId: "" }, deps);
+    const repository = createApiStoryRepository({}, deps);
     await expect(repository.listFilms()).resolves.toEqual([]);
     expect(deps.request).toHaveBeenCalledWith("GET", "/api/projects");
   });
