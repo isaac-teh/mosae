@@ -133,7 +133,10 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
       layoutId: chosen.layoutId, motionId: chosen.motionId, effectId: effect.id,
       seed: `${seed}:${idOf(first)}`, durationSec,
       slots: group.map((clip) => ({ slotId: idOf(clip), shotId: clip.source.shotId, kind: clip.source.kind })),
-      caption: { place: [...timeline.chapters].reverse().find((chapter) => chapter.startSec <= first.startSec)?.title ?? "", date: origin.localTime?.slice(0, 10) },
+      caption: {
+        place: [...timeline.chapters].reverse().find((chapter) => chapter.startSec <= first.startSec)?.title ?? "",
+        ...(origin.localTime ? { date: origin.localTime.slice(0, 10) } : {}),
+      },
     });
     const collage: CollageClip = {
       kind: "collage", clipId: `collage:${idOf(first)}`,

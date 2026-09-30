@@ -79,6 +79,14 @@ describe("Collage", () => {
     expect(renderToStaticMarkup(<Collage spec={{ ...spec, seed: "different-seed" }} />)).not.toBe(renderToStaticMarkup(<Collage spec={spec} />));
   });
 
+  it("renders a chapter place caption without a date or separator", () => {
+    const spec = { ...createCollageSpec("torn-paper"), caption: { place: "Day 1 · Siloso Beach" } };
+    const markup = renderToStaticMarkup(<Collage spec={spec} />);
+    expect(markup).toContain("Day 1 · Siloso Beach");
+    expect(markup).not.toContain("AUTUMN 2026");
+    expect(markup).not.toMatch(/·\s*<\/div>/);
+  });
+
   it("keeps focus-relay input ranges strictly increasing through the final slot", () => {
     const finalSixSlotRange = focusRelayInputRange(5, 6);
     expect(finalSixSlotRange).toEqual([expect.any(Number), expect.any(Number), 1]);

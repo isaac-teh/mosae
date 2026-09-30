@@ -87,6 +87,33 @@ function makeJob(overrides?: Partial<ComposeJob>): ComposeJob {
 }
 
 describe("runCompose — collages", () => {
+  it("composes photos without capture times and omits the collage caption date", async () => {
+    const moments = Array.from({ length: 7 }, (_, index) => ({
+      id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const,
+      title: `Photo ${index}`, description: "", rationale: "",
+    }));
+    const proposal = makeProposal({
+      moments,
+      chapters: [{ id: "chapter-1", title: "Day 1 · Siloso Beach", summary: "", momentIds: moments.map((moment) => moment.id) }],
+      constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+    });
+    const assets = new Map(moments.map((moment, index) => [moment.id, {
+      kind: "photo" as const, eventId: "burst", assetId: `asset-${index}`,
+      analysis: { caption: moment.title },
+    }]));
+    const result = await runCompose(makeJob({ proposal }), makeDeps({
+      assets,
+      collageReview: { combos: [{ layoutId: "torn-paper", motionId: "print-drop", verdict: "keep" }] },
+      generateStructured: async () => ({
+        clips: moments.map((moment) => ({ candidateId: `${moment.id}#still@c0`, holdSec: 4, transition: "cut", audio: "mute" })),
+        musicCues: [],
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.timeline.videoClips.length).toBeGreaterThan(0);
+  });
+
   it("places a four-photo event burst in the composed v2 film", async () => {
     const moments = Array.from({ length: 7 }, (_, index) => ({
       id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const,

@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { GenerationSchema, type Generation } from "@mosae/contracts";
+import { stripUndefined } from "./firestoreValue.js";
 
 export class StoreError extends Error {
   constructor(public code: "not_found" | "forbidden" | "validation_error") {
@@ -121,7 +122,9 @@ export async function publishGeneration(
     // Update generation
     const updated: Generation = {
       ...existing,
-      timeline: input.timeline,
+      // Admin Firestore rejects undefined nested values; omit them after
+      // schema validation so optional generated fields stay optional.
+      timeline: stripUndefined(input.timeline),
       droppedPicks: input.droppedPicks,
       ...(input.reasons ? { reasons: input.reasons } : {}),
       status: "playable",

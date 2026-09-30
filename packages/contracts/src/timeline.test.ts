@@ -41,6 +41,11 @@ describe("TimelineSchema", () => {
     expect(safeParseTimeline({ ...valid, videoClips: [collage] }).ok).toBe(false);
   });
 
+  it("accepts a collage caption without a date", () => {
+    const withCaption = { ...collage, spec: { ...collage.spec, caption: { place: "Day 1 · Siloso Beach" } } };
+    expect(safeParseTimeline({ ...valid, schemaVersion: 2, videoClips: [withCaption] }).ok).toBe(true);
+  });
+
   it("rejects a collage with two video cells", () => {
     const duplicateVideo = { ...collage, spec: { ...collage.spec, slots: collage.spec.slots.map((slot) => ({ ...slot, kind: "video" })) } };
     const result = safeParseTimeline({ ...valid, schemaVersion: 2, videoClips: [duplicateVideo] });
