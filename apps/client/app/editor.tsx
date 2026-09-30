@@ -30,7 +30,8 @@ const shotIdsIn = (timeline: Timeline) => new Set(timeline.videoClips.flatMap((c
 
 export default function EditorScreen() {
   const params = useLocalSearchParams<{ projectId?: string; generationId?: string; planId?: string; request?: string }>();
-  const { repository } = useStoryFlow();
+  const story = useStoryFlow();
+  const { repository } = story;
   const router = useRouter();
   const { height } = useWindowDimensions();
   const editor = useEditor(params.projectId || "fixture", params.generationId || "demo-film", repository);
@@ -54,6 +55,13 @@ export default function EditorScreen() {
     setSeekRequest({ seconds: target });
   }, [editor.timeline?.durationSec]);
   const previewHeight = Math.max(280, Math.min(720, height - 440));
+  useEffect(() => {
+    if (!editor.savedFilm) return;
+    router.navigate({
+      pathname: "/save-film",
+      params: { filmId: params.generationId || "demo-film", directorChat: "true", ...story.flow },
+    } as never);
+  }, [editor.savedFilm, params.generationId, router, story.flow]);
   const soundtrack = editor.timeline?.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   const soundtrackId = soundtrack?.source.kind === "soundtrack" ? soundtrack.source.soundtrackId : null;
   const soundtrackName = soundtrackId

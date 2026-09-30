@@ -3,9 +3,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 
-const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", planId: undefined as string | undefined, repository: "fixture", request: undefined as string | undefined }, back: vi.fn(), push: vi.fn() }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ back: boundary.back, push: boundary.push }) }));
-vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: boundary.repository }) }));
+const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", planId: undefined as string | undefined, repository: "fixture", request: undefined as string | undefined }, back: vi.fn(), push: vi.fn(), navigate: vi.fn() }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ back: boundary.back, push: boundary.push, navigate: boundary.navigate }) }));
+vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: boundary.repository, flow: { repository: "api", projectId: "p1" } }) }));
 vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ playheadSec, pauseRequest }: any) => React.createElement("div", { "data-testid": "preview", "data-playhead-sec": playheadSec, "data-pause-request": pauseRequest }) }));
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
 vi.mock("react-native-svg", () => {
@@ -76,6 +76,7 @@ beforeEach(() => {
   boundary.params = { projectId: "p1", generationId: "g1", planId: undefined, repository: "fixture", request: undefined };
   boundary.back.mockReset();
   boundary.push.mockReset();
+  boundary.navigate.mockReset();
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
 async function render(component: React.ReactNode) { await act(async () => root.render(component)); }
@@ -161,6 +162,27 @@ describe("film editor", () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.textContent).toContain("Rendering… 45%");
     await act(async () => finish({ downloadKey: "https://film.test/saved.mp4" }));
+  });
+
+  it("observes the started generation until it is saved, then opens the Saved screen", async () => {
+    let reads = 0;
+    boundary.repository.saveFilm = vi.fn(() => new Promise(() => {}));
+    boundary.repository.getFilm = vi.fn(async () => {
+      reads++;
+      return reads === 1
+        ? { generationStatus: "rendering", renderProgress: 0.4 }
+        : { generationStatus: "saved", renderProgress: 1, outputPath: "renders/u/p1/g1.mp4", videoUrl: "https://film.test/saved.mp4" };
+    });
+
+    await render(<EditorScreen />);
+    await click("Save");
+    await advance(1500);
+
+    expect(boundary.repository.getFilm).toHaveBeenCalledTimes(2);
+    expect(boundary.navigate).toHaveBeenCalledWith({
+      pathname: "/save-film",
+      params: { filmId: "g1", directorChat: "true", repository: "api", projectId: "p1" },
+    });
   });
 
   it("shows revision renderProgress while edited MP4 is rendering", async () => {

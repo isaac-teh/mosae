@@ -28,6 +28,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [renderProgress, setRenderProgress] = useState<number | null>(null);
   const [renderEtaMinutes, setRenderEtaMinutes] = useState<number | null>(null);
+  const [savedFilm, setSavedFilm] = useState(false);
   const pendingSave = useRef<Promise<boolean> | null>(null);
   const renderRequestId = useRef(0);
   const renderStartedAt = useRef(0);
@@ -142,6 +143,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
     setRenderProgress(null);
     setRenderEtaMinutes(null);
     setRenderRequest(null);
+    setSavedFilm(false);
     while (savedOpsKeyRef.current !== keyOf(opsRef.current)) {
       const saved = await persist(opsRef.current);
       if (!saved) return;
@@ -154,7 +156,13 @@ export function useEditor(projectId: string, generationId: string, repository: S
     setSave({ state: "rendering" });
     try {
       if (revision === 0) {
+        let observeSaved!: (result: { downloadKey: string }) => void;
+        const savedResult = new Promise<{ downloadKey: string }>((resolve) => { observeSaved = resolve; });
+        let observing = true;
+        let polling = false;
         const pollProgress = async () => {
+          if (!observing || polling) return;
+          polling = true;
           try {
             const film = await repository.getFilm(generationId);
             const progress = Math.max(0, Math.min(1, film.renderProgress ?? 0));
@@ -162,14 +170,17 @@ export function useEditor(projectId: string, generationId: string, repository: S
             setRenderEtaMinutes(progress > 0 && progress < 1
               ? Math.max(1, Math.ceil(((Date.now() - renderStartedAt.current) * (1 - progress) / progress) / 60_000))
               : null);
+            if (film.generationStatus === "saved") observeSaved({ downloadKey: film.videoUrl ?? "" });
           } catch { /* The save promise still reports render failures. */ }
+          finally { polling = false; }
         };
         const progressTimer = setInterval(() => { void pollProgress(); }, 1500);
         void pollProgress();
         let result: Awaited<ReturnType<typeof repository.saveFilm>>;
         try {
-          result = await repository.saveFilm(generationId);
+          result = await Promise.race([repository.saveFilm(generationId), savedResult]);
         } finally {
+          observing = false;
           clearInterval(progressTimer);
         }
         if (requestId !== renderRequestId.current) return;
@@ -177,6 +188,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
         setRenderProgress(1);
         setRenderEtaMinutes(null);
         setSave({ state: "ready" });
+        setSavedFilm(true);
         return;
       }
       await repository.renderRevision(projectId, generationId, revision);
@@ -214,6 +226,6 @@ export function useEditor(projectId: string, generationId: string, repository: S
   return {
     timeline, firstCut, sources, unusedMedia, setSource, ops, selectedClipId, select: setSelectedClipId,
     apply, applyMany, undo, redo, reset, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
-    save, savedRevision, downloadUrl, renderProgress, renderEtaMinutes, reloadAfterConflict, render, loaded, error, editError,
+    save, savedRevision, downloadUrl, renderProgress, renderEtaMinutes, savedFilm, reloadAfterConflict, render, loaded, error, editError,
   };
 }
