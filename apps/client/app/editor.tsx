@@ -20,7 +20,7 @@ import { RemoveConfirm } from "@/components/editor/RemoveConfirm";
 import { EditorMenu } from "@/components/editor/EditorMenu";
 import { AskSheet } from "@/components/editor/AskSheet";
 import { RedoIcon, UndoIcon } from "@/components/icons";
-import { downloadFilm } from "@/lib/downloadFilm";
+import { downloadFilm, prepareFilmDownload, type PreparedFilmDownload } from "@/lib/downloadFilm";
 
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 type Tool = "Swap" | "Trim" | "Move" | "Remove" | "Add" | "Ask" | "Collage" | "Soundtrack" | null;
@@ -41,6 +41,8 @@ export default function EditorScreen() {
   const [pauseRequest, setPauseRequest] = useState(0);
   const [preparingDownload, setPreparingDownload] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [preparedDownload, setPreparedDownload] = useState<PreparedFilmDownload | null>(null);
+  const [prefetchingDownload, setPrefetchingDownload] = useState(false);
   const [tool, setTool] = useState<Tool>(params.request ? "Ask" : null);
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [directions, setDirections] = useState<DirectionOptions | null>(null);
@@ -109,6 +111,19 @@ export default function EditorScreen() {
     return Array.isArray(op) ? editor.applyMany(op) : editor.apply(op);
   };
   const onApplyAsk = (ops: EditOp[]) => { if (editor.applyMany(ops)) setTool(null); };
+  const downloadSource = editor.downloadUrl === "film" ? Asset.fromModule(require("../assets/demo/film.mp4")).uri : editor.downloadUrl;
+  useEffect(() => {
+    let active = true;
+    setPreparedDownload(null);
+    if (downloadSource) {
+      setPrefetchingDownload(true);
+      void prepareFilmDownload(downloadSource, plan?.title ?? "Your film")
+        .then((value) => { if (active) setPreparedDownload(value); })
+        .catch(() => { /* Retried when the user taps Download. */ })
+        .finally(() => { if (active) setPrefetchingDownload(false); });
+    }
+    return () => { active = false; };
+  }, [downloadSource, plan?.title]);
   const chooseClip = useCallback((id: string) => {
     selectEditorClip(id);
     const clip = timelineForSelection?.videoClips.find((item) => clipId(item) === id);
@@ -124,8 +139,7 @@ export default function EditorScreen() {
   const downloadRenderedFilm = async () => {
     if (!editor.downloadUrl || preparingDownload) return;
     setDownloadError(null);
-    const source = editor.downloadUrl === "film" ? Asset.fromModule(require("../assets/demo/film.mp4")).uri : editor.downloadUrl;
-    try { await downloadFilm(source, plan?.title ?? "Your film", setPreparingDownload); }
+    try { await downloadFilm(downloadSource!, plan?.title ?? "Your film", setPreparingDownload, preparedDownload); }
     catch { setDownloadError("Could not prepare the film download. Try again."); }
   };
 
@@ -137,7 +151,7 @@ export default function EditorScreen() {
     </View>
     <View className="min-h-[29px] justify-center px-5"><SaveState save={editor.save} renderProgress={editor.renderProgress} renderEtaMinutes={editor.renderEtaMinutes} onReload={() => void editor.reloadAfterConflict()} /></View>
     {editor.editError ? <Text accessibilityRole="alert" className="px-5 pb-2 font-sans text-caption text-on-screen">{editor.editError}</Text> : null}
-    {editor.save.state === "ready" && editor.downloadUrl ? <View className="px-5 pb-2"><View className="flex-row gap-2"><Pressable role="button" accessibilityLabel="Download rendered film" disabled={preparingDownload} onPress={() => void downloadRenderedFilm()} className="min-h-10 justify-center rounded-full bg-[#294655] px-4"><Text className="font-sans-medium text-caption text-on-screen">{preparingDownload ? "Preparing download…" : "Download"}</Text></Pressable><Pressable role="button" accessibilityLabel="Share rendered film" onPress={() => void Share.share({ message: editor.downloadUrl! })} className="min-h-10 justify-center rounded-full border border-on-screen-muted px-4"><Text className="font-sans-medium text-caption text-on-screen">Share</Text></Pressable></View>{preparingDownload ? <Text accessibilityRole="progressbar" className="pt-1 font-sans text-caption text-on-screen-muted">Preparing your MP4…</Text> : null}{downloadError ? <Text accessibilityRole="alert" className="pt-1 font-sans text-caption text-critical">{downloadError}</Text> : null}</View> : null}
+    {editor.save.state === "ready" && editor.downloadUrl ? <View className="px-5 pb-2"><View className="flex-row gap-2"><Pressable role="button" accessibilityLabel="Download rendered film" disabled={preparingDownload || prefetchingDownload} onPress={() => void downloadRenderedFilm()} className="min-h-10 justify-center rounded-full bg-[#294655] px-4"><Text className="font-sans-medium text-caption text-on-screen">{preparingDownload || prefetchingDownload ? "Preparing download…" : "Download"}</Text></Pressable><Pressable role="button" accessibilityLabel="Share rendered film" onPress={() => void Share.share({ message: editor.downloadUrl! })} className="min-h-10 justify-center rounded-full border border-on-screen-muted px-4"><Text className="font-sans-medium text-caption text-on-screen">Share</Text></Pressable></View>{preparingDownload ? <Text accessibilityRole="progressbar" className="pt-1 font-sans text-caption text-on-screen-muted">Preparing your MP4…</Text> : null}{downloadError ? <Text accessibilityRole="alert" className="pt-1 font-sans text-caption text-critical">{downloadError}</Text> : null}</View> : null}
     {editor.error ? <View className="flex-1 items-center justify-center px-6"><Text className="text-center font-sans text-body text-on-screen">{editor.error}</Text></View>
       : !editor.timeline ? <View className="flex-1 items-center justify-center"><Text className="font-sans text-body text-on-screen-muted">Opening your film…</Text></View>
       : <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4" showsVerticalScrollIndicator={false}>

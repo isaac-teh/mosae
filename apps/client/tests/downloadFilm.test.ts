@@ -38,6 +38,27 @@ describe("downloadFilm", () => {
     expect(document.querySelector("a[download]")).toBeNull();
   });
 
+  it("falls back to an anchor download when file sharing loses user activation", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("video", { status: 200 })));
+    vi.stubGlobal("navigator", { canShare: vi.fn(() => true), share: vi.fn(async () => { throw new DOMException("activation expired", "NotAllowedError"); }) });
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:film"), revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    await downloadFilm("https://storage.example/film", "Trip");
+
+    expect(click).toHaveBeenCalledOnce();
+  });
+
+  it("treats a cancelled share as a quiet cancellation", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("video", { status: 200 })));
+    vi.stubGlobal("navigator", { canShare: vi.fn(() => true), share: vi.fn(async () => { throw new DOMException("cancelled", "AbortError"); }) });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    await expect(downloadFilm("https://storage.example/film", "Trip")).resolves.toBeUndefined();
+
+    expect(click).not.toHaveBeenCalled();
+  });
+
   it("reports failures and never opens the source URL", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 403 })));
     vi.stubGlobal("navigator", {});

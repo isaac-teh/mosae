@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, onSnapshot, query, where } from "firebase/firestore";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import { ensureSignedIn } from "../auth";
 import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
@@ -25,7 +25,6 @@ export type ApiStoryRepositoryDeps = {
    */
   listenUntil(path: string, accept: (value: unknown) => boolean): Promise<unknown>;
   listenCollection(path: string): Promise<unknown[]>;
-  listenUserProjects(userId: string): Promise<unknown[]>;
   getThumbnailUrl(projectId: string, assetId: string): Promise<string>;
   request(method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown): Promise<unknown>;
 };
@@ -109,11 +108,6 @@ const firebaseDeps: ApiStoryRepositoryDeps = {
         reject(error);
       });
     });
-  },
-  async listenUserProjects(userId) {
-    await ensureSignedIn();
-    const snapshot = await getDocs(query(collection(getFirestoreClient(), "projects"), where("userId", "==", userId)));
-    return snapshot.docs.map((entry) => entry.data());
   },
   async getThumbnailUrl(projectId, assetId) {
     const response = record(await firebaseDeps.request(
@@ -275,14 +269,13 @@ export function createApiStoryRepository(
 
   return {
     listFilms: async () => {
-      const user = await ensureSignedIn();
-      const projects = (await deps.listenUserProjects(user.uid)).map((value) => record(value, "project"));
+      const response = record(await deps.request("GET", "/api/projects"), "projects response");
+      const projects = Array.isArray(response.projects) ? response.projects.map((value) => record(value, "project")) : [];
       const now = Date.now();
       const films = await Promise.all(projects.map(async (project): Promise<FilmListItem[]> => {
         const projectId = typeof project.id === "string" ? project.id : "";
         if (!projectId) return [];
-        const projectValue = await deps.listenDocument(`projects/${projectId}`);
-        const projectRecord = { ...project, ...(projectValue ? record(projectValue, "project") : {}) };
+        const projectRecord = project;
         const savedId = typeof projectRecord.savedGenerationId === "string" ? projectRecord.savedGenerationId : "";
         const activeId = typeof projectRecord.latestRequestedGenerationId === "string"
           ? projectRecord.latestRequestedGenerationId
@@ -303,6 +296,8 @@ export function createApiStoryRepository(
           if (value) proposals.set(id, record(value, "proposal"));
         }));
         const range = projectRecord.dateRange && typeof projectRecord.dateRange === "object" ? projectRecord.dateRange as RecordData : {};
+        let shotsPromise: Promise<unknown[]> | undefined;
+        const projectShots = () => shotsPromise ??= deps.listenCollection(`projects/${projectId}/shots`);
         const date = isoDate(range.start);
         const month = date ? `${MONTHS[date.month - 1]} ${date.year}` : "";
         const titleFor = (proposalId: unknown) => {
@@ -312,15 +307,18 @@ export function createApiStoryRepository(
         const makeItem = async (generationId: string, generation: RecordData, status: FilmListItem["status"]): Promise<FilmListItem> => {
           const timeline = generation.timeline && typeof generation.timeline === "object" ? record(generation.timeline, "timeline") : {};
           const clips = Array.isArray(timeline.videoClips) ? timeline.videoClips as RecordData[] : [];
-          const firstSource = clips[0]?.source && typeof clips[0].source === "object" ? record(clips[0].source, "clip source") : {};
-          let firstShotId = typeof firstSource.shotId === "string" ? firstSource.shotId : "";
-          const shots = firstShotId ? await deps.listenCollection(`projects/${projectId}/shots`) : [];
-          const firstShot = shots.map((item) => record(item, "shot")).find((shot) => shot.id === firstShotId);
+          const firstClip = clips[0] ?? {};
+          const firstSource = firstClip.source && typeof firstClip.source === "object" ? record(firstClip.source, "clip source") : {};
+          const slots = firstClip.spec && typeof firstClip.spec === "object" && Array.isArray((firstClip.spec as RecordData).slots) ? (firstClip.spec as RecordData).slots as RecordData[] : [];
+          const firstShotId = typeof firstSource.shotId === "string" ? firstSource.shotId : typeof slots.find((slot) => typeof slot.shotId === "string")?.shotId === "string" ? String(slots.find((slot) => typeof slot.shotId === "string")?.shotId) : "";
+          const shots = (await projectShots()).map((item) => record(item, "shot"));
+          const firstShot = shots.find((shot) => shot.id === firstShotId)
+            ?? shots.find((shot) => shot.mediaType === "photo" || shot.type === "photo");
           const posterUrl = typeof firstShot?.assetId === "string" ? await deps.getThumbnailUrl(projectId, firstShot.assetId).catch(() => "") : "";
           const durationSec = Number(timeline.durationSec ?? 0);
           const savedAt = Number(generation.savedAt ?? generation.updatedAt ?? justSavedAtByGeneration.get(`${projectId}/${generationId}`) ?? 0);
           const proposalId = typeof generation.proposalId === "string" ? generation.proposalId : null;
-          return { projectId, filmId: generationId, planId: proposalId, title: titleFor(proposalId), month, duration: durationSec ? `${Math.floor(durationSec / 60)}:${String(Math.round(durationSec % 60)).padStart(2, "0")}` : "", posterUrl, justSaved: status === "saved" && savedAt > 0 && now - savedAt <= 10 * 60_000, status };
+          return { projectId, filmId: generationId, planId: proposalId, title: titleFor(proposalId), month, duration: durationSec ? `${Math.floor(durationSec / 60)}:${String(Math.round(durationSec % 60)).padStart(2, "0")}` : "", posterUrl, justSaved: status === "saved" && savedAt > 0 && now - savedAt <= 10 * 60_000, status, demo: Boolean(projectRecord.demo) };
         };
         const items: FilmListItem[] = [];
         const savedGeneration = savedId ? generations.get(savedId) : undefined;
@@ -336,11 +334,11 @@ export function createApiStoryRepository(
         if ((!activeGeneration || activeId === savedId) && (!savedGeneration || (activeProposalId && activeProposalId !== savedProposalId))) {
           const proposalId = activeProposalId || null;
           const proposal = proposalId ? proposals.get(proposalId) : undefined;
-          items.push({ projectId, filmId: null, planId: proposalId, title: titleFor(proposalId), month, duration: "", posterUrl: "", justSaved: false, status: "in-progress" });
+          items.push({ projectId, filmId: null, planId: proposalId, title: titleFor(proposalId), month, duration: "", posterUrl: "", justSaved: false, status: "in-progress", demo: Boolean(projectRecord.demo) });
         }
         if (items.length === 0 && !savedGeneration) {
           const proposalId = activeProposalId || null;
-          items.push({ projectId, filmId: null, planId: proposalId, title: titleFor(proposalId), month, duration: "", posterUrl: "", justSaved: false, status: "in-progress" });
+          items.push({ projectId, filmId: null, planId: proposalId, title: titleFor(proposalId), month, duration: "", posterUrl: "", justSaved: false, status: "in-progress", demo: Boolean(projectRecord.demo) });
         }
         return items;
       }));
@@ -639,10 +637,13 @@ export function createApiStoryRepository(
     const proposalRecord = (proposalValue ?? {}) as RecordData;
     const projectRecord = (projectValue ?? {}) as RecordData;
 
-    const firstSource = clips[0]?.source && typeof clips[0].source === "object" ? clips[0].source as RecordData : null;
-    const firstShot = firstSource
-      ? shotValues.map((value) => value as RecordData).find((shot) => shot.id === firstSource.shotId)
-      : undefined;
+    const firstClip = clips[0] as RecordData | undefined;
+    const firstSource = firstClip?.source && typeof firstClip.source === "object" ? firstClip.source as RecordData : {};
+    const firstSlots = firstClip?.spec && typeof firstClip.spec === "object" && Array.isArray((firstClip.spec as RecordData).slots) ? (firstClip.spec as RecordData).slots as RecordData[] : [];
+    const firstShotId = typeof firstSource.shotId === "string" ? firstSource.shotId : firstSlots.find((slot) => typeof slot.shotId === "string")?.shotId;
+    const availableShots = shotValues.map((value) => value as RecordData);
+    const firstShot = availableShots.find((shot) => shot.id === firstShotId)
+      ?? availableShots.find((shot) => shot.mediaType === "photo" || shot.type === "photo");
     const poster = typeof firstShot?.assetId === "string"
       ? await deps.getThumbnailUrl(projectId, firstShot.assetId).catch(() => "")
       : "";

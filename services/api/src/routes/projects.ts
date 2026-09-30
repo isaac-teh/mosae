@@ -74,6 +74,7 @@ export function projectsRouter(deps: {
   db: Firestore;
   now?: () => number;
   auth?: RequestHandler;
+  listProjects?: (userId: string) => Promise<Record<string, unknown>[]>;
   settle?: (projectId: string) => Promise<void>;
   sleep?: (ms: number) => Promise<void>;
   embedQuery?: (text: string) => Promise<number[]>;
@@ -152,6 +153,18 @@ export function projectsRouter(deps: {
       res.status(201).json({ project });
     } catch (error) {
       handleError(res, error);
+    }
+  });
+
+  router.get("/", async (_req, res) => {
+    try {
+      const projects = deps.listProjects
+        ? await deps.listProjects(res.locals.userId)
+        : await db.collection("projects").where("userId", "==", res.locals.userId).get().then((snapshot) => snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id })));
+      res.json({ projects });
+    } catch (error) {
+      console.error("list projects failed", error);
+      res.status(500).json({ error: "internal" });
     }
   });
 

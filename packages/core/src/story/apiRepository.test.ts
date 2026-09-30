@@ -3,9 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 const firebaseMocks = vi.hoisted(() => ({
   ensureSignedIn: vi.fn(async () => ({ uid: "owner", getIdToken: async () => "owner-token" })),
   onSnapshot: vi.fn(),
-  getDocs: vi.fn(),
-  query: vi.fn((source: unknown) => source),
-  where: vi.fn(),
 }));
 
 vi.mock("../auth", () => ({ ensureSignedIn: firebaseMocks.ensureSignedIn }));
@@ -15,9 +12,6 @@ vi.mock("firebase/firestore", () => ({
   doc: (_db: unknown, ...segments: string[]) => segments.join("/"),
   collection: (_db: unknown, ...segments: string[]) => segments.join("/"),
   onSnapshot: firebaseMocks.onSnapshot,
-  getDocs: firebaseMocks.getDocs,
-  query: firebaseMocks.query,
-  where: firebaseMocks.where,
 }));
 
 import { createApiStoryRepository, type ApiStoryRepositoryDeps } from "./apiRepository";
@@ -66,7 +60,6 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
       return value;
     }),
     listenCollection: vi.fn(async (path) => collections[path] ?? []),
-    listenUserProjects: vi.fn(async () => []),
     getThumbnailUrl: vi.fn(async (projectId, assetId) => `https://storage.test/${projectId}/${assetId}?signed=true`),
     request: vi.fn(async () => ({})),
     ...overrides,
@@ -75,10 +68,10 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
 
 describe("createApiStoryRepository", () => {
   it("lists the signed-in user's projects before a project is selected", async () => {
-    const deps = dependencies({ listenUserProjects: vi.fn(async () => []) });
+    const deps = dependencies({ request: vi.fn(async () => ({ projects: [] })) });
     const repository = createApiStoryRepository({ projectId: "" }, deps);
     await expect(repository.listFilms()).resolves.toEqual([]);
-    expect(deps.listenUserProjects).toHaveBeenCalledWith("owner");
+    expect(deps.request).toHaveBeenCalledWith("GET", "/api/projects");
   });
 
   it("loads the generation timeline and preview sources for editing", async () => {
@@ -138,15 +131,13 @@ describe("createApiStoryRepository", () => {
 
   it("lists saved films newest first with month, duration, poster and recent-save marker", async () => {
     const deps = dependencies({
-      listenUserProjects: vi.fn(async () => [
-        { id: "old", createdAt: 1, savedGenerationId: "g-old", title: "Old" },
-        { id: "new", createdAt: 2, savedGenerationId: "g-new", title: "New" },
-      ]),
+      request: vi.fn(async () => ({ projects: [
+        { id: "old", createdAt: 1, savedGenerationId: "g-old", title: "Old", dateRange: { start: "2025-06-02", end: "2025-06-03" } },
+        { id: "new", createdAt: 2, savedGenerationId: "g-new", title: "New", demo: "trip1-v2", dateRange: { start: "2026-09-22", end: "2026-09-23" } },
+      ] })),
       listenDocument: vi.fn(async (path) => {
         if (path === "projects/old/generations/g-old") return { id: "g-old", proposalId: "p-old", status: "saved", savedAt: Date.now() - 60_000, timeline: { durationSec: 125, videoClips: [{ source: { shotId: "old-shot" } }] } };
         if (path === "projects/new/generations/g-new") return { id: "g-new", proposalId: "p-new", status: "saved", savedAt: Date.now() - 60_000, timeline: { durationSec: 90, videoClips: [{ source: { shotId: "new-shot" } }] } };
-        if (path === "projects/old") return { dateRange: { start: "2025-06-02", end: "2025-06-03" } };
-        if (path === "projects/new") return { dateRange: { start: "2026-09-22", end: "2026-09-23" } };
         if (path.endsWith("/storyProposals/p-old")) return { title: "Old" };
         if (path.endsWith("/storyProposals/p-new")) return { title: "New" };
         return null;
@@ -155,9 +146,14 @@ describe("createApiStoryRepository", () => {
     });
     const films = await createApiStoryRepository({ projectId: "unused" }, deps).listFilms();
     expect(films).toEqual([
-      { projectId: "new", filmId: "g-new", planId: "p-new", title: "New", month: "Sep 2026", duration: "1:30", posterUrl: "https://storage.test/new/new-asset?signed=true", justSaved: true, status: "saved" },
-      { projectId: "old", filmId: "g-old", planId: "p-old", title: "Old", month: "Jun 2025", duration: "2:05", posterUrl: "https://storage.test/old/old-asset?signed=true", justSaved: true, status: "saved" },
+      { projectId: "new", filmId: "g-new", planId: "p-new", title: "New", month: "Sep 2026", duration: "1:30", posterUrl: "https://storage.test/new/new-asset?signed=true", justSaved: true, status: "saved", demo: true },
+      { projectId: "old", filmId: "g-old", planId: "p-old", title: "Old", month: "Jun 2025", duration: "2:05", posterUrl: "https://storage.test/old/old-asset?signed=true", justSaved: true, status: "saved", demo: false },
     ]);
+    expect(deps.listenDocument).not.toHaveBeenCalledWith("projects/old");
+    expect(deps.listenDocument).not.toHaveBeenCalledWith("projects/new");
+    const shotReads = vi.mocked(deps.listenCollection).mock.calls.map(([path]) => path).filter((path) => path.endsWith("/shots"));
+    expect(new Set(shotReads)).toEqual(new Set(["projects/new/shots", "projects/old/shots"]));
+    expect(shotReads).toHaveLength(2);
   });
 
   it("includes playable, rendering, and in-progress projects in the Home list", async () => {
@@ -175,7 +171,7 @@ describe("createApiStoryRepository", () => {
     }
     docs["projects/working/storyProposals/pw"] = { title: "Working title" };
     const deps = dependencies({
-      listenUserProjects: vi.fn(async () => projects),
+      request: vi.fn(async () => ({ projects })),
       listenDocument: vi.fn(async (path) => docs[path] ?? null),
       listenCollection: vi.fn(async () => []),
     });
@@ -555,6 +551,12 @@ describe("film adapters", () => {
       posterKey: "https://storage.test/project-1/asset-2?signed=true",
     });
     expect(deps.request).not.toHaveBeenCalled();
+  });
+
+  it("uses the first photo thumbnail when a film starts with a collage clip", async () => {
+    const deps = filmDependencies({ [genPath]: generation({ timeline: { durationSec: 30, videoClips: [{ kind: "collage", spec: { slots: [{ shotId: "unindexed" }] } }] } }) });
+    const film = await createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1");
+    expect(film.posterKey).toBe("https://storage.test/project-1/asset-1?signed=true");
   });
 
   it("reads the latest generation status and render progress on each film poll", async () => {

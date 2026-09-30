@@ -6,7 +6,7 @@ import Svg, { Circle, Path } from "react-native-svg";
 import { useStoryFlow, useStoryScreenGuard } from "@/lib/storyFlow";
 import { type Film, type StoryRepository } from "@mosae/core";
 import { FilmPlayer } from "@/components/FilmPlayer";
-import { downloadFilm } from "@/lib/downloadFilm";
+import { downloadFilm, prepareFilmDownload, type PreparedFilmDownload } from "@/lib/downloadFilm";
 import { storyImage } from "@/lib/storyImage";
 
 function PinIcon() { return <Svg width={13} height={13} viewBox="0 0 13 13"><Path d="M6.5 11.5s4-3.13 4-6.1a4 4 0 1 0-8 0c0 2.97 4 6.1 4 6.1Z" fill="none" stroke="rgb(var(--color-accent))" strokeWidth={1.3} /><Circle cx={6.5} cy={5.25} r={1.2} fill="rgb(var(--color-accent))" /></Svg>; }
@@ -30,14 +30,29 @@ function SaveFilmScreenContent({ filmId, directorChat, storyFlow, repository, ro
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [preparingDownload, setPreparingDownload] = useState(false);
+  const [preparedDownload, setPreparedDownload] = useState<PreparedFilmDownload | null>(null);
+  const [prefetchingDownload, setPrefetchingDownload] = useState(false);
   useEffect(() => { void repository.getFilm(filmId)
     .then((value) => { if (isCurrent()) setFilm(value); })
     .catch((cause: Error) => { if (isCurrent()) setError(cause.message); }); }, [filmId, isCurrent, repository]);
 
+  useEffect(() => {
+    let active = true;
+    setPreparedDownload(null);
+    if (film) {
+      setPrefetchingDownload(true);
+      void prepareFilmDownload(film.videoUrl ?? Asset.fromModule(require("../assets/demo/film.mp4")).uri, film.title)
+        .then((value) => { if (active) setPreparedDownload(value); })
+        .catch(() => { /* Retried when the user taps Download. */ })
+        .finally(() => { if (active) setPrefetchingDownload(false); });
+    }
+    return () => { active = false; };
+  }, [film]);
+
   const onDownload = async () => {
     if (!film || preparingDownload) return;
     setDownloadError(null);
-    try { await downloadFilm(film.videoUrl ?? Asset.fromModule(require("../assets/demo/film.mp4")).uri, film.title, setPreparingDownload); }
+    try { await downloadFilm(film.videoUrl ?? Asset.fromModule(require("../assets/demo/film.mp4")).uri, film.title, setPreparingDownload, preparedDownload); }
     catch { setDownloadError("Could not prepare the film download. Try again."); }
   };
   const poster = film ? storyImage(film.posterKey || film.savePosterKey) : {};
@@ -53,7 +68,7 @@ function SaveFilmScreenContent({ filmId, directorChat, storyFlow, repository, ro
       <FilmPlayer source={film.videoUrl ?? require("../assets/demo/film.mp4")} poster={poster} durationSec={film.durationSec} aspect="landscape" compact />
       <View className="gap-1"><Text className="font-title text-title text-ink">{film.title}</Text><View className="flex-row items-center gap-1"><PinIcon /><Text className="font-sans text-caption text-ink-muted">{film.dateLabel}</Text></View><Text className="font-sans text-caption text-ink-muted">{film.momentCount} moments · Still editable anytime</Text></View>
       <View accessibilityLabel="Film actions" className="flex-row gap-3">
-        <Pressable role="button" aria-label="Download" disabled={preparingDownload} onPress={() => void onDownload()} className="min-h-12 flex-1 items-center justify-center rounded-full bg-accent px-4"><Text className="font-sans-semibold text-button text-on-accent">{preparingDownload ? "Preparing download…" : "Download"}</Text></Pressable>
+        <Pressable role="button" aria-label="Download" disabled={preparingDownload || prefetchingDownload} onPress={() => void onDownload()} className="min-h-12 flex-1 items-center justify-center rounded-full bg-accent px-4"><Text className="font-sans-semibold text-button text-on-accent">{preparingDownload || prefetchingDownload ? "Preparing download…" : "Download"}</Text></Pressable>
         <Pressable role="button" aria-label="Share" onPress={() => void Share.share({ message: film.videoUrl ?? film.title })} className="min-h-12 flex-1 items-center justify-center rounded-full border border-line-strong px-4"><Text className="font-sans-semibold text-button text-ink">Share</Text></Pressable>
       </View>
       {preparingDownload ? <Text accessibilityRole="progressbar" className="font-sans text-caption text-ink-muted">Preparing your MP4…</Text> : null}
