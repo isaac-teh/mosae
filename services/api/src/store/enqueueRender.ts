@@ -1,27 +1,35 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { startRender } from "./generationStore.js";
+import { getGeneration, startRender } from "./generationStore.js";
 import { newOutboxTask } from "../domain/outbox.js";
 
 /**
  * Start a render for a playable generation and write its `render` outbox task,
  * reusing the exact code path of `POST …/render` in `routes/generations.ts`.
  *
- * The route calls this so compose success can enqueue a render too: a playable
- * film is rendered automatically (Task 7's ruling), and Save still works because
- * `startRender` refuses anything but a playable generation, so a second render
- * cannot start on top of a running one. In production the dispatcher picks up
- * the task it writes; callers that enqueue from compose pass no dispatch seam —
- * they rely on the same drain the route already performs.
+ * `startRender` refuses anything but a playable generation, so duplicate Save
+ * requests join the existing render rather than writing another outbox task.
  */
 export async function enqueueRender(
   db: Firestore,
   input: { userId: string; projectId: string; generationId: string; schemaVersion: number },
 ): Promise<void> {
-  await startRender(db, {
-    userId: input.userId,
-    projectId: input.projectId,
-    generationId: input.generationId,
-  });
+  const current = await getGeneration(db, input.userId, input.projectId, input.generationId);
+  if (!current) throw new Error("generation_not_found");
+  if (current.status === "rendering" || current.status === "saved") return;
+
+  try {
+    await startRender(db, {
+      userId: input.userId,
+      projectId: input.projectId,
+      generationId: input.generationId,
+    });
+  } catch (error) {
+    // Two taps can both read `playable`; the transaction lets one start, then
+    // the loser observes `rendering` and joins that in-flight render.
+    const latest = await getGeneration(db, input.userId, input.projectId, input.generationId);
+    if (latest?.status === "rendering" || latest?.status === "saved") return;
+    throw error;
+  }
 
   const task = newOutboxTask({
     projectId: input.projectId,

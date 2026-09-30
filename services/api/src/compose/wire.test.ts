@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Firestore } from "firebase-admin/firestore";
 import type { StoryProposal } from "@mosae/contracts";
-import { InMemoryTaskQueue } from "../queue/taskQueue.js";
 
 vi.mock("../store/enqueueRender.js", () => ({ enqueueRender: vi.fn() }));
 vi.mock("../store/generationStore.js", () => ({ publishGeneration: vi.fn(), failGeneration: vi.fn() }));
@@ -104,49 +103,23 @@ describe("loadComposeCatalog review edits", () => {
 });
 
 describe("createCompose render handoff", () => {
-  it("awaits the Cloud Tasks queue handoff after writing the render outbox task", async () => {
+  it("publishes a playable generation without starting a render", async () => {
     const projectId = "project1";
     const generationId = "generation1";
     const proposalData = proposal();
     const db = composeFirestore(proposalData);
-    const queue = new InMemoryTaskQueue();
-    let notifyEnqueueStarted!: () => void;
-    const enqueueStarted = new Promise<void>((resolve) => { notifyEnqueueStarted = resolve; });
-    let releaseEnqueue!: () => void;
-    const enqueueGate = new Promise<void>((resolve) => { releaseEnqueue = resolve; });
-    const realEnqueue = queue.enqueue.bind(queue);
-    let outboxWritten = false;
-    vi.mocked(enqueueRender).mockImplementation(async () => { outboxWritten = true; });
+    vi.mocked(enqueueRender).mockClear();
     vi.mocked(publishGeneration).mockResolvedValue({} as never);
     vi.mocked(runCompose).mockResolvedValue({ ok: true, timeline: {} as never, droppedPicks: [], reasons: [] } as never);
-    vi.spyOn(queue, "enqueue").mockImplementation(async (task) => {
-      expect(outboxWritten).toBe(true);
-      notifyEnqueueStarted();
-      await enqueueGate;
-      return realEnqueue(task);
-    });
 
     const compose = createCompose({
       db,
       generateStructured: async () => ({}) as never,
-      afterRenderEnqueued: () => queue.enqueue({
-        name: "render-work-key",
-        path: "/tasks/render",
-        body: { projectId, subjectKind: "generation", subjectId: generationId, generation: "1", workKey: "render-work-key" },
-      }).then(() => undefined),
     });
 
-    let finished = false;
-    const running = compose({ projectId, generationId }).finally(() => { finished = true; });
-    try {
-      await enqueueStarted;
-      await Promise.resolve();
-      expect(finished).toBe(false);
-    } finally {
-      releaseEnqueue();
-      await running;
-    }
+    await expect(compose({ projectId, generationId })).resolves.toBe("composed");
 
-    expect(queue.tasks).toEqual([expect.objectContaining({ path: "/tasks/render", body: expect.objectContaining({ projectId, subjectId: generationId }) })]);
+    expect(publishGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ userId: "owner", projectId, generationId }));
+    expect(enqueueRender).not.toHaveBeenCalled();
   });
 });

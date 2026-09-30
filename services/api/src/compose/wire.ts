@@ -5,7 +5,6 @@ import type { ShotAnalysis } from "../domain/understanding.js";
 import { generateStructured, type GenerateOptions } from "../gemini/client.js";
 import { createProjectGeminiClient, geminiConfigured, recordUsageToLog } from "../gemini/wire.js";
 import { publishGeneration, failGeneration } from "../store/generationStore.js";
-import { enqueueRender } from "../store/enqueueRender.js";
 import { stripProposalEnvelope } from "../store/directingStore.js";
 import { runCompose, type ComposeDeps, type ComposeJob } from "./runCompose.js";
 import type { Asset as CandidateAsset } from "./buildCandidates.js";
@@ -29,12 +28,6 @@ export type ComposeConfig = {
   /** Test seam: a recorded model response in place of the SDK. */
   generateStructured?: ComposeDeps["generateStructured"];
   soundtrackIds?: Set<string>;
-  /**
-   * Called once the render task is written. Production's dispatcher polls the
-   * outbox; the local dev runner only drains on events, so it hooks in here or
-   * the render task sits undelivered and the film stays "rendering" forever.
-   */
-  afterRenderEnqueued?: () => void | Promise<void>;
 };
 
 /**
@@ -325,17 +318,6 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       reasons: result.reasons,
       now: Date.now(),
     });
-
-    // Task 7's ruling: a playable film is rendered automatically. Compose writes
-    // the render task here; in production the dispatcher picks it up, so Save and
-    // auto-render share one path.
-    await enqueueRender(db, {
-      userId,
-      projectId: task.projectId,
-      generationId: task.generationId,
-      schemaVersion: generation.schemaVersion,
-    });
-    await config.afterRenderEnqueued?.();
 
     return "composed";
   };

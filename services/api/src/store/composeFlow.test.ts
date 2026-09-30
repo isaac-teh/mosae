@@ -157,35 +157,17 @@ const pointers = async (projectId: string): Promise<Record<string, string | null
 };
 
 describe("compose flow (emulator)", () => {
-  it("auto-enqueues a render when compose succeeds, so the film is rendering", async () => {
+  it("publishes compose as playable without enqueuing a render", async () => {
     const { projectId, proposalId } = await seed();
 
     const generationId = await requestGeneration(projectId, proposalId, true);
-    const afterRenderEnqueued = vi.fn();
-    const queue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), compose: createCompose({ db: adminDb, generateStructured: async () => RECORDED, afterRenderEnqueued }) });
+    const queue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), compose: createCompose({ db: adminDb, generateStructured: async () => RECORDED }) });
     expect(await deliverOwnTasks(projectId, queue)).toHaveLength(1);
-    // The local runner drains only on events; this hook is how the render task
-    // compose just wrote gets delivered at all.
-    expect(afterRenderEnqueued).toHaveBeenCalledTimes(1);
-
-    // Compose success moves the generation to playable and immediately enqueues
-    // a render: the film is `rendering` with a real `taskOutbox` record in the
-    // shape the dispatcher reads. No Save was pressed — this is Task 7's ruling.
     const composed = await getGeneration(adminDb, "owner", projectId, generationId);
-    expect(composed?.status).toBe("rendering");
-
-    // The compose task is delivered but still in the collection; only its render
-    // sibling is what Task 7's ruling just wrote. Filter by stage so the count
-    // names that one record, not every outbox doc for the project.
+    expect(composed?.status).toBe("playable");
     const renderTask = await adminDb.collection(`projects/${projectId}/taskOutbox`).get();
     const renders = renderTask.docs.filter((doc) => doc.get("stage") === "render");
-    expect(renders.length).toBe(1);
-    const taskDoc = renders[0].data();
-    expect(taskDoc.stage).toBe("render");
-    expect(taskDoc.subjectId).toBe(generationId);
-
-    // The render task is still pending — the dispatcher picks it up on its own.
-    expect(renderTask.docs.every((doc) => doc.get("state") === "delivered" || doc.get("state") === "pending")).toBe(true);
+    expect(renders).toHaveLength(0);
   });
 
   it("carries an accepted proposal to a saved film and moves each pointer in turn", async () => {
@@ -201,23 +183,20 @@ describe("compose flow (emulator)", () => {
     expect(await deliverOwnTasks(projectId, queue)).toHaveLength(1);
     expect(compose).toHaveBeenCalledWith({ projectId, generationId });
 
-    // Compose success already enqueued a render (Task 7's ruling), so the film
-    // is `rendering` with a real `taskOutbox` record in the shape the dispatcher
-    // reads. No Save was pressed — this is what makes Save consistent with auto-rendering.
     const composed = await getGeneration(adminDb, "owner", projectId, generationId);
-    expect(composed?.status).toBe("rendering");
+    expect(composed?.status).toBe("playable");
     expect(await pointers(projectId)).toEqual({ latestRequested: generationId, currentPlayable: generationId, saved: null });
 
-    // The render task the compose wrote is delivered the same way the compose task
-    // was, through the real dispatcher to the real render leg. Calling
+    const save = await request(await listeningServer(buildApp(projectId))).post(`/api/projects/${projectId}/generations/${generationId}/render`).send({});
+    expect(save.status).toBe(202);
+
+    // The render task Save wrote is delivered through the real dispatcher and render leg. Calling
     // `setRenderProgress` and `markSaved` from the test instead would
-    // manufacture by hand a state the system could not reach: until this
-    // existed, `/tasks/render` was a 404 and the film was stuck at `rendering`
-    // forever.
+    // manufacture by hand a state the system could not reach.
     const outputPath = `renders/owner/${projectId}/${generationId}.mp4`;
     const render = vi.fn(renderLeg([{ progress: 0.5 }, { done: true, outputPath: "/tmp/out.mp4", durationInFrames: 500 }]));
     const renderQueue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), render });
-    // Two tasks delivered in total: the compose task and its auto-enqueued render.
+    // Compose and Save are both delivered through the dispatcher.
     expect(await deliverOwnTasks(projectId, renderQueue)).toHaveLength(2);
     expect(render).toHaveBeenCalledWith({ projectId, generationId });
 
@@ -268,14 +247,13 @@ describe("compose flow (emulator)", () => {
     const first = await requestGeneration(projectId, proposalId, true);
     const good = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), compose: createCompose({ db: adminDb, generateStructured: async () => RECORDED }) });
     await deliverOwnTasks(projectId, good);
-    // Compose success auto-enqueued a render (Task 7's ruling), so the film is
-    // `rendering` with a real taskOutbox record. Saved through the real render leg,
-    // not by hand — delivering that enqueued task rather than calling startRender,
-    // which refuses anything but a playable generation.
+    // Compose is playable. Save owns starting the render task.
+    const save = await request(await listeningServer(buildApp(projectId))).post(`/api/projects/${projectId}/generations/${first}/render`).send({});
+    expect(save.status).toBe(202);
     const outputPath = `renders/owner/${projectId}/${first}.mp4`;
     const render = vi.fn(renderLeg([{ done: true, outputPath: "/tmp/first.mp4", durationInFrames: 1 }]));
     const renderQueue = new DevTaskQueue({ ingest: vi.fn(), understand: vi.fn(), cluster: vi.fn(), render });
-    // Both the compose task and its auto-enqueued render are delivered through the queue.
+    // The compose and Save render tasks are delivered through the queue.
     expect(await deliverOwnTasks(projectId, renderQueue)).toHaveLength(2);
     expect(render).toHaveBeenCalledWith({ projectId, generationId: first });
     const before = await pointers(projectId);
