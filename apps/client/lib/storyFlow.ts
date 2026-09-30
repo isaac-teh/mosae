@@ -17,8 +17,14 @@ export function storyRoute(path: string, id: { planId?: string; filmId?: string 
 /** A review URL owns its repository identity, including after a full reload. */
 export function useStoryFlow() {
   const params = useLocalSearchParams<{ repository?: string; projectId?: string; live?: string }>();
-  const api = params.repository === "api" || (params.repository !== "fixture" &&
-    (params.live === "1" || process.env.EXPO_PUBLIC_USE_API_STORY_REPOSITORY === "true"));
+  const fixtureOptIn = params.repository === "fixture" || (params.repository !== "api" && params.live !== "1" &&
+    process.env.NODE_ENV !== "production" && process.env.EXPO_PUBLIC_USE_FIXTURE_STORY_REPOSITORY === "true"
+  );
+  const api = !fixtureOptIn && (
+    params.repository === "api" || params.live === "1" ||
+    process.env.EXPO_PUBLIC_USE_API_STORY_REPOSITORY === "true" ||
+    process.env.NODE_ENV === "production" || process.env.EXPO_PUBLIC_USE_FIXTURE_STORY_REPOSITORY !== "true"
+  );
   const projectId = params.projectId ?? process.env.EXPO_PUBLIC_STORY_PROJECT_ID ?? "";
   const flow = useMemo<StoryFlow>(() => api ? { repository: "api", projectId } : { repository: "fixture" }, [api, projectId]);
   const repository = useMemo(() => api ? createApiStoryRepository({ projectId }) : getFixtureRepository(), [api, projectId]);

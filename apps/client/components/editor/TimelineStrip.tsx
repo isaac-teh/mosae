@@ -158,11 +158,10 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     pinch.current = { distance: Math.abs(second - first), scale: pixelsPerSecond, timeAtCenter: xToTime(scrollLeft.current + centerX, pixelsPerSecond, leadingPadding), centerX };
     isUserScrolling.current = false;
   };
-  const onTouchMove = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } }; preventDefault?: () => void }) => {
+  const onTouchMove = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } } }) => {
     const initial = pinch.current;
     const touches = (event.nativeEvent ?? event).touches;
     if (!initial && touches?.length === 1 && touchDrag.current) {
-      event.preventDefault?.();
       const left = event.currentTarget?.getBoundingClientRect?.().left ?? 0;
       const currentX = touchX(touches[0], left);
       scrubBy(touchDrag.current.lastX - currentX);
@@ -213,7 +212,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
       <Text accessibilityLabel={`Timeline zoom ${pixelsPerSecond} pixels per second`} className="w-12 text-center font-sans text-[10px] text-on-screen-muted">{pixelsPerSecond} px/s</Text>
       <Pressable role="button" accessibilityLabel="Zoom in timeline" disabled={pixelsPerSecond >= MAX_PIXELS_PER_SECOND} onPress={() => zoom(4)} className="size-8 items-center justify-center rounded-full border border-on-screen-muted"><Text className="font-sans text-body text-on-screen">+</Text></Pressable>
     </View>
-    <View className="relative overflow-hidden" onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
+    <View className="relative overflow-hidden" style={{ touchAction: "none" }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
       <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} style={{ width: "100%" }}>
         <TimelineRows timeline={timeline} sources={sources} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={onSelect} onSoundtrack={onSoundtrack} />
       </ScrollView>

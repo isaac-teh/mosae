@@ -1,10 +1,10 @@
-import { collection, doc, getDocs, onSnapshot, query, where } from "firebase/firestore";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import { ensureSignedIn } from "../auth";
 import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
 import { getFirestoreClient } from "../firebase";
 import { parseTimeline, type EditOp } from "@mosae/contracts";
-import type { ChatInterpretRequest, DirectorPerson, EditorMediaItem, FilmEdits, FilmListItem, FilmRender, StoryRepository } from "./repository";
+import type { ChatInterpretRequest, DirectorPerson, EditorMediaItem, FilmEdits, FilmListItem, FilmRender, ProjectResumeState, StoryRepository } from "./repository";
 import type { ProjectSummary } from "../chat/types";
 import type { DirectionOptions, Film } from "./types";
 import {
@@ -25,7 +25,6 @@ export type ApiStoryRepositoryDeps = {
    */
   listenUntil(path: string, accept: (value: unknown) => boolean): Promise<unknown>;
   listenCollection(path: string): Promise<unknown[]>;
-  listenUserProjects(userId: string): Promise<unknown[]>;
   getThumbnailUrl(projectId: string, assetId: string): Promise<string>;
   request(method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown): Promise<unknown>;
 };
@@ -109,11 +108,6 @@ const firebaseDeps: ApiStoryRepositoryDeps = {
         reject(error);
       });
     });
-  },
-  async listenUserProjects(userId) {
-    await ensureSignedIn();
-    const snapshot = await getDocs(query(collection(getFirestoreClient(), "projects"), where("userId", "==", userId)));
-    return snapshot.docs.map((entry) => entry.data());
   },
   async getThumbnailUrl(projectId, assetId) {
     const response = record(await firebaseDeps.request(
@@ -263,7 +257,8 @@ export function createApiStoryRepository(
   options: ApiStoryRepositoryOptions,
   deps: ApiStoryRepositoryDeps = firebaseDeps,
 ): StoryRepository {
-  if (!options.projectId) throw new Error("project_id_required");
+  // Home lists projects before one is selected, so the API repository may be
+  // created with an empty scope. Project operations receive their route ID.
   const projectId = options.projectId;
   const generationsPath = `/api/projects/${encodeURIComponent(projectId)}/generations`;
   const render = (source: ProjectionSources) => {
@@ -274,47 +269,113 @@ export function createApiStoryRepository(
 
   return {
     listFilms: async () => {
-      const user = await ensureSignedIn();
-      const projects = (await deps.listenUserProjects(user.uid)).map((value) => record(value, "project"));
+      const response = record(await deps.request("GET", "/api/projects"), "projects response");
+      const projects = Array.isArray(response.projects) ? response.projects.map((value) => record(value, "project")) : [];
       const now = Date.now();
-      const films = await Promise.all(projects.map(async (project): Promise<FilmListItem | null> => {
+      const films = await Promise.all(projects.map(async (project): Promise<FilmListItem[]> => {
         const projectId = typeof project.id === "string" ? project.id : "";
-        const generationId = typeof project.savedGenerationId === "string" ? project.savedGenerationId : "";
-        if (!projectId || !generationId) return null;
-        const [generationValue, projectValue] = await Promise.all([
-          deps.listenDocument(`projects/${projectId}/generations/${generationId}`),
-          deps.listenDocument(`projects/${projectId}`),
-        ]);
-        if (!generationValue) return null;
-        const generation = record(generationValue, "generation");
-        if (generation.status !== "saved" || !generation.timeline || typeof generation.timeline !== "object") return null;
-        const projectRecord = record(projectValue, "project");
-        const timeline = record(generation.timeline, "timeline");
-        const clips = Array.isArray(timeline.videoClips) ? timeline.videoClips as RecordData[] : [];
-        const firstShotId = record(clips[0]?.source ?? {}, "clip source").shotId;
-        const shots = await deps.listenCollection(`projects/${projectId}/shots`);
-        const firstShot = shots.map((item) => record(item, "shot")).find((shot) => shot.id === firstShotId);
-        const posterUrl = typeof firstShot?.assetId === "string" ? await deps.getThumbnailUrl(projectId, firstShot.assetId).catch(() => "") : "";
-        const proposal = typeof generation.proposalId === "string"
-          ? record(await deps.listenDocument(`projects/${projectId}/storyProposals/${generation.proposalId}`), "proposal")
-          : {};
+        if (!projectId) return [];
+        const projectRecord = project;
+        const savedId = typeof projectRecord.savedGenerationId === "string" ? projectRecord.savedGenerationId : "";
+        const activeId = typeof projectRecord.latestRequestedGenerationId === "string"
+          ? projectRecord.latestRequestedGenerationId
+          : typeof projectRecord.currentPlayableGenerationId === "string" ? projectRecord.currentPlayableGenerationId : "";
+        const ids = [...new Set([savedId, activeId].filter(Boolean))];
+        const generations = new Map<string, RecordData>();
+        await Promise.all(ids.map(async (id) => {
+          const value = await deps.listenDocument(`projects/${projectId}/generations/${id}`);
+          if (value) generations.set(id, record(value, "generation"));
+        }));
+        const proposalIds = [...new Set([
+          typeof projectRecord.currentProposalId === "string" ? projectRecord.currentProposalId : "",
+          ...[...generations.values()].map((generation) => typeof generation.proposalId === "string" ? generation.proposalId : ""),
+        ].filter(Boolean))];
+        const proposals = new Map<string, RecordData>();
+        await Promise.all(proposalIds.map(async (id) => {
+          const value = await deps.listenDocument(`projects/${projectId}/storyProposals/${id}`);
+          if (value) proposals.set(id, record(value, "proposal"));
+        }));
         const range = projectRecord.dateRange && typeof projectRecord.dateRange === "object" ? projectRecord.dateRange as RecordData : {};
+        let shotsPromise: Promise<unknown[]> | undefined;
+        const projectShots = () => shotsPromise ??= deps.listenCollection(`projects/${projectId}/shots`);
         const date = isoDate(range.start);
-        const savedAt = Number(generation.savedAt ?? generation.updatedAt ?? justSavedAtByGeneration.get(`${projectId}/${generationId}`) ?? 0);
-        const durationSec = Number(timeline.durationSec ?? 0);
-        return {
-          projectId, filmId: generationId,
-          title: typeof proposal.title === "string" ? proposal.title : "Your film",
-          month: date ? `${MONTHS[date.month - 1]} ${date.year}` : "",
-          duration: `${Math.floor(durationSec / 60)}:${String(Math.round(durationSec % 60)).padStart(2, "0")}`,
-          posterUrl, justSaved: savedAt > 0 && now - savedAt <= 10 * 60_000,
+        const month = date ? `${MONTHS[date.month - 1]} ${date.year}` : "";
+        const titleFor = (proposalId: unknown) => {
+          const proposal = typeof proposalId === "string" ? proposals.get(proposalId) : undefined;
+          return typeof proposal?.title === "string" ? proposal.title : typeof projectRecord.title === "string" ? projectRecord.title : typeof projectRecord.place === "string" ? projectRecord.place : "Your project";
         };
+        const makeItem = async (generationId: string, generation: RecordData, status: FilmListItem["status"]): Promise<FilmListItem> => {
+          const timeline = generation.timeline && typeof generation.timeline === "object" ? record(generation.timeline, "timeline") : {};
+          const clips = Array.isArray(timeline.videoClips) ? timeline.videoClips as RecordData[] : [];
+          const firstClip = clips[0] ?? {};
+          const firstSource = firstClip.source && typeof firstClip.source === "object" ? record(firstClip.source, "clip source") : {};
+          const slots = firstClip.spec && typeof firstClip.spec === "object" && Array.isArray((firstClip.spec as RecordData).slots) ? (firstClip.spec as RecordData).slots as RecordData[] : [];
+          const firstShotId = typeof firstSource.shotId === "string" ? firstSource.shotId : typeof slots.find((slot) => typeof slot.shotId === "string")?.shotId === "string" ? String(slots.find((slot) => typeof slot.shotId === "string")?.shotId) : "";
+          const shots = (await projectShots()).map((item) => record(item, "shot"));
+          const firstShot = shots.find((shot) => shot.id === firstShotId)
+            ?? shots.find((shot) => shot.mediaType === "photo" || shot.type === "photo");
+          const posterUrl = typeof firstShot?.assetId === "string" ? await deps.getThumbnailUrl(projectId, firstShot.assetId).catch(() => "") : "";
+          const durationSec = Number(timeline.durationSec ?? 0);
+          const savedAt = Number(generation.savedAt ?? generation.updatedAt ?? justSavedAtByGeneration.get(`${projectId}/${generationId}`) ?? 0);
+          const proposalId = typeof generation.proposalId === "string" ? generation.proposalId : null;
+          return { projectId, filmId: generationId, planId: proposalId, title: titleFor(proposalId), month, duration: durationSec ? `${Math.floor(durationSec / 60)}:${String(Math.round(durationSec % 60)).padStart(2, "0")}` : "", posterUrl, justSaved: status === "saved" && savedAt > 0 && now - savedAt <= 10 * 60_000, status, demo: Boolean(projectRecord.demo) };
+        };
+        const items: FilmListItem[] = [];
+        const savedGeneration = savedId ? generations.get(savedId) : undefined;
+        if (savedGeneration?.status === "saved") items.push(await makeItem(savedId, savedGeneration, "saved"));
+        const activeGeneration = activeId ? generations.get(activeId) : undefined;
+        if (activeGeneration && activeId !== savedId) {
+          const generationStatus = activeGeneration.status;
+          const status: FilmListItem["status"] = generationStatus === "playable" ? "film-ready" : generationStatus === "rendering" ? "rendering" : "in-progress";
+          items.push(await makeItem(activeId, activeGeneration, status));
+        }
+        const activeProposalId = typeof projectRecord.currentProposalId === "string" ? projectRecord.currentProposalId : "";
+        const savedProposalId = typeof savedGeneration?.proposalId === "string" ? savedGeneration.proposalId : "";
+        if ((!activeGeneration || activeId === savedId) && (!savedGeneration || (activeProposalId && activeProposalId !== savedProposalId))) {
+          const proposalId = activeProposalId || null;
+          const proposal = proposalId ? proposals.get(proposalId) : undefined;
+          items.push({ projectId, filmId: null, planId: proposalId, title: titleFor(proposalId), month, duration: "", posterUrl: "", justSaved: false, status: "in-progress", demo: Boolean(projectRecord.demo) });
+        }
+        if (items.length === 0 && !savedGeneration) {
+          const proposalId = activeProposalId || null;
+          items.push({ projectId, filmId: null, planId: proposalId, title: titleFor(proposalId), month, duration: "", posterUrl: "", justSaved: false, status: "in-progress", demo: Boolean(projectRecord.demo) });
+        }
+        return items;
       }));
-      return films.filter((film): film is FilmListItem => film !== null).sort((a, b) => {
+      return films.flat().sort((a, b) => {
         const projectA = projects.find((item) => item.id === a.projectId)!;
         const projectB = projects.find((item) => item.id === b.projectId)!;
         return Number(projectB.createdAt ?? 0) - Number(projectA.createdAt ?? 0);
       });
+    },
+    getProjectResume: async (id): Promise<ProjectResumeState> => {
+      const projectValue = await deps.listenDocument(`projects/${id}`);
+      if (!projectValue) return { proposalId: null, storyText: null, generationId: null, generationStatus: null };
+      const project = record(projectValue, "project");
+      const savedId = typeof project.savedGenerationId === "string" ? project.savedGenerationId : "";
+      const candidates = [...new Set([
+        typeof project.latestRequestedGenerationId === "string" ? project.latestRequestedGenerationId : "",
+        typeof project.currentPlayableGenerationId === "string" ? project.currentPlayableGenerationId : "",
+        savedId,
+      ].filter(Boolean))];
+      const generations = await Promise.all(candidates.map(async (generationId) => {
+        const value = await deps.listenDocument(`projects/${id}/generations/${generationId}`);
+        return value ? { id: generationId, value: record(value, "generation") } : null;
+      }));
+      const selected = generations.find((item) => item?.value.status && item.value.status !== "failed") ?? generations.find(Boolean);
+      const generation = selected?.value;
+      const proposalId = typeof project.currentProposalId === "string" ? project.currentProposalId : typeof generation?.proposalId === "string" ? generation.proposalId : null;
+      const proposal = proposalId ? await deps.listenDocument(`projects/${id}/storyProposals/${proposalId}`) : null;
+      const storyIntentId = proposal && typeof proposal === "object" ? (proposal as RecordData).storyIntentId : null;
+      const intent = typeof storyIntentId === "string" ? await deps.listenDocument(`projects/${id}/storyIntents/${storyIntentId}`) : null;
+      const status = generation?.status;
+      const generationStatus = status === "composing" || status === "playable" || status === "rendering" || status === "saved" || status === "failed" ? status : null;
+      return {
+        proposalId,
+        storyText: intent && typeof intent === "object" && typeof (intent as RecordData).text === "string" ? (intent as RecordData).text as string : null,
+        generationId: selected?.id ?? null,
+        generationStatus,
+      };
     },
     getSummary: async (id) => await deps.request("GET", `/api/projects/${encodeURIComponent(id)}/summary`) as ProjectSummary,
     interpret: async (id, req) => await deps.request("POST", `/api/projects/${encodeURIComponent(id)}/chat/interpret`, req) as { reply: string; change: { kind: string; [key: string]: unknown } },
@@ -576,10 +637,13 @@ export function createApiStoryRepository(
     const proposalRecord = (proposalValue ?? {}) as RecordData;
     const projectRecord = (projectValue ?? {}) as RecordData;
 
-    const firstSource = clips[0]?.source && typeof clips[0].source === "object" ? clips[0].source as RecordData : null;
-    const firstShot = firstSource
-      ? shotValues.map((value) => value as RecordData).find((shot) => shot.id === firstSource.shotId)
-      : undefined;
+    const firstClip = clips[0] as RecordData | undefined;
+    const firstSource = firstClip?.source && typeof firstClip.source === "object" ? firstClip.source as RecordData : {};
+    const firstSlots = firstClip?.spec && typeof firstClip.spec === "object" && Array.isArray((firstClip.spec as RecordData).slots) ? (firstClip.spec as RecordData).slots as RecordData[] : [];
+    const firstShotId = typeof firstSource.shotId === "string" ? firstSource.shotId : firstSlots.find((slot) => typeof slot.shotId === "string")?.shotId;
+    const availableShots = shotValues.map((value) => value as RecordData);
+    const firstShot = availableShots.find((shot) => shot.id === firstShotId)
+      ?? availableShots.find((shot) => shot.mediaType === "photo" || shot.type === "photo");
     const poster = typeof firstShot?.assetId === "string"
       ? await deps.getThumbnailUrl(projectId, firstShot.assetId).catch(() => "")
       : "";

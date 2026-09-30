@@ -13,7 +13,8 @@ export default function Home() {
   const [demoBusy, setDemoBusy] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
   const router = useRouter();
-  const { repository } = useStoryFlow();
+  const story = useStoryFlow();
+  const { repository } = story;
   const pickerRef = useRef<MediaPickerHandle>(null);
 
   useFocusEffect(useCallback(() => {
@@ -36,6 +37,23 @@ export default function Home() {
     setPendingMedia(media);
     router.push("/pick-memory" as Href);
   }
+
+  function openFilm(item: FilmListItem) {
+    if (item.status === "saved" && item.filmId) {
+      const query = new URLSearchParams({ repository: story.flow.repository, projectId: item.projectId, filmId: item.filmId });
+      router.push(`/save-film?${query.toString()}` as Href);
+      return;
+    }
+    if (item.status === "rendering" && item.filmId && item.planId) {
+      const query = new URLSearchParams({ repository: story.flow.repository, projectId: item.projectId, planId: item.planId, generationId: item.filmId });
+      router.push(`/editor?${query.toString()}` as Href);
+      return;
+    }
+    const query = new URLSearchParams({ repository: story.flow.repository, projectId: item.projectId });
+    router.push(`/director?${query.toString()}` as Href);
+  }
+
+  const statusLabel = (status: FilmListItem["status"]) => status === "saved" ? "Ready to watch" : status === "film-ready" ? "Film ready" : status === "rendering" ? "Rendering" : "In progress";
 
   const hasFilms = films !== null && films.length > 0;
   const mosaicColors = [
@@ -65,8 +83,8 @@ export default function Home() {
               <Text className="font-sans text-caption text-ink-muted">{films.length} films</Text>
             </View>
             <View data-film-grid="true" className="flex-row flex-wrap justify-between gap-y-3">
-              {films.map((film) => <View key={film.projectId + "/" + film.filmId} className="w-[48%]">
-                <FilmCard title={film.title} meta={film.month} status="Ready to watch" duration={film.duration} posterSource={film.posterUrl ? { uri: film.posterUrl } : undefined} badge={film.justSaved ? "Just saved" : undefined} onPress={() => router.push(("/save-film?repository=api&projectId=" + encodeURIComponent(film.projectId) + "&filmId=" + encodeURIComponent(film.filmId)) as Href)} />
+              {films.map((film) => <View key={film.projectId + "/" + (film.filmId ?? film.planId ?? "project")} className="w-[48%]">
+                <FilmCard title={film.title} meta={film.month} status={statusLabel(film.status)} duration={film.duration} posterSource={film.posterUrl ? { uri: film.posterUrl } : undefined} badge={film.demo ? "Demo" : film.justSaved ? "Just saved" : undefined} onPress={() => openFilm(film)} />
               </View>)}
             </View>
           </View>
@@ -84,7 +102,14 @@ export default function Home() {
             </View>
             <View className="mt-[60px] border-t border-line pt-5">
               <Text role="heading" aria-level={2} className="mb-3 font-title text-heading text-ink">Your films</Text>
-              {films === null ? <Text accessibilityRole="progressbar" className="font-sans text-caption text-ink-muted">Loading your films…</Text> : (
+              {films === null ? <View accessibilityRole="progressbar" aria-label="Loading your films" className="flex-row flex-wrap justify-between gap-y-3">
+                {[0, 1].map((item) => <View key={item} className="w-[48%] animate-pulse">
+                  <View className="aspect-video rounded-md bg-surface-sunken" />
+                  <View className="mt-3 h-4 w-4/5 rounded bg-surface-sunken" />
+                  <View className="mt-2 h-3 w-2/5 rounded bg-surface-sunken" />
+                  <View className="mt-3 h-6 w-1/2 rounded-pill bg-surface-sunken" />
+                </View>)}
+              </View> : (
                 <View className="flex-row items-center gap-4 rounded-md bg-surface-sunken p-3">
                   <View data-testid="empty-films-icon" accessibilityLabel="Four tiles" className="w-[26px] flex-row flex-wrap gap-0.5">
                     {["tide-tile", "tide-tile", "tide-tile", "deep-tide"].map((color, index) => <View key={index} className={`size-3 rounded-[2px] ${tileClasses[color]}`} />)}

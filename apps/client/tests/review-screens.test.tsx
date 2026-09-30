@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFixtureStoryRepository } from "../../../packages/core/src/story/fixtureRepository";
 import type { DirectionOptions, Film, StoryPlan } from "@mosae/core";
 
-const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, apiRepositories: new Map<string, any>(), params: {} as any, navigate: vi.fn(), setParams: vi.fn(), share: vi.fn() }));
+const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, apiRepositories: new Map<string, any>(), params: {} as any, navigate: vi.fn(), setParams: vi.fn(), share: vi.fn(), downloadFilm: vi.fn(async () => {}) }));
 vi.mock("@mosae/core", () => ({
   getStoryRepository: () => boundary.repository,
   createFixtureStoryRepository: () => new Proxy({}, { get: (_, key) => boundary.repository[key] }),
@@ -32,6 +32,7 @@ vi.mock("@/components/BottomTabBar", () => ({ BottomTabBar: () => null }));
 vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: ({ poster }: { poster: { uri?: string } | string }) => React.createElement("div", { "data-testid": "film-player", "data-poster": typeof poster === "string" ? poster : poster.uri }) }));
 vi.mock("@/components/PrimaryButton", () => ({ PrimaryButton: ({ label, onPress }: { label: string; onPress: () => void }) => React.createElement("button", { "aria-label": label, onClick: onPress }, label) }));
 vi.mock("@/lib/storyImage", () => ({ storyImage: (key: string) => ({ uri: key }) }));
+vi.mock("@/lib/downloadFilm", () => ({ downloadFilm: boundary.downloadFilm }));
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "film.mp4" }) } }));
 vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circle: () => null, Rect: () => null }));
 vi.mock("react-native", () => {
@@ -113,17 +114,22 @@ describe("review screens", () => {
     expect(host.textContent).toContain("Live project story");
   });
 
-  it("shows the director chat saved screen, shares the film URL, and returns to films", async () => {
+  it("shows the v13 saved screen with a poster, download, editor, and home actions", async () => {
     boundary.params = { filmId: "saved-film", repository: "fixture", directorChat: "true" };
     boundary.repository = { getFilm: vi.fn(async () => ({ ...film("saved-film", "plan-1", "poster"), title: "Japan, autumn", momentCount: 419, videoUrl: "https://film.example/saved.mp4" })) };
     await render(SaveFilmScreen);
     expect(host.textContent).toContain("✓ Saved to your films");
     expect(host.textContent).toContain("419 moments · Still editable anytime");
-    await click("Still editable anytime");
+    expect(host.textContent).toContain("Japan, autumn");
+    expect(host.textContent).not.toContain("STEP 6 OF 6");
+    expect(host.textContent).not.toContain("Fine-Art Print Edition");
+    expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-poster")).toBe("poster");
+    await click("Edit film");
     expect(boundary.navigate).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "fixture", planId: "plan-1", generationId: "saved-film", request: "", repository: "fixture" } });
-    expect(host.querySelectorAll('[aria-label="Share options"] button')).toHaveLength(4);
-    for (const label of ["Download", "WhatsApp", "Facebook", "Instagram"]) expect(host.querySelector(`button[aria-label="${label}"]`)).not.toBeNull();
-    await click("WhatsApp");
+    for (const label of ["Download", "Share", "Edit film", "Back to your films"]) expect(host.querySelector(`button[aria-label="${label}"]`)).not.toBeNull();
+    await click("Download");
+    expect(boundary.downloadFilm).toHaveBeenCalledWith("https://film.example/saved.mp4", "Japan, autumn", expect.any(Function));
+    await click("Share");
     expect(boundary.share).toHaveBeenCalledWith({ message: "https://film.example/saved.mp4" });
     await click("Back to your films");
     expect(boundary.navigate).toHaveBeenCalledWith("/?repository=fixture");
@@ -403,7 +409,7 @@ describe("downstream story screens", () => {
     await render(SaveFilmScreen);
     await act(async () => resolveA(film("film-a", "plan-a", "poster-a")));
 
-    expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-poster")).toBe("poster-b-save");
+    expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-poster")).toBe("poster-b");
   });
 });
 

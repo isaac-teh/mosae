@@ -31,7 +31,7 @@ const fakeAuth: express.RequestHandler = (_req, res, next) => {
   res.locals.userId = "user-1";
   next();
 };
-function buildApp(options: { settle?: (projectId: string) => Promise<void>; sleep?: (ms: number) => Promise<void>; closeFails?: boolean; embedQuery?: (text: string) => Promise<number[]> } = {}) {
+function buildApp(options: { settle?: (projectId: string) => Promise<void>; sleep?: (ms: number) => Promise<void>; closeFails?: boolean; embedQuery?: (text: string) => Promise<number[]>; listProjects?: (userId: string) => Promise<Record<string, unknown>[]> } = {}) {
   if (options.closeFails) {
     vi.mocked(store.closeSession).mockRejectedValue(new store.StoreError("not_found"));
   }
@@ -39,7 +39,7 @@ function buildApp(options: { settle?: (projectId: string) => Promise<void>; slee
   app.use(express.json());
   app.use(
     "/api/projects",
-    projectsRouter({ db, now: () => 42, auth: fakeAuth, settle: options.settle, sleep: options.sleep, embedQuery: options.embedQuery }),
+    projectsRouter({ db, now: () => 42, auth: fakeAuth, settle: options.settle, sleep: options.sleep, embedQuery: options.embedQuery, listProjects: options.listProjects }),
   );
   return app;
 }
@@ -55,6 +55,14 @@ const entry = {
 
 describe("projects routes", () => {
   beforeEach(() => vi.resetAllMocks());
+  it("lists only the signed-in user's projects", async () => {
+    const listProjects = vi.fn(async () => [{ id: "p1", title: "Japan trip" }]);
+    const res = await request(await listeningServer(buildApp({ listProjects }))).get("/api/projects");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ projects: [{ id: "p1", title: "Japan trip" }] });
+    expect(listProjects).toHaveBeenCalledWith("user-1");
+  });
+
   it("creates a project for the signed-in user", async () => {
     vi.mocked(store.createProject).mockResolvedValue({
       id: "p1",

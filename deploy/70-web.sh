@@ -18,7 +18,7 @@ export EXPO_PUBLIC_FIREBASE_API_KEY EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN EXPO_PUBLIC
 export EXPO_PUBLIC_FIREBASE_PROJECT_ID="$PROJECT_ID"
 export EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET="$BUCKET"
 export EXPO_PUBLIC_USE_EMULATORS=false
-export EXPO_PUBLIC_USE_API_STORY_REPOSITORY=false
+export EXPO_PUBLIC_USE_API_STORY_REPOSITORY=true
 run npm run build:web -w apps/client
 node "$DEPLOY_DIR/check-web-export.mjs" "$ROOT_DIR/apps/client/dist" "$ROOT_DIR"
 firebase_deploy --project "$PROJECT_ID" --only hosting --non-interactive
