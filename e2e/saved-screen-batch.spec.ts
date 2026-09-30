@@ -47,3 +47,22 @@ test("Home includes the demo film and routes it back into its project", async ({
   await expect(page).toHaveURL(/director\?repository=fixture&projectId=fixture/);
   await expect(page.getByRole("heading", { name: "Film ready" })).toBeVisible();
 });
+
+test("production Home without query parameters loads through Firebase APIs, not fixture data", async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 870 });
+  const authApiRequests: string[] = [];
+  const firestoreApiRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.hostname === "identitytoolkit.googleapis.com") authApiRequests.push(request.url());
+    if (url.hostname === "firestore.googleapis.com") firestoreApiRequests.push(request.url());
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Your films" })).toBeVisible();
+  await expect(page.getByText("Mei's 7th Birthday in Japan")).toHaveCount(0);
+  await expect(page.getByText("No films yet. Your first one will live here, and it stays editable.")).toBeVisible();
+  await expect.poll(() => authApiRequests.length).toBeGreaterThan(0);
+  await expect.poll(() => firestoreApiRequests.length).toBeGreaterThan(0);
+  expect(page.url()).toBe("https://neural-orbit-388508.web.app/");
+});

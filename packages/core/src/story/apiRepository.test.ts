@@ -74,6 +74,13 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
 }
 
 describe("createApiStoryRepository", () => {
+  it("lists the signed-in user's projects before a project is selected", async () => {
+    const deps = dependencies({ listenUserProjects: vi.fn(async () => []) });
+    const repository = createApiStoryRepository({ projectId: "" }, deps);
+    await expect(repository.listFilms()).resolves.toEqual([]);
+    expect(deps.listenUserProjects).toHaveBeenCalledWith("owner");
+  });
+
   it("loads the generation timeline and preview sources for editing", async () => {
     const timeline = { schemaVersion: 1, projectId: "project-1", mode: "memory", aspect: "9:16", fps: 30, durationSec: 3, chapters: [{ title: "Opening", startSec: 0 }], videoClips: [{ id: "c1", source: { kind: "photo", shotId: "s1" }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }], audioClips: [], captions: [] };
     const deps = dependencies({ request: vi.fn(async () => ({ timeline, sources: { s1: "preview.jpg" } })) });

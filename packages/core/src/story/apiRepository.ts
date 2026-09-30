@@ -263,7 +263,8 @@ export function createApiStoryRepository(
   options: ApiStoryRepositoryOptions,
   deps: ApiStoryRepositoryDeps = firebaseDeps,
 ): StoryRepository {
-  if (!options.projectId) throw new Error("project_id_required");
+  // Home lists projects before one is selected, so the API repository may be
+  // created with an empty scope. Project operations receive their route ID.
   const projectId = options.projectId;
   const generationsPath = `/api/projects/${encodeURIComponent(projectId)}/generations`;
   const render = (source: ProjectionSources) => {
