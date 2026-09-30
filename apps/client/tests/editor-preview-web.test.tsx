@@ -79,4 +79,33 @@ describe("web editor preview seeks", () => {
     expect(playerMock.seekTo).toHaveBeenCalledWith(135);
     expect(playerMock.play).toHaveBeenCalledOnce();
   });
+
+  it("seeks immediately when tapping the progress bar and supports keyboard steps", async () => {
+    const onTimeChange = vi.fn();
+    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} onTimeChange={onTimeChange} />));
+    const slider = host.querySelector('[aria-label="Film progress"]') as HTMLDivElement;
+    slider.getBoundingClientRect = () => ({ left: 100, right: 700, top: 0, bottom: 44, width: 600, height: 44, x: 100, y: 0, toJSON: () => ({}) });
+    await act(async () => slider.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 550 })));
+    expect(playerMock.seekTo).toHaveBeenCalledWith(203);
+    expect(onTimeChange).toHaveBeenCalledWith(6.75);
+    expect(slider.getAttribute("aria-valuenow")).toBe("6.75");
+    await act(async () => slider.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowLeft" })));
+    expect(playerMock.seekTo).toHaveBeenLastCalledWith(53);
+    expect(onTimeChange).toHaveBeenLastCalledWith(1.75);
+    await act(async () => (host.querySelector('[aria-label="Play preview"]') as HTMLButtonElement).click());
+    expect(playerMock.seekTo).toHaveBeenLastCalledWith(53);
+    expect(playerMock.play).toHaveBeenCalledOnce();
+  });
+
+  it("uses an in-app fullscreen overlay when native fullscreen is unavailable", async () => {
+    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} />));
+    await act(async () => (host.querySelector('[aria-label="Fullscreen"]') as HTMLButtonElement).click());
+    const fullscreen = host.querySelector('[aria-label="Close fullscreen"]');
+    expect(fullscreen).not.toBeNull();
+    expect((host.firstElementChild as HTMLElement).className).toContain("fixed");
+    expect(document.body.style.overflow).toBe("hidden");
+    await act(async () => (fullscreen as HTMLButtonElement).click());
+    expect(host.querySelector('[aria-label="Close fullscreen"]')).toBeNull();
+    expect(document.body.style.overflow).toBe("");
+  });
 });
