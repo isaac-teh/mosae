@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Linking, Pressable, ScrollView, Share, Text, View } from "react-native";
+import { Pressable, ScrollView, Share, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Asset } from "expo-asset";
 import Svg, { Circle, Path } from "react-native-svg";
@@ -75,7 +75,6 @@ function SaveFilmScreenContent({ filmId, directorChat, storyFlow, repository, ro
       {downloadError ? <Text accessibilityRole="alert" className="font-sans text-caption text-critical">{downloadError}</Text> : null}
       <Pressable role="button" aria-label="Edit film" onPress={() => router.push({ pathname: "/editor", params: { projectId, planId: film.planId, generationId: film.filmId, request: "", ...storyFlow } } as never)} className="min-h-12 items-center justify-center rounded-full border border-line-strong"><Text className="font-sans-semibold text-button text-ink">Edit film</Text></Pressable>
       <Pressable role="button" aria-label="Back to your films" onPress={() => router.navigate(route("/") as never)} className="min-h-12 items-center justify-center"><Text className="font-sans-medium text-button text-ink-muted">Back to your films</Text></Pressable>
-      <Pressable accessibilityRole="link" onPress={() => void Linking.openURL("https://www.openstreetmap.org/copyright")} className="items-center py-2"><Text className="font-sans text-[11px] text-ink-muted">© OpenStreetMap contributors</Text></Pressable>
     </ScrollView>
   </View>;
 }

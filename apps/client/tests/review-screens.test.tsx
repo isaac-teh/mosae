@@ -119,6 +119,7 @@ describe("review screens", () => {
     boundary.repository = { getFilm: vi.fn(async () => ({ ...film("saved-film", "plan-1", "poster"), title: "Japan, autumn", momentCount: 419, videoUrl: "https://film.example/saved.mp4" })) };
     await render(SaveFilmScreen);
     expect(host.textContent).toContain("✓ Saved to your films");
+    expect(host.textContent).not.toContain("OpenStreetMap contributors");
     expect(host.textContent).toContain("419 moments · Still editable anytime");
     expect(host.textContent).toContain("Japan, autumn");
     expect(host.textContent).not.toContain("STEP 6 OF 6");
