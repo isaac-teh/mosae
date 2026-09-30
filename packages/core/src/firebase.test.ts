@@ -35,4 +35,19 @@ describe("Firebase emulator endpoints", () => {
     expect(mocks.connectFirestoreEmulator).toHaveBeenCalledWith(mocks.firestore, "127.0.0.1", 18085);
     expect(mocks.connectStorageEmulator).toHaveBeenCalledWith(mocks.storage, "127.0.0.1", 19199);
   });
+
+  it("never connects to Firebase emulators in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const { configureCore } = await import("./config.js");
+    configureCore({ apiBaseUrl: "https://api.example.com", firebase: {}, useEmulators: true });
+    const firebase = await import("./firebase.js");
+
+    firebase.getAuthClient();
+    firebase.getFirestoreClient();
+    firebase.getStorageClient();
+
+    expect(mocks.connectAuthEmulator).not.toHaveBeenCalled();
+    expect(mocks.connectFirestoreEmulator).not.toHaveBeenCalled();
+    expect(mocks.connectStorageEmulator).not.toHaveBeenCalled();
+  });
 });
