@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
 import { Player, type PlayerRef } from "@remotion/player";
 import { MosaeTimeline } from "@mosae/video/timeline";
 import type { Timeline } from "@mosae/contracts";
 
-export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, playheadSec = 0, pauseRequest = 0 }: {
+export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, playheadSec = 0, pauseRequest = 0, poster, onError }: {
   timeline: Timeline;
   sources: Record<string, string>;
   onTimeChange?: (seconds: number) => void;
   seekRequest?: { seconds: number } | null;
   playheadSec?: number;
   pauseRequest?: number;
+  poster?: string;
+  onError?: (error: Error) => void;
 }) {
   const player = useRef<PlayerRef>(null);
   const [playing, setPlaying] = useState(false);
@@ -49,14 +51,25 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
     player.current?.play();
   };
 
+  const first = timeline.videoClips[0];
+  const firstShotId = first && ("kind" in first ? first.spec.slots[0]?.shotId : first.source.shotId);
+  const loadingPoster = (poster ?? (firstShotId ? sources[firstShotId] : undefined));
+
 
   return <View className="relative size-full overflow-hidden rounded-[14px] bg-[#18211d]">
     <Player ref={player} component={MosaeTimeline} inputProps={inputProps} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}
       compositionWidth={timeline.aspect === "9:16" ? 1080 : 1920} compositionHeight={timeline.aspect === "9:16" ? 1920 : 1080}
-      fps={timeline.fps} style={{ width: "100%", height: "100%" }} controls={false} clickToPlay />
+      fps={timeline.fps} style={{ width: "100%", height: "100%" }} controls={false} clickToPlay
+      renderLoading={() => <View className="absolute inset-0 items-center justify-center bg-[#18211d]">{loadingPoster ? <Image source={{ uri: loadingPoster }} resizeMode="cover" className="size-full opacity-70" /> : <Text className="font-sans text-body text-on-screen">Loading your film…</Text>}</View>}
+      errorFallback={({ error }) => <PlayerError error={error} onError={onError} poster={loadingPoster} />} />
     {!playing && <Pressable role="button" accessibilityLabel="Play preview" onPress={playFromPlayhead}
       className="absolute left-1/2 top-1/2 size-[62px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/60">
       <Text className="ml-1 font-sans text-[28px] text-on-screen">▶</Text>
     </Pressable>}
   </View>;
+}
+
+function PlayerError({ error, onError, poster }: { error: Error; onError?: (error: Error) => void; poster?: string }) {
+  useEffect(() => onError?.(error), [error, onError]);
+  return <View className="absolute inset-0 items-center justify-center bg-[#18211d]">{poster ? <Image source={{ uri: poster }} resizeMode="cover" className="size-full opacity-70" /> : <Text className="font-sans text-body text-on-screen">Your film preview is unavailable.</Text>}</View>;
 }

@@ -154,8 +154,8 @@ describe("director chat components", () => {
     expect(host.querySelector('[data-step="Picked moments for each chapter"]')?.getAttribute("data-status")).toBe("done");
     expect(host.querySelector('[data-step="Picked moments for each chapter"]')?.textContent).toBe("✓");
     expect(host.querySelector('[data-step="Trimmed the best parts of each clip"]')?.getAttribute("data-status")).toBe("done");
-    expect(host.querySelector('[data-step="Pacing it to the music"]')?.getAttribute("data-status")).toBe("current");
-    expect(host.querySelector('[data-step="Pacing it to the music"]')?.textContent).toBe("◷");
+    expect(host.querySelector('[data-step="Film ready"]')?.getAttribute("data-status")).toBe("current");
+    expect(host.querySelector('[data-step="Film ready"]')?.textContent).toBe("◷");
     const segments = [...host.querySelectorAll<HTMLElement>("[data-progress-segment]")];
     expect(segments).toHaveLength(10);
     expect(segments.filter((segment) => segment.getAttribute("data-filled") === "true")).toHaveLength(8);

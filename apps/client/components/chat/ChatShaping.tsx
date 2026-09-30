@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 
-const steps = ["Picked moments for each chapter", "Trimmed the best parts of each clip", "Pacing it to the music"];
+const steps = ["Picked moments for each chapter", "Trimmed the best parts of each clip", "Film ready"];
 
 export function ChatShaping({ progress, stepsDone }: { progress: number; stepsDone: number }) {
   const done = Math.max(0, Math.min(steps.length, stepsDone));

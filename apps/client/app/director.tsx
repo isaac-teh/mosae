@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatMomentGrid, ChatPersonQuestion, ChatProposal, ChatShaping, ChatTyping, MomentPickerSheet } from "@/components/chat";
 import { FilmPlayer } from "@/components/FilmPlayer";
 import { Button } from "@/components/ds";
 import { useDirectorChat } from "@/lib/useDirectorChat";
 import { useStoryFlow } from "@/lib/storyFlow";
+import { EditorPreview } from "@/components/editor/EditorPreview";
+import type { Timeline } from "@mosae/contracts";
 
 function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
   if (!summary) return "Your film";
@@ -30,6 +32,21 @@ export default function DirectorScreen() {
   const [name, setName] = useState("");
   const [namingPerson, setNamingPerson] = useState<string | null>(null);
   const [pickerSelection, setPickerSelection] = useState<string[]>([]);
+  const [filmTimeline, setFilmTimeline] = useState<{ filmId: string; timeline: Timeline; sources: Record<string, string> } | null>(null);
+  const [filmPlayerFailed, setFilmPlayerFailed] = useState(false);
+  const filmItem = state.items.find((item) => item.kind === "film");
+  const film = filmItem?.kind === "film" ? filmItem.film : null;
+  const onFilmPlayerError = useCallback(() => setFilmPlayerFailed(true), []);
+  useEffect(() => {
+    let active = true;
+    setFilmPlayerFailed(false);
+    if (!film) { setFilmTimeline(null); return () => { active = false; }; }
+    setFilmTimeline(null);
+    void story.repository.getFilmTimeline(projectId, film.filmId).then((result) => {
+      if (active) setFilmTimeline({ filmId: film.filmId, ...result });
+    }).catch(() => { if (active) setFilmPlayerFailed(true); });
+    return () => { active = false; };
+  }, [film?.filmId, projectId, story.repository]);
   const momentsItem = state.items.find((item) => item.kind === "moments");
   const suggestedTiles = useMemo(() => {
     const suggestedIds = momentsItem?.kind === "moments" ? momentsItem.suggestedShotIds : [];
@@ -89,10 +106,18 @@ export default function DirectorScreen() {
         if (item.kind === "film") return <View key={item.id} className="gap-4">
           <Text accessibilityRole="header" className="font-title text-heading text-positive">Film ready</Text>
           <ChatMessage from="mosae" text="Here's your first cut. Tap to watch." />
-          <FilmPlayer source={item.film.videoUrl ?? require("../assets/demo/film.mp4")} poster={{ uri: item.film.posterKey }} durationSec={item.film.durationSec} aspect="portrait" />
+          <View className="aspect-[0.8] overflow-hidden rounded-[23px] bg-ink">
+            {filmTimeline?.filmId === item.film.filmId && !filmPlayerFailed
+              ? <EditorPreview timeline={filmTimeline.timeline} sources={filmTimeline.sources} poster={item.film.posterKey || undefined} onError={onFilmPlayerError} />
+              : filmPlayerFailed && item.film.videoUrl
+                ? <FilmPlayer source={item.film.videoUrl} poster={{ uri: item.film.posterKey }} durationSec={item.film.durationSec} aspect="portrait" />
+                : item.film.posterKey
+                  ? <Image source={{ uri: item.film.posterKey }} resizeMode="cover" className="size-full" />
+                  : <View className="flex-1 items-center justify-center"><Text className="font-sans text-body text-on-screen">Loading your film…</Text></View>}
+          </View>
           <View className="gap-1"><Text className="font-title text-heading text-ink">{item.film.title}</Text><Text className="font-sans text-caption text-ink-muted">{plan?.chapters.length ?? 0} chapters</Text></View>
           <View className="gap-2"><Text className="font-sans-semibold text-button text-ink">How I directed it</Text>{item.film.reasons.slice(0, 3).map((reason, index) => <Text key={`${item.id}-reason-${index}`} className="font-sans text-body text-ink">• {reason}</Text>)}</View>
-          <View className="flex-row gap-2"><Button label="Open in editor" variant="secondary" onPress={() => router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", planId: item.film.planId, generationId: item.film.filmId, request: "", ...story.flow } } as any)} /><Button label="Save film" disabled={saving} onPress={() => void actions.saveFilm()} /></View>
+          <View className="flex-row gap-2"><Button label="Open in editor" variant="secondary" onPress={() => router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", planId: item.film.planId, generationId: item.film.filmId, request: "", ...story.flow } } as any)} /><Button label={item.film.generationStatus === "saved" ? "Saved" : "Save film"} disabled={saving || item.film.generationStatus === "saved"} onPress={() => void actions.saveFilm()} /></View>
         </View>;
         if (item.kind === "occasion") {
           const country = projectSummary?.country;

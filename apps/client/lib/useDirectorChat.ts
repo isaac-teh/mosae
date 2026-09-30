@@ -75,7 +75,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (!mounted.current) return;
         const confirmedStory = resume.storyText ?? (nextSummary.country ? `Yes, our ${nextSummary.country} trip` : `Yes, that's our story`);
         const hasGeneration = Boolean(resume.generationId && film);
-        const isFilmReady = resume.generationStatus === "playable" || resume.generationStatus === "saved";
+        const isFilmReady = resume.generationStatus === "playable" || resume.generationStatus === "rendering" || resume.generationStatus === "saved";
         const generation = hasGeneration ? isFilmReady
           ? { status: "done" as const, stage: resume.generationStatus!, progress: 1, stepsDone: 3, film }
           : { status: "running" as const, stage: resume.generationStatus === "rendering" ? "rendering" as const : "composing" as const, progress: 0, stepsDone: 2, film: null }
@@ -151,7 +151,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         } }));
         generationTimer.current = setTimeout(() => { void pollFilm(filmId); }, 1500);
       } else {
-        setInput((current) => ({ ...current, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } }));
+        setInput((current) => ({ ...current, generation: { status: "done", stage: film.generationStatus === "saved" ? "saved" : "playable", progress: 1, stepsDone: 3, film } }));
       }
     } catch (cause) {
       if (!mounted.current) return;

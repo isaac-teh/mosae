@@ -670,7 +670,7 @@ export function createApiStoryRepository(
       status: "ready",
       videoUrl,
       generationStatus: status,
-      rendering: isStatus(generation, "composing", "playable", "rendering"),
+      rendering: isStatus(generation, "composing", "rendering"),
       renderProgress: typeof generation.renderProgress === "number" ? generation.renderProgress : 0,
       reasons: Array.isArray(generation.reasons) ? generation.reasons.filter((reason): reason is string => typeof reason === "string") : [],
     };

@@ -15,7 +15,7 @@ describe("mapShapingProgress", () => {
   });
 
   it("treats playable as composition done and saved as fully complete", () => {
-    expect(mapShapingProgress("playable", 0)).toEqual({ progress: 1 / 3, stepsDone: 1 });
+    expect(mapShapingProgress("playable", 0)).toEqual({ progress: 1, stepsDone: 3 });
     expect(mapShapingProgress("saved", 0)).toEqual({ progress: 1, stepsDone: 3 });
   });
 

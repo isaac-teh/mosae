@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFixtureStoryRepository } from "../../../packages/core/src/story/fixtureRepository";
 import type { DirectionOptions, Film, StoryPlan } from "@mosae/core";
 
-const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, apiRepositories: new Map<string, any>(), params: {} as any, navigate: vi.fn(), setParams: vi.fn(), share: vi.fn(), downloadFilm: vi.fn(async () => {}) }));
+const boundary = vi.hoisted(() => ({ repository: {} as any, apiRepository: {} as any, apiRepositories: new Map<string, any>(), params: {} as any, navigate: vi.fn(), setParams: vi.fn(), share: vi.fn(), downloadFilm: vi.fn(async () => {}), prepareFilmDownload: vi.fn(async () => ({ file: new File([], "film.mp4"), filename: "film" })) }));
 vi.mock("@mosae/core", () => ({
   getStoryRepository: () => boundary.repository,
   createFixtureStoryRepository: () => new Proxy({}, { get: (_, key) => boundary.repository[key] }),
@@ -32,7 +32,7 @@ vi.mock("@/components/BottomTabBar", () => ({ BottomTabBar: () => null }));
 vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: ({ poster }: { poster: { uri?: string } | string }) => React.createElement("div", { "data-testid": "film-player", "data-poster": typeof poster === "string" ? poster : poster.uri }) }));
 vi.mock("@/components/PrimaryButton", () => ({ PrimaryButton: ({ label, onPress }: { label: string; onPress: () => void }) => React.createElement("button", { "aria-label": label, onClick: onPress }, label) }));
 vi.mock("@/lib/storyImage", () => ({ storyImage: (key: string) => ({ uri: key }) }));
-vi.mock("@/lib/downloadFilm", () => ({ downloadFilm: boundary.downloadFilm }));
+vi.mock("@/lib/downloadFilm", () => ({ downloadFilm: boundary.downloadFilm, prepareFilmDownload: boundary.prepareFilmDownload }));
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "film.mp4" }) } }));
 vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circle: () => null, Rect: () => null }));
 vi.mock("react-native", () => {
@@ -128,7 +128,7 @@ describe("review screens", () => {
     expect(boundary.navigate).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "fixture", planId: "plan-1", generationId: "saved-film", request: "", repository: "fixture" } });
     for (const label of ["Download", "Share", "Edit film", "Back to your films"]) expect(host.querySelector(`button[aria-label="${label}"]`)).not.toBeNull();
     await click("Download");
-    expect(boundary.downloadFilm).toHaveBeenCalledWith("https://film.example/saved.mp4", "Japan, autumn", expect.any(Function));
+    expect(boundary.downloadFilm).toHaveBeenCalledWith("https://film.example/saved.mp4", "Japan, autumn", expect.any(Function), expect.objectContaining({ filename: "film" }));
     await click("Share");
     expect(boundary.share).toHaveBeenCalledWith({ message: "https://film.example/saved.mp4" });
     await click("Back to your films");

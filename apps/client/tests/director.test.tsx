@@ -13,6 +13,7 @@ vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typ
 vi.mock("@/lib/characters", () => ({ confirmCast: (...args: any[]) => mocks.confirmCast(...args) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flowRepo, flow: { repository: "api", projectId: "project-1" } }) }));
 vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: () => React.createElement("div", { "data-testid": "film-player" }) }));
+vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: () => React.createElement("div", { "data-testid": "film-ready-player" }) }));
 import DirectorScreen from "../app/director";
 
 let root: Root;
@@ -51,7 +52,7 @@ function setup(options: { faces?: boolean; interpret?: () => Promise<any>; creat
     getSummary: vi.fn(async () => ({ ...summary(options.faces ?? true), total: planReady ? 465 : 8, ready: { ...summary(options.faces ?? true).ready, plan: planReady } })), getPeople: vi.fn(async () => options.people ?? people),
     createPlan: vi.fn(options.createPlan ?? (async () => ({ planId: "proposal-1" }))),
     interpret: vi.fn(options.interpret ?? (async () => ({ reply: "I understood the Japan trip.", change: { kind: "occasion", storyText: "Japan trip" } }))),
-    getPlan: vi.fn(async () => planFixture), applyEdits: vi.fn(options.applyEdits ?? (async () => planFixture)), getDirectionOptions: vi.fn(async () => ({ ...directionOptions, maximumDurationSec: options.maximumDurationSec ?? directionOptions.maximumDurationSec, ...(options.maximumDurationSecByCadence ? { maximumDurationSecByCadence: options.maximumDurationSecByCadence } : {}) })), directFilm: vi.fn(async () => ({ filmId: "film-1" })), getFilm: vi.fn(options.getFilm ?? (async () => filmFixture)), getProjectResume: vi.fn(options.getProjectResume ?? (async () => ({ proposalId: null, storyText: null, generationId: null, generationStatus: null }))), saveFilm: vi.fn(options.saveFilm ?? (async () => ({ downloadKey: "https://film.example/first-cut.mp4" }))),
+    getPlan: vi.fn(async () => planFixture), applyEdits: vi.fn(options.applyEdits ?? (async () => planFixture)), getDirectionOptions: vi.fn(async () => ({ ...directionOptions, maximumDurationSec: options.maximumDurationSec ?? directionOptions.maximumDurationSec, ...(options.maximumDurationSecByCadence ? { maximumDurationSecByCadence: options.maximumDurationSecByCadence } : {}) })), directFilm: vi.fn(async () => ({ filmId: "film-1" })), getFilm: vi.fn(options.getFilm ?? (async () => filmFixture)), getFilmTimeline: vi.fn(async () => ({ timeline: { durationSec: 124, fps: 30, aspect: "9:16", videoClips: [] }, sources: {} })), getProjectResume: vi.fn(options.getProjectResume ?? (async () => ({ proposalId: null, storyText: null, generationId: null, generationStatus: null }))), saveFilm: vi.fn(options.saveFilm ?? (async () => ({ downloadKey: "https://film.example/first-cut.mp4" }))),
   };
   mocks.flowRepo = mocks.repo;
   mocks.confirmCast.mockResolvedValue({ cast: { people: [] }, proposalId: "proposal-2" });
@@ -105,8 +106,37 @@ describe("Director chat", () => {
     expect(host.textContent).toContain("Mum");
     expect(host.textContent).toContain("Film ready");
     expect(host.textContent).toContain("Save film");
+    await waitFor(() => expect(host.querySelector('[data-testid="film-ready-player"]')).not.toBeNull());
+    expect(host.querySelector('[data-testid="film-player"]')).toBeNull();
     expect(mocks.repo.getProjectResume).toHaveBeenCalledOnce();
     expect(mocks.repo.getFilm).toHaveBeenCalledWith("film-1");
+    expect(mocks.repo.getFilmTimeline).toHaveBeenCalledWith("project-1", "film-1");
+  });
+
+  it("opens an already saved generation in the Player and marks it saved", async () => {
+    setup({
+      readyPlan: true,
+      getFilm: async () => ({ ...filmFixture, generationStatus: "saved" }),
+      getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Our family trip to Japan", generationId: "film-1", generationStatus: "saved" }),
+    });
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('[data-testid="film-ready-player"]')).not.toBeNull());
+    const saved = host.querySelector('button[aria-label="Saved"]') as HTMLButtonElement;
+    expect(saved).not.toBeNull();
+    expect(saved.disabled).toBe(true);
+    expect(mocks.repo.saveFilm).not.toHaveBeenCalled();
+  });
+
+  it("opens an older generation that is already rendering without waiting for its MP4", async () => {
+    setup({
+      readyPlan: true,
+      getFilm: async () => ({ ...filmFixture, rendering: true, generationStatus: "rendering" }),
+      getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Our family trip to Japan", generationId: "film-1", generationStatus: "rendering" }),
+    });
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('[data-testid="film-ready-player"]')).not.toBeNull());
+    expect(mocks.repo.getFilm).toHaveBeenCalledTimes(1);
+    expect(mocks.repo.getFilmTimeline).toHaveBeenCalledWith("project-1", "film-1");
   });
 
   it("uses a safe fallback story intent when the summary has no detected places", async () => {
@@ -458,7 +488,7 @@ describe("Director chat", () => {
       const afterLaterPoll = Number(progress());
       expect(afterLaterPoll).toBeCloseTo((1 / 3 + 0.73 * 2 / 3) * 100);
       expect(host.querySelector('[data-step="Trimmed the best parts of each clip"]')?.getAttribute("data-status")).toBe("done");
-      expect(host.querySelector('[data-step="Pacing it to the music"]')?.getAttribute("data-status")).toBe("current");
+      expect(host.querySelector('[data-step="Film ready"]')?.getAttribute("data-status")).toBe("current");
       await act(async () => { await vi.advanceTimersByTimeAsync(1500); await Promise.resolve(); });
       expect(Number(progress())).toBe(afterLaterPoll);
       await act(async () => { await vi.advanceTimersByTimeAsync(1500); await Promise.resolve(); });

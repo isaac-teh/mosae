@@ -545,7 +545,7 @@ describe("film adapters", () => {
     const film = await createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1");
     expect(film).toMatchObject({
       filmId: "gen-1", planId: "proposal-1", version: 1, title: "Family weekend", durationSec: 30, momentCount: 2,
-      status: "ready", videoUrl: null, rendering: true, reasons: ["Closing on the whole family together."],
+      status: "ready", videoUrl: null, rendering: false, reasons: ["Closing on the whole family together."],
       renderProgress: 0.7,
       generationStatus: "playable",
       posterKey: "https://storage.test/project-1/asset-2?signed=true",
