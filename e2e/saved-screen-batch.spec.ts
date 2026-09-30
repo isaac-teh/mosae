@@ -55,9 +55,14 @@ test("Home includes the demo film and routes it back into its project", async ({
 test("production Home without query parameters calls /api/projects, not the fixture repository", async ({ page }) => {
   await page.setViewportSize({ width: 412, height: 870 });
   const projectsApiRequests: string[] = [];
+  const projectsApiStatuses: number[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
     if (url.hostname.includes("mosae-api") && url.pathname === "/api/projects") projectsApiRequests.push(request.url());
+  });
+  page.on("response", (response) => {
+    const url = new URL(response.url());
+    if (url.hostname.includes("mosae-api") && url.pathname === "/api/projects") projectsApiStatuses.push(response.status());
   });
 
   await page.goto("/");
@@ -65,5 +70,7 @@ test("production Home without query parameters calls /api/projects, not the fixt
   await expect(page.getByText("Mei's 7th Birthday in Japan")).toHaveCount(0);
   await expect(page.getByText("No films yet. Your first one will live here, and it stays editable.")).toBeVisible();
   await expect.poll(() => projectsApiRequests.length).toBeGreaterThan(0);
+  await expect.poll(() => projectsApiStatuses.length).toBeGreaterThan(0);
+  expect(projectsApiStatuses).toContain(200);
   expect(page.url()).toBe("https://neural-orbit-388508.web.app/");
 });
