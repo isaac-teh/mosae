@@ -53,7 +53,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
         ].map(([id, path]) => [id, sourceUri(path)])));
         setUnusedMedia(film.unusedMedia ?? []);
         setHistory({ snapshots: [edits.ops], index: 0 });
-        setSelectedClipId(clipId(film.timeline.videoClips[0]));
+        setSelectedClipId(null);
         revisionRef.current = edits.revision;
         setSavedRevision(edits.revision);
         savedOpsKeyRef.current = keyOf(edits.ops);

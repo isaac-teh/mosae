@@ -14,6 +14,7 @@ export const EditOpSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("setCollageDuration"), clipId, sec: positiveSeconds }),
   z.strictObject({ op: z.literal("move"), clipId, toIndex: z.number().int().nonnegative() }),
   z.strictObject({ op: z.literal("remove"), clipId }),
+  z.strictObject({ op: z.literal("duplicate"), clipId }),
   z.strictObject({ op: z.literal("add"), shotId, kind: z.enum(["photo", "video"]), afterClipId: clipId.nullable(), durationSec: positiveSeconds, sourceInSec: seconds.optional(), sourceOutSec: positiveSeconds.optional() }),
   z.strictObject({ op: z.literal("setCollageLayout"), clipId, layoutId: z.string().min(1) }),
   z.strictObject({ op: z.literal("setCollageMotion"), clipId, motionId: z.string().min(1) }),
@@ -159,6 +160,18 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         if (work.length === 1) return fail("cannot remove the last clip");
         leftOutShotIds.push(...shotIdsOf(work[index].clip));
         work.splice(index, 1);
+        break;
+      }
+      case "duplicate": {
+        const original = work[index]!;
+        const id = `duplicate:${op.clipId}:${ops.slice(0, opIndex + 1).filter((prior) => prior.op === "duplicate" && prior.clipId === op.clipId).length}`;
+        const copy: WorkClip = {
+          ...original,
+          clip: "kind" in original.clip ? { ...original.clip, clipId: id } : { ...original.clip, id },
+          captions: original.captions.map((caption) => ({ ...caption })),
+          audio: original.audio.map((attached) => ({ ...attached, clip: { ...attached.clip, source: { ...attached.clip.source } } })),
+        };
+        work.splice(index + 1, 0, copy);
         break;
       }
       case "add": {

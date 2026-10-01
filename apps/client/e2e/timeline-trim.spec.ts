@@ -37,10 +37,12 @@ test("dragging a selected timeline edge changes film length and supports undo/re
   await expect.poll(readDuration).toBe(before + 1);
 });
 
-test("editor timeline owns scrubbing and preview taps toggle playback", async ({ page }, testInfo) => {
+test("context toolbar follows film, slot and collage selection", async ({ page }, testInfo) => {
   await mkdir(path.resolve(process.cwd(), "docs/design/screens-editor-batch-1"), { recursive: true });
   await page.goto("/editor?projectId=fixture&generationId=demo-film&planId=demo&repository=fixture");
   await expect(page.getByRole("button", { name: "Play film" })).toBeVisible();
+  const screenshot = (name: string) => page.screenshot({ path: path.resolve(process.cwd(), "docs/design/screens-editor-batch-1", `${name}-${testInfo.project.name === "webkit-iphone-14" ? "webkit" : "chromium"}.png`), scale: "css" });
+  for (const action of ["Music", "Add", "Ask"]) await expect(page.getByRole("button", { name: action, exact: true })).toBeVisible();
   await expect(page.getByRole("slider", { name: "Film progress" })).toHaveCount(0);
   await expect(page.getByText("00:00", { exact: true })).toHaveCount(0);
   await expect(page.getByText("00:23", { exact: true })).toHaveCount(0);
@@ -50,9 +52,36 @@ test("editor timeline owns scrubbing and preview taps toggle playback", async ({
   await expect(page.getByRole("button", { name: "Pause preview" })).toBeVisible();
   await page.getByRole("button", { name: "Pause preview" }).click();
   await expect(page.getByRole("button", { name: "Play preview" })).toBeVisible();
-  for (const name of ["Swap", "Trim", "Move"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
-  for (const name of ["Remove", "Add", "Ask"]) await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
-  await page.screenshot({ path: path.resolve(process.cwd(), "docs/design/screens-editor-batch-1", testInfo.project.name === "webkit-iphone-14" ? "e2-editor-current-webkit.png" : "e2-editor-current.png"), scale: "css" });
+  await screenshot("toolbar-none");
+
+  await page.getByRole("button", { name: "Select clip clip-1" }).click();
+  for (const action of ["Deselect", "Replace", "Duplicate", "Ask", "Delete"]) await expect(page.getByRole("button", { name: action, exact: true })).toBeVisible();
+  for (const action of ["Music", "Add"]) await expect(page.getByRole("button", { name: action, exact: true })).toHaveCount(0);
+  await screenshot("toolbar-slot");
+  await page.getByRole("button", { name: "Duplicate", exact: true }).click();
+  const duplicate = page.getByRole("button", { name: "Select clip duplicate:clip-1:1" });
+  await expect(duplicate).toBeVisible();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(duplicate).toHaveCount(0);
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Ask for an edit" })).toHaveValue("For this moment: ");
+  await page.getByLabel("Close Ask").click();
+  await page.getByRole("button", { name: "Deselect", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Music", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Select clip collage-1" }).click();
+  for (const action of ["Deselect", "Layout", "Motion", "Duplicate", "Delete"]) await expect(page.getByRole("button", { name: action, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ask", exact: true })).toHaveCount(0);
+  await screenshot("toolbar-collage");
+  await page.getByRole("button", { name: "Layout", exact: true }).click();
+  await expect(page.getByText("Collage layout")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Layout Photo table" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Motion Stack deal" })).toHaveCount(0);
+  await page.getByLabel("Close collage").click();
+  await page.getByRole("button", { name: "Motion", exact: true }).click();
+  await expect(page.getByText("Collage motion")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Motion Stack deal" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Layout Photo table" })).toHaveCount(0);
 });
 
 test("long press reorders a collage as one timeline slot and supports undo", async ({ page }, testInfo) => {

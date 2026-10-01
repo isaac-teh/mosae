@@ -111,10 +111,22 @@ describe("film editor", () => {
     expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-toggle-play-request")).toBe("1");
   });
 
-  it("keeps only Remove, Add and Ask in the editor toolbar", async () => {
+  it("shows whole-film Music, Add and Ask actions when no clip is selected", async () => {
     await render(<EditorScreen />);
     for (const name of ["Swap", "Trim", "Move"]) expect(host.querySelector(`[aria-label="${name}"]`)).toBeNull();
-    for (const name of ["Remove", "Add", "Ask"]) expect(host.querySelector(`[aria-label="${name}"]`)).not.toBeNull();
+    for (const name of ["Music", "Add", "Ask"]) expect(host.querySelector(`[aria-label="${name}"]`)).not.toBeNull();
+    expect(host.querySelector('[aria-label="Delete"]')).toBeNull();
+  });
+
+  it("duplicates the selected clip and restores the timeline with undo and redo", async () => {
+    await render(<EditorScreen />);
+    await click("Select clip a");
+    await click("Duplicate");
+    expect(host.querySelector('[aria-label="Select clip duplicate:a:1"]')).not.toBeNull();
+    await click("Undo");
+    expect(host.querySelector('[aria-label="Select clip duplicate:a:1"]')).toBeNull();
+    await click("Redo");
+    expect(host.querySelector('[aria-label="Select clip duplicate:a:1"]')).not.toBeNull();
   });
 
   it("reorders a timeline clip after a 300 ms hold and saves one move operation", async () => {
@@ -151,7 +163,7 @@ describe("film editor", () => {
     }
   });
 
-  it("adds an unused uploaded shot with its thumbnail after the selected clip", async () => {
+  it("adds an unused uploaded shot from the whole-film toolbar", async () => {
     boundary.repository.getFilmTimeline.mockResolvedValue({
       timeline: firstCut,
       sources: { "shot-a": "a.jpg", "shot-b": "b.jpg", "shot-c": "c.jpg" },
@@ -163,7 +175,7 @@ describe("film editor", () => {
     await click("Add Photo · Day 3, evening");
     expect(host.querySelector('[aria-label="Select clip add:shot-unused:1"]')).not.toBeNull();
     await advance(1500);
-    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "add", shotId: "shot-unused", kind: "photo", afterClipId: "a", durationSec: 3 }]);
+    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "add", shotId: "shot-unused", kind: "photo", afterClipId: null, durationSec: 3 }]);
   });
 
   it("prefills Ask from request= and applies its proposal in a single undo step", async () => {

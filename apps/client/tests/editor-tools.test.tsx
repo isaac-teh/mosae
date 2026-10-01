@@ -139,6 +139,15 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Timeline playhead"]')?.getAttribute("style")).toContain("left: 49px");
   });
 
+  it("deselects when the selected timeline clip is tapped again", async () => {
+    const onDeselect = vi.fn();
+    const onSelect = vi.fn();
+    await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId="b" playheadSec={3} onSelect={onSelect} onScrub={() => {}} onDeselect={onDeselect} />);
+    await click("Select clip b");
+    expect(onDeselect).toHaveBeenCalledOnce();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
   it("centres a tapped clip start under the playhead after its seek request", async () => {
     mockScrollTo.mockClear();
     function Harness() {
@@ -197,10 +206,10 @@ describe("editor tool operations", () => {
 
   it("shows selected collage chips, only layouts that fit the slots, and motions allowed by the selected layout", async () => {
     const threeSlotCollage = { ...collage, spec: { ...collage.spec, layoutId: "postcard-stack" as const, slots: collage.spec.slots.slice(0, 3) } };
-    await render(<CollagePanel clip={threeSlotCollage} sources={{ "shot-1": "one.jpg", "shot-2": "two.jpg", "shot-3": "three.jpg", "shot-4": "four.jpg" }} slotAlternatives={{ s1: [{ shotId: "slot-alt", thumbnailUrl: "alt.jpg" }] }} onApply={apply} onSource={onSource} onClose={() => {}} />);
+    await render(<CollagePanel clip={threeSlotCollage} section="Layout" onApply={apply} onClose={() => {}} />);
     expect(host.querySelector('[aria-label="Layout Postcard stack"]')?.getAttribute("aria-pressed")).toBe("true");
-    expect(host.querySelector('[aria-label="Motion Stack deal"]')?.getAttribute("aria-pressed")).toBe("true");
-    expect(host.querySelector('[aria-label="Effect Vignette"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('[aria-label="Motion Stack deal"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Effect Vignette"]')).toBeNull();
     for (const label of ["Botanical scrapbook", "Nine-photo grid", "Travel mosaic", "Travel story", "Torn paper mosaic", "Polaroid garland", "Postcard stack", "Route map"]) {
       expect(host.querySelector(`[aria-label="Layout ${label}"]`)).not.toBeNull();
     }
@@ -210,36 +219,15 @@ describe("editor tool operations", () => {
       { op: "setCollageLayout", clipId: "collage-1", layoutId: "torn-paper" },
       { op: "setCollageMotion", clipId: "collage-1", motionId: "print-drop" },
     ]);
-    expect(host.querySelector('[aria-label="Motion Print drop"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Motion Tape slap"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Motion Stack deal"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Layout Torn paper mosaic"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("shows a photo thumbnail and lets the user replace a collage slot", async () => {
-    await render(<CollagePanel clip={collage} sources={{ "shot-1": "one.jpg", "shot-2": "two.jpg", "shot-3": "three.jpg", "shot-4": "four.jpg" }} slotAlternatives={{ s1: [{ shotId: "slot-alt", thumbnailUrl: "alt.jpg" }] }} onApply={apply} onSource={onSource} onClose={() => {}} />);
-    expect(host.querySelector('img[src="one.jpg"]')).not.toBeNull();
-    expect(host.textContent).toContain("Photo 1");
-    await click("Replace Photo 1");
-    await click("Replace Photo 1 with option 1");
-    expect(apply).toHaveBeenLastCalledWith({ op: "replaceCollageSlot", clipId: "collage-1", slotId: "s1", shotId: "slot-alt", kind: "photo" });
-    expect(onSource).toHaveBeenCalledWith("slot-alt", "alt.jpg");
-  });
-
-  it("emits collage effect and split operations", async () => {
-    await render(<CollagePanel clip={collage} onApply={apply} onSource={onSource} onClose={() => {}} />);
-    await click("Effect Warm grade");
-    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageEffect", clipId: "collage-1", effectId: "warm-grade" });
-    await click("Split into single photos");
-    expect(apply).toHaveBeenLastCalledWith({ op: "splitCollage", clipId: "collage-1" });
-  });
-
-  it("refuses a second video in a collage slot", async () => {
-    const withVideo = { ...collage, spec: { ...collage.spec, slots: collage.spec.slots.map((slot, index) => index === 0 ? { ...slot, kind: "video" as const } : slot) } };
-    await render(<CollagePanel clip={withVideo} slotAlternatives={{ s2: [{ shotId: "video-alt", thumbnailUrl: "alt.jpg", kind: "video" }] }} onApply={apply} onSource={onSource} onClose={() => {}} />);
-    await click("Replace Photo 2");
-    await click("Replace Photo 2 with option 1");
-    expect(host.textContent).toContain("A collage can hold one video.");
-    expect(apply).not.toHaveBeenCalled();
+  it("shows only motion choices in the collage motion sheet", async () => {
+    await render(<CollagePanel clip={collage} section="Motion" onApply={apply} onClose={() => {}} />);
+    expect(host.querySelector('[aria-label="Layout Photo table"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Motion Stack deal"]')).not.toBeNull();
+    await click("Motion Page turn");
+    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageMotion", clipId: "collage-1", motionId: "page-turn" });
   });
 
   it("previews an Ask proposal without editing, then applies all operations together", async () => {

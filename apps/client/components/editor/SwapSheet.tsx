@@ -25,7 +25,7 @@ export function SwapSheet({ visible, clipId, planId, momentId, repository, onApp
   const error = result?.key === key ? result.error : null;
   return <View className="absolute inset-0 z-20 justify-end bg-black/55">
     <View className="max-h-[72%] rounded-t-[24px] bg-[#111d26] px-5 pb-8 pt-4">
-      <View className="mb-4 flex-row items-center justify-between"><Text className="font-sans-semibold text-[18px] text-on-screen">Swap moment</Text><Pressable accessibilityLabel="Close swap" onPress={onClose}><Text className="text-[24px] text-on-screen">×</Text></Pressable></View>
+      <View className="mb-4 flex-row items-center justify-between"><Text className="font-sans-semibold text-[18px] text-on-screen">Replace moment</Text><Pressable accessibilityLabel="Close swap" onPress={onClose}><Text className="text-[24px] text-on-screen">×</Text></Pressable></View>
       {error ? <Text className="font-sans text-caption text-on-screen">{error}</Text> : shots.length === 0 ? <Text className="font-sans text-caption text-on-screen-muted">No alternatives from this moment yet.</Text> : <ScrollView className="max-h-[420px]">
         {shots.map((shot) => <Pressable key={shot.shotId} role="button" accessibilityLabel={`Use alternative ${shot.shotId}`} onPress={() => { onSource(shot.shotId, shot.thumbnailUrl); onApply({ op: "swapShot", clipId, shotId: shot.shotId }); onClose(); }} className="mb-2 h-[74px] flex-row items-center gap-3 rounded-xl bg-[#1a2c38] p-2">
           {shot.thumbnailUrl ? <Image source={{ uri: uri(shot.thumbnailUrl) }} resizeMode="cover" className="size-[58px] rounded-md" /> : <View className="size-[58px] rounded-md bg-tide-tile" />}

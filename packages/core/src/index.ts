@@ -16,4 +16,6 @@ export { deriveChat, getSetAsideSummary } from "./chat/deriveChat";
 export { personAnswerChips, type PersonAgeBand } from "./chat/personChips";
 export { trimRange, type TimelineTrimEdge, type TrimRangeInput } from "./editor/timelineTrim";
 export { reorderSlots } from "./editor/reorderSlots";
+export { duplicateClip } from "./editor/duplicateClip";
+export { contextToolbar, type EditorSelection, type ContextToolbarAction } from "./editor/contextToolbar";
 export type { ChatInput, ChatItem, ChatState, ProjectSummary } from "./chat/types";

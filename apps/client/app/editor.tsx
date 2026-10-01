@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Share, Text, View, useWindowDimensions } from "r
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Asset } from "expo-asset";
 import type { EditOp, Timeline } from "@mosae/contracts";
-import { trimRange } from "@mosae/core";
+import { duplicateClip, trimRange, type ContextToolbarAction } from "@mosae/core";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { useEditor } from "@/lib/useEditor";
 import type { StoryPlan, DirectionOptions, Moment } from "@mosae/core";
@@ -17,11 +17,12 @@ import { SoundtrackSheet } from "@/components/editor/SoundtrackSheet";
 import { RemoveConfirm } from "@/components/editor/RemoveConfirm";
 import { EditorMenu } from "@/components/editor/EditorMenu";
 import { AskSheet } from "@/components/editor/AskSheet";
+import { SwapSheet } from "@/components/editor/SwapSheet";
 import { RedoIcon, UndoIcon } from "@/components/icons";
 import { downloadFilm, prepareFilmDownload, type PreparedFilmDownload } from "@/lib/downloadFilm";
 
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
-type Tool = "Remove" | "Add" | "Ask" | "Collage" | "Soundtrack" | null;
+type Tool = "Remove" | "Add" | "Ask" | "CollageLayout" | "CollageMotion" | "Replace" | "Soundtrack" | null;
 const clipId = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
 const shotIdsIn = (timeline: Timeline) => new Set(timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId]));
 const idOf = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
@@ -53,7 +54,6 @@ export default function EditorScreen() {
   const router = useRouter();
   const { height } = useWindowDimensions();
   const editor = useEditor(params.projectId || "fixture", params.generationId || "demo-film", repository);
-  const timelineForSelection = editor.timeline;
   const selectEditorClip = editor.select;
   const [playhead, setPlayhead] = useState(0);
   const [seekRequest, setSeekRequest] = useState<{ seconds: number } | null>(null);
@@ -67,7 +67,6 @@ export default function EditorScreen() {
   const [tool, setTool] = useState<Tool>(params.request ? "Ask" : null);
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [directions, setDirections] = useState<DirectionOptions | null>(null);
-  const [slotAlternatives, setSlotAlternatives] = useState<{ clipId: string; values: Record<string, { shotId: string; thumbnailUrl: string; kind?: "photo" | "video" }[]> } | null>(null);
   const onTimeChange = useCallback((seconds: number) => setPlayhead(seconds), []);
   const seekTo = useCallback((seconds: number) => {
     const target = Math.max(0, Math.min(editor.timeline?.durationSec ?? 0, seconds));
@@ -99,18 +98,6 @@ export default function EditorScreen() {
     return () => { active = false; };
   }, [params.planId, repository]);
   const selectedClip = editor.timeline?.videoClips.find((clip) => clipId(clip) === editor.selectedClipId) ?? null;
-  useEffect(() => {
-    let active = true;
-    if (tool !== "Collage" || !selectedClip || !("kind" in selectedClip) || !plan) return () => { active = false; };
-    void Promise.all(selectedClip.spec.slots.map(async (slot) => {
-      const moment = plan.moments.find((candidate) => candidate.shotId === slot.shotId);
-      if (!moment) return [slot.slotId, []] as const;
-      const shots = await repository.getAlternatives(plan.planId, moment.id);
-      return [slot.slotId, shots] as const;
-    })).then((entries) => { if (active) setSlotAlternatives({ clipId: selectedClip.clipId, values: Object.fromEntries(entries) }); })
-      .catch(() => { if (active) setSlotAlternatives({ clipId: selectedClip.clipId, values: {} }); });
-    return () => { active = false; };
-  }, [tool, selectedClip, plan, repository]);
   const addMoments = useMemo(() => {
     if (!editor.timeline) return [];
     const used = shotIdsIn(editor.timeline);
@@ -152,14 +139,22 @@ export default function EditorScreen() {
   }, [downloadSource, plan?.title]);
   const chooseClip = useCallback((id: string) => {
     selectEditorClip(id);
-    const clip = timelineForSelection?.videoClips.find((item) => clipId(item) === id);
-    setTool(clip && "kind" in clip ? "Collage" : null);
-  }, [selectEditorClip, timelineForSelection]);
+    setTool(null);
+  }, [selectEditorClip]);
   const onTimelineSelect = useCallback((id: string, startSec: number) => { chooseClip(id); seekTo(startSec); }, [chooseClip, seekTo]);
   const openSoundtrackPicker = useCallback(() => setTool("Soundtrack"), []);
-  const openTool = (next: Exclude<Tool, "Collage" | "Soundtrack" | null>) => {
-    if (next === "Remove" && editor.timeline?.videoClips.length === 1) return;
-    setTool(next);
+  const selectedShotId = selectedClip && "source" in selectedClip ? selectedClip.source.shotId : null;
+  const selectedMoment = selectedShotId ? plan?.moments.find((moment) => moment.shotId === selectedShotId) : null;
+  const toolbarSelection = !selectedClip ? "none" : "kind" in selectedClip ? "collage" : "slot";
+  const openTool = (action: ContextToolbarAction) => {
+    if (action === "Deselect") { editor.select(null); setTool(null); return; }
+    if (action === "Delete") { if (editor.timeline && editor.timeline.videoClips.length > 1) setTool("Remove"); return; }
+    if (action === "Duplicate") { if (selectedClip) editor.apply(duplicateClip(clipId(selectedClip))); setTool(null); return; }
+    if (action === "Replace") { setTool("Replace"); return; }
+    if (action === "Layout") { setTool("CollageLayout"); return; }
+    if (action === "Motion") { setTool("CollageMotion"); return; }
+    if (action === "Music") { setTool("Soundtrack"); return; }
+    setTool(action);
   };
   const downloadRenderedFilm = async () => {
     if (!editor.downloadUrl || preparingDownload) return;
@@ -198,11 +193,12 @@ export default function EditorScreen() {
             if (clip && original && editor.firstCut) editor.apply(trimEdit(clip, original, edge, delta, editor.firstCut.durationSec));
           }} onReorder={(id, toIndex) => editor.apply({ op: "move", clipId: id, toIndex })} onDeselect={() => editor.select(null)} onSoundtrack={openSoundtrackPicker} />
       </ScrollView>}
-    <ToolBar onTool={(value) => openTool(value)} />
+    <ToolBar selection={toolbarSelection} onTool={openTool} />
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
     {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} onApply={onApply} onClose={() => setTool(null)} /> : null}
-    {tool === "Collage" && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} sources={editor.sources} slotAlternatives={slotAlternatives?.clipId === selectedClip.clipId ? slotAlternatives.values : {}} onApply={onApplyCollage} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}
-    {tool === "Ask" && editor.timeline ? <AskSheet visible projectId={params.projectId || "fixture"} generationId={params.generationId || "demo-film"} revision={editor.savedRevision} timeline={editor.timeline} sources={editor.sources} repository={repository} initialRequest={typeof params.request === "string" ? params.request : ""} onApply={onApplyAsk} onClose={() => setTool(null)} /> : null}
+    {(tool === "CollageLayout" || tool === "CollageMotion") && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} section={tool === "CollageLayout" ? "Layout" : "Motion"} onApply={onApplyCollage} onClose={() => setTool(null)} /> : null}
+    {tool === "Replace" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={clipId(selectedClip)} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} onApply={onApply} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}
+    {tool === "Ask" && editor.timeline ? <AskSheet visible projectId={params.projectId || "fixture"} generationId={params.generationId || "demo-film"} revision={editor.savedRevision} timeline={editor.timeline} sources={editor.sources} repository={repository} initialRequest={typeof params.request === "string" ? params.request : selectedClip && !("kind" in selectedClip) ? "For this moment: " : ""} onApply={onApplyAsk} onClose={() => setTool(null)} /> : null}
     {tool === "Soundtrack" ? <SoundtrackSheet visible soundtracks={directions?.soundtracks ?? []} onApply={onApply} onClose={() => setTool(null)} /> : null}
   </View>;
 }

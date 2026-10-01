@@ -127,6 +127,19 @@ describe("applyEdits", () => {
     expect(removed.timeline.audioClips[0].fadeOutSec).toBe(0.5);
   });
 
+  it("duplicates a selected clip immediately after it with a fresh id", () => {
+    const duplicate = apply([{ op: "duplicate", clipId: "p1" }]);
+    expect(geometry(duplicate.timeline)).toEqual([
+      ["p1", 0, 2], ["duplicate:p1:1", 2, 2], ["v1", 4, 3], ["p2", 7, 2], ["c1", 9, 3],
+    ]);
+    expect(duplicate.timeline.videoClips[1]).toMatchObject({ source: { kind: "photo", shotId: "shot-p1" }, durationSec: 2 });
+  });
+
+  it("duplicates a collage slot as a collage", () => {
+    const duplicate = apply([{ op: "duplicate", clipId: "c1" }]);
+    expect(duplicate.timeline.videoClips.at(-1)).toMatchObject({ clipId: "duplicate:c1:1", kind: "collage", spec: { slots: firstCut.videoClips[3] && "kind" in firstCut.videoClips[3] ? firstCut.videoClips[3].spec.slots : [] } });
+  });
+
   it("refuses a second collage video cell with an indexed error", () => {
     const result = applyEdits(firstCut, [{ op: "replaceCollageSlot", clipId: "c1", slotId: "s1", shotId: "second-video", kind: "video" }]);
     expect(result).toMatchObject({ ok: false, opIndex: 0 });
