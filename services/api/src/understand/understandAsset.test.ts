@@ -62,6 +62,7 @@ describe("understandAsset", () => {
     expect(deps.embedImageContent).toHaveBeenCalledTimes(1);
     expect(deps.embedImageContent).toHaveBeenCalledWith(expect.objectContaining({ model: "gemini-embedding-2", jpeg: expect.any(Buffer) }));
     expect(filesAtCommit).toEqual(["render.jpg"]);
+    expect(deps.objects.upload).not.toHaveBeenCalled();
   });
 
   it("keeps the asset understood when one face embedding fails", async () => {
