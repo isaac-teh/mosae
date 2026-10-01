@@ -8,6 +8,7 @@ import { useDirectorChat } from "@/lib/useDirectorChat";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { EditorPreview } from "@/components/editor/EditorPreview";
 import type { Timeline } from "@mosae/contracts";
+import { personAnswerChips } from "@mosae/core";
 
 function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
   if (!summary) return "Your film";
@@ -129,7 +130,7 @@ export default function DirectorScreen() {
           return <Pressable key={item.id} role="button" aria-label={answer} onPress={() => void actions.confirmOccasion(answer, storyText)} className="max-w-[80%] self-end rounded-md bg-bubble-you px-4 py-3"><Text className="font-sans text-body text-ink">{answer}</Text></Pressable>;
         }
         if (item.kind === "person") return <View key={item.id} className="gap-3">
-          <ChatPersonQuestion momentCount={item.momentCount} samples={item.sampleFaces} days={item.days} chips={["My daughter", "My wife", "Me", "Type a name"]} onPick={(role) => void actions.setPerson(item.personId, role)} onTypeName={() => setNamingPerson(item.personId)} onSkip={() => void actions.setPerson(item.personId, "Skip")} />
+          <ChatPersonQuestion momentCount={item.momentCount} samples={item.sampleFaces} days={item.days} chips={personAnswerChips(item.ageBand, people.filter((person) => person.personId !== item.personId).map((person) => person.name ?? ""))} onPick={(role) => void actions.setPerson(item.personId, role)} onTypeName={() => setNamingPerson(item.personId)} onSkip={() => void actions.setPerson(item.personId, "Skip")} />
           {namingPerson === item.personId && <View className="flex-row gap-2"><TextInput accessibilityLabel="Person name" value={name} onChangeText={setName} className="min-h-11 flex-1 rounded-md border border-line-strong px-3 font-sans text-ink" /><Pressable role="button" onPress={() => { if (name.trim()) void actions.setPerson(item.personId, "Type a name", name.trim()); setName(""); setNamingPerson(null); }} className="min-h-11 justify-center px-3"><Text className="font-sans-semibold text-action">Save name</Text></Pressable></View>}
         </View>;
         if (item.kind === "anyone-else") return <View key={item.id} className="gap-3"><ChatProposal question="Anyone else?" replies={[{ id: "no", label: "No, that's everyone" }]} onReply={() => void actions.skipPeople()} /></View>;

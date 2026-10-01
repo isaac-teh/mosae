@@ -138,22 +138,22 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   if (!savedNameResponse.ok()) console.log("Name cast update failed:", savedNameResponse.status(), savedNameResponse.url(), savedNameResponse.request().postData(), await savedNameResponse.text());
   expect(savedNameResponse.ok()).toBe(true);
   await expect(page.getByText("Mia", { exact: true })).toBeVisible();
-  const previousDaughterReplies = await page.getByText("My daughter", { exact: true }).count();
-  const daughterCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
-  await page.getByRole("button", { name: "My daughter" }).click();
-  expect((await daughterCastResponse).ok()).toBe(true);
-  await expect.poll(() => page.getByText("My daughter", { exact: true }).count(), { timeout: 30_000 }).toBeGreaterThan(previousDaughterReplies);
-  const wifeChip = page.getByRole("button", { name: "My wife" });
+  const previousFriendReplies = await page.getByText("Friend", { exact: true }).count();
+  const friendCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
+  await page.getByRole("button", { name: "Friend" }).click();
+  expect((await friendCastResponse).ok()).toBe(true);
+  await expect.poll(() => page.getByText("Friend", { exact: true }).count(), { timeout: 30_000 }).toBeGreaterThan(previousFriendReplies);
+  const friendChip = page.getByRole("button", { name: "Friend" });
   const everyone = page.getByRole("button", { name: "No, that's everyone" });
   for (let answer = 0; answer < 3; answer += 1) {
     if (await everyone.count()) break;
-    const previousReplies = await page.getByText("My wife", { exact: true }).count();
-    const wifeCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
-    await wifeChip.click();
-    const wifeResponse = await wifeCastResponse;
-    if (!wifeResponse.ok()) console.log("Person cast update failed:", wifeResponse.status(), wifeResponse.url(), wifeResponse.request().postData(), await wifeResponse.text());
-    expect(wifeResponse.ok()).toBe(true);
-    await expect.poll(async () => (await everyone.count()) > 0 || (await page.getByText("My wife", { exact: true }).count()) > previousReplies, { timeout: 30_000 }).toBe(true);
+    const previousReplies = await page.getByText("Friend", { exact: true }).count();
+    const friendCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
+    await friendChip.click();
+    const friendResponse = await friendCastResponse;
+    if (!friendResponse.ok()) console.log("Person cast update failed:", friendResponse.status(), friendResponse.url(), friendResponse.request().postData(), await friendResponse.text());
+    expect(friendResponse.ok()).toBe(true);
+    await expect.poll(async () => (await everyone.count()) > 0 || (await page.getByText("Friend", { exact: true }).count()) > previousReplies, { timeout: 30_000 }).toBe(true);
   }
   await expect(everyone).toBeVisible({ timeout: 30_000 });
   await everyone.click();

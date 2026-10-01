@@ -89,9 +89,14 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.kind === "person")).toMatchObject({ kind: "person", sampleFaces });
   });
 
-  it("uses the person chip label instead of a generic family label", () => {
+  it("shows a person's saved answer without inferring a relationship from role", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p0", name: "Family", role: "child", skipped: false, momentCount: 30, sampleShotIds: [], days: [] }], peopleConfirmed: true });
-    expect(state.items.find((item) => item.kind === "you" && item.id === "person-answer-p0")).toMatchObject({ text: "My daughter" });
+    expect(state.items.find((item) => item.kind === "you" && item.id === "person-answer-p0")).toMatchObject({ text: "Family" });
+  });
+
+  it("does not invent an answer from an automatically assigned parent role", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p0", name: null, role: "parent", skipped: false, momentCount: 30, sampleShotIds: [], days: [] }], peopleConfirmed: true });
+    expect(state.items.some((item) => item.kind === "you" && item.id === "person-answer-p0")).toBe(false);
   });
 
   it("keeps skipped people represented by the Skip chip", () => {

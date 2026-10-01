@@ -28,13 +28,13 @@ async function waitFor(check: () => void) { for (let i = 0; i < 40; i++) { try {
 
 const summary = (faces = true) => ({ total: 8, photos: 8, clips: 0, days: 2, dateRange: null, places: ["Tokyo"], country: "Japan", season: "late October", processed: { ingested: 8, understood: 8, faces: 4 }, ready: { summary: true, faces, plan: false } });
 const people = [
-  { personId: "person-1", name: null, role: null, momentCount: 212, sampleShotIds: ["a", "b", "c", "d"], sampleFaces: [
+  { personId: "person-1", name: null, role: null, ageBand: "child", momentCount: 212, sampleShotIds: ["a", "b", "c", "d"], sampleFaces: [
     { shotId: "a", uri: "https://thumb.test/a", bbox: [0.1, 0.2, 0.4, 0.5] },
     { shotId: "b", uri: "https://thumb.test/b", bbox: [0.3, 0.4, 0.7, 0.8] },
     { shotId: "c", uri: "https://thumb.test/c", bbox: [0.2, 0.3, 0.5, 0.6] },
     { shotId: "d", uri: "https://thumb.test/d", bbox: [0.4, 0.4, 0.8, 0.8] },
   ], days: [1, 2, 3] },
-  { personId: "person-2", name: null, role: null, momentCount: 90, sampleShotIds: ["c"], sampleFaces: [], days: [1] },
+  { personId: "person-2", name: null, role: null, ageBand: "adult", momentCount: 90, sampleShotIds: ["c"], sampleFaces: [], days: [1] },
 ];
 
 const planFixture = {
@@ -212,9 +212,20 @@ describe("Director chat", () => {
     await renderScreen(); await click("Yes, our Japan trip");
     await click("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(1));
-    await click("My wife");
+    await click("My partner");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(2));
     expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ proposalId: "proposal-2" }));
+  });
+
+  it("uses each person's age for chips and hides a self answer already assigned", async () => {
+    setup({ people: [{ ...people[0], ageBand: "adult" }, { ...people[1], ageBand: "adult" }] }); await renderScreen(); await click("Yes, our Japan trip");
+    expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy();
+    await click("Me");
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(host.querySelector('button[aria-label="Me"]')).toBeNull());
+    expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Friend"]')).toBeTruthy();
   });
 
   it("does not send a second cast edit while the first one is still pending", async () => {
@@ -223,7 +234,7 @@ describe("Director chat", () => {
     mocks.confirmCast.mockImplementation(() => new Promise((resolve) => { resolveCast = resolve; }));
     await renderScreen(); await click("Yes, our Japan trip");
     await click("My daughter");
-    await click("My wife");
+    await click("Friend");
     expect(mocks.confirmCast).toHaveBeenCalledTimes(1);
     resolveCast({ cast: { people: [] }, proposalId: "proposal-2" });
   });

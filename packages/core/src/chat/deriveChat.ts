@@ -14,10 +14,7 @@ function occasionText(input: ChatInput): string {
 
 function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string {
   if (person.skipped) return "Skip";
-  if (person.name && person.name !== "Family") return person.name;
-  if (person.role === "child") return "My daughter";
-  if (person.role === "parent") return "My wife";
-  return "Skip";
+  return person.name ?? "";
 }
 
 function getSetAsideCounts(input: ChatInput): { blurry: number; duplicates: number } {
@@ -75,7 +72,7 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
     });
     if (unanswered) {
-      add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days });
+      add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days });
     } else {
       add({ kind: "anyone-else", id: "anyone-else" });
     }
@@ -84,7 +81,7 @@ export function deriveChat(input: ChatInput): ChatState {
 
   if (input.people?.length) {
     [...input.people].sort((a, b) => b.momentCount - a.momentCount).slice(0, 3).forEach((person) => {
-      if (person.skipped || person.name || person.role) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+      if (person.skipped || person.name) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
     });
   }
   confirmed = 2;

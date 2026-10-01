@@ -1,8 +1,9 @@
 import type { AlternativeShot, CreateOption, Direction, DirectionOptions, Film, PlanEdits, StoryPlan } from "./types";
 import type { ProjectSummary } from "../chat/types";
 import type { EditOp, Timeline } from "@mosae/contracts";
+import type { PersonAgeBand } from "../chat/personChips";
 
-export type DirectorPerson = { personId: string; name: string | null; role: string | null; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[] };
+export type DirectorPerson = { personId: string; name: string | null; role: string | null; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[] };
 export type FilmListStatus = "saved" | "film-ready" | "rendering" | "in-progress";
 export type FilmListItem = { projectId: string; filmId: string | null; planId: string | null; title: string; month: string; duration: string; posterUrl: string; justSaved: boolean; status: FilmListStatus; demo?: boolean };
 export type ProjectResumeState = { proposalId: string | null; storyText: string | null; generationId: string | null; generationStatus: "composing" | "playable" | "rendering" | "saved" | "failed" | null };

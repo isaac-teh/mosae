@@ -433,7 +433,7 @@ export function createApiStoryRepository(
           try { return { shotId, uri: await thumbnail(assetId), bbox }; }
           catch { return null; }
         }));
-        return { personId, name: typeof person?.name === "string" ? person.name : null, role: typeof person?.role === "string" ? person.role : null, momentCount: group.shots.size, sampleShotIds: [...group.shots].slice(0, 4), sampleFaces: samples.filter((sample): sample is NonNullable<typeof sample> => sample !== null), days: [...group.days].sort((a, b) => a - b) } satisfies DirectorPerson;
+        return { personId, name: typeof person?.name === "string" ? person.name : null, role: typeof person?.role === "string" ? person.role : null, ageBand: person?.ageBand === "child" || person?.ageBand === "teen" || person?.ageBand === "adult" || person?.ageBand === "senior" ? person.ageBand : undefined, momentCount: group.shots.size, sampleShotIds: [...group.shots].slice(0, 4), sampleFaces: samples.filter((sample): sample is NonNullable<typeof sample> => sample !== null), days: [...group.days].sort((a, b) => a - b) } satisfies DirectorPerson;
       }))).sort((a, b) => b.momentCount - a.momentCount);
     },
     createPlan: async (storyText, _mediaRefs) => {
