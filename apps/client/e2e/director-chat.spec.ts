@@ -19,7 +19,7 @@ async function screenshot(page: Page, name: string) {
 
 test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thread after reload", async ({ page }) => {
   test.setTimeout(10 * 60_000);
-  await page.setViewportSize({ width: 412, height: 870 });
+  await page.setViewportSize({ width: 390, height: 844 });
   await mkdir(screenshots, { recursive: true });
   await mkdir(styleScreenshots, { recursive: true });
   const existing = await readdir(samples);
@@ -78,11 +78,14 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await screenshot(page, "01-home-empty.png");
 
   await page.getByRole("button", { name: "Create a new film" }).first().click();
+  await screenshot(page, "02-add-photos.png");
   await page.locator('input[type="file"]').setInputFiles(media);
+  await page.waitForURL("**/pick-memory");
+  await screenshot(page, "03-pick-memory.png");
+
   uploadStartedAt = Date.now();
+  await page.getByRole("button", { name: "Next" }).click();
   await page.waitForURL("**/director?**", { timeout: 60_000 });
-  await expect(page.getByText("Camera Roll", { exact: true })).toHaveCount(0);
-  await screenshot(page, "pt-01-direct-upload-to-chat.png");
   await expect(page.getByText(`I've looked through all ${tripFiles.length}`)).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText("Singapore, June", { exact: true })).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText(/I've looked through all 15\. It looks like a trip to Singapore/)).toBeVisible();
@@ -94,7 +97,7 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await composer.fill("it's our Singapore holiday with the kids");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("it's our Singapore holiday with the kids")).toBeVisible({ timeout: 60_000 });
-  const interpretationReply = page.getByText(/Should I create a story about your Singapore family holiday\?|Would you like me to focus the story on your Singapore holiday with the kids\?|Would you like to center the story on your Singapore holiday with the kids\?/);
+  const interpretationReply = page.getByText(/Should I create a story about your Singapore family holiday\?|Would you like me to focus the story on your Singapore holiday with the kids\?/);
   await expect(interpretationReply).toBeVisible({ timeout: 60_000 });
   const interpretationText = (await interpretationReply.innerText()).trim();
   const typedBubble = page.getByText("it's our Singapore holiday with the kids", { exact: true });
@@ -107,7 +110,7 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await expect(page.getByText("I didn't catch that. Pick one below, or say it another way.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Yes, our Singapore trip" })).toHaveCount(0);
   await expect(page.getByText("0 of 4 confirmed", { exact: true })).toBeVisible();
-  await screenshot(page, "pt-04-answer-chips.png");
+  await screenshot(page, "05-free-text-confirmation.png");
   // The typed suggestion is still pending until confirmed. Reload restores the
   // initial occasion state so the primary Yes chip can drive the full film run.
   await page.reload();
@@ -135,30 +138,29 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   if (!savedNameResponse.ok()) console.log("Name cast update failed:", savedNameResponse.status(), savedNameResponse.url(), savedNameResponse.request().postData(), await savedNameResponse.text());
   expect(savedNameResponse.ok()).toBe(true);
   await expect(page.getByText("Mia", { exact: true })).toBeVisible();
-  const previousFriendReplies = await page.getByText("Friend", { exact: true }).count();
-  const friendCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
-  await page.getByRole("button", { name: "Friend" }).click();
-  expect((await friendCastResponse).ok()).toBe(true);
-  await expect.poll(() => page.getByText("Friend", { exact: true }).count(), { timeout: 30_000 }).toBeGreaterThan(previousFriendReplies);
-  const friendChip = page.getByRole("button", { name: "Friend" });
+  const previousDaughterReplies = await page.getByText("My daughter", { exact: true }).count();
+  const daughterCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
+  await page.getByRole("button", { name: "My daughter" }).click();
+  expect((await daughterCastResponse).ok()).toBe(true);
+  await expect.poll(() => page.getByText("My daughter", { exact: true }).count(), { timeout: 30_000 }).toBeGreaterThan(previousDaughterReplies);
+  const wifeChip = page.getByRole("button", { name: "My wife" });
   const everyone = page.getByRole("button", { name: "No, that's everyone" });
   for (let answer = 0; answer < 3; answer += 1) {
     if (await everyone.count()) break;
-    const previousReplies = await page.getByText("Friend", { exact: true }).count();
-    const friendCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
-    await friendChip.click();
-    const friendResponse = await friendCastResponse;
-    if (!friendResponse.ok()) console.log("Person cast update failed:", friendResponse.status(), friendResponse.url(), friendResponse.request().postData(), await friendResponse.text());
-    expect(friendResponse.ok()).toBe(true);
-    await expect.poll(async () => (await everyone.count()) > 0 || (await page.getByText("Friend", { exact: true }).count()) > previousReplies, { timeout: 30_000 }).toBe(true);
+    const previousReplies = await page.getByText("My wife", { exact: true }).count();
+    const wifeCastResponse = page.waitForResponse((response) => response.request().method() === "PUT" && /\/api\/projects\/[^/]+\/cast$/.test(response.url()));
+    await wifeChip.click();
+    const wifeResponse = await wifeCastResponse;
+    if (!wifeResponse.ok()) console.log("Person cast update failed:", wifeResponse.status(), wifeResponse.url(), wifeResponse.request().postData(), await wifeResponse.text());
+    expect(wifeResponse.ok()).toBe(true);
+    await expect.poll(async () => (await everyone.count()) > 0 || (await page.getByText("My wife", { exact: true }).count()) > previousReplies, { timeout: 30_000 }).toBe(true);
   }
   await expect(everyone).toBeVisible({ timeout: 30_000 });
   await everyone.click();
 
   {
     const createdPlanJob = await planJobCreated;
-    const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8085";
-    const jobUrl = `http://${firestoreEmulatorHost}/v1/projects/demo-face-e2e/databases/(default)/documents/projects/${createdPlanJob.projectId}/jobs/${createdPlanJob.jobId}`;
+    const jobUrl = `http://127.0.0.1:8085/v1/projects/demo-mosae/databases/(default)/documents/projects/${createdPlanJob.projectId}/jobs/${createdPlanJob.jobId}`;
     const deadline = Date.now() + 180_000;
     let failedJob: Record<string, unknown> | null = null;
     while (Date.now() < deadline) {
@@ -197,23 +199,22 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
     }
   }
 
-  const filteredPhotoCard = page.getByLabel("Filtered photos");
-  await expect(filteredPhotoCard).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByText(/I've set aside \d+ blurry shots? and \d+ near-duplicates?, keeping the best of each burst\. Your originals are untouched\./)).toBeVisible();
-  await expect(filteredPhotoCard.getByRole("button", { name: /^Blurry \d+$/ })).toBeVisible();
-  await expect(filteredPhotoCard.getByRole("button", { name: /^Near-duplicates \d+$/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Looks fine" })).toBeVisible();
-  await expect(page.getByText("Any moments that must be in the film")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /^Choose from all / })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Done" })).toHaveCount(0);
-  await screenshot(page, "pt-05-filtered-photos.png");
-  const chatHistory = page.getByLabel("Director chat history");
-  await expect.poll(() => chatHistory.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
-  await chatHistory.evaluate((node) => { node.scrollTop = 0; });
-  await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop)).toBe(0);
+  const momentsHeading = page.getByText("Any moments that must be in the film");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await expect(momentsHeading).toBeVisible({ timeout: 30_000 });
+      break;
+    } catch (error) {
+      if (attempt === 2 || !(await everyone.isVisible().catch(() => false))) throw error;
+      // A role write can still be completing when the last "No, that's
+      // everyone" reply is tapped. Retry only while that reply remains active.
+      await everyone.click();
+    }
+  }
+  await screenshot(page, "07-moments.png");
 
-  await page.getByRole("button", { name: "Looks fine" }).click();
-  await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop + node.clientHeight >= node.scrollHeight - 3)).toBe(true);
+  await page.getByRole("button", { name: /Moment .*$/ }).first().click();
+  await page.getByRole("button", { name: "Done" }).click();
   try {
     await expect(page.getByRole("button", { name: "Sounds good. Shape it." })).toBeVisible({ timeout: 120_000 });
   } catch (error) {
@@ -223,17 +224,9 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await screenshot(page, "08-direction.png");
   await expect(page.getByRole("button", { name: "A few" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "Calm" })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Lively" }).click();
 
   await page.getByRole("button", { name: "Sounds good. Shape it." }).click();
-  await expect(page.getByText("Lively · 30 sec · Whole family · A few collages · Calm", { exact: true })).toBeVisible();
-  await expect(page.getByText("Sounds good. Shape it.", { exact: true })).toHaveCount(0);
   await screenshot(page, "09-shaping.png");
-  await expect(page.getByText("Shaping your film")).toBeVisible({ timeout: 120_000 });
-  await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop + node.clientHeight >= node.scrollHeight - 3)).toBe(true);
-  await chatHistory.evaluate((node) => node.scrollTo(0, 0));
-  await page.waitForTimeout(500);
-  await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop)).toBe(0);
   const save = page.getByRole("button", { name: "Save film" });
   try {
     await expect(save).toBeVisible({ timeout: 300_000 });

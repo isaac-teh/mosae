@@ -102,5 +102,6 @@ export function labelledIdentity(labels: LabelFile): IdentityResolver {
 
 export function labelsCover(labels: LabelFile, photoHashes: string[]): boolean {
   if (photoHashes.length === 0) return false;
-  return photoHashes.every((hash) => Object.prototype.hasOwnProperty.call(labels.photos, hash));
+  const covered = photoHashes.filter((hash) => Object.prototype.hasOwnProperty.call(labels.photos, hash)).length;
+  return covered / photoHashes.length >= 0.5;
 }

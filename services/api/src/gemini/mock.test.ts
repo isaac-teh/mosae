@@ -167,38 +167,6 @@ describe("recording skips what it already has", () => {
   });
 });
 
-describe("recording image embeddings", () => {
-  let dir: string;
-  let recorder: typeof import("./recorder.js");
-
-  beforeEach(async () => {
-    dir = mkdtempSync(path.join(tmpdir(), "gemini-image-embeddings-"));
-    vi.stubEnv("GEMINI_FIXTURES", dir);
-    vi.stubEnv("MOCK_GEMINI", "record");
-    vi.resetModules();
-    recorder = await import("./recorder.js");
-  });
-  afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
-    vi.unstubAllEnvs();
-  });
-
-  it("reuses embeddings for identical image bytes and distinguishes different bytes", async () => {
-    const recordingImageEmbed = (recorder as typeof recorder & { recordingImageEmbed?: (real: (input: { model: string; jpeg: Buffer }) => Promise<number[]>) => (input: { model: string; jpeg: Buffer }) => Promise<number[]> }).recordingImageEmbed;
-    expect(recordingImageEmbed).toBeTypeOf("function");
-    if (!recordingImageEmbed) return;
-    const real = vi.fn(async ({ jpeg }: { model: string; jpeg: Buffer }) => [jpeg[0]!, 1]);
-    const embed = recordingImageEmbed(real);
-    const same = Buffer.from([7, 8, 9]);
-
-    await expect(embed({ model: "gemini-embedding-2", jpeg: same })).resolves.toEqual([7, 1]);
-    await expect(embed({ model: "gemini-embedding-2", jpeg: Buffer.from([7, 8, 9]) })).resolves.toEqual([7, 1]);
-    await expect(embed({ model: "gemini-embedding-2", jpeg: Buffer.from([7, 8, 0]) })).resolves.toEqual([7, 1]);
-
-    expect(real).toHaveBeenCalledTimes(2);
-  });
-});
-
 describe("exact replay across project ids", () => {
   it("replays an existing trip1-v2 plan with fresh shot ids", async () => {
     vi.resetModules();

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deriveChat, getSetAsideSummary, getStoryRepository, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
+import { deriveChat, getStoryRepository, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type PlanEdits, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
 import { mapShapingProgress } from "./shapingProgress";
@@ -23,12 +23,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const [pendingInterpret, setPendingInterpret] = useState<{ reply: string; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [momentState, setMomentState] = useState<Record<string, "keep" | "leave">>({});
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [directionOptions, setDirectionOptions] = useState<DirectionOptions | null>(null);
   const [directionSelection, setDirectionSelection] = useState<{ cadenceId: string; durationId: Direction["durationId"]; soundtrackId: string | null; focus: string; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful" }>({ cadenceId: "reflective", durationId: "2m", soundtrackId: null, focus: "family", collageAmount: "few", motionFeel: "calm" });
   const proposalId = useRef<string | null>(null);
   const personSaving = useRef(false);
   const planLoad = useRef(false);
-  const planFailed = useRef(false);
   const resumeProjectId = useRef<string | null>(null);
   const peopleEdits = useRef(new Map<string, { name: string | null; role: string | null; skipped: boolean }>());
   const skipPeopleForNow = useRef(false);
@@ -53,14 +53,13 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   }, [repository]);
 
   const refresh = useCallback(async () => {
-    if (planFailed.current) return;
     const [nextSummary, people] = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId)]);
     if (!mounted.current) return;
     setSummary(nextSummary);
-    const mapped = people?.map((person: DirectorPerson) => {
+    const mapped = people.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
       return { ...person, ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
-    }) ?? null;
+    });
     if (resumeProjectId.current !== projectId) {
       resumeProjectId.current = projectId;
       try {
@@ -76,8 +75,6 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (!mounted.current) return;
         const confirmedStory = resume.storyText ?? (nextSummary.country ? `Yes, our ${nextSummary.country} trip` : `Yes, that's our story`);
         const hasGeneration = Boolean(resume.generationId && film);
-        const setAside = getSetAsideSummary(plan);
-        const needsFilteredPhotoReview = setAside.blurry + setAside.duplicates > 0;
         const isFilmReady = resume.generationStatus === "playable" || resume.generationStatus === "rendering" || resume.generationStatus === "saved";
         const generation = hasGeneration ? isFilmReady
           ? { status: "done" as const, stage: resume.generationStatus!, progress: 1, stepsDone: 3, film }
@@ -88,13 +85,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           summary: nextSummary,
           intent: resume.proposalId || hasGeneration ? { text: confirmedStory } : current.intent,
           people: nextSummary.ready.faces ? mapped : null,
-          peopleConfirmed: Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)),
+          peopleConfirmed: Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && (skipPeopleForNow.current || mapped.length === 0)),
           plan,
-          momentsConfirmed: hasGeneration || Boolean(plan && !needsFilteredPhotoReview),
+          momentsConfirmed: hasGeneration,
           direction: hasGeneration ? { confirmed: true, pace: "gentle", lengthSec: Math.max(30, film?.durationSec ?? 120), focus: "family" } : null,
           generation,
         }));
-        if (plan && !hasGeneration && !needsFilteredPhotoReview) await loadDirectionOptions(plan.planId);
         if (resume.generationId && hasGeneration && !isFilmReady) void pollFilmRef.current(resume.generationId);
       } catch (cause) {
         resumeProjectId.current = null;
@@ -102,20 +98,15 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       }
       return;
     }
-    setInput((current) => ({ ...current, summary: nextSummary, people: nextSummary.ready.faces ? mapped : null, peopleConfirmed: current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) }));
+    setInput((current) => ({ ...current, summary: nextSummary, people: nextSummary.ready.faces ? mapped : null, peopleConfirmed: current.peopleConfirmed || (nextSummary.ready.faces && (skipPeopleForNow.current || mapped.length === 0)) }));
     if (proposalId.current && nextSummary.ready.plan && !planLoad.current && !input.plan) {
       planLoad.current = true;
       try {
         const plan = await repository.getPlan(proposalId.current);
-        if (mounted.current) {
-          const setAside = getSetAsideSummary(plan);
-          const needsFilteredPhotoReview = setAside.blurry + setAside.duplicates > 0;
-          setInput((current) => ({ ...current, plan, momentsConfirmed: !needsFilteredPhotoReview }));
-          if (!needsFilteredPhotoReview) await loadDirectionOptions(plan.planId);
-        }
+        if (mounted.current) setInput((current) => ({ ...current, plan }));
       } finally { planLoad.current = false; }
     }
-  }, [projectId, repository, input.plan, loadDirectionOptions]);
+  }, [projectId, repository, input.plan]);
 
   useEffect(() => {
     mounted.current = true;
@@ -173,7 +164,6 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const actions = {
     async confirmOccasion(answer?: string, storyTextOverride?: string) {
       if (saving) return;
-      planFailed.current = false;
       setSaving(true); setError(null);
       const storyText = storyTextOverride ?? answer ?? pendingInterpret?.text ?? (summary?.country ? `${summary.country} trip` : summary?.places[0] || "Our story");
       try {
@@ -182,7 +172,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         setInput((current) => ({ ...current, intent: { text: answer ?? storyText } }));
         setPendingInterpret(null);
         await refresh();
-      } catch (cause) { planFailed.current = true; reportFailure(cause); setError("I couldn't shape this one. Try again."); }
+      } catch (cause) { setError(reportFailure(cause)); }
       finally { setSaving(false); }
     },
     async setPerson(personId: string, role: string, name?: string) {
@@ -215,15 +205,44 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't save this. Please try again."); }
       finally { personSaving.current = false; }
     },
+    toggleMoment(shotId: string) {
+      setMomentState((current) => {
+        const next = { ...current };
+        if (!current[shotId]) next[shotId] = "keep";
+        else if (current[shotId] === "keep") next[shotId] = "leave";
+        else delete next[shotId];
+        return next;
+      });
+    },
     async confirmMoments() {
       if (!input.plan || saving) return;
       setSaving(true); setError(null);
       try {
-        setInput((current) => ({ ...current, momentsConfirmed: true, conflict: null }));
-        await loadDirectionOptions(input.plan.planId);
+        const momentIdsByShot = new Map(input.plan.moments.map((moment) => [moment.shotId ?? moment.id, moment.id]));
+        const mustIncludeMomentIds = [...new Set(Object.entries(momentState)
+          .filter(([, value]) => value === "keep")
+          .map(([shotId]) => momentIdsByShot.get(shotId))
+          .filter((momentId): momentId is string => Boolean(momentId)))];
+        const keptShotIds = new Set(Object.entries(momentState).filter(([, value]) => value === "keep").map(([shotId]) => shotId));
+        const excludedShotIds = [...new Set([...(input.plan.edits?.excludedShotIds ?? []), ...Object.entries(momentState).filter(([, value]) => value === "leave").map(([id]) => id)])].filter((id) => !keptShotIds.has(id));
+        const edits = { ...(input.plan.edits ?? { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], momentOrder: [], photoSwaps: {} }), mustIncludeMomentIds, excludedShotIds } as PlanEdits;
+        const updated = await repository.applyEdits(input.plan.planId, edits);
+        setInput((current) => ({ ...current, plan: updated, momentsConfirmed: true, conflict: null }));
+        await loadDirectionOptions(updated.planId);
       } catch (cause) {
-        setError(reportFailure(cause));
+        const reason = cause as { status?: number; message?: string; code?: string };
+        if (reason.status === 409) {
+          const message = reason.code === "stale_proposal" ? "Your plan changed while you were picking moments. Keep these choices and try again?" : reason.message ?? "These moment choices conflict. Which should stay in the film?";
+          setInput((current) => ({ ...current, momentsConfirmed: false, conflict: { shotIds: Object.entries(momentState).filter(([, value]) => value === "keep" || value === "leave").map(([id]) => id), message } }));
+          setError(null);
+        } else setError(reportFailure(cause));
       } finally { setSaving(false); }
+    },
+    openPicker() { setPickerOpen(true); },
+    async confirmPicker(shotIds: string[]) {
+      setMomentState((current) => ({ ...current, ...Object.fromEntries(shotIds.map((id) => [id, "keep" as const])) }));
+      setPickerOpen(false);
+      // Picker selection is staged; Done sends all inline and sheet choices together.
     },
     seeSetAside() {
       if (!input.plan) return;
@@ -293,5 +312,5 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     confirmInterpret() { if (pendingInterpret) void actions.confirmOccasion(pendingInterpret.text); },
     discardInterpret() { setPendingInterpret(null); },
   };
-  return { state, actions, error, retry: () => { setError(null); void refresh(); }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection, people: input.people ?? [] };
+  return { state, actions, error, retry: () => { setError(null); void refresh(); }, pendingInterpret, saving, summary, plan: input.plan, momentState, pickerOpen, directionOptions, directionSelection, people: input.people ?? [], setPickerOpen };
 }

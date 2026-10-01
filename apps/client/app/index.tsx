@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { type Href, useFocusEffect, useRouter } from "expo-router";
-import { isMedia, setPendingMedia, uploadMedia, type FilmListItem, type UploadProgress } from "@mosae/core";
+import { isMedia, setPendingMedia, type FilmListItem } from "@mosae/core";
 import { Button, FilmCard } from "@/components/ds";
 import { SettingsIcon } from "@/components/icons";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
@@ -12,9 +12,6 @@ export default function Home() {
   const [films, setFilms] = useState<FilmListItem[] | null>(null);
   const [demoBusy, setDemoBusy] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const router = useRouter();
   const story = useStoryFlow();
   const { repository } = story;
@@ -34,26 +31,11 @@ export default function Home() {
     catch { setDemoError("Could not start the demo trip. Try again."); }
     finally { setDemoBusy(false); }
   }
-  async function startWithMedia(files: File[]) {
+  function startWithMedia(files: File[]) {
     const media = files.filter(isMedia);
-    if (media.length === 0 || uploading) return;
-    setUploading(true);
-    setUploadProgress(null);
-    setUploadError(null);
-    try {
-      const result = await uploadMedia(media, { mode: "memory", onProgress: setUploadProgress });
-      if (result.finished === 0) {
-        setUploadError("Upload failed. Please try again.");
-        return;
-      }
-      setPendingMedia(media, result.assetIds);
-      router.push({ pathname: "/director", params: { projectId: result.projectId, live: "1" } } as unknown as Href);
-    } catch (error) {
-      console.error("upload failed", error);
-      setUploadError("Upload failed. Please try again.");
-    } finally {
-      setUploading(false);
-    }
+    if (media.length === 0) return;
+    setPendingMedia(media);
+    router.push("/pick-memory" as Href);
   }
 
   function openFilm(item: FilmListItem) {
@@ -115,8 +97,6 @@ export default function Home() {
               <Text role="heading" aria-level={1} className="font-title text-title text-ink">Many moments.{"\n"}One story.</Text>
               <Text className="mt-3 font-sans text-body leading-6 text-ink-muted">Bring in the photos and clips from a trip or celebration. You say what mattered. Mosaé shapes it into a film you can change at every step.</Text>
               <View className="mt-5"><Button label="＋  Create a new film" onPress={createFilm} /></View>
-              {uploading ? <Text accessibilityRole="progressbar" className="mt-2 text-center font-sans text-caption text-ink-muted">{uploadProgress ? `Uploading ${uploadProgress.finishedFiles + uploadProgress.failedFiles} of ${uploadProgress.totalFiles}` : "Uploading…"}</Text> : null}
-              {uploadError ? <Text className="mt-2 text-center font-sans text-caption text-critical">{uploadError}</Text> : null}
               <Pressable role="button" disabled={demoBusy} onPress={() => void tryDemo()} className="mt-3 min-h-11 items-center justify-center"><Text className="font-sans-medium text-label text-action">{demoBusy ? "Preparing demo trip…" : "Try with a demo trip"}</Text></Pressable>
               {demoError ? <Text className="font-sans text-caption text-critical">{demoError}</Text> : null}
             </View>

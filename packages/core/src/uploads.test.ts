@@ -44,7 +44,7 @@ describe("uploadMedia", () => {
     const progress: UploadProgress[] = [];
     const result = await uploadMedia([file("a.jpg", 10), file("b.mov", 20, "video/quicktime")], { mode: "memory", onProgress: (p) => progress.push(p) }, deps);
 
-    expect(result).toEqual({ projectId: "p1", finished: 2, failed: 0, assetIds: ["a1", "a2"] });
+    expect(result).toEqual({ projectId: "p1", finished: 2, failed: 0 });
     expect(calls.map((c) => c.path)).toEqual([
       "/api/projects",
       "/api/projects/p1/upload-sessions",
@@ -78,7 +78,7 @@ describe("uploadMedia", () => {
     const { deps, calls } = fakeDeps({ failPath: "uploads/u/p1/s1/a1/original" });
     const result = await uploadMedia([file("a.jpg", 10), file("b.jpg", 10)], { mode: "memory" }, deps);
 
-    expect(result).toEqual({ projectId: "p1", finished: 1, failed: 1, assetIds: ["a1", "a2"] });
+    expect(result).toEqual({ projectId: "p1", finished: 1, failed: 1 });
     expect(calls).toContainEqual({
       path: "/api/projects/p1/upload-sessions/s1/entries/a1/outcome",
       body: { kind: "failed", reason: "storage/unauthorized" },
@@ -89,7 +89,7 @@ describe("uploadMedia", () => {
   it("derives an empty MIME type and excludes unknown files before registration", async () => {
     const { deps, calls } = fakeDeps();
     const result = await uploadMedia([file("a.JPG", 10, ""), file("unknown.bin", 5, "")], { mode: "memory" }, deps);
-    expect(result).toEqual({ projectId: "p1", finished: 1, failed: 1, assetIds: ["a1"] });
+    expect(result).toEqual({ projectId: "p1", finished: 1, failed: 1 });
     expect(calls[1].body).toEqual({ entries: [{ fileName: "a.JPG", contentType: "image/jpeg", sizeBytes: 10 }] });
   });
 

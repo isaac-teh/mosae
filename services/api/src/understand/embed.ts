@@ -1,28 +1,7 @@
 import { analysisSearchText, type ShotAnalysis } from "../domain/understanding.js";
 import { MODELS } from "../gemini/pricing.js";
 export type EmbedContent = (input: { model: string; contents: string[]; taskType: "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY" }) => Promise<number[][]>;
-export type EmbedImageContent = (input: { model: string; jpeg: Buffer }) => Promise<number[]>;
 export type EmbeddedShot = { shotId: string; embedding: number[] | null };
-
-export async function embedImages(embedContent: EmbedImageContent, images: { id: string; jpeg: Buffer }[]): Promise<Map<string, number[]>> {
-  const vectors = new Map<string, number[]>();
-  let next = 0;
-  const worker = async () => {
-    while (next < images.length) {
-      const image = images[next++];
-      if (!image) continue;
-      try {
-        const vector = await embedContent({ model: MODELS.embed, jpeg: image.jpeg });
-        if (vector.length > 0) vectors.set(image.id, vector);
-      } catch {
-        // A single bad crop should not discard the other faces from this photo.
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(8, images.length) }, () => worker()));
-  return vectors;
-}
-
 export async function embedShotAnalyses(embedContent: EmbedContent, shots: { shotId: string; analysis: ShotAnalysis }[]): Promise<EmbeddedShot[]> {
   const texts = shots.map((shot) => ({ shotId: shot.shotId, text: analysisSearchText(shot.analysis) }));
   const present = texts.filter((shot) => shot.text.trim().length > 0);

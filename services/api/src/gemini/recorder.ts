@@ -320,8 +320,6 @@ export function replayingExactGenerate(): GenerateFn {
 
 type EmbedInput = { model: string; contents: string[]; taskType: "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY" };
 type EmbedFn = (input: EmbedInput) => Promise<number[][]>;
-type ImageEmbedInput = { model: string; jpeg: Buffer };
-type ImageEmbedFn = (input: ImageEmbedInput) => Promise<number[]>;
 
 /** Each text is cached on its own, so a new photo alongside old ones still hits. */
 const embedKey = (model: string, taskType: string, text: string): string =>
@@ -365,48 +363,6 @@ export function recordingEmbed(real: EmbedFn): EmbedFn {
       console.warn(`[gemini:record] reusing ${input.contents.length - missing.length}/${input.contents.length} embed fixtures`);
     }
     return vectors;
-  };
-}
-
-const imageEmbedKey = ({ model, jpeg }: ImageEmbedInput): string =>
-  sha(`${model}\u0000IMAGE\u0000${createHash("sha256").update(jpeg).digest("hex")}`);
-
-export function recordingImageEmbed(real: ImageEmbedFn): ImageEmbedFn {
-  return async (input) => {
-    const fixtures = loadIndex();
-    const key = imageEmbedKey(input);
-    const hit = fixtures.get(key);
-    if (hit?.kind === "embed") return JSON.parse(hit.response) as number[];
-
-    const vector = await real(input);
-    if (vector.length > 0) {
-      save({
-        key,
-        kind: "embed",
-        recordedAt: new Date().toISOString(),
-        request: `image-sha256:${createHash("sha256").update(input.jpeg).digest("hex")}`,
-        response: JSON.stringify(vector),
-      }, "embed-image");
-    }
-    return vector;
-  };
-}
-
-export function replayingImageEmbed(): ImageEmbedFn {
-  return async (input) => {
-    const fixtures = loadIndex();
-    const key = imageEmbedKey(input);
-    const hit = fixtures.get(key);
-    if (hit?.kind === "embed") return JSON.parse(hit.response) as number[];
-
-    let width = 0;
-    for (const fixture of fixtures.values()) {
-      if (fixture.kind === "embed") {
-        width = (JSON.parse(fixture.response) as number[]).length;
-        break;
-      }
-    }
-    return syntheticVector(key, width || EMBED_DIMENSIONS);
   };
 }
 

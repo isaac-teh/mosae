@@ -1,8 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import sharp from "sharp";
 import type { Asset } from "../store/finalizeStore.js";
 import { PermanentIngestError } from "../ingest/errors.js";
 import { understandAsset, type UnderstandDeps } from "./understandAsset.js";
@@ -18,7 +14,7 @@ function setup(asset: Asset | null = photoAsset, overrides: Partial<UnderstandDe
     objects: { download: vi.fn(), downloadCurrent: vi.fn(), upload: vi.fn() },
     analyzePhoto: vi.fn().mockResolvedValue(photoAnalysis), analyzeVideo: vi.fn().mockResolvedValue({ shots: [videoShot], transcript: [{ startSec: 0, endSec: 1, text: "hi" }] }), embedShots: vi.fn().mockResolvedValue([{ shotId: "a1_0000", embedding: [0.1] }]),
     uploadVideoFile: vi.fn().mockResolvedValue({ name: "files/x", uri: "gs://x", mimeType: "video/mp4" }), deleteVideoFile: vi.fn().mockResolvedValue(undefined),
-    embedImageContent: vi.fn().mockResolvedValue([0.75, 0.25]), commitUnderstood: vi.fn().mockResolvedValue("understood"), commitUnderstandFailed: vi.fn().mockResolvedValue("failed"), settle: vi.fn().mockResolvedValue(undefined), makeWorkDir: vi.fn().mockResolvedValue("/w"), removeWorkDir: vi.fn().mockResolvedValue(undefined), now: () => 99, ...overrides,
+    commitUnderstood: vi.fn().mockResolvedValue("understood"), commitUnderstandFailed: vi.fn().mockResolvedValue("failed"), settle: vi.fn().mockResolvedValue(undefined), makeWorkDir: vi.fn().mockResolvedValue("/w"), removeWorkDir: vi.fn().mockResolvedValue(undefined), now: () => 99, ...overrides,
   };
 }
 
@@ -28,80 +24,6 @@ describe("understandAsset", () => {
     await expect(understandAsset(deps, task)).resolves.toBe("understood");
     expect(deps.commitUnderstood).toHaveBeenCalledWith({ projectId: "p1", assetId: "a1", generation: "7", shots: [{ shotId: "a1_0000", analysis: photoAnalysis, embedding: [0.1] }], transcript: null, now: 99 });
     expect(deps.settle).toHaveBeenCalledWith("p1");
-  });
-
-  it("stores eligible face vectors without persisting crop files", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "understand-face-crops-"));
-    const jpeg = await sharp({ create: { width: 500, height: 300, channels: 3, background: "#68a5c2" } }).jpeg().toBuffer();
-    const analysisWithFaces = {
-      ...photoAnalysis,
-      faces: [
-        { faceId: "face-visible", bbox: [0.1, 0.1, 0.5, 0.5] as [number, number, number, number], confidence: 0.99, faceVisible: true },
-        { faceId: "face-low-confidence", bbox: [0.2, 0.55, 0.6, 0.9] as [number, number, number, number], confidence: 0.59, faceVisible: true },
-        { faceId: "face-background", bbox: [0.1, 0.5, 0.5, 0.8] as [number, number, number, number], confidence: 0.99, prominence: "background" as const, faceVisible: true },
-        { faceId: "face-turned-away", bbox: [0.1, 0.6, 0.5, 0.9] as [number, number, number, number], confidence: 0.99, faceVisible: false },
-        { faceId: "face-tall", bbox: [0.05, 0.05, 0.8, 0.25] as [number, number, number, number], confidence: 0.99, faceVisible: true },
-        { faceId: "face-large", bbox: [0.05, 0.05, 0.8, 0.8] as [number, number, number, number], confidence: 0.99, faceVisible: true },
-        { faceId: "face-tiny", bbox: [0.1, 0.1, 0.2, 0.2] as [number, number, number, number], confidence: 0.99, faceVisible: true },
-      ],
-    };
-    let filesAtCommit: string[] = [];
-    const deps = setup(photoAsset, {
-      makeWorkDir: vi.fn().mockResolvedValue(dir),
-      removeWorkDir: vi.fn(async (workDir) => rm(workDir, { recursive: true, force: true })),
-      objects: { download: vi.fn(), upload: vi.fn(), downloadCurrent: vi.fn(async ({ destination }) => writeFile(destination, jpeg)) },
-      analyzePhoto: vi.fn().mockResolvedValue(analysisWithFaces),
-      embedImageContent: vi.fn().mockResolvedValue([0.75, 0.25]),
-      commitUnderstood: vi.fn(async (input): Promise<"understood"> => {
-        filesAtCommit = await readdir(dir);
-        expect(input.shots[0]?.faceEmbeddings).toEqual({ "face-visible": [0.75, 0.25] });
-        return "understood";
-      }),
-    });
-
-    await expect(understandAsset(deps, task)).resolves.toBe("understood");
-    expect(deps.embedImageContent).toHaveBeenCalledTimes(1);
-    expect(deps.embedImageContent).toHaveBeenCalledWith(expect.objectContaining({ model: "gemini-embedding-2", jpeg: expect.any(Buffer) }));
-    expect(filesAtCommit).toEqual(["render.jpg"]);
-    expect(deps.objects.upload).not.toHaveBeenCalled();
-  });
-
-  it("keeps the asset understood when one face embedding fails", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "understand-face-failure-"));
-    const jpeg = await sharp({ create: { width: 500, height: 300, channels: 3, background: "#68a5c2" } }).jpeg().toBuffer();
-    const analysisWithFaces = {
-      ...photoAnalysis,
-      faces: [
-        { faceId: "face-fails", bbox: [0.1, 0.1, 0.5, 0.5] as [number, number, number, number], confidence: 0.99, faceVisible: true },
-        { faceId: "face-works", bbox: [0.1, 0.5, 0.5, 0.9] as [number, number, number, number], confidence: 0.99, faceVisible: true },
-      ],
-    };
-    let embedCall = 0;
-    const deps = setup(photoAsset, {
-      makeWorkDir: vi.fn().mockResolvedValue(dir),
-      removeWorkDir: vi.fn(async (workDir) => rm(workDir, { recursive: true, force: true })),
-      objects: { download: vi.fn(), upload: vi.fn(), downloadCurrent: vi.fn(async ({ destination }) => writeFile(destination, jpeg)) },
-      analyzePhoto: vi.fn().mockResolvedValue(analysisWithFaces),
-      embedImageContent: vi.fn(async () => {
-        embedCall += 1;
-        if (embedCall === 1) throw new Error("embedding service unavailable");
-        return [0.5, 0.5];
-      }),
-    });
-
-    await expect(understandAsset(deps, task)).resolves.toBe("understood");
-    expect(deps.commitUnderstood).toHaveBeenCalledWith(expect.objectContaining({
-      shots: [expect.objectContaining({ faceEmbeddings: { "face-works": [0.5, 0.5] } })],
-    }));
-    expect(deps.commitUnderstandFailed).not.toHaveBeenCalled();
-  });
-
-  it("omits face embeddings when a photo has no detected faces", async () => {
-    const deps = setup();
-    await expect(understandAsset(deps, task)).resolves.toBe("understood");
-    const commitInput = vi.mocked(deps.commitUnderstood).mock.calls[0]?.[0];
-    expect(commitInput?.shots[0]).not.toHaveProperty("faceEmbeddings");
-    expect(deps.embedImageContent).not.toHaveBeenCalled();
   });
 
   it("always deletes a Gemini video file after an analysis failure", async () => {

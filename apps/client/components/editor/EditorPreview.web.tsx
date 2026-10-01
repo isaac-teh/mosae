@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import { Player, type PlayerRef } from "@remotion/player";
-import { createPortal } from "react-dom";
 import { MosaeTimeline } from "@mosae/video/timeline";
 import type { Timeline } from "@mosae/contracts";
 import { fullscreenMode, seekTimeAtPosition } from "../player-controls";
@@ -21,7 +20,6 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(playheadSec);
   const [fullscreen, setFullscreen] = useState(false);
-  const overlayFullscreen = useRef(false);
   const [dragging, setDragging] = useState(false);
   const touchStart = useRef<number | null>(null);
   const inputProps = useMemo(() => ({ timeline, sources }), [timeline, sources]);
@@ -62,11 +60,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   }, [fullscreen]);
 
   useEffect(() => {
-    const changed = () => {
-      const nativeFullscreen = document.fullscreenElement === container.current;
-      if (nativeFullscreen) overlayFullscreen.current = false;
-      if (!overlayFullscreen.current) setFullscreen(nativeFullscreen);
-    };
+    const changed = () => setFullscreen(document.fullscreenElement === container.current);
     document.addEventListener("fullscreenchange", changed);
     return () => document.removeEventListener("fullscreenchange", changed);
   }, []);
@@ -89,19 +83,11 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   const enterFullscreen = async () => {
     const element = container.current;
     if (fullscreenMode(element, null) === "native" && element?.requestFullscreen) {
-      try {
-        await element.requestFullscreen();
-        return;
-      } catch {
-        // Safari may expose a fullscreen method without supporting it here.
-      }
-    }
-    overlayFullscreen.current = true;
-    setFullscreen(true);
+      try { await element.requestFullscreen(); } catch { setFullscreen(true); }
+    } else setFullscreen(true);
   };
   const closeFullscreen = () => {
     if (document.fullscreenElement && document.exitFullscreen) void document.exitFullscreen();
-    overlayFullscreen.current = false;
     setFullscreen(false);
   };
   const seekKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -119,7 +105,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
 
 
   const playerRatio = timeline.aspect === "9:16" ? 9 / 16 : 16 / 9;
-  const preview = <View ref={container as never} className={`size-full overflow-hidden ${fullscreen ? "fixed inset-0 z-[9999] flex h-[100dvh] w-screen items-center justify-center bg-black" : "relative rounded-[14px] bg-[#18211d]"}`} style={fullscreen ? { paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" } as never : undefined}
+  return <View ref={container as never} className={`size-full overflow-hidden ${fullscreen ? "fixed inset-0 z-[9999] flex h-[100dvh] w-screen items-center justify-center bg-black" : "relative rounded-[14px] bg-[#18211d]"}`} style={fullscreen ? { paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" } as never : undefined}
     onTouchStart={(event: any) => { touchStart.current = event.touches[0]?.clientY ?? null; }} onTouchEnd={(event: any) => { const start = touchStart.current; const end = event.changedTouches[0]?.clientY; if (fullscreen && start !== null && end !== undefined && end - start > 90) closeFullscreen(); touchStart.current = null; }}>
     <div style={fullscreen ? { position: "absolute", top: "env(safe-area-inset-top)", right: 0, bottom: "env(safe-area-inset-bottom)", left: 0, display: "flex", alignItems: "center", justifyContent: "center" } : { position: "absolute", inset: 0 }}>
     <Player ref={player} component={MosaeTimeline} inputProps={inputProps} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}
@@ -138,7 +124,6 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
     </View>
     {fullscreen && <button type="button" aria-label="Close fullscreen" onClick={closeFullscreen} className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-20 flex size-11 items-center justify-center rounded-full bg-black/60 text-3xl text-white">×</button>}
   </View>;
-  return overlayFullscreen.current ? createPortal(preview, document.body) : preview;
 }
 
 function formatTime(seconds: number) { return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`; }

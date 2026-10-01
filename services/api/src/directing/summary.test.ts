@@ -14,9 +14,6 @@ describe("summarise", () => {
     ], false);
     expect(result).toMatchObject({ total: 4, photos: 3, clips: 1, days: 2, places: ["Tokyo", "Kyoto"], country: "Japan", ready: { summary: true, faces: true, plan: false } });
   });
-  it("returns status keyed by asset id for the existing summary poll", () => {
-    expect(summarise([{ ...asset("photo", null), id: "photo-a", status: "ingested" }], false).assetStatuses).toEqual([{ assetId: "photo-a", kind: "photo", status: "ingested" }]);
-  });
   it("counts undated assets but excludes them from days", () => {
     expect(summarise([asset("photo", null)], false)).toMatchObject({ total: 1, days: 0, dateRange: null });
   });

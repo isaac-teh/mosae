@@ -52,7 +52,7 @@ describe("labelledIdentity", () => {
   });
 
   it("reports coverage", () => {
-    expect(labelsCover(labels, ["h1", "x"])).toBe(false);
+    expect(labelsCover(labels, ["h1", "x"])).toBe(true);
     expect(labelsCover(labels, ["x", "y", "z"])).toBe(false);
   });
 });

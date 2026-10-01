@@ -21,7 +21,7 @@ export function summaryRouter(deps: { db: Firestore; auth?: RequestHandler }): R
       const faceAssetIds = new Set(faces.map((face) => face.assetId));
       const assets = assetSnap.docs.map((doc) => {
         const data = doc.data();
-        return { ...data, id: doc.id, hasFaces: faceAssetIds.has(doc.id) } as SummaryAsset;
+        return { ...data, hasFaces: faceAssetIds.has(doc.id) } as SummaryAsset;
       });
       const proposalId = projectSnap.get("currentProposalId");
       let hasPlan = typeof proposalId === "string";

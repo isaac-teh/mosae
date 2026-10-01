@@ -2,16 +2,9 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), uploadMedia: vi.fn(), setPendingMedia: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any, flow: { repository: "api" as const, projectId: "" } }));
+const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any, flow: { repository: "api" as const, projectId: "" } }));
 vi.mock("@/lib/startDemoTrip", () => ({ startDemoTrip: vi.fn(async () => {}) }));
-vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms }), uploadMedia: state.uploadMedia, setPendingMedia: state.setPendingMedia }));
-vi.mock("@/components/MediaPicker", async () => {
-  const ReactModule = await import("react");
-  return { MediaPicker: ReactModule.forwardRef(({ onFiles }: { onFiles: (files: File[]) => void }, ref) => {
-    ReactModule.useImperativeHandle(ref, () => ({ open: () => onFiles([new File(["photo"], "trip.jpg", { type: "image/jpeg" })]) }), [onFiles]);
-    return null;
-  }) };
-});
+vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms }) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: state.repository, flow: state.flow }) }));
 vi.mock("expo-router", async () => {
   const ReactModule = await import("react");
@@ -24,6 +17,7 @@ vi.mock("react-native", () => {
 });
 
 import Home from "../app/index";
+import PickMemoryScreen from "../app/pick-memory";
 import { startDemoTrip } from "@/lib/startDemoTrip";
 
 let root: Root;
@@ -34,7 +28,6 @@ beforeEach(() => {
   state.films = [];
   state.focusEffect = null;
   state.listFilms.mockImplementation(async () => state.films);
-  state.uploadMedia.mockResolvedValue({ projectId: "uploaded-project", finished: 1, failed: 0, assetIds: ["asset-1"] });
   state.repository = { listFilms: state.listFilms };
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
@@ -42,18 +35,7 @@ afterEach(async () => { await act(async () => root.unmount()); host.remove(); })
 async function render() { await act(async () => root.render(<Home />)); }
 
 describe("Home", () => {
-  it("uploads selected media from the picker and opens the director without Camera Roll", async () => {
-    await render();
-    const button = [...host.querySelectorAll("button")].find((item) => item.textContent?.includes("Create a new film"));
-    await act(async () => button!.click());
-    await act(async () => await Promise.resolve());
-    expect(state.uploadMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), expect.objectContaining({ mode: "memory" }));
-    expect(state.setPendingMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), ["asset-1"]);
-    expect(state.push).toHaveBeenCalledWith({ pathname: "/director", params: { projectId: "uploaded-project", live: "1" } });
-    expect(state.push).not.toHaveBeenCalledWith("/pick-memory");
-  });
-
-  it("starts the demo trip from Home", async () => {
+  it("starts the same demo trip from Home and the empty upload screen", async () => {
     await render();
     const click = async (label: string) => {
       const button = [...host.querySelectorAll("button")].find((item) => item.textContent?.includes(label));
@@ -61,7 +43,9 @@ describe("Home", () => {
       await act(async () => button!.click());
     };
     await click("Try with a demo trip");
-    expect(startDemoTrip).toHaveBeenCalledTimes(1);
+    await act(async () => root.render(<PickMemoryScreen />));
+    await click("No photos handy? Use the demo trip");
+    expect(startDemoTrip).toHaveBeenCalledTimes(2);
     expect(vi.mocked(startDemoTrip).mock.calls.every(([router]) => typeof router.push === "function")).toBe(true);
   });
   it("shows the empty home invitation, body copy and editable empty film state", async () => {

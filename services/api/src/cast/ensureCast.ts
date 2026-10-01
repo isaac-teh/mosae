@@ -10,8 +10,6 @@ import { buildCast } from "./buildCast.js";
 import { castSummary } from "./castSummary.js";
 import { labelledIdentity, labelsCover, type LabelFile } from "./labelledIdentity.js";
 import type { Cast, FaceRef, Interaction } from "./types.js";
-import { embeddingIdentity } from "./embeddingIdentity.js";
-import { faceMatchingThresholds } from "../config.js";
 
 export async function loadCastLabels(photoHashes: string[], fixtureDirectory = fileURLToPath(new URL("../../fixtures/cast/", import.meta.url))): Promise<LabelFile | undefined> {
   let files: string[];
@@ -44,7 +42,6 @@ export async function ensureCast(
   );
 
   const faces: FaceRef[] = [];
-  const vectorFaces: { faceId: string; shotId: string; vector: number[]; characterId?: string }[] = [];
   const interactions: Interaction[] = [];
   const refs = new Map<string, { shotId: string; index: number }>();
   for (const doc of shotSnaps.docs) {
@@ -57,9 +54,6 @@ export async function ensureCast(
     if (!hash) continue;
     (analysis.faces ?? []).forEach((face: Face, index) => {
       faces.push({ faceId: face.faceId, shotId: doc.id, photoHash: hash, bbox: face.bbox, ageBand: face.ageBand, prominence: face.prominence });
-      const storedVector = (data.faceEmbeddings as Record<string, { toArray?: () => number[] } | number[]> | undefined)?.[face.faceId];
-      const vector = Array.isArray(storedVector) ? storedVector : storedVector?.toArray?.();
-      if (vector) vectorFaces.push({ faceId: face.faceId, shotId: doc.id, vector, ...(face.characterId ? { characterId: face.characterId } : {}) });
       refs.set(face.faceId, { shotId: doc.id, index });
     });
     for (const interaction of analysis.interactions ?? []) interactions.push(interaction);
@@ -80,13 +74,8 @@ export async function ensureCast(
   if (!labels) {
     labels = await loadCastLabels([...photoHashes.values()]);
   }
-  const coveredLabels = labels && labelsCover(labels, [...photoHashes.values()]) ? labels : undefined;
-  const thresholds = faceMatchingThresholds();
-  const embeddingResolver = !coveredLabels && vectorFaces.length
-    ? embeddingIdentity({ threshold: thresholds.faceMatchThreshold, groupMergeThreshold: thresholds.faceGroupMergeThreshold })
-    : null;
-  const resolver = coveredLabels ? labelledIdentity(coveredLabels) : embeddingResolver;
-  const identities = embeddingResolver ? embeddingResolver.resolveVectors(vectorFaces) : resolver?.resolve(faces) ?? new Map<string, string>();
+  const resolver = labels ? labelledIdentity(labels) : null;
+  const identities = resolver?.resolve(faces) ?? new Map<string, string>();
   const strangers = resolver?.strangers?.(faces) ?? new Set<string>();
   const cast = buildCast({ faces, identities, interactions, source: resolver?.source ?? "none" });
   const summary = castSummary(cast, faces, identities);
