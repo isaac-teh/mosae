@@ -37,6 +37,7 @@ describe("understandAsset", () => {
       ...photoAnalysis,
       faces: [
         { faceId: "face-visible", bbox: [0.1, 0.1, 0.5, 0.5] as [number, number, number, number], confidence: 0.99, faceVisible: true },
+        { faceId: "face-low-confidence", bbox: [0.2, 0.55, 0.6, 0.9] as [number, number, number, number], confidence: 0.59, faceVisible: true },
         { faceId: "face-background", bbox: [0.1, 0.5, 0.5, 0.8] as [number, number, number, number], confidence: 0.99, prominence: "background" as const, faceVisible: true },
         { faceId: "face-turned-away", bbox: [0.1, 0.6, 0.5, 0.9] as [number, number, number, number], confidence: 0.99, faceVisible: false },
         { faceId: "face-tall", bbox: [0.05, 0.05, 0.8, 0.25] as [number, number, number, number], confidence: 0.99, faceVisible: true },

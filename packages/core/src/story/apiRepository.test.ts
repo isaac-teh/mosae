@@ -215,6 +215,19 @@ describe("createApiStoryRepository", () => {
     expect(deps.getThumbnailUrl).toHaveBeenCalledWith("project-1", "asset-2");
   });
 
+  it("does not ask the user about a person who appears in only one photo", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
+      { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "repeat-1", characterId: "repeat", bbox: [0.1, 0.2, 0.4, 0.5] }] },
+      { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "repeat-2", characterId: "repeat", bbox: [0.1, 0.2, 0.4, 0.5] }] },
+      { shotId: "shot-3", assetId: "asset-1", faces: [{ faceId: "single-1", characterId: "single", bbox: [0.2, 0.3, 0.5, 0.6] }] },
+    ] } : { cast: { people: [{ personId: "repeat", role: "parent" }, { personId: "single", role: "other" }] } });
+
+    const people = await createApiStoryRepository({ projectId: "project-1" }, deps).getPeople("project-1");
+
+    expect(people?.map((person) => person.personId)).toEqual(["repeat"]);
+  });
+
   it("keeps people unresolved while the cast has not been created yet", async () => {
     const deps = dependencies({
       request: vi.fn(async (_method, path) => path.endsWith("/characters")

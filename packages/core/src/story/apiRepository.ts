@@ -427,7 +427,7 @@ export function createApiStoryRepository(
         if (!pending) { pending = deps.getThumbnailUrl(id, assetId); thumbnailUrls.set(assetId, pending); }
         return pending;
       };
-      return (await Promise.all([...groups.entries()].map(async ([personId, group]) => {
+      return (await Promise.all([...groups.entries()].filter(([, group]) => group.shots.size >= 2).map(async ([personId, group]) => {
         const person = names.get(personId);
         const samples = await Promise.all([...group.samples.values()].slice(0, 4).map(async ({ shotId, assetId, bbox }) => {
           try { return { shotId, uri: await thumbnail(assetId), bbox }; }

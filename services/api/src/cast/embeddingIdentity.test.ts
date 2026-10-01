@@ -18,7 +18,15 @@ describe("embeddingIdentity", () => {
     expect(result.get("a1")).not.toBe(result.get("b1"));
   });
 
-  it("keeps assigned character ids and prevents assigned groups merging across a shared shot", () => {
+  it("leaves a face unassigned when it appears in only one photo", () => {
+    const resolver = embeddingIdentity({ threshold: 0.85, groupMergeThreshold: 0.78 });
+    const result = resolver.resolveVectors([...faces, { faceId: "singleton", shotId: "only-photo", vector: [-1, 0] }]);
+
+    expect(result.has("singleton")).toBe(false);
+    expect(result.get("a1")).toBe(result.get("a2"));
+  });
+
+  it("keeps assigned ids for recurring groups and leaves a singleton unassigned", () => {
     const resolver = embeddingIdentity({ threshold: 0.85, groupMergeThreshold: 0.78 });
     const result = resolver.resolveVectors([
       { faceId: "x", shotId: "shared", vector: [1, 0], characterId: "picked" },
@@ -26,7 +34,7 @@ describe("embeddingIdentity", () => {
       { faceId: "z", shotId: "s2", vector: [1, 0] },
     ]);
     expect(result.get("x")).toBe("picked");
-    expect(result.get("y")).toBe("other");
+    expect(result.has("y")).toBe(false);
     expect(result.get("z")).toBe("picked");
   });
 });

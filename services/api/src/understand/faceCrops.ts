@@ -1,5 +1,6 @@
 export type FaceCropInput = {
   bbox: [number, number, number, number];
+  confidence?: number;
   prominence?: string;
   faceVisible?: boolean;
 };
@@ -8,6 +9,7 @@ export type CropRect = { left: number; top: number; width: number; height: numbe
 
 /** Return a padded pixel rectangle for a usable normalized face box. */
 export function faceCropRect(face: FaceCropInput, size: CropSize): CropRect | null {
+  if (face.confidence !== undefined && (!Number.isFinite(face.confidence) || face.confidence < 0.6)) return null;
   if (face.prominence === "background" || face.faceVisible === false) return null;
   if (!(size.width > 0 && size.height > 0)) return null;
   const [ymin, xmin, ymax, xmax] = face.bbox;

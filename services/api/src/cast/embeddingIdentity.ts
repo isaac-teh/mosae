@@ -9,7 +9,8 @@ export function embeddingIdentity(opts: { threshold: number; groupMergeThreshold
   const resolveVectors = (faces: EmbeddedFace[]): Map<string, string> => {
     const vectors = faces.filter((face) => Array.isArray(face.vector) && face.vector.length > 0);
     const groups = clusterFaces(vectors, { threshold: opts.threshold, minPhotos: 1 }).map((ids) =>
-      ids.map((id) => vectors.find((face) => face.faceId === id)!).filter(Boolean));
+      ids.map((id) => vectors.find((face) => face.faceId === id)!).filter(Boolean))
+      .filter((group) => new Set(group.map((face) => face.shotId)).size >= 2);
     // Merge borderline clusters by average cross-group cosine, never if they
     // contain two detections from the same shot. The rounds are deterministic.
     let changed = true;
