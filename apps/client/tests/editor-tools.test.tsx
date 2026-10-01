@@ -195,14 +195,16 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Timeline zoom 120 pixels per second"]')).not.toBeNull();
   });
 
-  it("shows selected collage chips, every allowed layout, and only motions allowed by the selected layout", async () => {
-    await render(<CollagePanel clip={collage} sources={{ "shot-1": "one.jpg", "shot-2": "two.jpg", "shot-3": "three.jpg", "shot-4": "four.jpg" }} slotAlternatives={{ s1: [{ shotId: "slot-alt", thumbnailUrl: "alt.jpg" }] }} onApply={apply} onSource={onSource} onClose={() => {}} />);
-    expect(host.querySelector('[aria-label="Layout Photo table"]')?.getAttribute("aria-pressed")).toBe("true");
+  it("shows selected collage chips, only layouts that fit the slots, and motions allowed by the selected layout", async () => {
+    const threeSlotCollage = { ...collage, spec: { ...collage.spec, layoutId: "postcard-stack" as const, slots: collage.spec.slots.slice(0, 3) } };
+    await render(<CollagePanel clip={threeSlotCollage} sources={{ "shot-1": "one.jpg", "shot-2": "two.jpg", "shot-3": "three.jpg", "shot-4": "four.jpg" }} slotAlternatives={{ s1: [{ shotId: "slot-alt", thumbnailUrl: "alt.jpg" }] }} onApply={apply} onSource={onSource} onClose={() => {}} />);
+    expect(host.querySelector('[aria-label="Layout Postcard stack"]')?.getAttribute("aria-pressed")).toBe("true");
     expect(host.querySelector('[aria-label="Motion Stack deal"]')?.getAttribute("aria-pressed")).toBe("true");
     expect(host.querySelector('[aria-label="Effect Vignette"]')?.getAttribute("aria-pressed")).toBe("true");
-    for (const label of ["Photo table", "Torn paper mosaic", "Polaroid garland", "Film negative", "Postcard stack", "Route map"]) {
+    for (const label of ["Botanical scrapbook", "Nine-photo grid", "Travel mosaic", "Travel story", "Torn paper mosaic", "Polaroid garland", "Postcard stack", "Route map"]) {
       expect(host.querySelector(`[aria-label="Layout ${label}"]`)).not.toBeNull();
     }
+    expect(host.querySelector('[aria-label="Layout Photo table"]')).toBeNull();
     await click("Layout Torn paper mosaic");
     expect(apply).toHaveBeenLastCalledWith([
       { op: "setCollageLayout", clipId: "collage-1", layoutId: "torn-paper" },
