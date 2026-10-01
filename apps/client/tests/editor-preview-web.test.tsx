@@ -84,26 +84,23 @@ describe("web editor preview seeks", () => {
     expect(playerMock.pause).toHaveBeenCalledOnce();
   });
 
-  it("seeks immediately when tapping the progress bar and supports keyboard steps", async () => {
-    const onTimeChange = vi.fn();
-    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} onTimeChange={onTimeChange} />));
-    const slider = host.querySelector('[aria-label="Film progress"]') as HTMLDivElement;
-    slider.getBoundingClientRect = () => ({ left: 100, right: 700, top: 0, bottom: 44, width: 600, height: 44, x: 100, y: 0, toJSON: () => ({}) });
-    await act(async () => slider.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 550 })));
-    expect(playerMock.seekTo).toHaveBeenCalledWith(203);
-    expect(onTimeChange).toHaveBeenCalledWith(6.75);
-    expect(slider.getAttribute("aria-valuenow")).toBe("6.75");
-    await act(async () => slider.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowLeft" })));
-    expect(playerMock.seekTo).toHaveBeenLastCalledWith(53);
-    expect(onTimeChange).toHaveBeenLastCalledWith(1.75);
-    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} playheadSec={1.75} togglePlayRequest={1} onTimeChange={onTimeChange} />));
-    expect(playerMock.seekTo).toHaveBeenLastCalledWith(53);
-    expect(playerMock.play).toHaveBeenCalledOnce();
+  it("keeps the preview free of its own progress and time controls", async () => {
+    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} />));
+    expect(host.querySelector('[aria-label="Film progress"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Fullscreen"]')).toBeNull();
+    expect(host.textContent).not.toContain("00:00");
+    expect(host.textContent).not.toContain("00:09");
   });
 
-  it("does not overlay playback or fullscreen controls on the preview", async () => {
+  it("toggles playback when the preview surface is tapped", async () => {
     await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} />));
-    expect(host.querySelector('[aria-label="Play preview"]')).toBeNull();
-    expect(host.querySelector('[aria-label="Fullscreen"]')).toBeNull();
+    const preview = host.querySelector('[aria-label="Play preview"]') as HTMLDivElement;
+    expect(preview).not.toBeNull();
+    await act(async () => preview.click());
+    expect(playerMock.play).toHaveBeenCalledOnce();
+    expect(preview.getAttribute("aria-label")).toBe("Pause preview");
+    await act(async () => preview.click());
+    expect(playerMock.pause).toHaveBeenCalledOnce();
+    expect(preview.getAttribute("aria-label")).toBe("Play preview");
   });
 });

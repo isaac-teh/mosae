@@ -37,12 +37,19 @@ test("dragging a selected timeline edge changes film length and supports undo/re
   await expect.poll(readDuration).toBe(before + 1);
 });
 
-test("editor playback controls sit beside the time display", async ({ page }, testInfo) => {
+test("editor timeline owns scrubbing and preview taps toggle playback", async ({ page }, testInfo) => {
   await mkdir(path.resolve(process.cwd(), "docs/design/screens-editor-batch-1"), { recursive: true });
   await page.goto("/editor?projectId=fixture&generationId=demo-film&planId=demo&repository=fixture");
   await expect(page.getByRole("button", { name: "Play film" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Fullscreen" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Play preview" })).toHaveCount(0);
+  await expect(page.getByRole("slider", { name: "Film progress" })).toHaveCount(0);
+  await expect(page.getByText("00:00", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("00:23", { exact: true })).toHaveCount(0);
+  const preview = page.getByRole("button", { name: "Play preview" });
+  await expect(preview).toBeVisible();
+  await preview.click();
+  await expect(page.getByRole("button", { name: "Pause preview" })).toBeVisible();
+  await page.getByRole("button", { name: "Pause preview" }).click();
+  await expect(page.getByRole("button", { name: "Play preview" })).toBeVisible();
   for (const name of ["Swap", "Trim", "Move"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
   for (const name of ["Remove", "Add", "Ask"]) await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
   await page.screenshot({ path: path.resolve(process.cwd(), "docs/design/screens-editor-batch-1", testInfo.project.name === "webkit-iphone-14" ? "e2-editor-current-webkit.png" : "e2-editor-current.png"), scale: "css" });
