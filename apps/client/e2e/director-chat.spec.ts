@@ -160,7 +160,8 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
 
   {
     const createdPlanJob = await planJobCreated;
-    const jobUrl = `http://127.0.0.1:8085/v1/projects/demo-mosae/databases/(default)/documents/projects/${createdPlanJob.projectId}/jobs/${createdPlanJob.jobId}`;
+    const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8085";
+    const jobUrl = `http://${firestoreEmulatorHost}/v1/projects/demo-face-e2e/databases/(default)/documents/projects/${createdPlanJob.projectId}/jobs/${createdPlanJob.jobId}`;
     const deadline = Date.now() + 180_000;
     let failedJob: Record<string, unknown> | null = null;
     while (Date.now() < deadline) {
