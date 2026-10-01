@@ -72,6 +72,7 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
   const motionFeel = style.motionFeel ?? "calm";
   if (collageAmount === "none") return { ...timeline, schemaVersion: 2 };
   const approved = review.combos.filter((combo) => combo.verdict === "keep" && ALLOWED_COMBOS.some((allowed) => allowed.layoutId === combo.layoutId && allowed.motionId === combo.motionId));
+  const maxCandidateSlots = Math.max(6, ...COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((aspect) => aspect === timeline.aspect) && approved.some((combo) => combo.layoutId === layout.id)).map((layout) => layout.maxSlots));
   const clips = timeline.videoClips;
   const replacements = new Map<number, { end: number; collage: CollageClip }>();
   const chapterCounts = new Map<string, number>();
@@ -89,7 +90,7 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     if (!origin || "kind" in first || (chapterCounts.get(origin.chapterId) ?? 0) >= maxPerChapter) { index++; continue; }
     const group = [first];
     let videos = first.source.kind === "video" ? 1 : 0;
-    for (let nextIndex = index + 1; nextIndex < clips.length && group.length < 6; nextIndex++) {
+    for (let nextIndex = index + 1; nextIndex < clips.length && group.length < maxCandidateSlots; nextIndex++) {
       const next = clips[nextIndex];
       const metadata = sources.get(idOf(next));
       if (!metadata || "kind" in next || videos + Number(next.source.kind === "video") > 1) break;
@@ -102,7 +103,7 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     // from one day or one event to reach its minimum slot count.
     if (group.length < 3) {
       group.length = 1;
-      for (let nextIndex = index + 1; nextIndex < clips.length && group.length < 6; nextIndex++) {
+      for (let nextIndex = index + 1; nextIndex < clips.length && group.length < maxCandidateSlots; nextIndex++) {
         const next = clips[nextIndex];
         const metadata = sources.get(idOf(next));
         if (!metadata || "kind" in next || next.source.kind !== "photo" || first.source.kind !== "photo" || !sameDayOrEvent(origin, metadata)) break;

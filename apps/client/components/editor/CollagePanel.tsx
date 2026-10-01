@@ -15,7 +15,7 @@ export function CollagePanel({ clip, sources = {}, slotAlternatives = {}, onAppl
   const layoutId = isCurrentSelection ? selection.layoutId : clip.spec.layoutId;
   const motionId = isCurrentSelection ? selection.motionId : clip.spec.motionId;
 
-  const layoutOptions = COLLAGE_LAYOUTS.filter((layout) => ALLOWED_COMBOS.some((combo) => combo.layoutId === layout.id));
+  const layoutOptions = COLLAGE_LAYOUTS.filter((layout) => clip.spec.slots.length >= layout.minSlots && clip.spec.slots.length <= layout.maxSlots && ALLOWED_COMBOS.some((combo) => combo.layoutId === layout.id));
   const motionOptions = COLLAGE_MOTIONS.filter((motion) => ALLOWED_COMBOS.some((combo) => combo.layoutId === layoutId && combo.motionId === motion.id));
   const chooseLayout = (nextLayoutId: typeof COLLAGE_LAYOUTS[number]["id"]) => {
     const allowedMotions = ALLOWED_COMBOS.filter((combo) => combo.layoutId === nextLayoutId).map((combo) => combo.motionId);

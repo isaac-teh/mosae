@@ -11,10 +11,13 @@ const HEIGHT = 1280;
 const FPS = 30;
 const FRAMES = 150;
 const STILL_MOTION_BY_LAYOUT: Record<CollageSpec["layoutId"], CollageSpec["motionId"]> = {
+  "travel-mosaic": "print-drop",
+  "travel-story": "focus-relay",
+  "botanical-scrapbook": "tape-slap",
+  "nine-photo-grid": "print-drop",
   "photo-table": "stack-deal",
   "torn-paper": "print-drop",
   "polaroid-garland": "focus-relay",
-  "film-negative": "page-turn",
   "postcard-stack": "stack-deal",
   "route-map": "stack-deal",
 };
@@ -32,7 +35,7 @@ export function specForLayout(
     motionId,
     effectId,
     seed: `library-${layoutId}`,
-    durationSec: 5,
+    durationSec: layoutId === "botanical-scrapbook" ? 5.2 : 5,
     caption: { place: "Kyoto · Japan", date: "AUTUMN 2026", headline: "Postcards from Kyoto", subline: "A small collection of places" },
     slots: base.slots.map((slot, index) => ({ slotId: slot.slotId, src: sampleSources[index % sampleSources.length] })),
   });
@@ -66,7 +69,7 @@ const Root: React.FC = () => <>
     id={`Collage-${layout.id}`}
     component={Collage}
     defaultProps={{ spec: specForLayout(layout.id) }}
-    durationInFrames={FRAMES}
+    durationInFrames={Math.round(specForLayout(layout.id).durationSec * FPS)}
     fps={FPS}
     width={WIDTH}
     height={HEIGHT}
@@ -77,13 +80,16 @@ const Root: React.FC = () => <>
       id={`Sample-${layoutId}`}
       component={Sample}
       defaultProps={{ layoutId, motionId }}
-      durationInFrames={FRAMES}
+      durationInFrames={Math.round(specForLayout(layoutId).durationSec * FPS)}
       fps={FPS}
       width={WIDTH}
       height={HEIGHT}
     />
   ))}
-  <Composition id="CollageContactSheet" component={ContactSheet} defaultProps={{}} durationInFrames={FRAMES} fps={FPS} width={1140} height={1320} />
+  {COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((aspect) => aspect === "16:9")).map((layout) => <Composition key={`wide-${layout.id}`} id={`Wide-${layout.id}`} component={Collage} defaultProps={{ spec: specForLayout(layout.id) }} durationInFrames={FRAMES} fps={FPS} width={1280} height={720} />)}
+  {(["botanical-scrapbook", "nine-photo-grid"] as const).map((id) => <Composition key={`review-${id}`} id={`MotionReview-${id}`} component={Collage} defaultProps={{ spec: specForLayout(id) }} durationInFrames={Math.round(specForLayout(id).durationSec * FPS)} fps={FPS} width={800} height={800} />)}
+  <Composition id="MotionReview-travel-mosaic" component={Collage} defaultProps={{ spec: specForLayout("travel-mosaic") }} durationInFrames={FRAMES} fps={FPS} width={800} height={800} />
+  <Composition id="CollageContactSheet" component={ContactSheet} defaultProps={{}} durationInFrames={FRAMES} fps={FPS} width={1140} height={68 + Math.ceil(COLLAGE_LAYOUTS.length / 3) * 625} />
 </>;
 
 registerRoot(Root);

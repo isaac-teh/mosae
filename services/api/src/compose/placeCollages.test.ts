@@ -30,6 +30,16 @@ function fixture(events: string[], chapters?: number[]): { timeline: Timeline; s
 const collages = (timeline: Timeline) => timeline.videoClips.filter((clip) => "kind" in clip);
 
 describe("placeCollages", () => {
+  it.each([["travel-mosaic", 8], ["nine-photo-grid", 9]] as const)("places a full %s without dropping selected photos", (layoutId, count) => {
+    const { timeline, sources } = fixture([...Array.from({ length: count }, () => "burst"), "other", "other"]);
+    const result = placeCollages(timeline, sources, "sample-grid", { combos: [{ layoutId, motionId: "print-drop", verdict: "keep" }] });
+    const collage = collages(result)[0];
+    if (!collage || !("kind" in collage)) throw new Error("expected collage");
+    expect(collage.spec.layoutId).toBe(layoutId);
+    expect(collage.spec.slots).toHaveLength(count);
+    expect(result.durationSec).toBe(timeline.durationSec);
+    expect(safeParseTimeline(result).ok).toBe(true);
+  });
   it("turns a four-photo burst into one four-slot collage", () => {
     const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "e4", "e5", "e6"]);
     const result = placeCollages(timeline, sources, "project-1:generation-1", review);
@@ -152,7 +162,7 @@ describe("placeCollages", () => {
     const result = placeCollages(timeline, sources, "project-1:generation-1", {
       combos: [
         { layoutId: "torn-paper", motionId: "print-drop", verdict: "keep" },
-        { layoutId: "film-negative", motionId: "print-drop", verdict: "keep" },
+        { layoutId: "polaroid-garland", motionId: "page-turn", verdict: "keep" },
       ],
     });
     expect(collages(result)).toHaveLength(2);
