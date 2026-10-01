@@ -115,6 +115,18 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.kind === "you" && item.id === "person-answer-p0")).toMatchObject({ text: "Family" });
   });
 
+  it("summarizes all selected direction settings in one user reply", () => {
+    const state = deriveChat({
+      ...base(),
+      people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }],
+      momentsConfirmed: true,
+      direction: { confirmed: true, pace: "lively", lengthSec: 30, focus: "family", collageAmount: "few", motionFeel: "calm" },
+    });
+    expect(state.items.filter((item) => item.kind === "you" && item.id === "direction-answer")).toEqual([
+      { kind: "you", id: "direction-answer", text: "Lively · 30 sec · Whole family · A few collages · Calm" },
+    ]);
+  });
+
   it("does not invent an answer from an automatically assigned parent role", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p0", name: null, role: "parent", skipped: false, momentCount: 30, sampleShotIds: [], days: [] }], peopleConfirmed: true });
     expect(state.items.some((item) => item.kind === "you" && item.id === "person-answer-p0")).toBe(false);

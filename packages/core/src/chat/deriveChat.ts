@@ -17,6 +17,14 @@ function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string 
   return person.name ?? "";
 }
 
+function directionAnswer(input: ChatInput): string {
+  const direction = input.direction!;
+  const focus = direction.focus === "family" ? "Whole family" : input.people?.find((person) => person.personId === direction.focus)?.name ?? "Whole family";
+  const collages = direction.collageAmount === "lots" ? "Lots of collages" : direction.collageAmount === "none" ? "No collages" : "A few collages";
+  const motion = direction.motionFeel === "playful" ? "Playful" : "Calm";
+  return `${direction.pace === "lively" ? "Lively" : "Gentle"} · ${direction.lengthSec} sec · ${focus} · ${collages} · ${motion}`;
+}
+
 export function getSetAsideSummary(plan: ChatInput["plan"]) {
   const leftOut = plan?.leftOut ?? [];
   const blurryPhotos = leftOut.filter(({ reason }) => /blur|soft focus/i.test(reason));
@@ -122,7 +130,7 @@ export function deriveChat(input: ChatInput): ChatState {
     return { items, step, confirmed, placeholder };
   }
 
-  add({ kind: "you", id: "direction-answer", text: "Sounds good. Shape it." });
+  add({ kind: "you", id: "direction-answer", text: directionAnswer(input) });
   confirmed = 4;
   if (input.generation?.status === "done" && input.generation.film) {
     step = "ready";

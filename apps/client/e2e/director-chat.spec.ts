@@ -223,8 +223,11 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await screenshot(page, "08-direction.png");
   await expect(page.getByRole("button", { name: "A few" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "Calm" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Lively" }).click();
 
   await page.getByRole("button", { name: "Sounds good. Shape it." }).click();
+  await expect(page.getByText("Lively · 30 sec · Whole family · A few collages · Calm", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sounds good. Shape it.", { exact: true })).toHaveCount(0);
   await screenshot(page, "09-shaping.png");
   await expect(page.getByText("Shaping your film")).toBeVisible({ timeout: 120_000 });
   await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop + node.clientHeight >= node.scrollHeight - 3)).toBe(true);
