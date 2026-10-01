@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { type Href, useFocusEffect, useRouter } from "expo-router";
-import { isMedia, uploadMedia, type FilmListItem, type UploadProgress } from "@mosae/core";
+import { isMedia, setPendingMedia, uploadMedia, type FilmListItem, type UploadProgress } from "@mosae/core";
 import { Button, FilmCard } from "@/components/ds";
 import { SettingsIcon } from "@/components/icons";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
@@ -46,6 +46,7 @@ export default function Home() {
         setUploadError("Upload failed. Please try again.");
         return;
       }
+      setPendingMedia(media, result.assetIds);
       router.push({ pathname: "/director", params: { projectId: result.projectId, live: "1" } } as unknown as Href);
     } catch (error) {
       console.error("upload failed", error);

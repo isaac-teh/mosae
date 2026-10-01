@@ -2,9 +2,9 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), uploadMedia: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any, flow: { repository: "api" as const, projectId: "" } }));
+const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), uploadMedia: vi.fn(), setPendingMedia: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any, flow: { repository: "api" as const, projectId: "" } }));
 vi.mock("@/lib/startDemoTrip", () => ({ startDemoTrip: vi.fn(async () => {}) }));
-vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms }), uploadMedia: state.uploadMedia }));
+vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms }), uploadMedia: state.uploadMedia, setPendingMedia: state.setPendingMedia }));
 vi.mock("@/components/MediaPicker", async () => {
   const ReactModule = await import("react");
   return { MediaPicker: ReactModule.forwardRef(({ onFiles }: { onFiles: (files: File[]) => void }, ref) => {
@@ -34,7 +34,7 @@ beforeEach(() => {
   state.films = [];
   state.focusEffect = null;
   state.listFilms.mockImplementation(async () => state.films);
-  state.uploadMedia.mockResolvedValue({ projectId: "uploaded-project", finished: 1, failed: 0 });
+  state.uploadMedia.mockResolvedValue({ projectId: "uploaded-project", finished: 1, failed: 0, assetIds: ["asset-1"] });
   state.repository = { listFilms: state.listFilms };
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
@@ -48,6 +48,7 @@ describe("Home", () => {
     await act(async () => button!.click());
     await act(async () => await Promise.resolve());
     expect(state.uploadMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), expect.objectContaining({ mode: "memory" }));
+    expect(state.setPendingMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), ["asset-1"]);
     expect(state.push).toHaveBeenCalledWith({ pathname: "/director", params: { projectId: "uploaded-project", live: "1" } });
     expect(state.push).not.toHaveBeenCalledWith("/pick-memory");
   });

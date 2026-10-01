@@ -1,6 +1,7 @@
 import type { AssetStatus } from "../domain/assetStatus.js";
 
 export type SummaryAsset = {
+  id?: string;
   facts?: { kind?: "photo" | "video"; localTime?: string | null };
   media?: { kind?: "photo" | "video"; localTime?: string | null };
   place?: { name?: string; country?: string | null } | null;
@@ -14,6 +15,7 @@ export type ProjectSummary = {
   places: string[]; country: string | null; season: string | null;
   processed: { ingested: number; understood: number; faces: number };
   ready: { summary: boolean; faces: boolean; plan: boolean };
+  assetStatuses: { assetId: string; kind: "photo" | "video"; status: AssetStatus }[];
 };
 
 export function summarise(assets: SummaryAsset[], hasPlan: boolean): ProjectSummary {
@@ -46,5 +48,9 @@ export function summarise(assets: SummaryAsset[], hasPlan: boolean): ProjectSumm
     places: places.slice(0, 6), country, season,
     processed: { ingested, understood, faces: facePhotos },
     ready: { summary: ingested === assets.length, faces: photos.every((asset) => asset.status === "understood"), plan: hasPlan },
+    assetStatuses: assets.flatMap((asset) => {
+      const kind = (asset.media ?? asset.facts)?.kind;
+      return asset.id && (kind === "photo" || kind === "video") ? [{ assetId: asset.id, kind, status: asset.status }] : [];
+    }),
   };
 }

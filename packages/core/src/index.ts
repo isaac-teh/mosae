@@ -2,7 +2,7 @@ export { configureCore, getCoreConfig, type CoreConfig } from "./config";
 export { ensureSignedIn } from "./auth";
 export { apiPost, ApiError } from "./apiClient";
 export { uploadMedia, contentTypeFor, type UploadDeps, type UploadProgress } from "./uploads";
-export { setPendingMedia, getPendingMedia } from "./pendingMedia";
+export { setPendingMedia, getPendingMedia, getPendingMediaAssets } from "./pendingMedia";
 export { isMedia, formatDuration, mediaId } from "./media";
 export type * from "./story/types";
 export { getStoryRepository, setStoryRepository, type StoryRepository, type DirectorPerson, type FilmListItem, type FilmListStatus, type ProjectResumeState, type FilmTimeline, type EditorMediaItem, type ChatInterpretRequest, type ChatInterpretResult } from "./story/repository";

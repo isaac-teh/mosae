@@ -45,13 +45,13 @@ export async function uploadMedia(
   files: File[],
   options: { mode: "memory" | "creator"; onProgress?: (p: UploadProgress) => void; concurrency?: number },
   deps?: UploadDeps,
-): Promise<{ projectId: string; finished: number; failed: number }> {
+): Promise<{ projectId: string; finished: number; failed: number; assetIds: string[] }> {
   const { post, putFile } = deps ?? (await defaultDeps());
   const concurrency = Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY);
 
   const accepted = files.filter((file) => Boolean(contentTypeFor(file)));
   const rejected = files.length - accepted.length;
-  if (accepted.length === 0) return { projectId: "", finished: 0, failed: rejected };
+  if (accepted.length === 0) return { projectId: "", finished: 0, failed: rejected, assetIds: [] };
   const { project } = await post<{ project: { id: string } }>("/api/projects", { mode: options.mode });
   const base = `/api/projects/${project.id}/upload-sessions`;
 
@@ -108,7 +108,7 @@ export async function uploadMedia(
     }
 
     await Promise.all(Array.from({ length: Math.min(concurrency, accepted.length) }, worker));
-    return { projectId: project.id, finished: progress.finishedFiles, failed: progress.failedFiles };
+    return { projectId: project.id, finished: progress.finishedFiles, failed: progress.failedFiles, assetIds: entries.map(({ assetId }) => assetId) };
   } catch (error) {
     mainPathFailed = true;
     throw error;

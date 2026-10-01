@@ -12,6 +12,7 @@ export type ProjectSummary = {
   season: string | null;
   processed: { ingested: number; understood: number; faces: number };
   ready: { summary: boolean; faces: boolean; plan: boolean };
+  assetStatuses?: { assetId: string; kind: "photo" | "video"; status: "uploaded" | "ingested" | "understood" | "failed" }[];
 };
 
 export type ChatInput = {
@@ -30,7 +31,7 @@ export type ChatInput = {
 export type ChatItem =
   | { kind: "mosae"; id: string; text: string; facts?: string[]; photos?: string[] }
   | { kind: "you"; id: string; text: string }
-  | { kind: "typing"; id: string; text: string }
+  | { kind: "typing"; id: string; text: string; photoProgress?: NonNullable<ProjectSummary["assetStatuses"]> }
   | { kind: "occasion"; id: string }
   | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[] }
   | { kind: "anyone-else"; id: string }

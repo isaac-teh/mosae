@@ -35,6 +35,17 @@ describe("director chat components", () => {
     expect(host.textContent).not.toMatch(/\b\d+\s*(seconds?|minutes?)\b/i);
   });
 
+  it("shows local photos blurred until their own asset status is understood", async () => {
+    await render(<ChatTyping text="Reading your photos, 1 of 2" photos={[
+      { uri: "/ready.jpg", understood: true, label: "Photo 1 of 2, understood" },
+      { uri: "/waiting.jpg", understood: false, label: "Photo 2 of 2, still reading" },
+    ]} />);
+    expect(host.textContent).toContain("Reading your photos, 1 of 2");
+    expect(host.querySelector('img[src="/ready.jpg"]')?.className).toContain("blur-0");
+    expect(host.querySelector('img[src="/waiting.jpg"]')?.className).toContain("blur-[6px]");
+    expect(host.querySelectorAll('[data-reading-photo="true"]')).toHaveLength(2);
+  });
+
   it("renders proposal replies and calls onReply with the selected id", async () => {
     const onReply = vi.fn();
     await render(<ChatProposal label="PACE" question="About 3 minutes, unhurried?" detail="Good for watching together." replies={[{ id: "yes", label: "Sounds right" }, { id: "shorter", label: "Shorter" }]} onReply={onReply} />);

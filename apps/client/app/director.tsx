@@ -9,7 +9,7 @@ import { shouldAutoScrollAfterAction } from "@/lib/chatScroll";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { EditorPreview } from "@/components/editor/EditorPreview";
 import type { Timeline } from "@mosae/contracts";
-import { personAnswerChips } from "@mosae/core";
+import { contentTypeFor, getPendingMediaAssets, personAnswerChips } from "@mosae/core";
 
 function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
   if (!summary) return "Your film";
@@ -38,6 +38,14 @@ export default function DirectorScreen() {
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
   const actionPendingScroll = useRef(false);
   const userScrolledUp = useRef(false);
+  const [readingAssets, setReadingAssets] = useState<{ assetId: string; uri: string }[]>([]);
+  useEffect(() => {
+    const created = getPendingMediaAssets()
+      .filter(({ file, assetId }) => Boolean(assetId) && !contentTypeFor(file).startsWith("video/"))
+      .map(({ file, assetId }) => ({ assetId: assetId!, uri: URL.createObjectURL(file) }));
+    setReadingAssets(created);
+    return () => created.forEach(({ uri }) => URL.revokeObjectURL(uri));
+  }, []);
   const filmItem = state.items.find((item) => item.kind === "film");
   const film = filmItem?.kind === "film" ? filmItem.film : null;
   const onFilmPlayerError = useCallback(() => setFilmPlayerFailed(true), []);
@@ -84,7 +92,15 @@ export default function DirectorScreen() {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveConflict(choice as "keep" | "leave"))} />;
         if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} />;
         if (item.kind === "you") return <ChatMessage key={item.id} from="you" text={item.text} />;
-        if (item.kind === "typing") return <ChatTyping key={item.id} text={item.text} />;
+        if (item.kind === "typing") {
+          const statuses = new Map((item.photoProgress ?? projectSummary?.assetStatuses ?? []).map((asset) => [asset.assetId, asset.status]));
+          const photos = readingAssets.flatMap(({ assetId, uri }, index) => {
+            const status = statuses.get(assetId);
+            const label = status === "understood" ? "understood" : status === "failed" ? "couldn't read" : "still reading";
+            return status ? [{ uri, understood: status === "understood", label: `Photo ${index + 1} of ${readingAssets.length}, ${label}` }] : [];
+          });
+          return <ChatTyping key={item.id} text={item.text} photos={photos} />;
+        }
         if (item.kind === "shaping") return <ChatShaping key={item.id} progress={item.progress} stepsDone={item.stepsDone} />;
         if (item.kind === "set-aside") {
           const blurryLabel = `${item.blurry} blurry ${item.blurry === 1 ? "shot" : "shots"}`;

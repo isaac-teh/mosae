@@ -27,6 +27,28 @@ const base = (): ChatInput => ({
 const kinds = (items: ChatItem[]) => items.map((item) => item.kind);
 
 describe("deriveChat state table", () => {
+  it("attaches individual asset statuses to the existing reading progress item", () => {
+    const pending = deriveChat({ ...base(), summary: { ...summary, ready: { ...summary.ready, summary: false }, assetStatuses: [
+      { assetId: "a1", kind: "photo", status: "understood" },
+      { assetId: "a2", kind: "photo", status: "ingested" },
+      { assetId: "a3", kind: "video", status: "uploaded" },
+    ] } });
+    expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Reading your photos, 10 of 10", photoProgress: [
+      { assetId: "a1", kind: "photo", status: "understood" },
+      { assetId: "a2", kind: "photo", status: "ingested" },
+      { assetId: "a3", kind: "video", status: "uploaded" },
+    ] });
+  });
+
+  it("keeps the photo reading grid through asset understanding after ingest completes", () => {
+    const pending = deriveChat({ ...base(), summary: { ...summary, ready: { ...summary.ready, faces: false }, assetStatuses: [
+      { assetId: "a1", kind: "photo", status: "understood" },
+      { assetId: "a2", kind: "photo", status: "ingested" },
+    ] } });
+    expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Reading your photos, 10 of 10", photoProgress: [{ assetId: "a1", status: "understood" }, { assetId: "a2", status: "ingested" }] });
+    expect(pending.items.some((item) => item.kind === "you" && item.text === "Our Japan trip")).toBe(true);
+  });
+
   it("skips the keep/leave step when no blurry or duplicate photos were filtered", () => {
     const state = deriveChat({ ...base(), plan: { ...plan, leftOut: [] } });
     expect(state.step).toBe("direction");

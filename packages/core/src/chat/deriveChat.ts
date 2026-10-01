@@ -45,13 +45,17 @@ export function deriveChat(input: ChatInput): ChatState {
   let confirmed: ChatState["confirmed"] = 0;
   let placeholder = DEFAULT_PLACEHOLDER;
   const add = (item: ChatItem) => items.push(item);
-
-  if (!input.summary?.ready.summary) {
+  const addPhotoProgress = () => {
     const processed = input.summary?.processed.ingested ?? 0;
     const total = input.summary?.total ?? 0;
-    add({ kind: "typing", id: "summary-wait", text: `Reading your photos, ${processed} of ${total}` });
+    add({ kind: "typing", id: "summary-wait", text: `Reading your photos, ${processed} of ${total}`, photoProgress: input.summary?.assetStatuses });
+  };
+
+  if (!input.summary?.ready.summary) {
+    addPhotoProgress();
     return { items, step, confirmed, placeholder };
   }
+  if (input.summary.photos > 0 && !input.summary.ready.faces) addPhotoProgress();
 
   if (!input.intent) {
     add({ kind: "mosae", id: "occasion-message", text: occasionText(input) });
