@@ -78,14 +78,11 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await screenshot(page, "01-home-empty.png");
 
   await page.getByRole("button", { name: "Create a new film" }).first().click();
-  await screenshot(page, "02-add-photos.png");
   await page.locator('input[type="file"]').setInputFiles(media);
-  await page.waitForURL("**/pick-memory");
-  await screenshot(page, "03-pick-memory.png");
-
   uploadStartedAt = Date.now();
-  await page.getByRole("button", { name: "Next" }).click();
   await page.waitForURL("**/director?**", { timeout: 60_000 });
+  await expect(page.getByText("Camera Roll", { exact: true })).toHaveCount(0);
+  await screenshot(page, "pt-01-direct-upload-to-chat.png");
   await expect(page.getByText(`I've looked through all ${tripFiles.length}`)).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText("Singapore, June", { exact: true })).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText(/I've looked through all 15\. It looks like a trip to Singapore/)).toBeVisible();
