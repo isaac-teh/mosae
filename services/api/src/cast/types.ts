@@ -7,6 +7,8 @@ export type FaceRef = {
   bbox: [number, number, number, number];
   ageBand?: AgeBand;
   prominence?: "primary" | "secondary" | "background";
+  vector?: number[];
+  characterId?: string;
 };
 
 export type Interaction = { from: string; to: string; kind: string }; // faceIds
