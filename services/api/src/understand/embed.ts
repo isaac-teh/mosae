@@ -6,14 +6,20 @@ export type EmbeddedShot = { shotId: string; embedding: number[] | null };
 
 export async function embedImages(embedContent: EmbedImageContent, images: { id: string; jpeg: Buffer }[]): Promise<Map<string, number[]>> {
   const vectors = new Map<string, number[]>();
-  await Promise.all(images.map(async ({ id, jpeg }) => {
-    try {
-      const vector = await embedContent({ model: MODELS.embed, jpeg });
-      if (vector.length > 0) vectors.set(id, vector);
-    } catch {
-      // A single bad crop should not discard the other faces from this photo.
+  let next = 0;
+  const worker = async () => {
+    while (next < images.length) {
+      const image = images[next++];
+      if (!image) continue;
+      try {
+        const vector = await embedContent({ model: MODELS.embed, jpeg: image.jpeg });
+        if (vector.length > 0) vectors.set(image.id, vector);
+      } catch {
+        // A single bad crop should not discard the other faces from this photo.
+      }
     }
-  }));
+  };
+  await Promise.all(Array.from({ length: Math.min(8, images.length) }, () => worker()));
   return vectors;
 }
 

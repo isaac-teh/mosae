@@ -34,6 +34,26 @@ describe("embedding helpers", () => {
     expect(vectors).toEqual(new Map([["good-face", [0, 1]]]));
   });
 
+  it("limits concurrent image embedding calls to eight", async () => {
+    const module = await import("./embed.js");
+    const embedImages = (module as typeof module & { embedImages?: (embed: (input: { model: string; jpeg: Buffer }) => Promise<number[]>, images: { id: string; jpeg: Buffer }[]) => Promise<Map<string, number[]>> }).embedImages;
+    expect(embedImages).toBeTypeOf("function");
+    if (!embedImages) return;
+    let active = 0;
+    let peak = 0;
+    const embed = vi.fn(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      active -= 1;
+      return [1];
+    });
+
+    await embedImages(embed, Array.from({ length: 20 }, (_, index) => ({ id: `face-${index}`, jpeg: Buffer.from([index]) })));
+
+    expect(peak).toBeLessThanOrEqual(8);
+  });
+
   it("batches non-empty document text and preserves skipped shots", async () => {
     const embed = vi.fn().mockResolvedValue([[1, 0]]);
     await expect(embedShotAnalyses(embed, [{ shotId: "empty", analysis: photo("") }, { shotId: "beach", analysis: photo("beach") }])).resolves.toEqual([{ shotId: "empty", embedding: null }, { shotId: "beach", embedding: [1, 0] }]);

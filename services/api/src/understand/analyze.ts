@@ -5,7 +5,7 @@ import { generateStructured, type GenerateDeps } from "../gemini/client.js";
 import { MODELS } from "../gemini/pricing.js";
 import { normalizeFaces } from "./faceDetect.js";
 
-const photoPrompt = "Analyze this photo for a family-memory shot catalog. Do not identify people by name, gender or relationship. Be concise and only describe visible evidence. Score aesthetics and keyMomentScore as integers from 1 to 5. Detect every human face; for each give bbox as [ymin, xmin, ymax, xmax] on a 0-1000 grid, confidence 0-1, ageBand (child, teen, adult or senior), appearance (clothing, hair and accessories only), prominence (primary, secondary or background), expression, and lookingAtCamera. List interactions between faces as {from, to, kind} using face indices, e.g. carrying, holding hands, hugging.";
+const photoPrompt = "Analyze this photo for a family-memory shot catalog. Do not identify people by name, gender or relationship. Be concise and only describe visible evidence. Score aesthetics and keyMomentScore as integers from 1 to 5. Detect every human face; for each give bbox as [ymin, xmin, ymax, xmax] on a 0-1000 grid, confidence 0-1, ageBand (child, teen, adult or senior), appearance (clothing, hair and accessories only), prominence (primary, secondary or background), expression, lookingAtCamera, and faceVisible. Set faceVisible false when the face is hidden, turned away, or only the back of the head is visible. List interactions between faces as {from, to, kind} using face indices, e.g. carrying, holding hands, hugging.";
 const videoPrompt = (count: number, duration: number) => `Analyze this video, already split into exactly ${count} shots in order. Return one analysis object per shot, in the same order, plus a transcript of audible speech with timestamps. Keep every timestamp within duration ${duration.toFixed(2)} seconds. Do not identify people by name.`;
 
 const VALID_AGE_BANDS = new Set(["child", "teen", "adult", "senior"]);
@@ -19,6 +19,7 @@ const photoFaceSchema = z.strictObject({
   prominence: z.enum(["primary", "secondary", "background"]).optional(),
   expression: z.string().optional(),
   lookingAtCamera: z.boolean().optional(),
+  faceVisible: z.boolean().optional(),
 });
 
 const photoInteractionSchema = z.strictObject({
@@ -135,6 +136,7 @@ const photoResponseSchema = {
           prominence: { type: "string", enum: ["primary", "secondary", "background"] },
           expression: { type: "string" },
           lookingAtCamera: { type: "boolean" },
+          faceVisible: { type: "boolean" },
         },
         required: ["bbox", "confidence"],
       },
@@ -208,6 +210,7 @@ export async function analyzePhoto(deps: GenerateDeps, input: { assetId: string;
       ...(raw?.prominence ? { prominence: raw.prominence } : {}),
       ...(raw?.expression ? { expression: raw.expression } : {}),
       ...(typeof raw?.lookingAtCamera === "boolean" ? { lookingAtCamera: raw.lookingAtCamera } : {}),
+      ...(typeof raw?.faceVisible === "boolean" ? { faceVisible: raw.faceVisible } : {}),
     };
   });
   const interactions = (value.interactions ?? [])

@@ -88,6 +88,30 @@ describe("Gemini shot analysis", () => {
     }
   });
 
+  it("parses faceVisible and asks the model to flag turned-away faces", async () => {
+    const enrichedJson = JSON.stringify({
+      caption: "c", subjects: [], setting: "beach", activities: [], mood: "calm", shotType: "portrait",
+      aesthetics: 3, keyMomentScore: 3, tags: [],
+      faces: [{ bbox: [100, 100, 700, 500], confidence: 0.9, faceVisible: false }],
+    });
+    const generateContent = vi.fn(async (_request: unknown) => reply(enrichedJson));
+    const dir = await mkdtemp(path.join(tmpdir(), "mosae-analyze-test-"));
+    try {
+      const renderPath = path.join(dir, "render.jpg");
+      await writeFile(renderPath, "jpeg-bytes");
+      const result = await analyzePhoto(deps(generateContent), { assetId: "a1", shotId: "s1", renderPath });
+
+      expect(result.faces?.[0]).toMatchObject({ faceId: "s1-0", faceVisible: false });
+      const request = generateContent.mock.calls[0]![0] as { contents: { text?: string }[]; config: { responseJsonSchema: unknown } };
+      expect(request.contents[0]?.text).toContain("faceVisible");
+      expect(request.contents[0]?.text).toContain("back of the head");
+      const responseSchema = request.config.responseJsonSchema as { properties: { faces: { items: { properties: Record<string, { type: string }> } } } };
+      expect(responseSchema.properties.faces.items.properties.faceVisible).toEqual({ type: "boolean" });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("drops a face with a malformed box instead of failing the whole photo", async () => {
     // Recorded from Gemini on trip1: every face's box nested inside the first.
     const json = JSON.stringify({
@@ -135,4 +159,3 @@ describe("Gemini shot analysis", () => {
     }
   });
 });
-
