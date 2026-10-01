@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import type { Timeline } from "@mosae/contracts";
+import { reorderSlots } from "@mosae/core";
 import { DEFAULT_PIXELS_PER_SECOND, MAX_PIXELS_PER_SECOND, MIN_PIXELS_PER_SECOND, timeToX, timelineContentWidth, xToTime } from "./timelineScale";
 
 const clipId = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
@@ -21,10 +22,14 @@ type TimelineRowsProps = {
   onTrimPointerUp: (event: any, commit: boolean) => void;
   trimDraft: { clipId: string; edge: "start" | "end"; deltaSec: number } | null;
   onDeselect: () => void;
+  onSlotPointerDown: (clip: Timeline["videoClips"][number], index: number, event: any) => void;
+  onSlotPointerMove: (event: any) => void;
+  onSlotPointerUp: (event: any, commit: boolean) => void;
+  reorderPreview: { clipId: string; toIndex: number; pointerContentX: number } | null;
   onSoundtrack: () => void;
 };
 
-const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, trimDraft, onDeselect, onSoundtrack }: TimelineRowsProps) {
+const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, trimDraft, onDeselect, onSlotPointerDown, onSlotPointerMove, onSlotPointerUp, reorderPreview, onSoundtrack }: TimelineRowsProps) {
   const music = timeline.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   const musicDuration = music ? music.source.sourceOutSec - music.source.sourceInSec : 0;
   const tickSeconds = Array.from({ length: Math.floor(timeline.durationSec) + 1 }, (_, second) => second);
@@ -47,20 +52,27 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedCli
     <View className="relative mt-1 h-[62px]">
       {selectedClipId ? <Pressable role="button" accessibilityLabel="Deselect selected clip" onPress={onDeselect} style={{ position: "absolute", zIndex: 0, left: 0, right: 0, top: 0, height: 58 }} /> : null}
       {(() => {
-        let ripple = 0;
-        return timeline.videoClips.map((clip, index) => {
+        const fromIndex = reorderPreview ? timeline.videoClips.findIndex((clip) => clipId(clip) === reorderPreview.clipId) : -1;
+        const displayClips = reorderPreview && fromIndex >= 0 ? reorderSlots(timeline.videoClips, fromIndex, reorderPreview.toIndex) : timeline.videoClips;
+        let cursor = 0;
+        return displayClips.map((clip, index) => {
         const id = clipId(clip);
         const selected = selectedClipId === id;
+        const lifted = reorderPreview?.clipId === id;
         const uri = sources[shotId(clip) ?? ""];
         const delta = trimDraft?.clipId === id ? trimDraft.deltaSec : 0;
         const duration = Math.max(0.5, clip.durationSec + (trimDraft?.clipId === id ? (trimDraft.edge === "start" ? -delta : delta) : 0));
-        const start = clip.startSec + ripple;
-        if (trimDraft?.clipId === id) ripple += duration - clip.durationSec;
+        const start = cursor + (trimDraft?.clipId === id && trimDraft.edge === "start" ? delta : 0);
+        cursor = start + duration;
         const makeHandle = (edge: "start" | "end") => <Pressable key={edge} role="button" accessibilityLabel={`Trim ${edge} of clip ${id}`} aria-pressed={selected}
           onPointerDown={(event: any) => onTrimPointerDown(clip, edge, event)} onPointerMove={onTrimPointerMove} onPointerUp={(event: any) => onTrimPointerUp(event, true)} onPointerCancel={(event: any) => onTrimPointerUp(event, false)} data-trim-handle="true"
           style={{ position: "absolute", zIndex: 20, left: edge === "start" ? -6 : undefined, right: edge === "end" ? -6 : undefined, top: 8, height: 42, width: 12, borderRadius: 6, backgroundColor: "#F5C842", borderWidth: 1, borderColor: "#2B2B20", touchAction: "none" }} />;
-        return <View key={id} style={{ position: "absolute", zIndex: selected ? 10 : 1, left: timeToX(start, pixelsPerSecond, leadingPadding), width: Math.max(1, duration * pixelsPerSecond), top: 0, height: 58, borderWidth: 2, borderRadius: 7, overflow: "visible", borderColor: selected ? "#F5C842" : "transparent", backgroundColor: index % 2 ? "#294655" : "#E8E2D5" }}>
-          <Pressable role="button" accessibilityLabel={`Select clip ${id}`} aria-pressed={selected} onPress={(event: any) => { event?.stopPropagation?.(); onSelect(id, clip.startSec); }}
+        const width = Math.max(1, duration * pixelsPerSecond);
+        return <View key={id} className="transition-all duration-200" style={{ position: "absolute", zIndex: lifted ? 30 : selected ? 10 : 1, left: lifted && reorderPreview ? reorderPreview.pointerContentX - width / 2 : timeToX(start, pixelsPerSecond, leadingPadding), width, top: 0, height: 58, borderWidth: 2, borderRadius: 7, overflow: "visible", borderColor: selected ? "#F5C842" : "transparent", backgroundColor: index % 2 ? "#294655" : "#E8E2D5", transform: lifted ? [{ scale: 1.04 }] : undefined, boxShadow: lifted ? "0px 8px 22px rgba(0,0,0,0.35)" : undefined, elevation: lifted ? 8 : 0 }}>
+          <Pressable role="button" accessibilityLabel={`Select clip ${id}`} aria-pressed={selected} data-timeline-slot="true"
+            onPointerDown={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), event)} onPointerMove={onSlotPointerMove} onPointerUp={(event: any) => onSlotPointerUp(event, true)} onPointerCancel={(event: any) => onSlotPointerUp(event, false)}
+            onTouchStart={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), { ...event.nativeEvent, currentTarget: event.currentTarget, pointerId: 0 })}
+            onPress={(event: any) => { event?.stopPropagation?.(); onSelect(id, clip.startSec); }}
             style={{ width: Math.max(1, duration * pixelsPerSecond), height: "100%", overflow: "hidden", borderRadius: 5, backgroundColor: "transparent" }}>
             {uri ? <Image source={{ uri }} resizeMode="cover" style={{ width: "100%", height: "100%" }} /> : null}
             {"kind" in clip ? <View pointerEvents="none" className="absolute bottom-0 left-0 right-0 items-center bg-screen/75"><Text className="font-sans text-[9px] text-on-screen">Collage</Text></View> : null}
@@ -85,8 +97,10 @@ type TouchPoint = { pageX?: number; clientX?: number; locationX?: number };
 type PinchState = { distance: number; scale: number; timeAtCenter: number; centerX: number } | null;
 type TouchDragState = { lastX: number } | null;
 type TrimDragState = { clipId: string; edge: "start" | "end"; startX: number; edgeTime: number; pixelsPerSecond: number } | null;
+type PendingSlotPress = { clipId: string; fromIndex: number; startX: number; startY: number; pointerId: number; target: any } | null;
+type ActiveSlotReorder = { clipId: string; fromIndex: number; toIndex: number; pointerId: number } | null;
 
-export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onDeselect = () => {}, onSoundtrack = () => {} }: {
+export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {} }: {
   timeline: Timeline;
   sources: Record<string, string>;
   selectedClipId: string | null;
@@ -96,12 +110,14 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   onScrub: (seconds: number) => void;
   onScrubStart?: () => void;
   onTrim?: (clipId: string, edge: "start" | "end", deltaSec: number) => void;
+  onReorder?: (clipId: string, toIndex: number) => void;
   onDeselect?: () => void;
   onSoundtrack?: () => void;
 }) {
   const [pixelsPerSecond, setPixelsPerSecond] = useState(DEFAULT_PIXELS_PER_SECOND);
   const [viewportWidth, setViewportWidth] = useState(0);
   const scrollView = useRef<React.ElementRef<typeof ScrollView>>(null);
+  const viewportRef = useRef<any>(null);
   const scrollLeft = useRef(0);
   const isUserScrolling = useRef(false);
   const programmaticOffset = useRef<number | null>(null);
@@ -110,12 +126,21 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   const touchDrag = useRef<TouchDragState>(null);
   const trimDrag = useRef<TrimDragState>(null);
   const [trimDraft, setTrimDraft] = useState<{ clipId: string; edge: "start" | "end"; deltaSec: number } | null>(null);
+  const pendingSlotPress = useRef<PendingSlotPress>(null);
+  const activeSlotReorder = useRef<ActiveSlotReorder>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const edgeScrollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const edgeScrollDirection = useRef<-1 | 1 | null>(null);
+  const lastReorderPointerX = useRef(0);
+  const suppressNextPress = useRef(false);
+  const [reorderPreview, setReorderPreview] = useState<{ clipId: string; toIndex: number; pointerContentX: number } | null>(null);
   const pinch = useRef<PinchState>(null);
   const leadingPadding = viewportWidth / 2;
   const contentWidth = timelineContentWidth(timeline.durationSec, viewportWidth, pixelsPerSecond);
 
   const updateViewport = useCallback((event: LayoutChangeEvent) => setViewportWidth(event.nativeEvent.layout.width), []);
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (activeSlotReorder.current) { scrollLeft.current = event.nativeEvent.contentOffset.x; return; }
     const offset = event.nativeEvent.contentOffset.x;
     scrollLeft.current = offset;
     const expected = programmaticOffset.current;
@@ -195,6 +220,101 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     setTrimDraft(null);
   }, [onTrim]);
 
+  const stopEdgeScroll = useCallback(() => {
+    if (edgeScrollTimer.current) clearInterval(edgeScrollTimer.current);
+    edgeScrollTimer.current = null;
+    edgeScrollDirection.current = null;
+  }, []);
+  const targetIndexAt = useCallback((clientX: number) => {
+    const bounds = viewportRef.current?.getBoundingClientRect?.();
+    if (!bounds || !timeline.videoClips.length) return 0;
+    const seconds = (clientX - bounds.left + scrollLeft.current - leadingPadding) / pixelsPerSecond;
+    let target = 0;
+    let nearest = Number.POSITIVE_INFINITY;
+    timeline.videoClips.forEach((clip, index) => {
+      const distance = Math.abs(seconds - (clip.startSec + clip.durationSec / 2));
+      if (distance < nearest) { nearest = distance; target = index; }
+    });
+    return target;
+  }, [leadingPadding, pixelsPerSecond, timeline.videoClips]);
+  const updateSlotReorder = useCallback((clientX: number) => {
+    const active = activeSlotReorder.current;
+    if (!active) return;
+    lastReorderPointerX.current = clientX;
+    const toIndex = targetIndexAt(clientX);
+    active.toIndex = toIndex;
+    const bounds = viewportRef.current?.getBoundingClientRect?.();
+    const pointerContentX = bounds ? clientX - bounds.left + scrollLeft.current : clientX;
+    setReorderPreview({ clipId: active.clipId, toIndex, pointerContentX });
+    const direction = bounds && clientX < bounds.left + 36 ? -1 : bounds && clientX > bounds.right - 36 ? 1 : 0;
+    if (!direction) { stopEdgeScroll(); return; }
+    if (edgeScrollTimer.current && edgeScrollDirection.current === direction) return;
+    stopEdgeScroll();
+    edgeScrollDirection.current = direction;
+    edgeScrollTimer.current = setInterval(() => {
+      const max = Math.max(0, contentWidth - viewportWidth);
+      const next = Math.max(0, Math.min(max, scrollLeft.current + direction * 12));
+      if (next === scrollLeft.current) { stopEdgeScroll(); return; }
+      scrollLeft.current = next;
+      scrollView.current?.scrollTo({ x: next, animated: false });
+      updateSlotReorder(lastReorderPointerX.current);
+    }, 50);
+  }, [contentWidth, stopEdgeScroll, targetIndexAt, viewportWidth]);
+  const beginSlotPress = useCallback((clip: Timeline["videoClips"][number], fromIndex: number, event: any) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    if (trimDrag.current) return;
+    if (pendingSlotPress.current?.clipId === clipId(clip)) return;
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    const pending = { clipId: clipId(clip), fromIndex, startX: event.clientX ?? event.pageX ?? event.nativeEvent?.pageX ?? 0, startY: event.clientY ?? event.pageY ?? event.nativeEvent?.pageY ?? 0, pointerId: event.pointerId ?? 0, target: event.currentTarget };
+    pendingSlotPress.current = pending;
+    lastReorderPointerX.current = pending.startX;
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null;
+      if (pendingSlotPress.current !== pending) return;
+      activeSlotReorder.current = { clipId: pending.clipId, fromIndex, toIndex: fromIndex, pointerId: pending.pointerId };
+      pendingSlotPress.current = null;
+      mouseDrag.current = null;
+      touchDrag.current = null;
+      const bounds = viewportRef.current?.getBoundingClientRect?.();
+      setReorderPreview({ clipId: pending.clipId, toIndex: fromIndex, pointerContentX: bounds ? pending.startX - bounds.left + scrollLeft.current : pending.startX });
+      try { if (typeof navigator !== "undefined") navigator.vibrate?.(10); } catch { /* Haptics are optional. */ }
+      try { pending.target?.setPointerCapture?.(pending.pointerId); } catch { /* Some browser gestures do not expose pointer capture. */ }
+      updateSlotReorder(lastReorderPointerX.current || pending.startX);
+    }, 300);
+  }, [updateSlotReorder]);
+  const moveSlotPress = useCallback((event: any) => {
+    const active = activeSlotReorder.current;
+    if (active) { event.preventDefault?.(); updateSlotReorder(event.clientX); return; }
+    const pending = pendingSlotPress.current;
+    if (!pending) return;
+    const dx = (event.clientX ?? pending.startX) - pending.startX;
+    const dy = (event.clientY ?? pending.startY) - pending.startY;
+    if (Math.hypot(dx, dy) > 6) {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+      pendingSlotPress.current = null;
+    }
+  }, [updateSlotReorder]);
+  const finishSlotPress = useCallback((event: any, commit: boolean) => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+    pendingSlotPress.current = null;
+    const active = activeSlotReorder.current;
+    if (active) {
+      if (commit && active.toIndex !== active.fromIndex) onReorder(active.clipId, active.toIndex);
+      suppressNextPress.current = true;
+      setTimeout(() => { suppressNextPress.current = false; }, 0);
+      activeSlotReorder.current = null;
+      setReorderPreview(null);
+      stopEdgeScroll();
+      event.currentTarget?.releasePointerCapture?.(active.pointerId);
+    }
+  }, [onReorder, stopEdgeScroll]);
+  useEffect(() => () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    if (edgeScrollTimer.current) clearInterval(edgeScrollTimer.current);
+  }, []);
+
   const isTrimHandle = (event: any) => Boolean(event.target?.closest?.('[data-trim-handle="true"]'));
 
   const touchX = (touch: TouchPoint, left: number) => touch.locationX ?? (touch.clientX !== undefined ? touch.clientX - left : touch.pageX !== undefined ? touch.pageX - left - (typeof window === "undefined" ? 0 : window.scrollX) : 0);
@@ -216,6 +336,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     isUserScrolling.current = false;
   };
   const onTouchMove = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } } }) => {
+    if (activeSlotReorder.current) return;
     if (isTrimHandle(event as any)) return;
     const initial = pinch.current;
     const touches = (event.nativeEvent ?? event).touches;
@@ -240,11 +361,12 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     onMouseDown: (event: { button: number; clientX: number; preventDefault: () => void }) => {
       if (event.button !== 0) return;
       if (isTrimHandle(event as any)) return;
-      event.preventDefault();
+      if (!((event as any).target?.closest?.('[data-timeline-slot="true"]'))) event.preventDefault();
       beginInteraction();
       mouseDrag.current = { x: event.clientX, scrollLeft: scrollLeft.current };
     },
     onMouseMove: (event: { clientX: number }) => {
+      if (activeSlotReorder.current) return;
       const drag = mouseDrag.current;
       if (!drag) return;
       scrubBy(drag.x - event.clientX);
@@ -271,9 +393,9 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
       <Text accessibilityLabel={`Timeline zoom ${pixelsPerSecond} pixels per second`} className="w-12 text-center font-sans text-[10px] text-on-screen-muted">{pixelsPerSecond} px/s</Text>
       <Pressable role="button" accessibilityLabel="Zoom in timeline" disabled={pixelsPerSecond >= MAX_PIXELS_PER_SECOND} onPress={() => zoom(4)} className="size-8 items-center justify-center rounded-full border border-on-screen-muted"><Text className="font-sans text-body text-on-screen">+</Text></Pressable>
     </View>
-    <View className="relative overflow-hidden" style={{ touchAction: "none" }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
+    <View ref={viewportRef} className="relative overflow-hidden" style={{ touchAction: "none" }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
       <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} style={{ width: "100%" }}>
-        <TimelineRows timeline={timeline} sources={sources} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={onSelect} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} trimDraft={trimDraft} onDeselect={onDeselect} onSoundtrack={onSoundtrack} />
+        <TimelineRows timeline={timeline} sources={sources} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => { if (suppressNextPress.current) return; onSelect(id, start); }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} trimDraft={trimDraft} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} />
       </ScrollView>
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />
     </View>

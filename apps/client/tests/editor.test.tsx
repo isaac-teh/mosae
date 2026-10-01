@@ -117,6 +117,25 @@ describe("film editor", () => {
     for (const name of ["Remove", "Add", "Ask"]) expect(host.querySelector(`[aria-label="${name}"]`)).not.toBeNull();
   });
 
+  it("reorders a timeline clip after a 300 ms hold and saves one move operation", async () => {
+    await render(<EditorScreen />);
+    const pointer = (type: string, clientX: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.defineProperty(event, "clientX", { value: clientX });
+      Object.defineProperty(event, "clientY", { value: 20 });
+      Object.defineProperty(event, "pointerId", { value: 1 });
+      return event;
+    };
+    const start = host.querySelector('[aria-label="Select clip a"]')!;
+    await act(async () => start.dispatchEvent(pointer("pointerdown", 250)));
+    await advance(300);
+    await act(async () => start.dispatchEvent(pointer("pointermove", 515)));
+    await act(async () => start.dispatchEvent(pointer("pointerup", 515)));
+    expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((node) => node.getAttribute("aria-label"))).toEqual(["Select clip b", "Select clip c", "Select clip a"]);
+    await advance(1500);
+    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "move", clipId: "a", toIndex: 2 }]);
+  });
+
   it("renders prominent undo and redo arrows in 44px disabled header controls", async () => {
     await render(<EditorScreen />);
     for (const label of ["Undo", "Redo"]) {

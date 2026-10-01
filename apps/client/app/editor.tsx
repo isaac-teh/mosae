@@ -196,7 +196,7 @@ export default function EditorScreen() {
             const clip = editor.timeline?.videoClips.find((candidate) => idOf(candidate) === id);
             const original = editor.firstCut?.videoClips.find((candidate) => idOf(candidate) === id);
             if (clip && original && editor.firstCut) editor.apply(trimEdit(clip, original, edge, delta, editor.firstCut.durationSec));
-          }} onDeselect={() => editor.select(null)} onSoundtrack={openSoundtrackPicker} />
+          }} onReorder={(id, toIndex) => editor.apply({ op: "move", clipId: id, toIndex })} onDeselect={() => editor.select(null)} onSoundtrack={openSoundtrackPicker} />
       </ScrollView>}
     <ToolBar onTool={(value) => openTool(value)} />
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
