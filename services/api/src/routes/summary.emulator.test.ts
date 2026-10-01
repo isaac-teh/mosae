@@ -25,7 +25,7 @@ describe("project summary route", () => {
     await adminDb.doc(`projects/${id}/shots/s`).set({ id: "s", assetId: "a", index: 0, analysis: { kind: "photo", faces: [] } });
     const res = await request(await listeningServer(await buildApp("summary-owner"))).get(`/api/projects/${id}/summary`);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ total: 1, photos: 1, days: 1, places: ["Tokyo"], country: "Japan", processed: { ingested: 1, understood: 1, faces: 1 }, ready: { summary: true, faces: true, plan: false } });
+    expect(res.body).toMatchObject({ assetStatuses: [{ assetId: "a", kind: "photo", status: "understood" }], total: 1, photos: 1, days: 1, places: ["Tokyo"], country: "Japan", processed: { ingested: 1, understood: 1, faces: 1 }, ready: { summary: true, faces: true, plan: false } });
   });
   it("returns 404 to another user", async () => {
     const id = await seed("summary-owner");

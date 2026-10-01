@@ -205,14 +205,51 @@ describe("createApiStoryRepository", () => {
     vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
       { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "face-1", characterId: "char-1", bbox: [0.1, 0.2, 0.4, 0.5] }, { faceId: "face-2", characterId: "char-1", bbox: [0.2, 0.3, 0.5, 0.6] }] },
       { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "face-3", characterId: "char-1", bbox: [0.3, 0.4, 0.7, 0.8] }] },
-    ] } : { cast: { people: [{ personId: "char-1", name: "Mia", role: "child" }] } });
+    ] } : { cast: { people: [{ personId: "char-1", name: "Mia", role: "child", ageBand: "teen" }] } });
     const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
-    await expect(repository.getPeople("project-1")).resolves.toEqual([{ personId: "char-1", name: "Mia", role: "child", momentCount: 2, sampleShotIds: ["shot-1", "shot-2"], sampleFaces: [
+    await expect(repository.getPeople("project-1")).resolves.toEqual([{ personId: "char-1", name: "Mia", role: "child", ageBand: "teen", momentCount: 2, sampleShotIds: ["shot-1", "shot-2"], sampleFaces: [
       { shotId: "shot-1", uri: "https://storage.test/project-1/asset-1?signed=true", bbox: [0.1, 0.2, 0.4, 0.5] },
       { shotId: "shot-2", uri: "https://storage.test/project-1/asset-2?signed=true", bbox: [0.3, 0.4, 0.7, 0.8] },
     ], days: [1] }]);
     expect(deps.getThumbnailUrl).toHaveBeenCalledWith("project-1", "asset-1");
     expect(deps.getThumbnailUrl).toHaveBeenCalledWith("project-1", "asset-2");
+  });
+
+  it("does not ask the user about a person who appears in only one photo", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
+      { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "repeat-1", characterId: "repeat", bbox: [0.1, 0.2, 0.4, 0.5] }] },
+      { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "repeat-2", characterId: "repeat", bbox: [0.1, 0.2, 0.4, 0.5] }] },
+      { shotId: "shot-3", assetId: "asset-1", faces: [{ faceId: "single-1", characterId: "single", bbox: [0.2, 0.3, 0.5, 0.6] }] },
+    ] } : { cast: { people: [{ personId: "repeat", role: "parent" }, { personId: "single", role: "other" }] } });
+
+    const people = await createApiStoryRepository({ projectId: "project-1" }, deps).getPeople("project-1");
+
+    expect(people?.map((person) => person.personId)).toEqual(["repeat"]);
+  });
+
+  it("keeps people unresolved while the cast has not been created yet", async () => {
+    const deps = dependencies({
+      request: vi.fn(async (_method, path) => path.endsWith("/characters")
+        ? { shots: [{ shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "face-1", characterId: null, bbox: [0.1, 0.2, 0.4, 0.5] }] }] }
+        : { cast: null }),
+    });
+
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getPeople("project-1")).resolves.toBeNull();
+  });
+
+  it("waits for initial plan job completion and surfaces job failure", async () => {
+    const deps = dependencies({
+      request: vi.fn(async () => ({ job: { id: "job-failed", proposalId: "proposal-next" } })),
+      listenUntil: vi.fn(async (_path, accept) => {
+        const job = { id: "job-failed", status: "failed", reason: "planner failed" };
+        if (!accept(job)) throw new Error("listenUntil rejected terminal job");
+        return job;
+      }),
+    });
+
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).createPlan("Our story", [])).rejects.toThrow("planner failed");
+    expect(deps.listenUntil).toHaveBeenCalledWith("projects/project-1/jobs/job-failed", expect.any(Function));
   });
 
   it("uses Firestore snapshots and authenticated thumbnail API URLs in its default read adapter", async () => {

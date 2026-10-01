@@ -27,6 +27,49 @@ const base = (): ChatInput => ({
 const kinds = (items: ChatItem[]) => items.map((item) => item.kind);
 
 describe("deriveChat state table", () => {
+  it("attaches individual asset statuses to the existing reading progress item", () => {
+    const pending = deriveChat({ ...base(), summary: { ...summary, ready: { ...summary.ready, summary: false }, assetStatuses: [
+      { assetId: "a1", kind: "photo", status: "understood" },
+      { assetId: "a2", kind: "photo", status: "ingested" },
+      { assetId: "a3", kind: "video", status: "uploaded" },
+    ] } });
+    expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Reading your photos, 10 of 10", photoProgress: [
+      { assetId: "a1", kind: "photo", status: "understood" },
+      { assetId: "a2", kind: "photo", status: "ingested" },
+      { assetId: "a3", kind: "video", status: "uploaded" },
+    ] });
+  });
+
+  it("keeps the photo reading grid through asset understanding after ingest completes", () => {
+    const pending = deriveChat({ ...base(), summary: { ...summary, ready: { ...summary.ready, faces: false }, assetStatuses: [
+      { assetId: "a1", kind: "photo", status: "understood" },
+      { assetId: "a2", kind: "photo", status: "ingested" },
+    ] } });
+    expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Reading your photos, 10 of 10", photoProgress: [{ assetId: "a1", status: "understood" }, { assetId: "a2", status: "ingested" }] });
+    expect(pending.items.some((item) => item.kind === "you" && item.text === "Our Japan trip")).toBe(true);
+  });
+
+  it("skips the keep/leave step when no blurry or duplicate photos were filtered", () => {
+    const state = deriveChat({ ...base(), plan: { ...plan, leftOut: [] } });
+    expect(state.step).toBe("direction");
+    expect(state.items.some((item) => item.kind === "set-aside" || item.kind === "moments")).toBe(false);
+    expect(state.items.at(-1)).toMatchObject({ kind: "typing", text: "Putting together a direction for your film" });
+  });
+
+  it("shows filtered photo groups without the old moment picker", () => {
+    const state = deriveChat({ ...base(), plan: { ...plan, leftOut: [
+      { shotId: "blur-1", thumbnailUrl: "https://thumb/blur-1.jpg", reason: "Blurry" },
+      { shotId: "dup-1", thumbnailUrl: "https://thumb/dup-1.jpg", reason: "Near duplicate" },
+    ] } });
+    expect(state.step).toBe("moments");
+    expect(state.items.filter((item) => item.kind === "set-aside" || item.kind === "moments")).toHaveLength(1);
+    expect(state.items.find((item) => item.kind === "set-aside")).toMatchObject({
+      blurry: 1, duplicates: 1,
+      blurryPhotos: [{ shotId: "blur-1", uri: "https://thumb/blur-1.jpg" }],
+      duplicatePhotos: [{ shotId: "dup-1", uri: "https://thumb/dup-1.jpg" }],
+    });
+  });
+
   it("derives all twelve saved-project states", () => {
     const cases: { name: string; input: ChatInput; step: ChatState["step"]; confirmed: number; kinds: string[] }[] = [
       { name: "fresh summary pending", input: { ...base(), summary: { ...summary, ready: { ...summary.ready, summary: false }, processed: { ...summary.processed, ingested: 3 } }, intent: null, people: null, peopleConfirmed: false, plan: null }, step: "occasion", confirmed: 0, kinds: ["typing"] },
@@ -37,12 +80,12 @@ describe("deriveChat state table", () => {
       { name: "all people named", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: `Person ${n}`, role: "child", skipped: false, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "you", "you", "anyone-else"] },
       { name: "top three by moment count then anyone else", input: { ...base(), people: [0, 1, 2, 3].map((n) => ({ personId: `p${n}`, name: n === 3 ? null : `Person ${n}`, role: "child", skipped: false, momentCount: [4, 40, 30, 1][n], sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "you", "you", "anyone-else"] },
       { name: "skipped person counts as answered", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: null, role: null, skipped: n === 0, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "person"] },
-      { name: "no people detected", input: { ...base(), people: [], peopleConfirmed: false, momentsConfirmed: false }, step: "moments", confirmed: 2, kinds: ["you", "set-aside", "moments"] },
-      { name: "people confirmed and plan ready", input: { ...base(), people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: true }, step: "moments", confirmed: 2, kinds: ["you", "you", "set-aside", "moments"] },
-      { name: "planning conflict", input: { ...base(), conflict: { shotIds: ["m1"], message: "This moment is both kept and left out." } }, step: "moments", confirmed: 2, kinds: ["you", "mosae", "set-aside", "moments"] },
-      { name: "moments confirmed", input: { ...base(), momentsConfirmed: true, direction: { confirmed: false, pace: "gentle", lengthSec: 120, focus: "family" } }, step: "direction", confirmed: 3, kinds: ["you", "set-aside", "moments", "you", "direction"] },
-      { name: "direction confirmed and generation running", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "running", stage: "rendering", progress: 0.7, stepsDone: 2, film: null } }, step: "shaping", confirmed: 4, kinds: ["you", "set-aside", "moments", "you", "you", "shaping"] },
-      { name: "generation done", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } }, step: "ready", confirmed: 4, kinds: ["you", "set-aside", "moments", "you", "you", "film"] },
+      { name: "no people detected", input: { ...base(), people: [], peopleConfirmed: false, momentsConfirmed: false }, step: "direction", confirmed: 3, kinds: ["you", "typing"] },
+      { name: "people confirmed and plan ready", input: { ...base(), people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: true }, step: "direction", confirmed: 3, kinds: ["you", "you", "typing"] },
+      { name: "planning conflict", input: { ...base(), conflict: { shotIds: ["m1"], message: "This moment is both kept and left out." } }, step: "direction", confirmed: 3, kinds: ["you", "mosae", "typing"] },
+      { name: "direction options ready", input: { ...base(), momentsConfirmed: true, direction: { confirmed: false, pace: "gentle", lengthSec: 120, focus: "family" } }, step: "direction", confirmed: 3, kinds: ["you", "direction"] },
+      { name: "direction confirmed and generation running", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "running", stage: "rendering", progress: 0.7, stepsDone: 2, film: null } }, step: "shaping", confirmed: 4, kinds: ["you", "you", "shaping"] },
+      { name: "generation done", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } }, step: "ready", confirmed: 4, kinds: ["you", "you", "film"] },
     ];
 
     for (const row of cases) {
@@ -89,9 +132,26 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.kind === "person")).toMatchObject({ kind: "person", sampleFaces });
   });
 
-  it("uses the person chip label instead of a generic family label", () => {
+  it("shows a person's saved answer without inferring a relationship from role", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p0", name: "Family", role: "child", skipped: false, momentCount: 30, sampleShotIds: [], days: [] }], peopleConfirmed: true });
-    expect(state.items.find((item) => item.kind === "you" && item.id === "person-answer-p0")).toMatchObject({ text: "My daughter" });
+    expect(state.items.find((item) => item.kind === "you" && item.id === "person-answer-p0")).toMatchObject({ text: "Family" });
+  });
+
+  it("summarizes all selected direction settings in one user reply", () => {
+    const state = deriveChat({
+      ...base(),
+      people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }],
+      momentsConfirmed: true,
+      direction: { confirmed: true, pace: "lively", lengthSec: 30, focus: "family", collageAmount: "few", motionFeel: "calm" },
+    });
+    expect(state.items.filter((item) => item.kind === "you" && item.id === "direction-answer")).toEqual([
+      { kind: "you", id: "direction-answer", text: "Lively · 30 sec · Whole family · A few collages · Calm" },
+    ]);
+  });
+
+  it("does not invent an answer from an automatically assigned parent role", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p0", name: null, role: "parent", skipped: false, momentCount: 30, sampleShotIds: [], days: [] }], peopleConfirmed: true });
+    expect(state.items.some((item) => item.kind === "you" && item.id === "person-answer-p0")).toBe(false);
   });
 
   it("keeps skipped people represented by the Skip chip", () => {
@@ -112,10 +172,10 @@ describe("deriveChat state table", () => {
     expect(state.placeholder).toBe("Tell me anything about the story");
   });
 
-  it("puts close calls before top moments in the six suggestions", () => {
-    const state = deriveChat(base());
-    const moments = state.items.find((item) => item.kind === "moments");
-    expect(moments).toMatchObject({ kind: "moments", suggestedShotIds: ["close-1", "close-2", "m1", "m2", "m3", "m4"] });
+  it("includes up to four actual thumbnails and a remaining count in each filtered photo group", () => {
+    const leftOut = Array.from({ length: 6 }, (_, index) => ({ shotId: `blur-${index}`, thumbnailUrl: `https://thumb/${index}`, reason: "Blurry" }));
+    const summary = deriveChat({ ...base(), plan: { ...plan, leftOut } }).items.find((item) => item.kind === "set-aside");
+    expect(summary).toMatchObject({ kind: "set-aside", blurry: 6, blurryMore: 2, blurryPhotos: leftOut.slice(0, 4).map(({ shotId, thumbnailUrl }) => ({ shotId, uri: thumbnailUrl })) });
   });
 
   it("names a conflict on the moments step", () => {

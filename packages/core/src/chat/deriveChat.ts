@@ -14,24 +14,29 @@ function occasionText(input: ChatInput): string {
 
 function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string {
   if (person.skipped) return "Skip";
-  if (person.name && person.name !== "Family") return person.name;
-  if (person.role === "child") return "My daughter";
-  if (person.role === "parent") return "My wife";
-  return "Skip";
+  return person.name ?? "";
 }
 
-function getSetAsideCounts(input: ChatInput): { blurry: number; duplicates: number } {
-  const leftOut = input.plan?.leftOut ?? [];
+function directionAnswer(input: ChatInput): string {
+  const direction = input.direction!;
+  const focus = direction.focus === "family" ? "Whole family" : input.people?.find((person) => person.personId === direction.focus)?.name ?? "Whole family";
+  const collages = direction.collageAmount === "lots" ? "Lots of collages" : direction.collageAmount === "none" ? "No collages" : "A few collages";
+  const motion = direction.motionFeel === "playful" ? "Playful" : "Calm";
+  return `${direction.pace === "lively" ? "Lively" : "Gentle"} · ${direction.lengthSec} sec · ${focus} · ${collages} · ${motion}`;
+}
+
+export function getSetAsideSummary(plan: ChatInput["plan"]) {
+  const leftOut = plan?.leftOut ?? [];
+  const blurryPhotos = leftOut.filter(({ reason }) => /blur|soft focus/i.test(reason));
+  const duplicatePhotos = leftOut.filter(({ reason }) => /duplicat|similar|same burst/i.test(reason));
   return {
-    blurry: leftOut.filter(({ reason }) => /blur|soft focus/i.test(reason)).length,
-    duplicates: leftOut.filter(({ reason }) => /duplicat|similar|same burst/i.test(reason)).length,
+    blurry: blurryPhotos.length,
+    duplicates: duplicatePhotos.length,
+    blurryPhotos: blurryPhotos.slice(0, 4).map(({ shotId, thumbnailUrl }) => ({ shotId, uri: thumbnailUrl })),
+    blurryMore: Math.max(0, blurryPhotos.length - 4),
+    duplicatePhotos: duplicatePhotos.slice(0, 4).map(({ shotId, thumbnailUrl }) => ({ shotId, uri: thumbnailUrl })),
+    duplicateMore: Math.max(0, duplicatePhotos.length - 4),
   };
-}
-
-function getSuggestedShotIds(input: ChatInput): string[] {
-  const leftOutIds = (input.plan?.leftOut ?? []).map(({ shotId }) => shotId);
-  const topMomentIds = (input.plan?.moments ?? []).filter((moment) => moment.selected).map((moment) => moment.shotId ?? moment.id);
-  return [...new Set([...leftOutIds, ...topMomentIds])].slice(0, 6);
 }
 
 export function deriveChat(input: ChatInput): ChatState {
@@ -40,13 +45,17 @@ export function deriveChat(input: ChatInput): ChatState {
   let confirmed: ChatState["confirmed"] = 0;
   let placeholder = DEFAULT_PLACEHOLDER;
   const add = (item: ChatItem) => items.push(item);
-
-  if (!input.summary?.ready.summary) {
+  const addPhotoProgress = () => {
     const processed = input.summary?.processed.ingested ?? 0;
     const total = input.summary?.total ?? 0;
-    add({ kind: "typing", id: "summary-wait", text: `Reading your photos, ${processed} of ${total}` });
+    add({ kind: "typing", id: "summary-wait", text: `Reading your photos, ${processed} of ${total}`, photoProgress: input.summary?.assetStatuses });
+  };
+
+  if (!input.summary?.ready.summary) {
+    addPhotoProgress();
     return { items, step, confirmed, placeholder };
   }
+  if (input.summary.photos > 0 && !input.summary.ready.faces) addPhotoProgress();
 
   if (!input.intent) {
     add({ kind: "mosae", id: "occasion-message", text: occasionText(input) });
@@ -75,7 +84,7 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
     });
     if (unanswered) {
-      add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days });
+      add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days });
     } else {
       add({ kind: "anyone-else", id: "anyone-else" });
     }
@@ -84,7 +93,7 @@ export function deriveChat(input: ChatInput): ChatState {
 
   if (input.people?.length) {
     [...input.people].sort((a, b) => b.momentCount - a.momentCount).slice(0, 3).forEach((person) => {
-      if (person.skipped || person.name || person.role) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+      if (person.skipped || person.name) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
     });
   }
   confirmed = 2;
@@ -99,16 +108,16 @@ export function deriveChat(input: ChatInput): ChatState {
     step = "moments";
     add({ kind: "mosae", id: "moments-conflict", text: input.conflict.message });
   }
-  const setAside = getSetAsideCounts(input);
-  add({ kind: "set-aside", id: "set-aside", ...setAside });
-  add({ kind: "moments", id: "moments", suggestedShotIds: getSuggestedShotIds(input) });
+  const setAside = getSetAsideSummary(input.plan);
+  const hasPhotosToReview = setAside.blurry + setAside.duplicates > 0;
+  if (hasPhotosToReview) add({ kind: "set-aside", id: "set-aside", ...setAside });
 
-  if (!input.momentsConfirmed) {
+  if (hasPhotosToReview && !input.momentsConfirmed) {
     step = "moments";
     return { items, step, confirmed, placeholder };
   }
 
-  add({ kind: "you", id: "moments-answer", text: "Looks fine" });
+  if (hasPhotosToReview) add({ kind: "you", id: "moments-answer", text: "Looks fine" });
   confirmed = 3;
   if (!input.direction) {
     step = "direction";
@@ -125,7 +134,7 @@ export function deriveChat(input: ChatInput): ChatState {
     return { items, step, confirmed, placeholder };
   }
 
-  add({ kind: "you", id: "direction-answer", text: "Sounds good. Shape it." });
+  add({ kind: "you", id: "direction-answer", text: directionAnswer(input) });
   confirmed = 4;
   if (input.generation?.status === "done" && input.generation.film) {
     step = "ready";

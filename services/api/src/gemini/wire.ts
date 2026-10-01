@@ -3,9 +3,10 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { GenerateDeps, UsageRecord } from "./client.js";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { MODE, recordingGenerate, replayingGenerate, replayingExactGenerate, FixtureMissing, recordingEmbed, replayingEmbed, rememberFileUri } from "./recorder.js";
+import { MODE, recordingGenerate, replayingGenerate, replayingExactGenerate, FixtureMissing, recordingEmbed, replayingEmbed, recordingImageEmbed, replayingImageEmbed, rememberFileUri } from "./recorder.js";
 import { EMBED_DIMENSIONS } from "./pricing.js";
 import { DemoLimitReached } from "./errors.js";
+import type { EmbedImageContent } from "../understand/embed.js";
 
 // ── Record and replay ──────────────────────────────────────────────
 // MOCK_GEMINI=record hits the real API and saves each exchange; =replay serves
@@ -66,6 +67,15 @@ export function createEmbedClient(apiKey?: string): (input: { model: string; con
   if (!apiKey) throw new Error("gemini_api_key_missing");
   const real = embedContentVia(createGenAI(apiKey));
   if (MODE === "record") return recordingEmbed(real);
+  return real;
+}
+
+/** Single-image embeddings use the same record/replay modes as text embeddings. */
+export function createImageEmbedClient(apiKey?: string): EmbedImageContent {
+  if (MODE === "replay") return replayingImageEmbed();
+  if (!apiKey) throw new Error("gemini_api_key_missing");
+  const real = embedImageContentVia(createGenAI(apiKey));
+  if (MODE === "record") return recordingImageEmbed(real);
   return real;
 }
 
@@ -131,6 +141,17 @@ export function embedContentVia(client: GoogleGenAI): (input: { model: string; c
   return async ({ model, contents, taskType }) => {
     const response = await client.models.embedContent({ model, contents, config: { taskType, outputDimensionality: EMBED_DIMENSIONS } });
     return (response.embeddings ?? []).map((embedding) => toUnitLength(embedding.values ?? []));
+  };
+}
+
+export function embedImageContentVia(client: GoogleGenAI): EmbedImageContent {
+  return async ({ model, jpeg }) => {
+    const response = await client.models.embedContent({
+      model,
+      contents: [{ inlineData: { mimeType: "image/jpeg", data: jpeg.toString("base64") } }],
+      config: { outputDimensionality: EMBED_DIMENSIONS },
+    });
+    return toUnitLength(response.embeddings?.[0]?.values ?? []);
   };
 }
 export type UploadedFile = { name: string; uri: string; mimeType: string };

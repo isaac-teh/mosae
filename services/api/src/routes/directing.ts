@@ -440,8 +440,7 @@ export function directingRouter(deps: {
         return;
       }
       const snap = await deps.db.doc(`projects/${projectId}/cast/current`).get();
-      if (!snap.exists) { res.status(404).json({ error: "not_found" }); return; }
-      res.json({ cast: snap.data() });
+      res.json({ cast: snap.exists ? snap.data() : null });
     } catch (error) {
       handleError(res, error);
     }

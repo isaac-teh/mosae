@@ -100,9 +100,10 @@ describe("web editor preview seeks", () => {
   it("uses an in-app fullscreen overlay when native fullscreen is unavailable", async () => {
     await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} />));
     await act(async () => (host.querySelector('[aria-label="Fullscreen"]') as HTMLButtonElement).click());
-    const fullscreen = host.querySelector('[aria-label="Close fullscreen"]');
+    const fullscreen = document.body.querySelector('[aria-label="Close fullscreen"]');
     expect(fullscreen).not.toBeNull();
-    expect((host.firstElementChild as HTMLElement).className).toContain("fixed");
+    expect(host.querySelector('[aria-label="Close fullscreen"]')).toBeNull();
+    expect((fullscreen?.parentElement as HTMLElement).className).toContain("fixed");
     expect(document.body.style.overflow).toBe("hidden");
     await act(async () => (fullscreen as HTMLButtonElement).click());
     expect(host.querySelector('[aria-label="Close fullscreen"]')).toBeNull();

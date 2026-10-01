@@ -8,7 +8,7 @@ vi.mock("react-native", () => {
   return { View: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, accessibilityLabel, resizeMode, onLoad, ...props }: any) => React.createElement("img", { ...props, onLoad: onLoad ? () => onLoad({ nativeEvent: { source: { width: 400, height: 200 } } }) : undefined, src: source?.uri, alt: accessibilityLabel }) };
 });
 
-import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatMomentGrid, ChatPeoplePick, ChatPersonQuestion, ChatProposal, ChatShaping, ChatTyping, MomentPickerSheet } from "../components/chat";
+import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatMomentGrid, ChatPeoplePick, ChatPersonQuestion, ChatProposal, ChatSetAsideCard, ChatShaping, ChatTyping, MomentPickerSheet } from "../components/chat";
 
 let root: Root;
 let host: HTMLDivElement;
@@ -35,12 +35,37 @@ describe("director chat components", () => {
     expect(host.textContent).not.toMatch(/\b\d+\s*(seconds?|minutes?)\b/i);
   });
 
+  it("shows local photos blurred until their own asset status is understood", async () => {
+    await render(<ChatTyping text="Reading your photos, 1 of 2" photos={[
+      { uri: "/ready.jpg", understood: true, label: "Photo 1 of 2, understood" },
+      { uri: "/waiting.jpg", understood: false, label: "Photo 2 of 2, still reading" },
+    ]} />);
+    expect(host.textContent).toContain("Reading your photos, 1 of 2");
+    expect(host.querySelector('img[src="/ready.jpg"]')?.className).toContain("blur-0");
+    expect(host.querySelector('img[src="/waiting.jpg"]')?.className).toContain("blur-[6px]");
+    expect(host.querySelectorAll('[data-reading-photo="true"]')).toHaveLength(2);
+  });
+
   it("renders proposal replies and calls onReply with the selected id", async () => {
     const onReply = vi.fn();
     await render(<ChatProposal label="PACE" question="About 3 minutes, unhurried?" detail="Good for watching together." replies={[{ id: "yes", label: "Sounds right" }, { id: "shorter", label: "Shorter" }]} onReply={onReply} />);
     expect(host.textContent).toContain("Good for watching together.");
+    expect((host.firstElementChild as HTMLElement).className).not.toContain("border");
+    expect((host.firstElementChild as HTMLElement).className).not.toContain("bg-surface-raised");
     await click("Shorter");
     expect(onReply).toHaveBeenCalledWith("shorter");
+  });
+
+  it("shows up to four real thumbnails per filtered-photo row and opens the existing review list", async () => {
+    const onOpen = vi.fn();
+    await render(<ChatSetAsideCard blurryCount={7} blurryPhotos={Array.from({ length: 4 }, (_, index) => ({ shotId: `b${index}`, uri: `/blur-${index}.jpg` }))} blurryMore={3} duplicateCount={1} duplicatePhotos={[{ shotId: "d1", uri: "/duplicate.jpg" }]} duplicateMore={0} onOpen={onOpen} />);
+    expect(host.querySelectorAll("img")).toHaveLength(5);
+    expect(host.querySelector('img[src="/blur-0.jpg"]')).not.toBeNull();
+    expect(host.textContent).toContain("Blurry 7");
+    expect(host.textContent).toContain("Near-duplicates 1");
+    expect(host.textContent).toContain("+3");
+    await click("Blurry 7");
+    expect(onOpen).toHaveBeenCalledOnce();
   });
 
   it("renders square people faces and toggles people in the picker", async () => {

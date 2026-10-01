@@ -37,6 +37,8 @@ export type Face = {
   prominence?: "primary" | "secondary" | "background";
   expression?: string;
   lookingAtCamera?: boolean;
+  /** False when the face is hidden, turned away, or only the back of the head is visible. */
+  faceVisible?: boolean;
 };
 
 export type VideoShotAnalysis = {
