@@ -215,6 +215,30 @@ describe("createApiStoryRepository", () => {
     expect(deps.getThumbnailUrl).toHaveBeenCalledWith("project-1", "asset-2");
   });
 
+  it("keeps people unresolved while the cast has not been created yet", async () => {
+    const deps = dependencies({
+      request: vi.fn(async (_method, path) => path.endsWith("/characters")
+        ? { shots: [{ shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "face-1", characterId: null, bbox: [0.1, 0.2, 0.4, 0.5] }] }] }
+        : { cast: null }),
+    });
+
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getPeople("project-1")).resolves.toBeNull();
+  });
+
+  it("waits for initial plan job completion and surfaces job failure", async () => {
+    const deps = dependencies({
+      request: vi.fn(async () => ({ job: { id: "job-failed", proposalId: "proposal-next" } })),
+      listenUntil: vi.fn(async (_path, accept) => {
+        const job = { id: "job-failed", status: "failed", reason: "planner failed" };
+        if (!accept(job)) throw new Error("listenUntil rejected terminal job");
+        return job;
+      }),
+    });
+
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).createPlan("Our story", [])).rejects.toThrow("planner failed");
+    expect(deps.listenUntil).toHaveBeenCalledWith("projects/project-1/jobs/job-failed", expect.any(Function));
+  });
+
   it("uses Firestore snapshots and authenticated thumbnail API URLs in its default read adapter", async () => {
     const fetchMock = vi.fn(async (url: string, options: RequestInit) => {
       if (options.method !== "GET" || (options.headers as Record<string, string>).Authorization !== "Bearer owner-token") {

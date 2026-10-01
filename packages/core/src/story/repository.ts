@@ -19,7 +19,7 @@ export interface StoryRepository {
   getProjectResume(projectId: string): Promise<ProjectResumeState>;
   getSummary(projectId: string): Promise<ProjectSummary>;
   interpret(projectId: string, req: ChatInterpretRequest): Promise<ChatInterpretResult>;
-  getPeople(projectId: string): Promise<DirectorPerson[]>;
+  getPeople(projectId: string): Promise<DirectorPerson[] | null>;
   createPlan(storyText: string, mediaRefs: string[]): Promise<{ planId: string }>;
   getPlan(planId: string): Promise<StoryPlan>;
   setMomentSelected(planId: string, momentId: string, selected: boolean): Promise<StoryPlan>;

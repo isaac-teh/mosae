@@ -154,6 +154,28 @@ describe("Director chat", () => {
     expect(hasText("Skip for now")).toBe(true);
   });
 
+  it("waits for the plan-time cast instead of confirming an empty pre-cast people list", async () => {
+    setup();
+    let reads = 0;
+    mocks.repo.getPeople.mockImplementation(async () => reads++ === 0 ? null : people);
+    await renderScreen();
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(hasText("Who is this?")).toBe(true));
+    expect(host.querySelectorAll('[data-face-preview="true"]').length).toBeGreaterThan(0);
+  });
+
+  it("shows a plan failure and lets the user retry it", async () => {
+    setup({ createPlan: vi.fn().mockRejectedValue(new Error("planner failed")) });
+    await renderScreen();
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(hasText("I couldn't shape this one. Try again")).toBe(true));
+    const summaryReadsAtFailure = mocks.repo.getSummary.mock.calls.length;
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 3_100)));
+    expect(mocks.repo.getSummary).toHaveBeenCalledTimes(summaryReadsAtFailure);
+    await click("Try again");
+    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledTimes(2));
+  });
+
   it("saves the selected role and name before asking about the next person", async () => {
     setup({ people: people.map((person) => ({ ...person, role: "other" })) }); await renderScreen();
     await click("Yes, our Japan trip");
@@ -229,12 +251,12 @@ describe("Director chat", () => {
     expect(hasText("Family")).toBe(false);
   });
 
-  it("shows a Mosae retry message and logs instead of rendering the API error code", async () => {
+  it("shows the plan retry message and logs instead of rendering the API error code", async () => {
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
     const infoLog = vi.spyOn(console, "info").mockImplementation(() => {});
     setup({ createPlan: async () => { throw new Error("not_found"); } }); await renderScreen();
     await click("Yes, our Japan trip");
-    await waitFor(() => expect(hasText("I couldn't do that. Try again?")).toBe(true));
+    await waitFor(() => expect(hasText("I couldn't shape this one. Try again.")).toBe(true));
     expect(hasText("not_found")).toBe(false);
     expect(hasText("Try again")).toBe(true);
     expect(infoLog).toHaveBeenCalledWith("Director chat request failed", "not_found");

@@ -79,6 +79,18 @@ describe("character picker routes", () => {
     vi.resetAllMocks();
   });
 
+  it("returns a successful null cast until planning creates the cast document", async () => {
+    const projectId = await seedProject();
+    const { url, close } = await listen(await buildApp());
+    try {
+      const res = await fetch(`${url}/api/projects/${projectId}/cast`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ cast: null });
+    } finally {
+      await close();
+    }
+  });
+
   it("returns every photo-face grouped by shot with null identity when unassigned", async () => {
     const projectId = await seedProject();
     await photo(projectId, "shot-1", [face("shot-1-f0"), face("shot-1-f1")]);

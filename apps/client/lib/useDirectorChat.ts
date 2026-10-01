@@ -29,6 +29,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const proposalId = useRef<string | null>(null);
   const personSaving = useRef(false);
   const planLoad = useRef(false);
+  const planFailed = useRef(false);
   const resumeProjectId = useRef<string | null>(null);
   const peopleEdits = useRef(new Map<string, { name: string | null; role: string | null; skipped: boolean }>());
   const skipPeopleForNow = useRef(false);
@@ -53,13 +54,14 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   }, [repository]);
 
   const refresh = useCallback(async () => {
+    if (planFailed.current) return;
     const [nextSummary, people] = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId)]);
     if (!mounted.current) return;
     setSummary(nextSummary);
-    const mapped = people.map((person: DirectorPerson) => {
+    const mapped = people?.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
       return { ...person, ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
-    });
+    }) ?? null;
     if (resumeProjectId.current !== projectId) {
       resumeProjectId.current = projectId;
       try {
@@ -85,7 +87,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           summary: nextSummary,
           intent: resume.proposalId || hasGeneration ? { text: confirmedStory } : current.intent,
           people: nextSummary.ready.faces ? mapped : null,
-          peopleConfirmed: Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && (skipPeopleForNow.current || mapped.length === 0)),
+          peopleConfirmed: Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)),
           plan,
           momentsConfirmed: hasGeneration,
           direction: hasGeneration ? { confirmed: true, pace: "gentle", lengthSec: Math.max(30, film?.durationSec ?? 120), focus: "family" } : null,
@@ -98,7 +100,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       }
       return;
     }
-    setInput((current) => ({ ...current, summary: nextSummary, people: nextSummary.ready.faces ? mapped : null, peopleConfirmed: current.peopleConfirmed || (nextSummary.ready.faces && (skipPeopleForNow.current || mapped.length === 0)) }));
+    setInput((current) => ({ ...current, summary: nextSummary, people: nextSummary.ready.faces ? mapped : null, peopleConfirmed: current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) }));
     if (proposalId.current && nextSummary.ready.plan && !planLoad.current && !input.plan) {
       planLoad.current = true;
       try {
@@ -164,6 +166,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const actions = {
     async confirmOccasion(answer?: string, storyTextOverride?: string) {
       if (saving) return;
+      planFailed.current = false;
       setSaving(true); setError(null);
       const storyText = storyTextOverride ?? answer ?? pendingInterpret?.text ?? (summary?.country ? `${summary.country} trip` : summary?.places[0] || "Our story");
       try {
@@ -172,7 +175,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         setInput((current) => ({ ...current, intent: { text: answer ?? storyText } }));
         setPendingInterpret(null);
         await refresh();
-      } catch (cause) { setError(reportFailure(cause)); }
+      } catch (cause) { planFailed.current = true; reportFailure(cause); setError("I couldn't shape this one. Try again."); }
       finally { setSaving(false); }
     },
     async setPerson(personId: string, role: string, name?: string) {

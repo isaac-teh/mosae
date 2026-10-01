@@ -383,7 +383,7 @@ export function createApiStoryRepository(
     },
     getSummary: async (id) => await deps.request("GET", `/api/projects/${encodeURIComponent(id)}/summary`) as ProjectSummary,
     interpret: async (id, req) => await deps.request("POST", `/api/projects/${encodeURIComponent(id)}/chat/interpret`, req) as { reply: string; change: { kind: string; [key: string]: unknown } },
-    getPeople: async (id) => {
+    getPeople: async (id): Promise<DirectorPerson[] | null> => {
       const root = `projects/${id}`;
       const [charactersValue, castValue, shotsValue, assetsValue, eventsValue] = await Promise.all([
         deps.request("GET", `/api/projects/${encodeURIComponent(id)}/characters`),
@@ -391,7 +391,11 @@ export function createApiStoryRepository(
         deps.listenCollection(`${root}/shots`), deps.listenCollection(`${root}/assets`), deps.listenCollection(`${root}/events`),
       ]);
       const characters = record(charactersValue, "characters response");
-      const cast = castValue ? record(castValue, "cast response").cast as RecordData | undefined : undefined;
+      const cast = castValue ? record(castValue, "cast response").cast as RecordData | null | undefined : null;
+      // A missing cast means plan-time identity resolution has not happened yet.
+      // Keep this distinct from an existing, legitimately empty cast so the
+      // chat does not mark its people step complete while faces are unassigned.
+      if (!cast || !Array.isArray(cast.people)) return null;
       const castPeople = cast && Array.isArray(cast.people) ? cast.people as RecordData[] : [];
       const names = new Map(castPeople.map((person) => [String(person.personId), person]));
       const assets = new Map(assetsValue.map((value) => { const asset = record(value, "asset"); return [String(asset.id), asset] as const; }));
@@ -439,6 +443,8 @@ export function createApiStoryRepository(
         focus: [],
       }), "create plan response");
       const job = record(response.job, "plan job");
+      const jobId = typeof job.id === "string" ? job.id : null;
+      if (jobId) await awaitPlanJob(deps, projectId, jobId);
       return { planId: stringField(job.proposalId, "proposal id") };
     },
     getPlan: async (planId) => {
