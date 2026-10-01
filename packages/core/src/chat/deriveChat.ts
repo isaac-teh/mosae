@@ -17,18 +17,18 @@ function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string 
   return person.name ?? "";
 }
 
-function getSetAsideCounts(input: ChatInput): { blurry: number; duplicates: number } {
-  const leftOut = input.plan?.leftOut ?? [];
+export function getSetAsideSummary(plan: ChatInput["plan"]) {
+  const leftOut = plan?.leftOut ?? [];
+  const blurryPhotos = leftOut.filter(({ reason }) => /blur|soft focus/i.test(reason));
+  const duplicatePhotos = leftOut.filter(({ reason }) => /duplicat|similar|same burst/i.test(reason));
   return {
-    blurry: leftOut.filter(({ reason }) => /blur|soft focus/i.test(reason)).length,
-    duplicates: leftOut.filter(({ reason }) => /duplicat|similar|same burst/i.test(reason)).length,
+    blurry: blurryPhotos.length,
+    duplicates: duplicatePhotos.length,
+    blurryPhotos: blurryPhotos.slice(0, 4).map(({ shotId, thumbnailUrl }) => ({ shotId, uri: thumbnailUrl })),
+    blurryMore: Math.max(0, blurryPhotos.length - 4),
+    duplicatePhotos: duplicatePhotos.slice(0, 4).map(({ shotId, thumbnailUrl }) => ({ shotId, uri: thumbnailUrl })),
+    duplicateMore: Math.max(0, duplicatePhotos.length - 4),
   };
-}
-
-function getSuggestedShotIds(input: ChatInput): string[] {
-  const leftOutIds = (input.plan?.leftOut ?? []).map(({ shotId }) => shotId);
-  const topMomentIds = (input.plan?.moments ?? []).filter((moment) => moment.selected).map((moment) => moment.shotId ?? moment.id);
-  return [...new Set([...leftOutIds, ...topMomentIds])].slice(0, 6);
 }
 
 export function deriveChat(input: ChatInput): ChatState {
@@ -96,16 +96,16 @@ export function deriveChat(input: ChatInput): ChatState {
     step = "moments";
     add({ kind: "mosae", id: "moments-conflict", text: input.conflict.message });
   }
-  const setAside = getSetAsideCounts(input);
-  add({ kind: "set-aside", id: "set-aside", ...setAside });
-  add({ kind: "moments", id: "moments", suggestedShotIds: getSuggestedShotIds(input) });
+  const setAside = getSetAsideSummary(input.plan);
+  const hasPhotosToReview = setAside.blurry + setAside.duplicates > 0;
+  if (hasPhotosToReview) add({ kind: "set-aside", id: "set-aside", ...setAside });
 
-  if (!input.momentsConfirmed) {
+  if (hasPhotosToReview && !input.momentsConfirmed) {
     step = "moments";
     return { items, step, confirmed, placeholder };
   }
 
-  add({ kind: "you", id: "moments-answer", text: "Looks fine" });
+  if (hasPhotosToReview) add({ kind: "you", id: "moments-answer", text: "Looks fine" });
   confirmed = 3;
   if (!input.direction) {
     step = "direction";

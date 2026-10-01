@@ -8,7 +8,7 @@ vi.mock("react-native", () => {
   return { View: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, accessibilityLabel, resizeMode, onLoad, ...props }: any) => React.createElement("img", { ...props, onLoad: onLoad ? () => onLoad({ nativeEvent: { source: { width: 400, height: 200 } } }) : undefined, src: source?.uri, alt: accessibilityLabel }) };
 });
 
-import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatMomentGrid, ChatPeoplePick, ChatPersonQuestion, ChatProposal, ChatShaping, ChatTyping, MomentPickerSheet } from "../components/chat";
+import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatMomentGrid, ChatPeoplePick, ChatPersonQuestion, ChatProposal, ChatSetAsideCard, ChatShaping, ChatTyping, MomentPickerSheet } from "../components/chat";
 
 let root: Root;
 let host: HTMLDivElement;
@@ -43,6 +43,18 @@ describe("director chat components", () => {
     expect((host.firstElementChild as HTMLElement).className).not.toContain("bg-surface-raised");
     await click("Shorter");
     expect(onReply).toHaveBeenCalledWith("shorter");
+  });
+
+  it("shows up to four real thumbnails per filtered-photo row and opens the existing review list", async () => {
+    const onOpen = vi.fn();
+    await render(<ChatSetAsideCard blurryCount={7} blurryPhotos={Array.from({ length: 4 }, (_, index) => ({ shotId: `b${index}`, uri: `/blur-${index}.jpg` }))} blurryMore={3} duplicateCount={1} duplicatePhotos={[{ shotId: "d1", uri: "/duplicate.jpg" }]} duplicateMore={0} onOpen={onOpen} />);
+    expect(host.querySelectorAll("img")).toHaveLength(5);
+    expect(host.querySelector('img[src="/blur-0.jpg"]')).not.toBeNull();
+    expect(host.textContent).toContain("Blurry 7");
+    expect(host.textContent).toContain("Near-duplicates 1");
+    expect(host.textContent).toContain("+3");
+    await click("Blurry 7");
+    expect(onOpen).toHaveBeenCalledOnce();
   });
 
   it("renders square people faces and toggles people in the picker", async () => {

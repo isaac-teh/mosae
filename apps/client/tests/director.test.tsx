@@ -22,7 +22,6 @@ beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; host = d
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 async function renderScreen() { await act(async () => root.render(<DirectorScreen />)); }
 async function click(label: string) { const button = host.querySelector(`button[aria-label="${label}"]`) ?? host.querySelector(`button[aria-label^="${label},"]`) ?? [...host.querySelectorAll("button")].find((item) => item.textContent?.trim() === label); expect(button).toBeTruthy(); await act(async () => button!.dispatchEvent(new MouseEvent("click", { bubbles: true }))); }
-async function clickInDialog(label: string) { const button = host.querySelector(`[role="dialog"] button[aria-label="${label}"]`); expect(button).toBeTruthy(); await act(async () => button!.dispatchEvent(new MouseEvent("click", { bubbles: true }))); }
 function hasText(text: string) { return host.textContent?.includes(text) ?? false; }
 async function waitFor(check: () => void) { for (let i = 0; i < 40; i++) { try { check(); return; } catch { await act(async () => new Promise((resolve) => setTimeout(resolve, 10))); } } check(); }
 
@@ -200,18 +199,18 @@ describe("Director chat", () => {
     expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.not.objectContaining({ proposalId: expect.any(String) }));
   });
 
-  it("uses the revised proposal returned by cast confirmation for later moment edits", async () => {
+  it("uses the revised proposal returned by cast confirmation for direction options", async () => {
     setup({ readyPlan: true, people: [{ ...people[0], role: null }] }); await renderScreen();
     await click("Yes, our Japan trip");
     await click("My daughter");
-    for (let i = 0; i < 3 && !hasText("Any moments that must be in the film"); i++) {
+    for (let i = 0; i < 3 && !hasText("Who is this?"); i++) {
       if (host.querySelector('button[aria-label="No, that\'s everyone"]')) await click("No, that's everyone");
       else if (host.querySelector('button[aria-label="Skip"]')) await click("Skip");
       await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
     }
-    await waitFor(() => expect(hasText("Any moments that must be in the film")).toBe(true));
-    await click("Done");
-    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-2", expect.anything()));
+    await waitFor(() => expect(hasText("Looks fine")).toBe(true));
+    await click("Looks fine");
+    await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-2"));
   });
 
   it("uses each returned proposal ID for the next cast edit", async () => {
@@ -359,96 +358,42 @@ describe("Director chat", () => {
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
   }
 
-  it("shows the set-aside counts from the plan", async () => {
+  it("shows filtered-photo counts and opens the existing full review list", async () => {
     await openMoments();
-    expect(hasText("I've set aside 1 blurry shot and 120 near-duplicates. Your originals are untouched.")).toBe(true);
-    expect(hasText("See what's set aside")).toBe(true);
-    await click("See what's set aside");
+    expect(hasText("I've set aside 1 blurry shot and 120 near-duplicates, keeping the best of each burst. Your originals are untouched.")).toBe(true);
+    expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull();
+    expect(host.querySelector('img[alt="Blurry photo"]')).not.toBeNull();
+    await click("Blurry 1");
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/review-moments", params: { planId: "proposal-1", tab: "left-out" } });
   });
 
-  it.each([
-    { name: "no shots", leftOut: [], copy: "Nothing needed setting aside - every photo is sharp and different. Your originals are untouched.", showButton: false },
-    { name: "one blurry shot", leftOut: [{ shotId: "blur-1", thumbnailUrl: "", reason: "Blurry" }], copy: "I've set aside 1 blurry shot. Your originals are untouched.", showButton: true },
-    { name: "several blurry shots", leftOut: [{ shotId: "blur-1", thumbnailUrl: "", reason: "Blurry" }, { shotId: "blur-2", thumbnailUrl: "", reason: "Soft focus" }], copy: "I've set aside 2 blurry shots. Your originals are untouched.", showButton: true },
-    { name: "one near-duplicate", leftOut: [{ shotId: "dup-1", thumbnailUrl: "", reason: "Near duplicate" }], copy: "I've set aside 1 near-duplicate. Your originals are untouched.", showButton: true },
-    { name: "several near-duplicates", leftOut: [{ shotId: "dup-1", thumbnailUrl: "", reason: "Near duplicate" }, { shotId: "dup-2", thumbnailUrl: "", reason: "Near duplicate" }], copy: "I've set aside 2 near-duplicates. Your originals are untouched.", showButton: true },
-  ])("uses accurate set-aside copy for $name", async ({ leftOut, copy, showButton }) => {
+  it("skips the photo review and advances when nothing was filtered", async () => {
     const previous = planFixture.leftOut;
-    planFixture.leftOut = leftOut as any;
+    planFixture.leftOut = [];
     try {
-      await openMoments();
-      expect(hasText(copy)).toBe(true);
-      expect([...host.querySelectorAll("button")].some((button) => button.textContent?.trim() === "See what's set aside")).toBe(showButton);
+      setup({ people: [], readyPlan: true }); await renderScreen(); await click("Yes, our Japan trip");
+      await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-1"));
+      expect(host.querySelector('[aria-label="Filtered photos"]')).toBeNull();
+      expect(hasText("Looks fine")).toBe(false);
+      expect(hasText("Any moments that must be in the film")).toBe(false);
+      expect(hasText("Choose from all")).toBe(false);
+      expect(hasText("Done")).toBe(false);
+      expect(hasText("Sounds good. Shape it.")).toBe(true);
     } finally {
       planFixture.leftOut = previous;
     }
   });
 
-  it("saves Keep and Leave out choices in one constraints update when Done is pressed", async () => {
-    const leftOut = planFixture.leftOut;
-    planFixture.leftOut = [];
+  it("does not write plan edits for the Looks fine reply", async () => {
     await openMoments();
-    await click("Moment shot-1");
-    await click("Moment shot-2"); await click("Moment shot-2");
-    await click("Done");
-    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledTimes(1));
-    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["moment-1"], excludedShotIds: ["previously-excluded", "dup-0", "shot-2"] }));
-    planFixture.leftOut = leftOut;
-  });
-
-  it("preserves earlier exclusions and removes a prior exclusion when that tile is marked Keep", async () => {
-    const leftOut = planFixture.leftOut;
-    planFixture.leftOut = [];
-    await openMoments();
-    const priorExclusions = planFixture.edits.excludedShotIds;
-    planFixture.edits.excludedShotIds = ["previously-excluded", "shot-2", "dup-0"];
-    await click("Moment shot-2");
-    await click("Moment shot-3"); await click("Moment shot-3");
-    await click("Done");
-    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledTimes(1));
-    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["moment-2"], excludedShotIds: ["previously-excluded", "dup-0", "shot-3"] }));
-    planFixture.leftOut = leftOut;
-    planFixture.edits.excludedShotIds = priorExclusions;
-  });
-
-  it("does not send a kept set-aside shot as a must-include moment ID", async () => {
-    const leftOut = planFixture.leftOut;
-    const excludedShotIds = planFixture.edits.excludedShotIds;
-    planFixture.leftOut = [{ shotId: "set-aside-blur", thumbnailUrl: "https://image/blur", reason: "Blurry" }];
-    planFixture.edits.excludedShotIds = ["set-aside-blur", "previously-excluded"];
-    await openMoments();
-    await click("Moment set-aside-blur");
-    await click("Done");
-    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledTimes(1));
-    expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: [], excludedShotIds: ["previously-excluded"] }));
-    planFixture.leftOut = leftOut;
-    planFixture.edits.excludedShotIds = excludedShotIds;
-  });
-
-  it("opens the all-moments picker and submits the selected ids", async () => {
-    await openMoments();
-    await click("Choose from all 465");
-    expect(hasText("Must-include moments")).toBe(true);
-    await clickInDialog("Moment shot-4");
-    await click("Add 1 moments");
+    await click("Looks fine");
+    await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-1"));
     expect(mocks.repo.applyEdits).not.toHaveBeenCalled();
-    await click("Done");
-    await waitFor(() => expect(mocks.repo.applyEdits).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ mustIncludeMomentIds: ["moment-4"] })));
-  });
-
-  it("shows a conflict question and stays on moments when the constraints patch returns 409", async () => {
-    await openMoments(async () => { throw Object.assign(new Error("You asked to keep and leave out the same moment."), { status: 409, code: "must_include_conflict" }); });
-    await click("Moment set-aside-blur"); await click("Done");
-    await waitFor(() => expect(hasText("You asked to keep and leave out the same moment.")).toBe(true));
-    expect(hasText("Any moments that must be in the film")).toBe(true);
-    expect(hasText("Keep it")).toBe(true);
-    expect(hasText("3 of 4 confirmed")).toBe(false);
   });
 
   it("loads direction options, updates the explanation for the chosen length, and directs with the chosen settings", async () => {
     await openMoments();
-    await click("Done");
+    await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-1"));
     expect(hasText("Warm, intimate story")).toBe(true);
     await click("4 min");
@@ -465,7 +410,7 @@ describe("Director chat", () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 60 }); await renderScreen();
     await click("Yes, our Japan trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
-    await click("Done");
+    await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
     expect(host.querySelector('button[aria-label="1 min"]')?.getAttribute("aria-pressed")).toBe("true");
     expect(host.querySelector('button[aria-label="2 min"]')).toBeNull();
@@ -477,7 +422,7 @@ describe("Director chat", () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 65, maximumDurationSecByCadence: { reflective: 65, playful: 45.5 } }); await renderScreen();
     await click("Yes, our Japan trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
-    await click("Done");
+    await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
     expect(host.querySelector('button[aria-label="1 min"]')?.getAttribute("aria-pressed")).toBe("true");
     await click("Lively");
@@ -490,7 +435,7 @@ describe("Director chat", () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 10 }); await renderScreen();
     await click("Yes, our Japan trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
-    await click("Done");
+    await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
     expect(hasText("These moments can make about 10 seconds. Add more photos for a longer film.")).toBe(true);
     expect((host.querySelector('button[aria-label="Sounds good. Shape it."]') as HTMLButtonElement).disabled).toBe(true);
@@ -505,7 +450,7 @@ describe("Director chat", () => {
       .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
       .mockResolvedValueOnce(laterRender).mockResolvedValueOnce(regressedRender).mockResolvedValueOnce(filmFixture);
     await openMoments(undefined, getFilm);
-    await click("Done");
+    await click("Looks fine");
     await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
     await waitFor(() => expect((host.querySelector('button[aria-label="Sounds good. Shape it."]') as HTMLButtonElement).disabled).toBe(false));
     vi.useFakeTimers();
@@ -541,7 +486,7 @@ describe("Director chat", () => {
   it("shows the completed film with three direction notes and opens the editor", async () => {
     planFixture.chapters = Array.from({ length: 5 }, (_, index) => ({ id: `chapter-${index}`, title: `Chapter ${index + 1}`, momentIds: [] }));
     await openMoments();
-    await click("Done");
+    await click("Looks fine");
     await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
     await click("Sounds good. Shape it.");
     await waitFor(() => expect(hasText("Japan, autumn")).toBe(true));
@@ -555,7 +500,7 @@ describe("Director chat", () => {
 
   it("saves the film and opens the chat saved screen", async () => {
     await openMoments();
-    await click("Done");
+    await click("Looks fine");
     await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
     await click("Sounds good. Shape it.");
     await waitFor(() => expect(hasText("Save film")).toBe(true));
@@ -566,7 +511,7 @@ describe("Director chat", () => {
 
   it("sends Ask for a change to the editor with the request in the URL", async () => {
     await openMoments();
-    await click("Done");
+    await click("Looks fine");
     await waitFor(() => expect(hasText("Sounds good. Shape it.")).toBe(true));
     await click("Sounds good. Shape it.");
     await waitFor(() => expect(host.querySelector('input[aria-label="Ask for a change"]')).toBeTruthy());

@@ -12,6 +12,6 @@ export { projectProposal } from "./story/projectProposal";
 export { startStoryPlan, watchStoryPlan, type StoryPlanJob } from "./story/planning";
 export { computeProgress, describeProgress, type ProjectProgress, type ProjectStatus, type RawProgress } from "./progress/progress";
 export { watchProjectProgress, type ProgressDeps } from "./progress/watchProgress";
-export { deriveChat } from "./chat/deriveChat";
+export { deriveChat, getSetAsideSummary } from "./chat/deriveChat";
 export { personAnswerChips, type PersonAgeBand } from "./chat/personChips";
 export type { ChatInput, ChatItem, ChatState, ProjectSummary } from "./chat/types";

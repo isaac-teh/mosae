@@ -197,26 +197,22 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
     }
   }
 
-  const momentsHeading = page.getByText("Any moments that must be in the film");
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await expect(momentsHeading).toBeVisible({ timeout: 30_000 });
-      break;
-    } catch (error) {
-      if (attempt === 2 || !(await everyone.isVisible().catch(() => false))) throw error;
-      // A role write can still be completing when the last "No, that's
-      // everyone" reply is tapped. Retry only while that reply remains active.
-      await everyone.click();
-    }
-  }
-  await screenshot(page, "07-moments.png");
+  const filteredPhotoCard = page.getByLabel("Filtered photos");
+  await expect(filteredPhotoCard).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByText(/I've set aside \d+ blurry shots? and \d+ near-duplicates?, keeping the best of each burst\. Your originals are untouched\./)).toBeVisible();
+  await expect(filteredPhotoCard.getByRole("button", { name: /^Blurry \d+$/ })).toBeVisible();
+  await expect(filteredPhotoCard.getByRole("button", { name: /^Near-duplicates \d+$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Looks fine" })).toBeVisible();
+  await expect(page.getByText("Any moments that must be in the film")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Choose from all / })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Done" })).toHaveCount(0);
+  await screenshot(page, "pt-05-filtered-photos.png");
   const chatHistory = page.getByLabel("Director chat history");
   await expect.poll(() => chatHistory.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
   await chatHistory.evaluate((node) => { node.scrollTop = 0; });
   await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop)).toBe(0);
 
-  await page.getByRole("button", { name: /Moment .*$/ }).first().click();
-  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Looks fine" }).click();
   try {
     await expect(page.getByRole("button", { name: "Sounds good. Shape it." })).toBeVisible({ timeout: 120_000 });
   } catch (error) {

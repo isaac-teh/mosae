@@ -4,6 +4,7 @@ export { ChatProposal } from "./ChatProposal";
 export { ChatPersonQuestion } from "./ChatPersonQuestion";
 export { ChatPeoplePick } from "./ChatPeoplePick";
 export { ChatMomentGrid } from "./ChatMomentGrid";
+export { ChatSetAsideCard } from "./ChatSetAsideCard";
 export { ChatDirectionCard } from "./ChatDirectionCard";
 export { ChatShaping } from "./ChatShaping";
 export { ChatComposer } from "./ChatComposer";

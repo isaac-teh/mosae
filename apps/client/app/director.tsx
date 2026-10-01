@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatMomentGrid, ChatPersonQuestion, ChatProposal, ChatShaping, ChatTyping, MomentPickerSheet } from "@/components/chat";
+import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatPersonQuestion, ChatProposal, ChatSetAsideCard, ChatShaping, ChatTyping } from "@/components/chat";
 import { FilmPlayer } from "@/components/FilmPlayer";
 import { Button } from "@/components/ds";
 import { useDirectorChat } from "@/lib/useDirectorChat";
@@ -28,11 +28,10 @@ export default function DirectorScreen() {
   const params = useLocalSearchParams<{ projectId?: string }>();
   const projectId = params.projectId ?? "";
   const story = useStoryFlow();
-  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, momentState, pickerOpen, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow);
+  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow);
   const router = useRouter();
   const [name, setName] = useState("");
   const [namingPerson, setNamingPerson] = useState<string | null>(null);
-  const [pickerSelection, setPickerSelection] = useState<string[]>([]);
   const [filmTimeline, setFilmTimeline] = useState<{ filmId: string; timeline: Timeline; sources: Record<string, string> } | null>(null);
   const [filmPlayerFailed, setFilmPlayerFailed] = useState(false);
   const filmItem = state.items.find((item) => item.kind === "film");
@@ -48,26 +47,6 @@ export default function DirectorScreen() {
     }).catch(() => { if (active) setFilmPlayerFailed(true); });
     return () => { active = false; };
   }, [film?.filmId, projectId, story.repository]);
-  const momentsItem = state.items.find((item) => item.kind === "moments");
-  const suggestedTiles = useMemo(() => {
-    const suggestedIds = momentsItem?.kind === "moments" ? momentsItem.suggestedShotIds : [];
-    const allTiles = [
-      ...(plan?.moments ?? []).map((moment) => ({ shotId: moment.shotId ?? moment.id, uri: moment.imageKey })),
-      ...(plan?.leftOut ?? []).map((item) => ({ shotId: item.shotId, uri: item.thumbnailUrl })),
-    ];
-    const byId = new Map(allTiles.map((tile) => [tile.shotId, tile]));
-    return suggestedIds.map((id) => byId.get(id)).filter((tile): tile is { shotId: string; uri: string } => Boolean(tile));
-  }, [plan, momentsItem]);
-  const pickerDays = useMemo(() => {
-    const all = [
-      ...(plan?.moments ?? []).map((moment) => ({ shotId: moment.shotId ?? moment.id, uri: moment.imageKey, day: moment.meta.match(/day\s+\d+/i)?.[0] ?? "Other moments" })),
-      ...(plan?.leftOut ?? []).map((item) => ({ shotId: item.shotId, uri: item.thumbnailUrl, day: "Other moments" })),
-    ];
-    const groups = new Map<string, { shotId: string; uri: string }[]>();
-    all.forEach(({ day, ...tile }) => groups.set(day, [...(groups.get(day) ?? []), tile]));
-    return [...groups.entries()].map(([label, tiles]) => ({ label, tiles }));
-  }, [plan]);
-
   return <View className="flex-1 bg-surface">
     <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => router.back()} />
     <ScrollView accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 py-6" contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" style={{ flex: 1, minHeight: 0 }}>
@@ -78,16 +57,15 @@ export default function DirectorScreen() {
         if (item.kind === "typing") return <ChatTyping key={item.id} text={item.text} />;
         if (item.kind === "shaping") return <ChatShaping key={item.id} progress={item.progress} stepsDone={item.stepsDone} />;
         if (item.kind === "set-aside") {
-          const parts = [
-            item.blurry ? `${item.blurry} blurry ${item.blurry === 1 ? "shot" : "shots"}` : "",
-            item.duplicates ? `${item.duplicates} near-duplicate${item.duplicates === 1 ? "" : "s"}` : "",
-          ].filter(Boolean);
-          const message = parts.length
-            ? `I've set aside ${parts.join(" and ")}. Your originals are untouched.`
-            : "Nothing needed setting aside - every photo is sharp and different. Your originals are untouched.";
-          return <View key={item.id} className="gap-3"><ChatMessage from="mosae" text={message} />{parts.length > 0 ? <Button label="See what's set aside" variant="quiet" onPress={actions.seeSetAside} /> : null}</View>;
+          const blurryLabel = `${item.blurry} blurry ${item.blurry === 1 ? "shot" : "shots"}`;
+          const duplicateLabel = `${item.duplicates} near-duplicate${item.duplicates === 1 ? "" : "s"}`;
+          const message = `I've set aside ${blurryLabel} and ${duplicateLabel}, keeping the best of each burst. Your originals are untouched.`;
+          return <View key={item.id} className="gap-3">
+            <ChatMessage from="mosae" text={message} />
+            <ChatSetAsideCard blurryCount={item.blurry} blurryPhotos={item.blurryPhotos} blurryMore={item.blurryMore} duplicateCount={item.duplicates} duplicatePhotos={item.duplicatePhotos} duplicateMore={item.duplicateMore} onOpen={actions.seeSetAside} />
+            <ChatProposal replies={[{ id: "confirm", label: "Looks fine" }]} onReply={() => void actions.confirmMoments()} />
+          </View>;
         }
-        if (item.kind === "moments") return <ChatMomentGrid key={item.id} tiles={suggestedTiles} state={momentState} total={projectSummary?.total ?? 0} onTap={actions.toggleMoment} onDone={() => void actions.confirmMoments()} onChooseAll={() => { setPickerSelection(Object.entries(momentState).filter(([, value]) => value === "keep").map(([id]) => id)); actions.openPicker(); }} />;
         if (item.kind === "direction") {
           const focusOptions = [{ id: "family", label: "Whole family" }, ...people.filter((person) => person.name).map((person) => ({ id: person.personId, label: person.name as string }))];
           const focusLabel = focusOptions.find((option) => option.id === item.focus)?.label ?? "Whole family";
@@ -140,7 +118,6 @@ export default function DirectorScreen() {
       {pendingInterpret && <View className="gap-3"><ChatMessage from="you" text={pendingInterpret.text} /><ChatMessage from="mosae" text={pendingInterpret.reply} /><ChatProposal replies={[{ id: "confirm", label: "Yes, that's right" }, { id: "discard", label: "Not quite" }]} onReply={(choice) => choice === "confirm" ? actions.confirmInterpret() : actions.discardInterpret()} /></View>}
       {error && <View className="gap-2"><ChatMessage from="mosae" text={error} /><Pressable role="button" onPress={() => { retry(); if (state.step === "occasion") void actions.confirmOccasion(); }} className="min-h-11 self-start justify-center"><Text className="font-sans-semibold text-action">Try again</Text></Pressable></View>}
     </ScrollView>
-    {pickerOpen && <MomentPickerSheet days={pickerDays} selected={pickerSelection} onToggle={(shotId) => setPickerSelection((current) => current.includes(shotId) ? current.filter((id) => id !== shotId) : [...current, shotId])} onCancel={() => { setPickerSelection([]); actions.confirmPicker([]); }} onConfirm={() => void actions.confirmPicker(pickerSelection)} />}
     {projectSummary && <ChatComposer placeholder={state.placeholder} disabled={saving} onSend={(text) => state.step === "ready" ? actions.askForChange(text) : void actions.send(text)} />}
   </View>;
 }

@@ -34,7 +34,7 @@ export type ChatItem =
   | { kind: "occasion"; id: string }
   | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[] }
   | { kind: "anyone-else"; id: string }
-  | { kind: "set-aside"; id: string; blurry: number; duplicates: number }
+  | { kind: "set-aside"; id: string; blurry: number; duplicates: number; blurryPhotos: { shotId: string; uri: string }[]; blurryMore: number; duplicatePhotos: { shotId: string; uri: string }[]; duplicateMore: number }
   | { kind: "moments"; id: string; suggestedShotIds: string[] }
   | { kind: "direction"; id: string; pace: string; lengthSec: number; focus: string; momentCount: number }
   | { kind: "shaping"; id: string; progress: number; stepsDone: number }
