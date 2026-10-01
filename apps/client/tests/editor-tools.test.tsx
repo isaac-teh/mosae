@@ -161,7 +161,7 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Timeline ruler tick 2 seconds"]')?.getAttribute("style")).toContain("left: 130px");
     expect(host.querySelector('[aria-label="Timeline ruler label 0:02"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="Chapter Zoo day"]')?.getAttribute("style")).toContain("left: 50px");
-    expect(host.querySelector('[aria-label="Select clip a"]')?.getAttribute("style")).toContain("left: 50px");
+    expect(host.querySelector('[aria-label="Select clip a"]')?.parentElement?.getAttribute("style")).toContain("left: 50px");
     expect(host.querySelector('[aria-label="Music track Sandcastle Days"]')?.getAttribute("style")).toContain("width: 360px");
   });
 
