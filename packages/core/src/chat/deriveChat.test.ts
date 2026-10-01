@@ -145,8 +145,15 @@ describe("deriveChat state table", () => {
       direction: { confirmed: true, pace: "lively", lengthSec: 30, focus: "family", collageAmount: "few", motionFeel: "calm" },
     });
     expect(state.items.filter((item) => item.kind === "you" && item.id === "direction-answer")).toEqual([
-      { kind: "you", id: "direction-answer", text: "Lively · 30 sec · Whole family · A few collages · Calm" },
+      { kind: "you", id: "direction-answer", text: "Pace: Lively\nLength: 30 sec\nFocus: Whole family\nCollages: A few\nMotion: Calm" },
     ]);
+  });
+
+  it("only shows settings rows present on the direction card", () => {
+    const state = deriveChat({ ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 60, focus: "family" } });
+    expect(state.items.find((item) => item.kind === "you" && item.id === "direction-answer")).toMatchObject({
+      text: "Pace: Gentle\nLength: 60 sec\nFocus: Whole family",
+    });
   });
 
   it("does not invent an answer from an automatically assigned parent role", () => {

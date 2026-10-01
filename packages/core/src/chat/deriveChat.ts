@@ -20,9 +20,17 @@ function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string 
 function directionAnswer(input: ChatInput): string {
   const direction = input.direction!;
   const focus = direction.focus === "family" ? "Whole family" : input.people?.find((person) => person.personId === direction.focus)?.name ?? "Whole family";
-  const collages = direction.collageAmount === "lots" ? "Lots of collages" : direction.collageAmount === "none" ? "No collages" : "A few collages";
-  const motion = direction.motionFeel === "playful" ? "Playful" : "Calm";
-  return `${direction.pace === "lively" ? "Lively" : "Gentle"} · ${direction.lengthSec} sec · ${focus} · ${collages} · ${motion}`;
+  const rows = [
+    `Pace: ${direction.pace === "lively" ? "Lively" : "Gentle"}`,
+    `Length: ${direction.lengthSec} sec`,
+    `Focus: ${focus}`,
+  ];
+  if (direction.collageAmount !== undefined) {
+    const collages = direction.collageAmount === "lots" ? "Lots" : direction.collageAmount === "none" ? "None" : "A few";
+    rows.push(`Collages: ${collages}`);
+  }
+  if (direction.motionFeel !== undefined) rows.push(`Motion: ${direction.motionFeel === "playful" ? "Playful" : "Calm"}`);
+  return rows.join("\n");
 }
 
 export function getSetAsideSummary(plan: ChatInput["plan"]) {
