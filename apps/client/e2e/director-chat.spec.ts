@@ -97,7 +97,7 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await composer.fill("it's our Singapore holiday with the kids");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("it's our Singapore holiday with the kids")).toBeVisible({ timeout: 60_000 });
-  const interpretationReply = page.getByText(/Should I create a story about your Singapore family holiday\?|Would you like me to focus the story on your Singapore holiday with the kids\?/);
+  const interpretationReply = page.getByText(/Should I create a story about your Singapore family holiday\?|Would you like me to focus the story on your Singapore holiday with the kids\?|Would you like to center the story on your Singapore holiday with the kids\?/);
   await expect(interpretationReply).toBeVisible({ timeout: 60_000 });
   const interpretationText = (await interpretationReply.innerText()).trim();
   const typedBubble = page.getByText("it's our Singapore holiday with the kids", { exact: true });

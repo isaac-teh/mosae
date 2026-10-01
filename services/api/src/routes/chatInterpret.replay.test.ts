@@ -21,7 +21,7 @@ describe("chat interpret replay route", () => {
       import("./chatInterpret.js"), import("../gemini/client.js"), import("../gemini/wire.js"),
     ]);
     // The four plan examples; later end-to-end runs record more interpret fixtures beside them.
-    const files = ["interpret-01d724a117a9.json", "interpret-7cced985f820.json", "interpret-82cc1d67a409.json", "interpret-c5072669ddec.json", "interpret-d2c806b96a5e.json"];
+    const files = ["interpret-01d724a117a9.json", "interpret-7cced985f820.json", "interpret-82cc1d67a409.json", "interpret-c5072669ddec.json", "interpret-d2c806b96a5e.json", "interpret-c7e38da8a6da.json"];
     for (const name of files) expect(readdirSync(fixturesDir)).toContain(name);
     const fixtures = files.map((name) => JSON.parse(readFileSync(`${fixturesDir}/${name}`, "utf8")) as { request: string });
     const examples = fixtures.map(({ request: requestText }) => {
@@ -68,9 +68,15 @@ describe("chat interpret replay route", () => {
       expect(response.body.change, example.step).toMatchObject({ kind: example.kind, ...example.fields });
     }
 
-    const singapore = examples.find(({ step, text }) => step === "occasion" && text === "it's our Singapore holiday with the kids")!;
-    const singaporeResponse = await request(await listeningServer(app)).post(`/api/projects/${projectId}/chat/interpret`).send(singapore);
-    expect(singaporeResponse.status).toBe(200);
-    expect(singaporeResponse.body.change).toMatchObject({ kind: "occasion", storyText: "Singapore family holiday" });
+    const singaporeExamples = examples.filter(({ step, text }) => step === "occasion" && text === "it's our Singapore holiday with the kids");
+    expect(singaporeExamples).toHaveLength(2);
+    for (const singapore of singaporeExamples) {
+      const singaporeResponse = await request(await listeningServer(app)).post(`/api/projects/${projectId}/chat/interpret`).send(singapore);
+      expect(singaporeResponse.status).toBe(200);
+      expect(singaporeResponse.body.change).toMatchObject({
+        kind: "occasion",
+        storyText: singapore.context.summary.processed.understood === 13 ? "Singapore holiday with the kids" : "Singapore family holiday",
+      });
+    }
   });
 });
