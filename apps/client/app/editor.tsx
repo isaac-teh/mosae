@@ -62,6 +62,8 @@ export default function EditorScreen() {
   const [playhead, setPlayhead] = useState(0);
   const [seekRequest, setSeekRequest] = useState<{ seconds: number } | null>(null);
   const [pauseRequest, setPauseRequest] = useState(0);
+  const [togglePlayRequest, setTogglePlayRequest] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const [preparingDownload, setPreparingDownload] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [preparedDownload, setPreparedDownload] = useState<PreparedFilmDownload | null>(null);
@@ -186,10 +188,10 @@ export default function EditorScreen() {
       : !editor.timeline ? <View className="flex-1 items-center justify-center"><Text className="font-sans text-body text-on-screen-muted">Opening your film…</Text></View>
       : <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4" showsVerticalScrollIndicator={false}>
         <View className="w-full overflow-hidden rounded-[14px] bg-tide-tile" style={{ height: previewHeight }}>
-          <EditorPreview timeline={editor.timeline} sources={editor.sources} onTimeChange={onTimeChange} seekRequest={seekRequest} playheadSec={playhead} pauseRequest={pauseRequest} />
+          <EditorPreview timeline={editor.timeline} sources={editor.sources} onTimeChange={onTimeChange} seekRequest={seekRequest} playheadSec={playhead} pauseRequest={pauseRequest} togglePlayRequest={togglePlayRequest} onPlayingChange={setPlaying} />
         </View>
         <View className="mt-4 flex-row items-center justify-between">
-          <Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text>
+          <View className="flex-row items-center gap-3"><Pressable role="button" accessibilityLabel={playing ? "Pause film" : "Play film"} onPress={() => setTogglePlayRequest((request) => request + 1)} className="min-h-11 min-w-11 items-center justify-center rounded-full bg-black/35"><Text className="font-sans text-[18px] text-on-screen">{playing ? "Ⅱ" : "▶"}</Text></Pressable><Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text></View>
           <View className="flex-row gap-4">
             <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="min-h-11 min-w-11 items-center justify-center"><UndoIcon disabled={!editor.canUndo} /></Pressable>
             <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="min-h-11 min-w-11 items-center justify-center"><RedoIcon disabled={!editor.canRedo} /></Pressable>

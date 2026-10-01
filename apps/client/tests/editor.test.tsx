@@ -6,7 +6,7 @@ import type { Timeline } from "@mosae/contracts";
 const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", planId: undefined as string | undefined, repository: "fixture", request: undefined as string | undefined }, back: vi.fn(), push: vi.fn(), navigate: vi.fn() }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ back: boundary.back, push: boundary.push, navigate: boundary.navigate }) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: boundary.repository, flow: { repository: "api", projectId: "p1" } }) }));
-vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ playheadSec, pauseRequest }: any) => React.createElement("div", { "data-testid": "preview", "data-playhead-sec": playheadSec, "data-pause-request": pauseRequest }) }));
+vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ playheadSec, pauseRequest, togglePlayRequest }: any) => React.createElement("div", { "data-testid": "preview", "data-playhead-sec": playheadSec, "data-pause-request": pauseRequest, "data-toggle-play-request": togglePlayRequest }) }));
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
 vi.mock("react-native-svg", () => {
   const element = (tag: string) => ({ children, ...props }: any) => React.createElement(tag, props, children);
@@ -101,6 +101,14 @@ describe("film editor", () => {
     await act(async () => timeline.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
     expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-pause-request")).toBe("1");
     expect(Number(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec"))).toBe(4);
+  });
+
+  it("puts playback beside the editor time and sends play toggles to the preview", async () => {
+    await render(<EditorScreen />);
+    expect(host.querySelector('[aria-label="Play film"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Fullscreen"]')).toBeNull();
+    await click("Play film");
+    expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-toggle-play-request")).toBe("1");
   });
 
   it("renders prominent undo and redo arrows in 44px disabled header controls", async () => {
