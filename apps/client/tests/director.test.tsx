@@ -2,9 +2,14 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const scrollMock = vi.hoisted(() => ({ scrollToEnd: vi.fn() }));
 vi.mock("react-native", () => {
+  const ScrollView = React.forwardRef(({ children, accessibilityLabel, onScrollBeginDrag: _onScrollBeginDrag, scrollEventThrottle: _scrollEventThrottle, contentContainerStyle: _contentContainerStyle, contentContainerClassName: _contentContainerClassName, keyboardShouldPersistTaps: _keyboardShouldPersistTaps, ...props }: any, ref: any) => {
+    React.useImperativeHandle(ref, () => ({ scrollToEnd: scrollMock.scrollToEnd }), []);
+    return React.createElement("div", { ...props, "aria-label": accessibilityLabel }, children);
+  });
   const node = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, editable, ...props }: any) => React.createElement(tag, { ...props, "aria-label": props["aria-label"] ?? accessibilityLabel, disabled: props.disabled ?? (editable === false ? true : undefined), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
-  return { View: node("div"), ScrollView: node("div"), Text: node("span"), Pressable: node("button"), TextInput: node("input"), Image: ({ source, accessibilityLabel, ...props }: any) => React.createElement("img", { ...props, src: source?.uri, alt: accessibilityLabel }) };
+  return { View: node("div"), ScrollView, Text: node("span"), Pressable: node("button"), TextInput: node("input"), Image: ({ source, accessibilityLabel, ...props }: any) => React.createElement("img", { ...props, src: source?.uri, alt: accessibilityLabel }) };
 });
 
 const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, confirmCast: vi.fn(), push: vi.fn() }));
@@ -66,6 +71,13 @@ describe("Director chat", () => {
     expect(history).not.toBeNull();
     expect(history!.style.minHeight).toBe("0");
     expect(history!.style.flexGrow).toBe("1");
+  });
+
+  it("scrolls the director history to the newest message after an occasion chip action", async () => {
+    setup(); await renderScreen();
+    scrollMock.scrollToEnd.mockClear();
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(scrollMock.scrollToEnd).toHaveBeenCalled());
   });
 
   it("shows the ready summary and starts the story intent when the occasion reply is tapped", async () => {

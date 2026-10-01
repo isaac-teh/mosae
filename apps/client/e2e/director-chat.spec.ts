@@ -213,6 +213,7 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop)).toBe(0);
 
   await page.getByRole("button", { name: "Looks fine" }).click();
+  await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop + node.clientHeight >= node.scrollHeight - 3)).toBe(true);
   try {
     await expect(page.getByRole("button", { name: "Sounds good. Shape it." })).toBeVisible({ timeout: 120_000 });
   } catch (error) {
@@ -225,6 +226,11 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
 
   await page.getByRole("button", { name: "Sounds good. Shape it." }).click();
   await screenshot(page, "09-shaping.png");
+  await expect(page.getByText("Shaping your film")).toBeVisible({ timeout: 120_000 });
+  await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop + node.clientHeight >= node.scrollHeight - 3)).toBe(true);
+  await chatHistory.evaluate((node) => node.scrollTo(0, 0));
+  await page.waitForTimeout(500);
+  await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop)).toBe(0);
   const save = page.getByRole("button", { name: "Save film" });
   try {
     await expect(save).toBeVisible({ timeout: 300_000 });
