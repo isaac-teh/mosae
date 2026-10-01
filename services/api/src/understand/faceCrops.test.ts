@@ -31,4 +31,14 @@ describe("face crop rectangles", () => {
     expect(makeCropRect({ bbox: [0.1, 0.4, 0.8, 0.55] }, size)).toBeNull();
     expect(makeCropRect({ bbox: [0, 0, 0.8, 0.8] }, size)).toBeNull();
   });
+
+  it("measures tallness in pixels for portrait images", async () => {
+    const makeCropRect = await cropRect();
+    expect(makeCropRect).toBeTypeOf("function");
+    if (!makeCropRect) return;
+    const portrait = { width: 1367, height: 2048 };
+
+    expect(makeCropRect({ bbox: [0.2, 0.2, 0.3, 0.3] }, portrait)).not.toBeNull();
+    expect(makeCropRect({ bbox: [0.1, 0.2, 0.35, 0.4] }, portrait)).toBeNull();
+  });
 });

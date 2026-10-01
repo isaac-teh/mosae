@@ -11,6 +11,7 @@ import { castSummary } from "./castSummary.js";
 import { labelledIdentity, labelsCover, type LabelFile } from "./labelledIdentity.js";
 import type { Cast, FaceRef, Interaction } from "./types.js";
 import { embeddingIdentity } from "./embeddingIdentity.js";
+import { faceMatchingThresholds } from "../config.js";
 
 export async function loadCastLabels(photoHashes: string[], fixtureDirectory = fileURLToPath(new URL("../../fixtures/cast/", import.meta.url))): Promise<LabelFile | undefined> {
   let files: string[];
@@ -80,8 +81,9 @@ export async function ensureCast(
     labels = await loadCastLabels([...photoHashes.values()]);
   }
   const coveredLabels = labels && labelsCover(labels, [...photoHashes.values()]) ? labels : undefined;
+  const thresholds = faceMatchingThresholds();
   const embeddingResolver = !coveredLabels && vectorFaces.length
-    ? embeddingIdentity({ threshold: Number(process.env.FACE_MATCH_THRESHOLD ?? 0.85), groupMergeThreshold: Number(process.env.FACE_GROUP_MERGE_THRESHOLD ?? 0.78) })
+    ? embeddingIdentity({ threshold: thresholds.faceMatchThreshold, groupMergeThreshold: thresholds.faceGroupMergeThreshold })
     : null;
   const resolver = coveredLabels ? labelledIdentity(coveredLabels) : embeddingResolver;
   const identities = embeddingResolver ? embeddingResolver.resolveVectors(vectorFaces) : resolver?.resolve(faces) ?? new Map<string, string>();

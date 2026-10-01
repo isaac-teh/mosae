@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loadConfig } from "./config.js";
+import { faceMatchingThresholds, loadConfig } from "./config.js";
 
 const base = { FIREBASE_STORAGE_BUCKET: "b", SERVICE_URL: "http://localhost:8080" };
 const tasks = { GCP_PROJECT_ID: "p", TASKS_LOCATION: "l", TASKS_QUEUE: "q", TASKS_INVOKER_SERVICE_ACCOUNT: "sa@p.iam.gserviceaccount.com" };
@@ -14,6 +14,11 @@ describe("loadConfig", () => {
     expect(loadConfig(base)).toMatchObject({ faceMatchThreshold: 0.85, faceGroupMergeThreshold: 0.78 });
     expect(loadConfig({ ...base, FACE_MATCH_THRESHOLD: "0.9", FACE_GROUP_MERGE_THRESHOLD: "0.8" }))
       .toMatchObject({ faceMatchThreshold: 0.9, faceGroupMergeThreshold: 0.8 });
+  });
+
+  it("exposes face thresholds through one shared config helper", () => {
+    expect(faceMatchingThresholds({ FACE_MATCH_THRESHOLD: "0.91", FACE_GROUP_MERGE_THRESHOLD: "0.81" }))
+      .toEqual({ faceMatchThreshold: 0.91, faceGroupMergeThreshold: 0.81 });
   });
 
   it("passes through GEMINI_API_KEY without requiring it", () => {

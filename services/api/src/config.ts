@@ -23,6 +23,13 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
 
 const TASK_KEYS = ["GCP_PROJECT_ID", "TASKS_LOCATION", "TASKS_QUEUE", "TASKS_INVOKER_SERVICE_ACCOUNT"] as const;
 
+export function faceMatchingThresholds(env: NodeJS.ProcessEnv = process.env): Pick<Config, "faceMatchThreshold" | "faceGroupMergeThreshold"> {
+  return {
+    faceMatchThreshold: Number(env.FACE_MATCH_THRESHOLD ?? 0.85),
+    faceGroupMergeThreshold: Number(env.FACE_GROUP_MERGE_THRESHOLD ?? 0.78),
+  };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const production = env.NODE_ENV === "production";
   const invokers = production ? required(env, "INVOKER_SERVICE_ACCOUNTS") : (env.INVOKER_SERVICE_ACCOUNTS ?? "");
@@ -36,8 +43,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     production,
     storageBucket: required(env, "FIREBASE_STORAGE_BUCKET"),
     geminiApiKey: env.GEMINI_API_KEY ?? "",
-    faceMatchThreshold: Number(env.FACE_MATCH_THRESHOLD ?? 0.85),
-    faceGroupMergeThreshold: Number(env.FACE_GROUP_MERGE_THRESHOLD ?? 0.78),
+    ...faceMatchingThresholds(env),
     // Required in production: without it, saving a film is a task that cannot
     // reach anything. Locally it defaults to the render service's own port.
     renderServiceUrl: production ? required(env, "RENDER_SERVICE_URL") : (env.RENDER_SERVICE_URL ?? "http://127.0.0.1:8081"),

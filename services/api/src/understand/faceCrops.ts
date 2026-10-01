@@ -17,7 +17,7 @@ export function faceCropRect(face: FaceCropInput, size: CropSize): CropRect | nu
   const boxWidth = xmax - xmin;
   const boxHeight = ymax - ymin;
   if (boxWidth * size.width < 48 || boxHeight * size.height < 48) return null;
-  if (boxHeight > boxWidth * 1.6 || boxWidth * boxHeight > 0.35) return null;
+  if (boxHeight * size.height > 1.6 * boxWidth * size.width || boxWidth * boxHeight > 0.35) return null;
 
   const left = Math.max(0, Math.floor((xmin - boxWidth * 0.1) * size.width + 1e-9));
   const top = Math.max(0, Math.floor((ymin - boxHeight * 0.1) * size.height + 1e-9));
