@@ -54,6 +54,13 @@ remains selectable without updating the client. The Saved screen credits
 data is licensed under ODbL. Only public place or city names are stored on
 assets—never house numbers, roads, or postcodes.
 
+The `mosae-tasks` queue allows up to 10 concurrent dispatches at 10 dispatches
+per second. The API is capped at one instance with 40 request slots, so this
+keeps understand work below the available API capacity while allowing the
+queue to drain steadily. Raising queue concurrency above roughly 20 should
+wait until understand work runs in a separate service; otherwise it can
+consume capacity needed by the API's user-facing requests.
+
 `DRY_RUN=1 ENV=dev deploy/deploy.sh` prints the commands and uses illustrative
 URLs and a project number where discovery would need GCP. It does not contact
 GCP or prompt for secrets. Run the same prefix with `deploy/smoke.sh` to print

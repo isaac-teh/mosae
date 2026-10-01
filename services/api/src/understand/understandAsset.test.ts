@@ -23,6 +23,28 @@ function setup(asset: Asset | null = photoAsset, overrides: Partial<UnderstandDe
 }
 
 describe("understandAsset", () => {
+  it("logs per-stage timings for an understood photo", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    let clock = 1_000;
+    const deps = setup(photoAsset, {
+      now: () => clock,
+      objects: { download: vi.fn(), upload: vi.fn(), downloadCurrent: vi.fn(async () => { clock += 5; }) },
+      analyzePhoto: vi.fn(async () => { clock += 7; return photoAnalysis; }),
+      embedShots: vi.fn(async () => { clock += 11; return [{ shotId: "a1_0000", embedding: [0.1] }]; }),
+      commitUnderstood: vi.fn(async () => { clock += 13; return "understood" as const; }),
+    });
+
+    try {
+      await expect(understandAsset(deps, task)).resolves.toBe("understood");
+      expect(info).toHaveBeenCalledWith("understand_timing", {
+        queueWaitMs: 999, downloadMs: 5, analyzeMs: 7, faceEmbedMs: 0,
+        shotEmbedMs: 11, commitMs: 13, totalMs: 36, faces: 0,
+      });
+    } finally {
+      info.mockRestore();
+    }
+  });
+
   it("commits a photo analysis and a null transcript before settling", async () => {
     const deps = setup();
     await expect(understandAsset(deps, task)).resolves.toBe("understood");
