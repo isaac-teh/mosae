@@ -111,6 +111,12 @@ describe("film editor", () => {
     expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-toggle-play-request")).toBe("1");
   });
 
+  it("keeps only Remove, Add and Ask in the editor toolbar", async () => {
+    await render(<EditorScreen />);
+    for (const name of ["Swap", "Trim", "Move"]) expect(host.querySelector(`[aria-label="${name}"]`)).toBeNull();
+    for (const name of ["Remove", "Add", "Ask"]) expect(host.querySelector(`[aria-label="${name}"]`)).not.toBeNull();
+  });
+
   it("renders prominent undo and redo arrows in 44px disabled header controls", async () => {
     await render(<EditorScreen />);
     for (const label of ["Undo", "Redo"]) {
@@ -202,18 +208,25 @@ describe("film editor", () => {
     expect(host.textContent).toContain("Rendering… 42%");
   });
 
-  it("visibly applies a two second photo length and autosaves it", async () => {
+  it("trims a photo edge and autosaves the new duration", async () => {
     await render(<EditorScreen />);
     const clip = host.querySelector('[aria-label="Select clip a"]') as HTMLButtonElement;
     const widthBefore = Number.parseFloat(clip.style.width);
     await click("Select clip a");
-    await click("Trim");
-    await click("Photo duration 2 seconds");
-    expect(host.textContent).toContain("0:00 / 0:08");
-    expect(host.querySelector('[aria-label="Photo duration 2 seconds"]')?.getAttribute("aria-pressed")).toBe("true");
-    expect(Number.parseFloat(clip.style.width)).toBeLessThan(widthBefore);
+    const end = host.querySelector('[aria-label="Trim end of clip a"]')!;
+    const pointer = (type: string, clientX: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.defineProperty(event, "clientX", { value: clientX });
+      Object.defineProperty(event, "pointerId", { value: 1 });
+      return event;
+    };
+    await act(async () => end.dispatchEvent(pointer("pointerdown", 100)));
+    await act(async () => end.dispatchEvent(pointer("pointermove", 140)));
+    await act(async () => end.dispatchEvent(pointer("pointerup", 140)));
+    expect(host.textContent).toContain("0:04 / 0:10");
+    expect(Number.parseFloat(clip.style.width)).toBeGreaterThan(widthBefore);
     await advance(1500);
-    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "setPhotoDuration", clipId: "a", sec: 2 }]);
+    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "setPhotoDuration", clipId: "a", sec: 4 }]);
   });
 
   it("trims a selected timeline clip by its edge, seeks live, and undoes as one edit", async () => {

@@ -43,5 +43,7 @@ test("editor playback controls sit beside the time display", async ({ page }, te
   await expect(page.getByRole("button", { name: "Play film" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Fullscreen" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Play preview" })).toHaveCount(0);
+  for (const name of ["Swap", "Trim", "Move"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  for (const name of ["Remove", "Add", "Ask"]) await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
   await page.screenshot({ path: path.resolve(process.cwd(), "docs/design/screens-editor-batch-1", testInfo.project.name === "webkit-iphone-14" ? "e2-editor-current-webkit.png" : "e2-editor-current.png"), scale: "css" });
 });

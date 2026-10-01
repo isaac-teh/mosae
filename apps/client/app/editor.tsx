@@ -11,9 +11,6 @@ import { EditorPreview } from "@/components/editor/EditorPreview";
 import { TimelineStrip } from "@/components/editor/TimelineStrip";
 import { ToolBar } from "@/components/editor/ToolBar";
 import { SaveState } from "@/components/editor/SaveState";
-import { SwapSheet } from "@/components/editor/SwapSheet";
-import { TrimControl } from "@/components/editor/TrimControl";
-import { MoveMode } from "@/components/editor/MoveMode";
 import { AddSheet } from "@/components/editor/AddSheet";
 import { CollagePanel } from "@/components/editor/CollagePanel";
 import { SoundtrackSheet } from "@/components/editor/SoundtrackSheet";
@@ -24,9 +21,8 @@ import { RedoIcon, UndoIcon } from "@/components/icons";
 import { downloadFilm, prepareFilmDownload, type PreparedFilmDownload } from "@/lib/downloadFilm";
 
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
-type Tool = "Swap" | "Trim" | "Move" | "Remove" | "Add" | "Ask" | "Collage" | "Soundtrack" | null;
+type Tool = "Remove" | "Add" | "Ask" | "Collage" | "Soundtrack" | null;
 const clipId = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
-const clipShotId = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.spec.slots[0]?.shotId : clip.source.shotId;
 const shotIdsIn = (timeline: Timeline) => new Set(timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId]));
 const idOf = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
 
@@ -103,8 +99,6 @@ export default function EditorScreen() {
     return () => { active = false; };
   }, [params.planId, repository]);
   const selectedClip = editor.timeline?.videoClips.find((clip) => clipId(clip) === editor.selectedClipId) ?? null;
-  const selectedShotId = selectedClip ? clipShotId(selectedClip) : undefined;
-  const selectedMoment = plan?.moments.find((moment) => moment.shotId === selectedShotId) ?? null;
   useEffect(() => {
     let active = true;
     if (tool !== "Collage" || !selectedClip || !("kind" in selectedClip) || !plan) return () => { active = false; };
@@ -165,7 +159,6 @@ export default function EditorScreen() {
   const openSoundtrackPicker = useCallback(() => setTool("Soundtrack"), []);
   const openTool = (next: Exclude<Tool, "Collage" | "Soundtrack" | null>) => {
     if (next === "Remove" && editor.timeline?.videoClips.length === 1) return;
-    if ((next === "Swap" || next === "Trim") && selectedClip && "kind" in selectedClip) { setTool("Collage"); return; }
     setTool(next);
   };
   const downloadRenderedFilm = async () => {
@@ -206,9 +199,6 @@ export default function EditorScreen() {
           }} onDeselect={() => editor.select(null)} onSoundtrack={openSoundtrackPicker} />
       </ScrollView>}
     <ToolBar onTool={(value) => openTool(value)} />
-    {tool === "Swap" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={selectedClip.id} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} onApply={onApply} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}
-    {tool === "Trim" && selectedClip ? <TrimControl clip={selectedClip} onApply={editor.apply} onClose={() => setTool(null)} /> : null}
-    {tool === "Move" && editor.timeline && editor.selectedClipId ? <MoveMode timeline={editor.timeline} clipId={editor.selectedClipId} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
     {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {tool === "Collage" && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} sources={editor.sources} slotAlternatives={slotAlternatives?.clipId === selectedClip.clipId ? slotAlternatives.values : {}} onApply={onApplyCollage} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}

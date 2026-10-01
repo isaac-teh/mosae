@@ -1,9 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 
 const tools = [
-  { name: "Swap", icon: "⇄" },
-  { name: "Trim", icon: "✂" },
-  { name: "Move", icon: "↔" },
   { name: "Remove", icon: "⌫" },
   { name: "Add", icon: "+" },
   { name: "Ask", icon: "◯" },

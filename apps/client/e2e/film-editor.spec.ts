@@ -19,23 +19,17 @@ test("opens a saved film in the editor, edits it, restores the saved revision, a
   await expect(page.getByRole("button", { name: "Select clip clip-1" })).toBeVisible();
   await capture(page, "editor-e2e-01-open.png");
 
-  await page.getByRole("button", { name: "Select clip clip-3" }).click();
-  await page.getByRole("button", { name: "Move", exact: true }).click();
-  await page.getByRole("button", { name: "Drop clip at position 1" }).click();
-  await expect(page.getByRole("button", { name: "Select clip clip-3" })).toHaveAttribute("aria-label", "Select clip clip-3");
-  await capture(page, "editor-e2e-02-moved.png");
-
-  await page.getByRole("button", { name: "Select clip clip-3" }).click();
-  await page.getByRole("button", { name: "Swap" }).click();
-  await page.getByRole("button", { name: "Use alternative fixture-alt" }).click();
-  await capture(page, "editor-e2e-03-swapped.png");
-
+  for (const name of ["Swap", "Trim", "Move"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  for (const name of ["Remove", "Add", "Ask"]) await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Select clip clip-1" }).click();
-  await page.getByRole("button", { name: "Trim" }).click();
-  await page.getByRole("button", { name: "Photo duration 4 seconds" }).click();
-  await expect(page.getByRole("button", { name: "Photo duration 4 seconds" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText("0:03 / 0:23", { exact: true })).toBeVisible();
-  await page.locator('[aria-label="Close trim"]').click();
+  const endHandle = page.getByRole("button", { name: "Trim end of clip clip-1" });
+  const handleBounds = await endHandle.boundingBox();
+  if (!handleBounds) throw new Error("Selected clip has no trim handle");
+  await page.mouse.move(handleBounds.x + handleBounds.width / 2, handleBounds.y + handleBounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBounds.x + handleBounds.width / 2 + 40, handleBounds.y + handleBounds.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByText(/0:\d{2} \/ 0:\d{2}/)).toBeVisible();
   await capture(page, "editor-e2e-04-trimmed.png");
 
   await page.getByRole("button", { name: "Select clip collage-1" }).click();
