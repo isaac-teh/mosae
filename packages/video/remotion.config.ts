@@ -5,3 +5,11 @@ import { Config } from "@remotion/cli/config";
 // will receive project-specific signed media URLs instead.
 Config.setPublicDir(process.env.MOSAE_REMOTION_PUBLIC_DIR ?? path.resolve("../../apps/client/assets/demo"));
 Config.setVideoImageFormat("jpeg");
+// Workspace contracts use ESM .js imports backed by TypeScript source files.
+Config.overrideWebpackConfig((config) => ({
+  ...config,
+  resolve: {
+    ...config.resolve,
+    extensionAlias: { ...config.resolve?.extensionAlias, ".js": [".js", ".ts", ".tsx"] },
+  },
+}));

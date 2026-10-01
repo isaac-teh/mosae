@@ -8,4 +8,5 @@ export const TRIP_PHOTO_FILES = [
   "d05-kyoto-photo-30094291.jpg",
   "d06-kyoto-photo-35568183.jpg",
   "d09-osaka-photo-25050466.jpg",
+  "d01-tokyo-photo-1510610.jpg",
 ] as const;

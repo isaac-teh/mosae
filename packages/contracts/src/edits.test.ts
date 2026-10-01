@@ -72,7 +72,7 @@ describe("applyEdits", () => {
     { name: "move", op: { op: "move", clipId: "p2", toIndex: 0 }, clips: [["p2", 0, 2], ["p1", 2, 2], ["v1", 4, 3], ["c1", 7, 3]], duration: 10 },
     { name: "remove", op: { op: "remove", clipId: "v1" }, clips: [["p1", 0, 2], ["p2", 2, 2], ["c1", 4, 3]], duration: 7 },
     { name: "add", op: { op: "add", shotId: "new-shot", kind: "photo", afterClipId: "p1", durationSec: 3 }, clips: [["p1", 0, 2], ["add:new-shot:1", 2, 3], ["v1", 5, 3], ["p2", 8, 2], ["c1", 10, 3]], duration: 13 },
-    { name: "setCollageLayout", op: { op: "setCollageLayout", clipId: "c1", layoutId: "film-negative" }, clips: [["p1", 0, 2], ["v1", 2, 3], ["p2", 5, 2], ["c1", 7, 3]], duration: 10 },
+    { name: "setCollageLayout", op: { op: "setCollageLayout", clipId: "c1", layoutId: "travel-mosaic" }, clips: [["p1", 0, 2], ["v1", 2, 3], ["p2", 5, 2], ["c1", 7, 3]], duration: 10 },
     { name: "setCollageMotion", op: { op: "setCollageMotion", clipId: "c1", motionId: "tape-slap" }, clips: [["p1", 0, 2], ["v1", 2, 3], ["p2", 5, 2], ["c1", 7, 3]], duration: 10 },
     { name: "setCollageEffect", op: { op: "setCollageEffect", clipId: "c1", effectId: "vignette" }, clips: [["p1", 0, 2], ["v1", 2, 3], ["p2", 5, 2], ["c1", 7, 3]], duration: 10 },
     { name: "replaceCollageSlot", op: { op: "replaceCollageSlot", clipId: "c1", slotId: "s1", shotId: "other-photo", kind: "photo" }, clips: [["p1", 0, 2], ["v1", 2, 3], ["p2", 5, 2], ["c1", 7, 3]], duration: 10 },
@@ -109,8 +109,8 @@ describe("applyEdits", () => {
   it("changes the requested shot, collage settings, slot, and soundtrack", () => {
     const swapped = apply([{ op: "swapShot", clipId: "p1", shotId: "replacement" }]).timeline.videoClips[0];
     expect("source" in swapped && swapped.source.shotId).toBe("replacement");
-    const layout = apply([{ op: "setCollageLayout", clipId: "c1", layoutId: "film-negative" }]).timeline.videoClips[3];
-    expect("kind" in layout && layout.spec.layoutId).toBe("film-negative");
+    const layout = apply([{ op: "setCollageLayout", clipId: "c1", layoutId: "travel-mosaic" }]).timeline.videoClips[3];
+    expect("kind" in layout && layout.spec.layoutId).toBe("travel-mosaic");
     const motion = apply([{ op: "setCollageMotion", clipId: "c1", motionId: "tape-slap" }]).timeline.videoClips[3];
     expect("kind" in motion && motion.spec.motionId).toBe("tape-slap");
     const effect = apply([{ op: "setCollageEffect", clipId: "c1", effectId: "vignette" }]).timeline.videoClips[3];

@@ -26,6 +26,24 @@ import { CollageSpecSchema, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, COLLAGE_EFFECTS, s
 import { createCollageSpec } from "./fixtures";
 
 describe("CollageSpec", () => {
+  it("excludes both Film negative motions from the reviewed library", () => {
+    expect(ALLOWED_COMBOS.map((combo) => combo.layoutId)).not.toContain("film-negative");
+    expect(COLLAGE_LAYOUTS.map((layout) => layout.id)).not.toContain("film-negative");
+  });
+  it("retains the selected and rebuilt reference layout-motion combinations", () => {
+    expect(ALLOWED_COMBOS.filter((combo) => ["travel-mosaic", "travel-story", "nine-photo-grid", "botanical-scrapbook"].includes(combo.layoutId))).toEqual([
+      { layoutId: "travel-mosaic", motionId: "print-drop" },
+      { layoutId: "travel-story", motionId: "focus-relay" },
+      { layoutId: "botanical-scrapbook", motionId: "tape-slap" },
+      { layoutId: "nine-photo-grid", motionId: "print-drop" },
+    ]);
+    for (const [id, count] of [["travel-mosaic", 8], ["travel-story", 5], ["botanical-scrapbook", 4], ["nine-photo-grid", 9]] as const) {
+      const layout = COLLAGE_LAYOUTS.find((item) => item.id === id);
+      expect(layout?.preferredSlots).toBe(count);
+      const markup = renderToStaticMarkup(<Collage spec={createCollageSpec(id)} />);
+      expect((markup.match(/<img /g) ?? []).length).toBe(count);
+    }
+  });
   it("accepts shot ID and URL slot sources, and rejects missing or competing sources", () => {
     const spec = createCollageSpec("route-map");
     expect(CollageSpecSchema.safeParse(spec).success).toBe(true);
@@ -71,6 +89,12 @@ describe("Collage", () => {
       const spec = { ...createCollageSpec(combo.layoutId), motionId: combo.motionId, effectId: effect.id };
       expect(() => renderToStaticMarkup(<Collage spec={spec} />), `${combo.layoutId}/${combo.motionId}/${effect.id}`).not.toThrow();
     }
+  });
+
+  it("keeps Travel story free of all template caption text", () => {
+    const markup = renderToStaticMarkup(<Collage spec={createCollageSpec("travel-story")} />);
+    for (const text of ["Postcards from Kyoto", "A small collection of places", "Kyoto · Japan", "AUTUMN 2026"]) expect(markup).not.toContain(text);
+    expect(markup).not.toContain("linear-gradient(transparent,rgba(0,0,0,.35))");
   });
 
   it("produces identical markup for identical props and seed", () => {

@@ -2,10 +2,13 @@ import { z } from "zod";
 import { ALLOWED_COMBO_KEYS } from "./collageCombos.js";
 
 export const COLLAGE_LAYOUTS = [
+  { id: "botanical-scrapbook", label: "Botanical scrapbook", minSlots: 3, maxSlots: 6, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 4 },
+  { id: "nine-photo-grid", label: "Nine-photo grid", minSlots: 3, maxSlots: 9, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 9 },
+  { id: "travel-mosaic", label: "Travel mosaic", minSlots: 3, maxSlots: 8, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 8 },
+  { id: "travel-story", label: "Travel story", minSlots: 3, maxSlots: 6, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 5 },
   { id: "photo-table", label: "Photo table", minSlots: 4, maxSlots: 6, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 6 },
   { id: "torn-paper", label: "Torn paper mosaic", minSlots: 3, maxSlots: 5, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 4 },
   { id: "polaroid-garland", label: "Polaroid garland", minSlots: 3, maxSlots: 5, aspect: ["9:16"], maxVideoCells: 1, preferredSlots: 4 },
-  { id: "film-negative", label: "Film negative", minSlots: 3, maxSlots: 5, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 4 },
   { id: "postcard-stack", label: "Postcard stack", minSlots: 3, maxSlots: 5, aspect: ["9:16"], maxVideoCells: 1, preferredSlots: 4 },
   { id: "route-map", label: "Route map", minSlots: 3, maxSlots: 5, aspect: ["9:16"], maxVideoCells: 1, preferredSlots: 4 },
 ] as const;
