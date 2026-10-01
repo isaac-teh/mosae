@@ -19,7 +19,7 @@ async function screenshot(page: Page, name: string) {
 
 test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thread after reload", async ({ page }) => {
   test.setTimeout(10 * 60_000);
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 412, height: 870 });
   await mkdir(screenshots, { recursive: true });
   await mkdir(styleScreenshots, { recursive: true });
   const existing = await readdir(samples);
@@ -107,7 +107,7 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
   await expect(page.getByText("I didn't catch that. Pick one below, or say it another way.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Yes, our Singapore trip" })).toHaveCount(0);
   await expect(page.getByText("0 of 4 confirmed", { exact: true })).toBeVisible();
-  await screenshot(page, "05-free-text-confirmation.png");
+  await screenshot(page, "pt-04-answer-chips.png");
   // The typed suggestion is still pending until confirmed. Reload restores the
   // initial occasion state so the primary Yes chip can drive the full film run.
   await page.reload();

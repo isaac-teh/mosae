@@ -39,6 +39,8 @@ describe("director chat components", () => {
     const onReply = vi.fn();
     await render(<ChatProposal label="PACE" question="About 3 minutes, unhurried?" detail="Good for watching together." replies={[{ id: "yes", label: "Sounds right" }, { id: "shorter", label: "Shorter" }]} onReply={onReply} />);
     expect(host.textContent).toContain("Good for watching together.");
+    expect((host.firstElementChild as HTMLElement).className).not.toContain("border");
+    expect((host.firstElementChild as HTMLElement).className).not.toContain("bg-surface-raised");
     await click("Shorter");
     expect(onReply).toHaveBeenCalledWith("shorter");
   });
