@@ -63,6 +63,33 @@ describe("applyEdits", () => {
     }
   });
 
+  it("allows a half-second video trim and ripples every following clip", () => {
+    const result = applyEdits(firstCut, [{ op: "trim", clipId: "v1", inSec: 6.5, outSec: 7 }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(geometry(result.timeline)).toEqual([
+      ["p1", 0, 2], ["v1", 2, 0.5], ["p2", 2.5, 2], ["c1", 4.5, 3],
+    ]);
+    expect(result.timeline.durationSec).toBe(7.5);
+  });
+
+  it("allows a half-second photo and ripples following clips", () => {
+    const result = applyEdits(firstCut, [{ op: "setPhotoDuration", clipId: "p1", sec: 0.5 }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(geometry(result.timeline)[1]).toEqual(["v1", 0.5, 3]);
+    expect(result.timeline.durationSec).toBe(8.5);
+  });
+
+  it("trims a collage as one clip and keeps its spec duration in sync", () => {
+    const result = applyEdits(firstCut, [{ op: "setCollageDuration", clipId: "c1", sec: 2 }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const collage = result.timeline.videoClips.at(-1);
+    expect(collage && "kind" in collage ? collage.spec.durationSec : null).toBe(2);
+    expect(result.timeline.durationSec).toBe(9);
+  });
+
   it.each<{
     name: string; op: EditOp; clips: Array<[string, number, number]>; duration: number;
   }>([
@@ -214,7 +241,9 @@ describe("applyEdits", () => {
   it("rejects unknown clips and invalid trims without throwing", () => {
     expect(applyEdits(firstCut, [{ op: "remove", clipId: "missing" }])).toMatchObject({ ok: false, opIndex: 0 });
     expect(applyEdits(firstCut, [{ op: "trim", clipId: "p1", inSec: 0, outSec: 2 }])).toMatchObject({ ok: false, opIndex: 0 });
-    expect(applyEdits(firstCut, [{ op: "trim", clipId: "v1", inSec: 5, outSec: 5.5 }])).toMatchObject({ ok: false, opIndex: 0 });
+    expect(applyEdits(firstCut, [{ op: "trim", clipId: "v1", inSec: 5, outSec: 5.49 }])).toMatchObject({ ok: false, opIndex: 0 });
+    expect(applyEdits(firstCut, [{ op: "setPhotoDuration", clipId: "p1", sec: 0.49 }])).toMatchObject({ ok: false, opIndex: 0 });
+    expect(applyEdits(firstCut, [{ op: "setCollageDuration", clipId: "c1", sec: 0.49 }])).toMatchObject({ ok: false, opIndex: 0 });
   });
 
   it("merges only consecutive gestures on the same clip and operation", () => {

@@ -208,6 +208,41 @@ describe("film editor", () => {
     expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "setPhotoDuration", clipId: "a", sec: 2 }]);
   });
 
+  it("trims a selected timeline clip by its edge, seeks live, and undoes as one edit", async () => {
+    await render(<EditorScreen />);
+    await click("Select clip a");
+    const startHandle = host.querySelector('[aria-label="Trim start of clip a"]') as HTMLButtonElement | null;
+    const endHandle = host.querySelector('[aria-label="Trim end of clip a"]') as HTMLButtonElement | null;
+    expect(startHandle).not.toBeNull();
+    expect(endHandle).not.toBeNull();
+    expect(endHandle?.getAttribute("aria-pressed")).toBe("true");
+
+    const pointer = (type: string, clientX: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.defineProperty(event, "clientX", { value: clientX });
+      Object.defineProperty(event, "pointerId", { value: 1 });
+      return event;
+    };
+    await act(async () => startHandle!.dispatchEvent(pointer("pointerdown", 100)));
+    await act(async () => startHandle!.dispatchEvent(pointer("pointermove", 140)));
+    expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec")).toBe("1");
+    await act(async () => startHandle!.dispatchEvent(pointer("pointerup", 140)));
+    expect(host.textContent).toContain("0:01 / 0:08");
+
+    await click("Undo");
+    expect(host.textContent).toContain("0:01 / 0:09");
+    await click("Redo");
+    expect(host.textContent).toContain("0:01 / 0:08");
+  });
+
+  it("deselects a timeline clip when tapping empty track space", async () => {
+    await render(<EditorScreen />);
+    await click("Select clip a");
+    expect(host.querySelector('[aria-label="Trim start of clip a"]')).not.toBeNull();
+    await click("Deselect selected clip");
+    expect(host.querySelector('[aria-label="Trim start of clip a"]')).toBeNull();
+  });
+
   it("shows the soundtrack catalog name and pacing label instead of its id", async () => {
     boundary.params = { ...boundary.params, planId: "proposal-1" };
     boundary.repository.getPlan.mockRejectedValue(new Error("proposal is unavailable"));

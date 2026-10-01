@@ -14,4 +14,5 @@ export { computeProgress, describeProgress, type ProjectProgress, type ProjectSt
 export { watchProjectProgress, type ProgressDeps } from "./progress/watchProgress";
 export { deriveChat, getSetAsideSummary } from "./chat/deriveChat";
 export { personAnswerChips, type PersonAgeBand } from "./chat/personChips";
+export { trimRange, type TimelineTrimEdge, type TrimRangeInput } from "./editor/timelineTrim";
 export type { ChatInput, ChatItem, ChatState, ProjectSummary } from "./chat/types";

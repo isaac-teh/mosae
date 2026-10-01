@@ -16,10 +16,15 @@ type TimelineRowsProps = {
   leadingPadding: number;
   contentWidth: number;
   onSelect: (clipId: string, startSec: number) => void;
+  onTrimPointerDown: (clip: Timeline["videoClips"][number], edge: "start" | "end", event: any) => void;
+  onTrimPointerMove: (event: any) => void;
+  onTrimPointerUp: (event: any, commit: boolean) => void;
+  trimDraft: { clipId: string; edge: "start" | "end"; deltaSec: number } | null;
+  onDeselect: () => void;
   onSoundtrack: () => void;
 };
 
-const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onSoundtrack }: TimelineRowsProps) {
+const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, trimDraft, onDeselect, onSoundtrack }: TimelineRowsProps) {
   const music = timeline.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   const musicDuration = music ? music.source.sourceOutSec - music.source.sourceInSec : 0;
   const tickSeconds = Array.from({ length: Math.floor(timeline.durationSec) + 1 }, (_, second) => second);
@@ -40,16 +45,30 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedCli
       })}
     </View>
     <View className="relative mt-1 h-[62px]">
-      {timeline.videoClips.map((clip, index) => {
+      {selectedClipId ? <Pressable role="button" accessibilityLabel="Deselect selected clip" onPress={onDeselect} style={{ position: "absolute", zIndex: 0, left: 0, right: 0, top: 0, height: 58 }} /> : null}
+      {(() => {
+        let ripple = 0;
+        return timeline.videoClips.map((clip, index) => {
         const id = clipId(clip);
+        const selected = selectedClipId === id;
         const uri = sources[shotId(clip) ?? ""];
-        const width = Math.max(1, clip.durationSec * pixelsPerSecond);
-        return <Pressable key={id} role="button" accessibilityLabel={`Select clip ${id}`} onPress={() => onSelect(id, clip.startSec)}
-          style={{ position: "absolute", left: timeToX(clip.startSec, pixelsPerSecond, leadingPadding), width, top: 0, height: 58, borderWidth: 2, borderRadius: 7, overflow: "hidden", borderColor: selectedClipId === id ? "#F1734F" : "transparent", backgroundColor: index % 2 ? "#294655" : "#E8E2D5" }}>
-          {uri ? <Image source={{ uri }} resizeMode="cover" style={{ width: "100%", height: "100%" }} /> : null}
-          {"kind" in clip ? <View pointerEvents="none" className="absolute bottom-0 left-0 right-0 items-center bg-screen/75"><Text className="font-sans text-[9px] text-on-screen">Collage</Text></View> : null}
-        </Pressable>;
-      })}
+        const delta = trimDraft?.clipId === id ? trimDraft.deltaSec : 0;
+        const duration = Math.max(0.5, clip.durationSec + (trimDraft?.clipId === id ? (trimDraft.edge === "start" ? -delta : delta) : 0));
+        const start = clip.startSec + ripple;
+        if (trimDraft?.clipId === id) ripple += duration - clip.durationSec;
+        const makeHandle = (edge: "start" | "end") => <Pressable key={edge} role="button" accessibilityLabel={`Trim ${edge} of clip ${id}`} aria-pressed={selected}
+          onPointerDown={(event: any) => onTrimPointerDown(clip, edge, event)} onPointerMove={onTrimPointerMove} onPointerUp={(event: any) => onTrimPointerUp(event, true)} onPointerCancel={(event: any) => onTrimPointerUp(event, false)} data-trim-handle="true"
+          style={{ position: "absolute", zIndex: 20, left: edge === "start" ? -6 : undefined, right: edge === "end" ? -6 : undefined, top: 8, height: 42, width: 12, borderRadius: 6, backgroundColor: "#F5C842", borderWidth: 1, borderColor: "#2B2B20", touchAction: "none" }} />;
+        return <View key={id} style={{ position: "absolute", zIndex: selected ? 10 : 1, left: timeToX(start, pixelsPerSecond, leadingPadding), width: Math.max(1, duration * pixelsPerSecond), top: 0, height: 58, borderWidth: 2, borderRadius: 7, overflow: "visible", borderColor: selected ? "#F5C842" : "transparent", backgroundColor: index % 2 ? "#294655" : "#E8E2D5" }}>
+          <Pressable role="button" accessibilityLabel={`Select clip ${id}`} aria-pressed={selected} onPress={(event: any) => { event?.stopPropagation?.(); onSelect(id, clip.startSec); }}
+            style={{ width: Math.max(1, duration * pixelsPerSecond), height: "100%", overflow: "hidden", borderRadius: 5, backgroundColor: "transparent" }}>
+            {uri ? <Image source={{ uri }} resizeMode="cover" style={{ width: "100%", height: "100%" }} /> : null}
+            {"kind" in clip ? <View pointerEvents="none" className="absolute bottom-0 left-0 right-0 items-center bg-screen/75"><Text className="font-sans text-[9px] text-on-screen">Collage</Text></View> : null}
+          </Pressable>
+          {selected ? <>{makeHandle("start")}{makeHandle("end")}</> : null}
+        </View>;
+      });
+      })()}
     </View>
     <View className="relative mt-1 h-[36px]">
       {music ? <Pressable role="button" accessibilityLabel={`Music track ${soundtrackName ?? "Soundtrack"}`} onPress={onSoundtrack}
@@ -65,8 +84,9 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedCli
 type TouchPoint = { pageX?: number; clientX?: number; locationX?: number };
 type PinchState = { distance: number; scale: number; timeAtCenter: number; centerX: number } | null;
 type TouchDragState = { lastX: number } | null;
+type TrimDragState = { clipId: string; edge: "start" | "end"; startX: number; edgeTime: number; pixelsPerSecond: number } | null;
 
-export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onSoundtrack = () => {} }: {
+export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onDeselect = () => {}, onSoundtrack = () => {} }: {
   timeline: Timeline;
   sources: Record<string, string>;
   selectedClipId: string | null;
@@ -75,6 +95,8 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   onSelect: (clipId: string, startSec: number) => void;
   onScrub: (seconds: number) => void;
   onScrubStart?: () => void;
+  onTrim?: (clipId: string, edge: "start" | "end", deltaSec: number) => void;
+  onDeselect?: () => void;
   onSoundtrack?: () => void;
 }) {
   const [pixelsPerSecond, setPixelsPerSecond] = useState(DEFAULT_PIXELS_PER_SECOND);
@@ -86,6 +108,8 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   const interactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mouseDrag = useRef<{ x: number; scrollLeft: number } | null>(null);
   const touchDrag = useRef<TouchDragState>(null);
+  const trimDrag = useRef<TrimDragState>(null);
+  const [trimDraft, setTrimDraft] = useState<{ clipId: string; edge: "start" | "end"; deltaSec: number } | null>(null);
   const pinch = useRef<PinchState>(null);
   const leadingPadding = viewportWidth / 2;
   const contentWidth = timelineContentWidth(timeline.durationSec, viewportWidth, pixelsPerSecond);
@@ -141,8 +165,41 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     requestAnimationFrame(() => syncScrollToTime(playheadSec));
   }, [pixelsPerSecond, playheadSec, syncScrollToTime]);
 
+  const beginTrim = useCallback((clip: Timeline["videoClips"][number], edge: "start" | "end", event: any) => {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    const id = clipId(clip);
+    const edgeTime = clip.startSec + (edge === "end" ? clip.durationSec : 0);
+    trimDrag.current = { clipId: id, edge, startX: event.clientX, edgeTime, pixelsPerSecond };
+    setTrimDraft({ clipId: id, edge, deltaSec: 0 });
+    onScrubStart();
+    event.currentTarget?.setPointerCapture?.(event.pointerId);
+  }, [onScrubStart, pixelsPerSecond]);
+
+  const moveTrim = useCallback((event: any) => {
+    const drag = trimDrag.current;
+    if (!drag) return;
+    const deltaSec = (event.clientX - drag.startX) / drag.pixelsPerSecond;
+    setTrimDraft({ clipId: drag.clipId, edge: drag.edge, deltaSec });
+    onScrub(Math.max(0, Math.min(timeline.durationSec, drag.edgeTime + deltaSec)));
+  }, [onScrub, timeline.durationSec]);
+
+  const finishTrim = useCallback((event: any, commit: boolean) => {
+    const drag = trimDrag.current;
+    if (!drag) return;
+    if (commit) {
+      const deltaSec = (event.clientX - drag.startX) / drag.pixelsPerSecond;
+      if (Math.abs(deltaSec) >= 0.02) onTrim(drag.clipId, drag.edge, deltaSec);
+    }
+    trimDrag.current = null;
+    setTrimDraft(null);
+  }, [onTrim]);
+
+  const isTrimHandle = (event: any) => Boolean(event.target?.closest?.('[data-trim-handle="true"]'));
+
   const touchX = (touch: TouchPoint, left: number) => touch.locationX ?? (touch.clientX !== undefined ? touch.clientX - left : touch.pageX !== undefined ? touch.pageX - left - (typeof window === "undefined" ? 0 : window.scrollX) : 0);
   const onTouchStart = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } } }) => {
+    if (isTrimHandle(event as any)) return;
     const touches = (event.nativeEvent ?? event).touches;
     if (touches?.length === 1) {
       beginInteraction();
@@ -159,6 +216,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     isUserScrolling.current = false;
   };
   const onTouchMove = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } } }) => {
+    if (isTrimHandle(event as any)) return;
     const initial = pinch.current;
     const touches = (event.nativeEvent ?? event).touches;
     if (!initial && touches?.length === 1 && touchDrag.current) {
@@ -181,6 +239,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
   const webHandlers = {
     onMouseDown: (event: { button: number; clientX: number; preventDefault: () => void }) => {
       if (event.button !== 0) return;
+      if (isTrimHandle(event as any)) return;
       event.preventDefault();
       beginInteraction();
       mouseDrag.current = { x: event.clientX, scrollLeft: scrollLeft.current };
@@ -214,7 +273,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     </View>
     <View className="relative overflow-hidden" style={{ touchAction: "none" }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
       <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} style={{ width: "100%" }}>
-        <TimelineRows timeline={timeline} sources={sources} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={onSelect} onSoundtrack={onSoundtrack} />
+        <TimelineRows timeline={timeline} sources={sources} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={onSelect} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} trimDraft={trimDraft} onDeselect={onDeselect} onSoundtrack={onSoundtrack} />
       </ScrollView>
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />
     </View>

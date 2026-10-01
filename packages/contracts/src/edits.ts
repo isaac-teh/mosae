@@ -11,6 +11,7 @@ export const EditOpSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("swapShot"), clipId, shotId }),
   z.strictObject({ op: z.literal("trim"), clipId, inSec: seconds, outSec: positiveSeconds }),
   z.strictObject({ op: z.literal("setPhotoDuration"), clipId, sec: positiveSeconds }),
+  z.strictObject({ op: z.literal("setCollageDuration"), clipId, sec: positiveSeconds }),
   z.strictObject({ op: z.literal("move"), clipId, toIndex: z.number().int().nonnegative() }),
   z.strictObject({ op: z.literal("remove"), clipId }),
   z.strictObject({ op: z.literal("add"), shotId, kind: z.enum(["photo", "video"]), afterClipId: clipId.nullable(), durationSec: positiveSeconds, sourceInSec: seconds.optional(), sourceOutSec: positiveSeconds.optional() }),
@@ -128,7 +129,7 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
       }
       case "trim": {
         if (!item || !("source" in item.clip) || item.clip.source.kind !== "video") return fail("trim requires a video clip");
-        if (op.outSec - op.inSec < 1) return fail("trim requires at least one second");
+        if (op.outSec - op.inSec < 0.5) return fail("trim requires at least half a second");
         const bounds = videoBounds.get(op.clipId) ?? { inSec: item.clip.source.sourceInSec, outSec: item.clip.source.sourceOutSec };
         if (op.inSec < bounds.inSec || op.outSec > bounds.outSec) return fail("trim must stay within the source clip");
         item.clip = { ...item.clip, durationSec: op.outSec - op.inSec, source: { ...item.clip.source, sourceInSec: op.inSec, sourceOutSec: op.outSec } };
@@ -136,8 +137,14 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
       }
       case "setPhotoDuration": {
         if (!item || !("source" in item.clip) || item.clip.source.kind !== "photo") return fail("setPhotoDuration requires a photo clip");
-        if (op.sec < 2 || op.sec > 6) return fail("photo duration must be 2–6 seconds");
+        if (op.sec < 0.5 || op.sec > 6) return fail("photo duration must be 0.5–6 seconds");
         item.clip = { ...item.clip, durationSec: op.sec };
+        break;
+      }
+      case "setCollageDuration": {
+        if (!item || !("kind" in item.clip)) return fail("setCollageDuration requires a collage clip");
+        if (op.sec < 0.5) return fail("collage duration must be at least half a second");
+        item.clip = { ...item.clip, durationSec: op.sec, spec: { ...item.clip.spec, durationSec: op.sec } };
         break;
       }
       case "move": {

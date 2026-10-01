@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Share, Text, View, useWindowDimensions } from "r
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Asset } from "expo-asset";
 import type { EditOp, Timeline } from "@mosae/contracts";
+import { trimRange } from "@mosae/core";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { useEditor } from "@/lib/useEditor";
 import type { StoryPlan, DirectionOptions, Moment } from "@mosae/core";
@@ -27,6 +28,27 @@ type Tool = "Swap" | "Trim" | "Move" | "Remove" | "Add" | "Ask" | "Collage" | "S
 const clipId = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
 const clipShotId = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.spec.slots[0]?.shotId : clip.source.shotId;
 const shotIdsIn = (timeline: Timeline) => new Set(timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId]));
+const idOf = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
+
+function trimEdit(current: Timeline["videoClips"][number], original: Timeline["videoClips"][number], edge: "start" | "end", deltaSec: number, maxDurationSec: number): EditOp {
+  const clipId = idOf(current);
+  if ("kind" in current) {
+    const duration = current.durationSec;
+    const range = trimRange({ startSec: 0, endSec: duration, edge, requestedSec: edge === "start" ? deltaSec : duration + deltaSec,
+      minSec: edge === "start" ? duration - maxDurationSec : 0, maxSec: edge === "start" ? duration : maxDurationSec });
+    return { op: "setCollageDuration", clipId, sec: range.endSec - range.startSec };
+  }
+  if (current.source.kind === "video" && "source" in original && original.source.kind === "video") {
+    const range = trimRange({ startSec: current.source.sourceInSec, endSec: current.source.sourceOutSec, edge,
+      requestedSec: (edge === "start" ? current.source.sourceInSec : current.source.sourceOutSec) + deltaSec,
+      minSec: original.source.sourceInSec, maxSec: original.source.sourceOutSec });
+    return { op: "trim", clipId, inSec: range.startSec, outSec: range.endSec };
+  }
+  const duration = current.durationSec;
+  const range = trimRange({ startSec: 0, endSec: duration, edge, requestedSec: edge === "start" ? deltaSec : duration + deltaSec,
+    minSec: edge === "start" ? duration - 6 : 0, maxSec: edge === "start" ? duration : 6 });
+  return { op: "setPhotoDuration", clipId, sec: range.endSec - range.startSec };
+}
 
 export default function EditorScreen() {
   const params = useLocalSearchParams<{ projectId?: string; generationId?: string; planId?: string; request?: string }>();
@@ -174,7 +196,12 @@ export default function EditorScreen() {
           </View>
         </View>
         <TimelineStrip timeline={editor.timeline} sources={editor.sources} selectedClipId={editor.selectedClipId} playheadSec={playhead} soundtrackName={soundtrackName ? `${soundtrackName} · paced to the film` : null}
-          onSelect={onTimelineSelect} onScrub={seekTo} onScrubStart={() => setPauseRequest((request) => request + 1)} onSoundtrack={openSoundtrackPicker} />
+          onSelect={onTimelineSelect} onScrub={seekTo} onScrubStart={() => setPauseRequest((request) => request + 1)}
+          onTrim={(id, edge, delta) => {
+            const clip = editor.timeline?.videoClips.find((candidate) => idOf(candidate) === id);
+            const original = editor.firstCut?.videoClips.find((candidate) => idOf(candidate) === id);
+            if (clip && original && editor.firstCut) editor.apply(trimEdit(clip, original, edge, delta, editor.firstCut.durationSec));
+          }} onDeselect={() => editor.select(null)} onSoundtrack={openSoundtrackPicker} />
       </ScrollView>}
     <ToolBar onTool={(value) => openTool(value)} />
     {tool === "Swap" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={selectedClip.id} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} onApply={onApply} onSource={editor.setSource} onClose={() => setTool(null)} /> : null}
