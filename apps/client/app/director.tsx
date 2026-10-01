@@ -70,7 +70,7 @@ export default function DirectorScreen() {
 
   return <View className="flex-1 bg-surface">
     <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => router.back()} />
-    <ScrollView className="flex-1 px-5" contentContainerClassName="gap-5 py-6" keyboardShouldPersistTaps="handled">
+    <ScrollView accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 py-6" contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" style={{ flex: 1, minHeight: 0 }}>
       {state.items.map((item) => {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => actions.resolveConflict(choice as "keep" | "leave")} />;
         if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} />;

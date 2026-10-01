@@ -210,6 +210,10 @@ test("verifies phase 1 on trip1-v2 from Home through Saved and restores the thre
     }
   }
   await screenshot(page, "07-moments.png");
+  const chatHistory = page.getByLabel("Director chat history");
+  await expect.poll(() => chatHistory.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  await chatHistory.evaluate((node) => { node.scrollTop = 0; });
+  await expect.poll(() => chatHistory.evaluate((node) => node.scrollTop)).toBe(0);
 
   await page.getByRole("button", { name: /Moment .*$/ }).first().click();
   await page.getByRole("button", { name: "Done" }).click();

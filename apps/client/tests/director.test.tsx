@@ -61,6 +61,14 @@ function setup(options: { faces?: boolean; interpret?: () => Promise<any>; creat
 describe("Director chat", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("keeps the chat history in a constrained, independently scrollable flex region", async () => {
+    setup(); await renderScreen();
+    const history = host.querySelector('[aria-label="Director chat history"]') as HTMLElement | null;
+    expect(history).not.toBeNull();
+    expect(history!.style.minHeight).toBe("0");
+    expect(history!.style.flexGrow).toBe("1");
+  });
+
   it("shows the ready summary and starts the story intent when the occasion reply is tapped", async () => {
     setup(); await renderScreen();
     expect(hasText("I've looked through all 8")).toBe(true);
