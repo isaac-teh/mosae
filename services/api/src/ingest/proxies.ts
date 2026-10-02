@@ -9,22 +9,30 @@ export const RENDER_MAX = 2048;
 export const PROXY_HEIGHT = 360;
 
 export type PhotoDerivatives = { thumb: string; render: string };
+export type DerivativeTimingStage = "decodeResizeMs" | "thumbMs";
+export type DerivativeTiming = (stage: DerivativeTimingStage, milliseconds: number) => void;
+
+async function timedDerivative<T>(stage: DerivativeTimingStage, onTiming: DerivativeTiming | undefined, operation: () => Promise<T>): Promise<T> {
+  const startedAt = performance.now();
+  try { return await operation(); }
+  finally { onTiming?.(stage, Math.max(0, performance.now() - startedAt)); }
+}
 
 /** sharp's prebuilt libvips cannot decode HEVC-coded HEIC, which is what iPhones write. */
 const NEEDS_HEIF = /heif|heic|codec|unsupported image format/i;
 
-async function encode(source: string, outDir: string): Promise<PhotoDerivatives> {
+async function encode(source: string, outDir: string, onTiming?: DerivativeTiming): Promise<PhotoDerivatives> {
   const render = path.join(outDir, "render.jpg");
   const thumb = path.join(outDir, "thumb.jpg");
-  await sharp(source, { failOn: "none" })
+  await timedDerivative("decodeResizeMs", onTiming, () => sharp(source, { failOn: "none" })
     .rotate()
     .resize(RENDER_MAX, RENDER_MAX, { fit: "inside", withoutEnlargement: true })
     .jpeg({ quality: 88 })
-    .toFile(render);
-  await sharp(render)
+    .toFile(render));
+  await timedDerivative("thumbMs", onTiming, () => sharp(render)
     .resize(THUMB_MAX, THUMB_MAX, { fit: "inside", withoutEnlargement: true })
     .jpeg({ quality: 78 })
-    .toFile(thumb);
+    .toFile(thumb));
   return { thumb, render };
 }
 
@@ -32,16 +40,16 @@ async function encode(source: string, outDir: string): Promise<PhotoDerivatives>
  * Orientation is applied once here, so every consumer downstream (the UI, the
  * renderer, Gemini) sees an upright image and never has to know about EXIF.
  */
-export async function makePhotoDerivatives(input: string, outDir: string, run: Runner = defaultRun): Promise<PhotoDerivatives> {
+export async function makePhotoDerivatives(input: string, outDir: string, run: Runner = defaultRun, onTiming?: DerivativeTiming): Promise<PhotoDerivatives> {
   try {
-    return await encode(input, outDir);
+    return await encode(input, outDir, onTiming);
   } catch (first) {
     const message = first instanceof Error ? first.message : String(first);
     if (!isDecodeFailure(first) && !NEEDS_HEIF.test(message)) throw first;
     const converted = path.join(outDir, "converted.jpg");
     try {
-      await run("heif-convert", [input, converted], { timeoutMs: 120_000 });
-      return await encode(converted, outDir);
+      await timedDerivative("decodeResizeMs", onTiming, () => run("heif-convert", [input, converted], { timeoutMs: 120_000 }));
+      return await encode(converted, outDir, onTiming);
     } catch (error) {
       if (isTimeout(error) || isEnvironmental(error) || !isToolRejection(error)) throw error;
       throw new PermanentIngestError("unsupported_image", message);
@@ -61,11 +69,12 @@ export async function makeVideoDerivatives(
   outDir: string,
   durationSec: number,
   run: Runner = defaultRun,
+  onTiming?: DerivativeTiming,
 ): Promise<VideoDerivatives> {
   const proxy = path.join(outDir, "proxy.mp4");
   const thumb = path.join(outDir, "video-thumb.jpg");
   try {
-    await run("ffmpeg", [
+    await timedDerivative("decodeResizeMs", onTiming, () => run("ffmpeg", [
       "-y", "-hide_banner", "-loglevel", "error",
       "-i", input,
       "-vf", `fps=12,scale=-2:'min(${PROXY_HEIGHT},ih)'`,
@@ -73,14 +82,14 @@ export async function makeVideoDerivatives(
       "-c:a", "aac", "-b:a", "64k",
       "-movflags", "+faststart",
       proxy,
-    ]);
+    ]));
     const at = Math.min(0.5, Math.max(0, durationSec / 2));
-    await run("ffmpeg", [
+    await timedDerivative("thumbMs", onTiming, () => run("ffmpeg", [
       "-y", "-hide_banner", "-loglevel", "error",
       "-ss", String(at), "-i", proxy,
       "-frames:v", "1", "-vf", `scale=${THUMB_MAX}:-2`,
       thumb,
-    ]);
+    ]));
   } catch (error) {
     if (isTimeout(error) || isEnvironmental(error) || !(isToolRejection(error) || isDecodeFailure(error))) throw error;
     throw new PermanentIngestError("unreadable_media", error instanceof Error ? error.message : String(error));
