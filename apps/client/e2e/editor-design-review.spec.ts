@@ -234,7 +234,7 @@ test("music label remains accessible after timeline scroll and Save opens render
   await page.getByLabel("Confirm soundtrack").click();
   const timeline = page.getByLabel("Unified timeline");
   await timeline.evaluate((node) => { node.scrollLeft = node.scrollWidth; node.dispatchEvent(new Event("scroll", { bubbles: true })); });
-  await expect(page.getByRole("button", { name: /^Select music Okinawa Ukulele & String Trio/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Music track Okinawa Ukulele & String Trio/ })).toBeVisible();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText(/^(Preparing|Rendering|Ready)$/)).toBeVisible({ timeout: 30_000 });
 });

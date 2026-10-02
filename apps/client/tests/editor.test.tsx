@@ -166,7 +166,7 @@ describe("film editor", () => {
       sources: { "shot-a": "a.jpg", "shot-b": "b.jpg", "shot-c": "c.jpg" },
     });
     await render(<EditorScreen />);
-    await click("Select music Soundtrack · paced to the film");
+    await click("Music track Soundtrack · paced to the film");
     await click("Replace");
     expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-pause-request")).toBe("1");
     expect(host.textContent).toContain("Select a soundtrack");

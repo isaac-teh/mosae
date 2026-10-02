@@ -225,7 +225,7 @@ describe("editor tool operations", () => {
     const photoClip = host.querySelector('[aria-label="Select clip a"]')!;
     expect(musicTrack.getAttribute("style")).toContain("width: 360px");
     expect(Boolean(musicTrack.compareDocumentPosition(photoClip) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(host.querySelector('[aria-label="Select music Sandcastle Days"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Select music Sandcastle Days"]')).toBeNull();
   });
 
   it("selects an existing music track without opening the soundtrack picker", async () => {

@@ -297,7 +297,8 @@ export default function EditorScreen() {
         </View>
         <View className="mt-4 flex-row items-center justify-between">
           <View className="flex-row items-center gap-3"><Pressable role="button" accessibilityLabel={playing ? "Pause film" : "Play film"} onPress={() => setTogglePlayRequest((request) => request + 1)} className="min-h-11 min-w-11 items-center justify-center rounded-full bg-black/35"><Text className="font-sans text-[18px] text-on-screen">{playing ? "Ⅱ" : "▶"}</Text></Pressable><Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text></View>
-          <View className="flex-row gap-4">
+          <View className="flex-row gap-1">
+            <Pressable role="button" accessibilityLabel="Ask AI" onPress={() => openTool("Ask")} className="min-h-11 min-w-11 items-center justify-center"><Text className="text-[25px] text-on-screen">✦</Text><Text className="font-sans text-[9px] text-on-screen-muted">Ask AI</Text></Pressable>
             <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="min-h-11 min-w-11 items-center justify-center"><UndoIcon disabled={!editor.canUndo} /></Pressable>
             <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="min-h-11 min-w-11 items-center justify-center"><RedoIcon disabled={!editor.canRedo} /></Pressable>
           </View>

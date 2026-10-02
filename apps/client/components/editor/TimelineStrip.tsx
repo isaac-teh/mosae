@@ -55,8 +55,8 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
     <View className="relative mt-1 h-[36px]">
       {selectedClipId || selectedAudioClipId ? <Pressable role="button" accessibilityLabel="Deselect selected audio" onPress={onDeselect} style={{ position: "absolute", zIndex: 0, left: 0, right: 0, top: 0, height: 32 }} /> : null}
       {music ? <Pressable role="button" accessibilityLabel={`Music track ${soundtrackName ?? "Soundtrack"}`} aria-pressed={selectedAudioClipId === music.id} onPress={() => onSelectAudio(music.id)}
-        style={{ position: "absolute", left: timeToX(music.startSec, pixelsPerSecond, leadingPadding), width: Math.max(1, musicDuration * pixelsPerSecond), height: 32, top: 0, borderWidth: selectedAudioClipId === music.id ? 2 : 0, borderColor: "#FF8F70" }} className="justify-center overflow-hidden rounded-sm bg-[#2B856C] px-2">
-        <Text numberOfLines={1} ellipsizeMode="tail" className="font-sans-medium text-[11px] text-white">♫ {soundtrackName ?? "Soundtrack"}</Text>
+        style={{ position: "absolute", left: timeToX(music.startSec, pixelsPerSecond, leadingPadding), width: Math.max(1, musicDuration * pixelsPerSecond), height: 32, top: 0, borderWidth: selectedAudioClipId === music.id ? 2 : 0, borderColor: "#FF8F70" }} className="justify-center rounded-sm bg-[#2B856C] px-2">
+        <Text accessibilityLabel="Music track label" style={Platform.OS === "web" ? { position: "sticky", left: 8, alignSelf: "flex-start", maxWidth: Math.max(132, leadingPadding * 2 - 16) } as any : undefined} numberOfLines={1} ellipsizeMode="tail" className="font-sans-medium text-[11px] text-white">♫ {soundtrackName ?? "Soundtrack"}</Text>
       </Pressable> : <Pressable role="button" accessibilityLabel="Open soundtrack picker" onPress={onSoundtrack} style={{ position: "absolute", left: leadingPadding, width: Math.max(1, timeline.durationSec * pixelsPerSecond), height: 32, top: 0 }} className="justify-center rounded-sm bg-[#1C5548] px-2">
         <Text numberOfLines={1} className="font-sans text-[11px] text-white">+ Add soundtrack</Text>
       </Pressable>}
@@ -437,9 +437,7 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
       <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} style={{ width: "100%" }}>
         <TimelineRows timeline={timeline} sources={sources} thumbnails={thumbnails} selectedClipId={selectedClipId} selectedAudioClipId={selectedAudioClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => { if (suppressNextPress.current) return; if (id === selectedClipId) onDeselect(); else onSelect(id, start); }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} onSelectAudio={onSelectAudio} onAddClip={onAddClip} />
       </ScrollView>
-      {timeline.audioClips.some((clip) => clip.role === "music" && clip.source.kind === "soundtrack") ? <Pressable role="button" accessibilityLabel={`Select music ${soundtrackName ?? "Soundtrack"}`} onPress={() => { const music = timeline.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack"); if (music) onSelectAudio(music.id); }} style={{ position: "absolute", zIndex: 8, left: 0, top: 88, width: Math.min(132, viewportWidth), height: 28, justifyContent: "center", paddingHorizontal: 7, backgroundColor: "#236d59", borderRadius: 4 }}>
-        <Text numberOfLines={1} ellipsizeMode="tail" className="font-sans-medium text-[10px] text-white">♫ {soundtrackName ?? "Soundtrack"}</Text>
-      </Pressable> : null}
+
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />
     </View>
   </View>;
