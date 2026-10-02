@@ -15,7 +15,7 @@ vi.mock("react-native", () => {
     React.useImperativeHandle(ref, () => ({ scrollTo: (...args: any[]) => mockScrollTo(...args) }));
     return React.createElement("div", { ...props, "aria-label": accessibilityLabel, onPointerDown: onScrollBeginDrag, onPointerUp: onScrollEndDrag, onTouchStart, onTouchMove, onScroll: (event: any) => onScroll?.({ nativeEvent: { contentOffset: { x: event.currentTarget.scrollLeft } } }) }, children);
   });
-  return { View: element("div"), ScrollView, Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }) };
+  return { Platform: { OS: "web" }, View: element("div"), ScrollView, Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }) };
 });
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
 vi.mock("@/lib/demoAssets", () => ({ demoImage: () => 1 }));

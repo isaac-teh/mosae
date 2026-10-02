@@ -16,7 +16,7 @@ vi.mock("react-native", () => {
   const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, accessibilityState, ...props }: any) =>
     React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), ...(accessibilityState?.selected !== undefined ? { "aria-pressed": String(accessibilityState.selected) } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
   const ScrollView = ({ children, accessibilityLabel, onScrollBeginDrag, onScroll, ...props }: any) => React.createElement("div", { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), onDoubleClick: accessibilityLabel === "Unified timeline" ? () => { onScrollBeginDrag?.(); onScroll?.({ nativeEvent: { contentOffset: { x: 160 } } }); } : undefined }, children);
-  return { View: element("div"), ScrollView, Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }), Share: { share: vi.fn() }, Linking: { openURL: vi.fn() }, useWindowDimensions: () => ({ width: 390, height: 844 }) };
+  return { Platform: { OS: "web" }, View: element("div"), ScrollView, Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, ...props }: any) => React.createElement("img", { ...props, src: source?.uri }), Share: { share: vi.fn() }, Linking: { openURL: vi.fn() }, useWindowDimensions: () => ({ width: 390, height: 844 }) };
 });
 
 import EditorScreen from "../app/editor";
