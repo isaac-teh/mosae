@@ -36,6 +36,19 @@ describe("makePhotoDerivatives", () => {
     await out.cleanup();
   });
 
+  it("reports render resize and thumbnail generation durations", async () => {
+    const input = await makeJpeg(dir, "timed.jpg", { width: 1200, height: 800 });
+    const out = await tempDir();
+    const stages: string[] = [];
+    const made = await makePhotoDerivatives(input, out.dir, undefined, (stage, milliseconds) => {
+      stages.push(stage);
+      expect(milliseconds).toBeGreaterThanOrEqual(0);
+    });
+    expect(stages).toEqual(["decodeResizeMs", "thumbMs"]);
+    expect(await size(made.render)).toMatchObject({ width: 1200, height: 800 });
+    await out.cleanup();
+  });
+
   it("never enlarges a small photo", async () => {
     const input = await makeJpeg(dir, "small.jpg", { width: 200, height: 100 });
     const out = await tempDir();
@@ -118,7 +131,12 @@ describe("makeVideoDerivatives", () => {
   it("makes a 360p proxy that keeps the duration, and a 512px poster", async () => {
     const input = await makeVideo(dir, "clip.mp4", { seconds: 3, size: "640x480" });
     const out = await tempDir();
-    const made = await makeVideoDerivatives(input, out.dir, 3);
+    const stages: string[] = [];
+    const made = await makeVideoDerivatives(input, out.dir, 3, undefined, (stage, milliseconds) => {
+      stages.push(stage);
+      expect(milliseconds).toBeGreaterThanOrEqual(0);
+    });
+    expect(stages).toEqual(["decodeResizeMs", "thumbMs"]);
     const proxy = await probeMedia(made.proxy, "video");
     expect(proxy.height).toBe(360);
     expect(proxy.durationSec).toBeGreaterThan(2.7);

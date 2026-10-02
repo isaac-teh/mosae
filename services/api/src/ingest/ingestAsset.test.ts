@@ -60,6 +60,33 @@ describe("ingestAsset", () => {
     expect(deps.removeWorkDir).toHaveBeenCalledWith("/w");
   });
 
+  it("logs the ingest stage timings and media size once the task completes", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const { deps } = setup(baseAsset, {
+        photoDerivatives: vi.fn(async (_input, _outDir, onTiming) => {
+          onTiming?.("decodeResizeMs", 17);
+          onTiming?.("thumbMs", 4);
+          return { thumb: "/w/thumb.jpg", render: "/w/render.jpg" };
+        }),
+      });
+      expect(await ingestAsset(deps, task)).toBe("ingested");
+      expect(info).toHaveBeenCalledWith("ingest_timing", expect.objectContaining({
+        queueWaitMs: 98,
+        downloadMs: expect.any(Number),
+        decodeResizeMs: 17,
+        thumbMs: 4,
+        exifMs: expect.any(Number),
+        uploadDerivativesMs: expect.any(Number),
+        totalMs: expect.any(Number),
+        bytes: 100,
+        megapixels: 0.12,
+      }));
+    } finally {
+      info.mockRestore();
+    }
+  });
+
   it("stores GPS-derived places, leaves no-GPS place null, and tolerates resolver failures", async () => {
     const gpsFacts = { ...photoFacts, gps: { lat: 1.404, lng: 103.793 } };
     const place = { name: "Singapore Zoo", level: "landmark" as const, country: "Singapore" };
@@ -83,7 +110,7 @@ describe("ingestAsset", () => {
     const asset = { ...baseAsset, contentType: "video/mp4" };
     const { deps } = setup(asset, { probe: vi.fn().mockResolvedValue(videoFacts) });
     expect(await ingestAsset(deps, task)).toBe("ingested");
-    expect(deps.videoDerivatives).toHaveBeenCalledWith("/w/original", "/w", 5);
+    expect(deps.videoDerivatives).toHaveBeenCalledWith("/w/original", "/w", 5, expect.any(Function));
     expect(deps.detectShots).toHaveBeenCalledWith("/w/proxy.mp4", 5);
     expect(deps.analyze).toHaveBeenCalledWith("/w/video-thumb.jpg");
     expect(deps.objects.upload).toHaveBeenCalledWith({ source: "/w/video-thumb.jpg", path: "proxies/u1/p1/a1/7/thumb.jpg", contentType: "image/jpeg" });
