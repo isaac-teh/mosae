@@ -72,9 +72,12 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedCli
           <Pressable role="button" accessibilityLabel={`Select clip ${id}`} aria-pressed={selected} data-timeline-slot="true"
             onPointerDown={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), event)} onPointerMove={onSlotPointerMove} onPointerUp={(event: any) => onSlotPointerUp(event, true)} onPointerCancel={(event: any) => onSlotPointerUp(event, false)}
             onTouchStart={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), { ...event.nativeEvent, currentTarget: event.currentTarget, pointerId: 0 })}
+            onContextMenu={(event: any) => event.preventDefault()}
+            onDragStart={(event: any) => event.preventDefault()}
             onPress={(event: any) => { event?.stopPropagation?.(); onSelect(id, clip.startSec); }}
-            style={{ width: Math.max(1, duration * pixelsPerSecond), height: "100%", overflow: "hidden", borderRadius: 5, backgroundColor: "transparent" }}>
-            {uri ? <Image source={{ uri }} resizeMode="cover" style={{ width: "100%", height: "100%" }} /> : null}
+            style={{ width: Math.max(1, duration * pixelsPerSecond), height: "100%", overflow: "hidden", borderRadius: 5, backgroundColor: "transparent", touchAction: "pan-x", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
+            {...({ draggable: false } as any)}>
+            {uri ? <Image source={{ uri }} resizeMode="cover" pointerEvents="none" {...({ draggable: false } as any)} style={{ width: "100%", height: "100%", pointerEvents: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }} /> : null}
             {"kind" in clip ? <View pointerEvents="none" className="absolute bottom-0 left-0 right-0 items-center bg-screen/75"><Text className="font-sans text-[9px] text-on-screen">Collage</Text></View> : null}
           </Pressable>
           {selected ? <>{makeHandle("start")}{makeHandle("end")}</> : null}
@@ -335,8 +338,8 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     pinch.current = { distance: Math.abs(second - first), scale: pixelsPerSecond, timeAtCenter: xToTime(scrollLeft.current + centerX, pixelsPerSecond, leadingPadding), centerX };
     isUserScrolling.current = false;
   };
-  const onTouchMove = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } } }) => {
-    if (activeSlotReorder.current) return;
+  const onTouchMove = (event: { nativeEvent?: { touches?: ArrayLike<TouchPoint> }; touches?: ArrayLike<TouchPoint>; currentTarget?: { getBoundingClientRect?: () => { left: number } }; preventDefault?: () => void }) => {
+    if (activeSlotReorder.current) { event.preventDefault?.(); return; }
     if (isTrimHandle(event as any)) return;
     const initial = pinch.current;
     const touches = (event.nativeEvent ?? event).touches;
@@ -393,7 +396,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
       <Text accessibilityLabel={`Timeline zoom ${pixelsPerSecond} pixels per second`} className="w-12 text-center font-sans text-[10px] text-on-screen-muted">{pixelsPerSecond} px/s</Text>
       <Pressable role="button" accessibilityLabel="Zoom in timeline" disabled={pixelsPerSecond >= MAX_PIXELS_PER_SECOND} onPress={() => zoom(4)} className="size-8 items-center justify-center rounded-full border border-on-screen-muted"><Text className="font-sans text-body text-on-screen">+</Text></Pressable>
     </View>
-    <View ref={viewportRef} className="relative overflow-hidden" style={{ touchAction: "none" }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
+    <View ref={viewportRef} className="relative overflow-hidden" style={{ touchAction: "pan-x", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
       <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} style={{ width: "100%" }}>
         <TimelineRows timeline={timeline} sources={sources} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => { if (suppressNextPress.current) return; if (id === selectedClipId) onDeselect(); else onSelect(id, start); }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} trimDraft={trimDraft} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} />
       </ScrollView>

@@ -96,6 +96,12 @@ test("long press reorders a collage as one timeline slot and supports undo", asy
   await page.mouse.move(startX, startY);
   await page.mouse.down();
   await page.waitForTimeout(350);
+  const contextMenuPrevented = await collage.evaluate((slot) => {
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    slot.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(contextMenuPrevented).toBe(true);
   await page.mouse.move(245, startY, { steps: 8 });
   await expect.poll(() => collage.evaluate((button) => getComputedStyle(button.parentElement!).transform)).not.toBe("none");
   await expect.poll(async () => { const box = await collage.boundingBox(); return box ? Math.abs(box.x + box.width / 2 - 245) : Number.POSITIVE_INFINITY; }).toBeLessThan(4);

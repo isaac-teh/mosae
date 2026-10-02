@@ -81,7 +81,7 @@ test("shows one aligned timeline on mobile and desktop", async ({ page }) => {
   await page.goto("/editor?projectId=fixture&generationId=demo-film&planId=demo&repository=fixture");
   const timeline = page.getByLabel("Unified timeline");
   await expect(timeline).toBeVisible();
-  await expect(timeline.locator(".." )).toHaveCSS("touch-action", "none");
+  await expect(timeline.locator(".." )).toHaveCSS("touch-action", "pan-x");
   await expect(page.getByLabel("Timeline ruler tick 2 seconds")).toBeVisible();
   await expect(page.getByRole("button", { name: "Select clip clip-1" })).toBeVisible();
   await page.getByRole("button", { name: "Open soundtrack picker" }).click();
