@@ -156,6 +156,15 @@ describe("deriveChat state table", () => {
     });
   });
 
+  it("includes newly added direction fields in the saved answer", () => {
+    const state = deriveChat({ ...base(), momentsConfirmed: true, direction: {
+      confirmed: true, pace: "gentle", lengthSec: 60, focus: "family", visualStyle: "film grain",
+    } as ChatInput["direction"] });
+    expect(state.items.find((item) => item.kind === "you" && item.id === "direction-answer")).toMatchObject({
+      text: "Pace: Gentle\nLength: 60 sec\nFocus: Whole family\nVisual Style: Film grain",
+    });
+  });
+
   it("does not invent an answer from an automatically assigned parent role", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p0", name: null, role: "parent", skipped: false, momentCount: 30, sampleShotIds: [], days: [] }], peopleConfirmed: true });
     expect(state.items.some((item) => item.kind === "you" && item.id === "person-answer-p0")).toBe(false);

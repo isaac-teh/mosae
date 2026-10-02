@@ -20,17 +20,21 @@ function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string 
 function directionAnswer(input: ChatInput): string {
   const direction = input.direction!;
   const focus = direction.focus === "family" ? "Whole family" : input.people?.find((person) => person.personId === direction.focus)?.name ?? "Whole family";
-  const rows = [
-    `Pace: ${direction.pace === "lively" ? "Lively" : "Gentle"}`,
-    `Length: ${direction.lengthSec} sec`,
-    `Focus: ${focus}`,
-  ];
-  if (direction.collageAmount !== undefined) {
-    const collages = direction.collageAmount === "lots" ? "Lots" : direction.collageAmount === "none" ? "None" : "A few";
-    rows.push(`Collages: ${collages}`);
-  }
-  if (direction.motionFeel !== undefined) rows.push(`Motion: ${direction.motionFeel === "playful" ? "Playful" : "Calm"}`);
-  return rows.join("\n");
+  const labels: Record<string, string> = { pace: "Pace", lengthSec: "Length", focus: "Focus", collageAmount: "Collages", motionFeel: "Motion" };
+  const words = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (first) => first.toUpperCase());
+  const displayValue = (key: string, value: unknown) => {
+    if (key === "pace") return value === "lively" ? "Lively" : "Gentle";
+    if (key === "lengthSec") return `${value} sec`;
+    if (key === "focus") return focus;
+    if (key === "collageAmount") return value === "lots" ? "Lots" : value === "none" ? "None" : "A few";
+    if (key === "motionFeel") return value === "playful" ? "Playful" : "Calm";
+    if (typeof value === "string") return words(value);
+    return String(value);
+  };
+  return Object.entries(direction)
+    .filter(([key, value]) => key !== "confirmed" && value !== undefined && value !== null)
+    .map(([key, value]) => `${labels[key] ?? words(key)}: ${displayValue(key, value)}`)
+    .join("\n");
 }
 
 export function getSetAsideSummary(plan: ChatInput["plan"]) {
