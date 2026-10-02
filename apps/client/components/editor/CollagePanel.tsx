@@ -53,6 +53,9 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
     const bIndex = COLLAGE_GRID_VARIANTS.findIndex((variant) => variant.id === b.id);
     return (aIndex < 0 ? COLLAGE_GRID_VARIANTS.length : aIndex) - (bIndex < 0 ? COLLAGE_GRID_VARIANTS.length : bIndex);
   });
+  const visibleLayouts = category === "Styles"
+    ? COLLAGE_LAYOUTS.filter((layout) => LIBRARY_IDS.has(layout.id) && (layout.aspect as readonly string[]).includes(aspect))
+    : layoutOptions.filter((layout) => !LIBRARY_IDS.has(layout.id));
   const motionOptions = COLLAGE_MOTIONS.filter((motion) => ALLOWED_COMBOS.some((combo) => combo.layoutId === layoutId && combo.motionId === motion.id));
   const chooseLayout = (nextLayoutId: typeof COLLAGE_LAYOUTS[number]["id"]) => {
     const allowedMotions = ALLOWED_COMBOS.filter((combo) => combo.layoutId === nextLayoutId).map((combo) => combo.motionId);
@@ -108,13 +111,14 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
           {(["Layouts", "Styles"] as const).map((tab) => <Pressable key={tab} accessibilityRole="button" accessibilityLabel={`Collage ${tab}`} aria-pressed={category === tab} onPress={() => setCategory(tab)} className={`min-h-9 flex-1 items-center justify-center rounded-lg ${category === tab ? "bg-[#29443f]" : "bg-[#202a32]"}`}><Text className="font-sans-semibold text-caption text-on-screen">{tab}</Text></Pressable>)}
         </View>
         {category === "Styles" && LIBRARY_IDS.has(layoutId) ? <View className="mb-3"><Text className="mb-1 font-sans text-[11px] text-on-screen-muted">Animation</Text><ScrollView horizontal contentContainerClassName="gap-2">{motionOptions.map((motion) => <Pressable key={motion.id} accessibilityRole="button" accessibilityLabel={`Motion ${motion.label}`} aria-pressed={motionId === motion.id} onPress={() => onApply({ op: "setCollageMotion", clipId: clip.clipId, motionId: motion.id })} className={`min-h-8 rounded-full border px-3 justify-center ${motionId === motion.id ? "border-white bg-[#263744]" : "border-[#526574]"}`}><Text className="font-sans text-[11px] text-on-screen">{motion.label}</Text></Pressable>)}</ScrollView></View> : null}
-        {category === "Styles" && !layoutOptions.some((layout) => LIBRARY_IDS.has(layout.id)) ? <Text className="py-4 font-sans text-caption text-on-screen-muted">Add more photos to use a collage style.</Text> : null}
+        {category === "Styles" && !layoutOptions.some((layout) => LIBRARY_IDS.has(layout.id)) ? <Text className="py-4 font-sans text-caption text-on-screen-muted">These styles need at least 3 photos. Tap + above to add a photo slot.</Text> : null}
         <ScrollView className="min-h-0" contentContainerClassName="flex-row flex-wrap gap-2 pb-1">
-          {layoutOptions.filter((layout) => category === "Styles" ? LIBRARY_IDS.has(layout.id) : !LIBRARY_IDS.has(layout.id)).map((layout) => <Pressable key={layout.id} accessibilityRole="button" accessibilityLabel={`Layout ${layout.label}`} aria-pressed={layoutId === layout.id} onPress={() => chooseLayout(layout.id)} className={`h-[104px] w-[31%] rounded-[14px] bg-[#050a0e] p-2 ${layoutId === layout.id ? "border-2 border-white" : "border-2 border-transparent"}`}>
+          {visibleLayouts.map((layout) => <Pressable key={layout.id} accessibilityRole="button" accessibilityLabel={`Layout ${layout.label}`} aria-pressed={layoutId === layout.id} disabled={count < layout.minSlots || count > layout.maxSlots} accessibilityHint={count < layout.minSlots || count > layout.maxSlots ? `Requires ${layout.minSlots} to ${layout.maxSlots} photos. Adjust number of photos above.` : undefined} onPress={() => chooseLayout(layout.id)} className={`h-[118px] w-[31%] rounded-[14px] bg-[#050a0e] p-2 ${layoutId === layout.id ? "border-2 border-white" : "border-2 border-transparent"}`}>
             <View className="relative flex-1 overflow-hidden rounded-md bg-[#101920]">
               {LIBRARY_IDS.has(layout.id) ? <Image accessibilityLabel={`${layout.label} style preview`} source={demoImage(`collage-${layout.id}${aspect === "16:9" && ["botanical-scrapbook", "nine-photo-grid", "travel-mosaic", "travel-story"].includes(layout.id) ? "-wide" : ""}`)} resizeMode="cover" className="h-full w-full" /> : thumbnailRects(layout.id, count).map(({ x, y, w, h }, i) => <View key={i} className="absolute rounded-[3px] bg-[#71879a]" style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%` }} />)}
             </View>
             <Text numberOfLines={1} className="mt-1 text-center font-sans text-[9px] text-[#c4cfd6]">{layout.label}</Text>
+            {category === "Styles" ? <Text className="text-center font-sans text-[9px] text-on-screen-muted">{layout.minSlots}–{layout.maxSlots} photos{count < layout.minSlots || count > layout.maxSlots ? " · add or remove slots" : ""}</Text> : null}
           </Pressable>)}
         </ScrollView>
       </> : <>

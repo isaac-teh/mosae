@@ -288,7 +288,7 @@ describe("editor tool operations", () => {
     for (const label of ["Botanical scrapbook", "Nine-photo grid", "Travel mosaic", "Travel story", "Torn paper mosaic", "Polaroid garland", "Postcard stack", "Route map"]) {
       expect(host.querySelector(`[aria-label="Layout ${label}"]`)).not.toBeNull();
     }
-    expect(host.querySelector('[aria-label="Layout Photo table"]')).toBeNull();
+    expect((host.querySelector('[aria-label="Layout Photo table"]') as HTMLButtonElement).disabled).toBe(true);
     await click("Layout Torn paper mosaic");
     expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "torn-paper", motionId: "print-drop" } });
     expect(host.querySelector('[aria-label="Layout Torn paper mosaic"]')?.className).toContain("border-white");
@@ -302,6 +302,19 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Layout Torn paper mosaic"]')).not.toBeNull();
     await click("Layout Torn paper mosaic");
     expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: collage.clipId, spec: { ...collage.spec, layoutId: "torn-paper", motionId: "print-drop" } });
+  });
+
+  it("shows the library for two photos and explains the required slot counts", async () => {
+    const two = { ...collage, spec: { ...collage.spec, layoutId: "two-photo-diptych" as const, motionId: "print-drop" as const, slots: collage.spec.slots.slice(0, 2) } };
+    await render(<CollagePanel clip={two} section="Layout" onApply={apply} onClose={() => {}} />);
+    await click("Collage Styles");
+    expect(host.querySelectorAll('[aria-label^="Layout "]')).toHaveLength(9);
+    expect((host.querySelector('[aria-label="Layout Torn paper mosaic"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(host.textContent).toContain("Tap + above");
+    await click("Increase number of photos");
+    const op = apply.mock.lastCall![0];
+    await render(<CollagePanel clip={{ ...two, spec: op.spec }} section="Layout" onApply={apply} onClose={() => {}} />);
+    expect((host.querySelector('[aria-label="Layout Torn paper mosaic"]') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("shows only motion choices in the collage motion sheet", async () => {
