@@ -8,6 +8,9 @@ export type TimelineProps = {
    * usable from a test fixture and from Cloud Run without changing.
    */
   sources: Record<string, string>;
+  selectedCollageCellId?: string | null;
+  onSelectCollageCell?: (clipId: string, slotId: string) => void;
+  onCommitCollageCrop?: (clipId: string, slotId: string, crop: { x: number; y: number; scale: number }) => void;
 };
 
 const FRAME_SIZES = { "16:9": { width: 1920, height: 1080 }, "9:16": { width: 1080, height: 1920 } } as const;

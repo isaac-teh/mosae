@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CollageSpecSchema } from "./collage.js";
+import { COLLAGE_LAYOUTS, CollageSpecSchema } from "./collage.js";
 import { safeParseTimeline, type AudioClip, type Caption, type CollageClip, type Timeline, type VideoClip } from "./timeline.js";
 
 const clipId = z.string().min(1);
@@ -15,11 +15,14 @@ export const EditOpSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("move"), clipId, toIndex: z.number().int().nonnegative() }),
   z.strictObject({ op: z.literal("remove"), clipId }),
   z.strictObject({ op: z.literal("duplicate"), clipId }),
-  z.strictObject({ op: z.literal("add"), shotId, kind: z.enum(["photo", "video"]), afterClipId: clipId.nullable(), durationSec: positiveSeconds, sourceInSec: seconds.optional(), sourceOutSec: positiveSeconds.optional() }),
+  z.strictObject({ op: z.literal("add"), shotId, kind: z.enum(["photo", "video"]), afterClipId: clipId.nullable(), durationSec: positiveSeconds, sourceInSec: seconds.optional(), sourceOutSec: positiveSeconds.optional(), sourceDurationSec: positiveSeconds.optional() }),
   z.strictObject({ op: z.literal("setCollageLayout"), clipId, layoutId: z.string().min(1) }),
   z.strictObject({ op: z.literal("setCollageMotion"), clipId, motionId: z.string().min(1) }),
   z.strictObject({ op: z.literal("setCollageEffect"), clipId, effectId: z.string().min(1).nullable() }),
   z.strictObject({ op: z.literal("replaceCollageSlot"), clipId, slotId: z.string().min(1), shotId, kind: z.enum(["photo", "video"]) }),
+  z.strictObject({ op: z.literal("setCollageCrop"), clipId, slotId: z.string().min(1), crop: z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), scale: z.number().min(1).max(4) }) }),
+  z.strictObject({ op: z.literal("addCollageSlot"), clipId, slotId: z.string().min(1), shotId, kind: z.enum(["photo", "video"]) }),
+  z.strictObject({ op: z.literal("removeCollageSlot"), clipId, slotId: z.string().min(1) }),
   z.strictObject({ op: z.literal("splitCollage"), clipId }),
   z.strictObject({ op: z.literal("setSoundtrack"), soundtrackId: z.string().min(1) }),
 ]);
@@ -109,7 +112,7 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
   if (ops.length === 0) return { ok: true, timeline: base.timeline, leftOutShotIds: [] };
   let work = attach(base.timeline);
   const videoBounds = new Map(work.flatMap((item) => "source" in item.clip && item.clip.source.kind === "video"
-    ? [[idOf(item.clip), { inSec: item.clip.source.sourceInSec, outSec: item.clip.source.sourceOutSec }] as const]
+    ? [[idOf(item.clip), { inSec: item.clip.source.sourceDurationSec !== undefined ? 0 : item.clip.source.sourceInSec, outSec: item.clip.source.sourceDurationSec ?? item.clip.source.sourceOutSec }] as const]
     : []));
   let soundtrackId: string | undefined;
   const leftOutShotIds: string[] = [];
@@ -178,10 +181,11 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         const afterIndex = op.afterClipId === null ? -1 : work.findIndex((entry) => idOf(entry.clip) === op.afterClipId);
         if (op.afterClipId !== null && afterIndex < 0) return fail(`unknown clipId: ${op.afterClipId}`);
         if (op.kind === "video" && (op.sourceInSec === undefined || op.sourceOutSec === undefined || op.sourceOutSec - op.sourceInSec < op.durationSec)) return fail("video add requires a source range covering its duration");
+        if (op.kind === "video" && op.sourceDurationSec !== undefined && op.sourceOutSec! > op.sourceDurationSec) return fail("video add source range exceeds the asset duration");
         const count = ops.slice(0, opIndex + 1).filter((prior) => prior.op === "add" && prior.shotId === op.shotId).length;
         const id = `add:${op.shotId}:${count}`;
-        if (op.kind === "video") videoBounds.set(id, { inSec: op.sourceInSec!, outSec: op.sourceOutSec! });
-        const source = op.kind === "photo" ? { kind: "photo" as const, shotId: op.shotId } : { kind: "video" as const, shotId: op.shotId, sourceInSec: op.sourceInSec!, sourceOutSec: op.sourceOutSec! };
+        if (op.kind === "video") videoBounds.set(id, { inSec: op.sourceDurationSec !== undefined ? 0 : op.sourceInSec!, outSec: op.sourceDurationSec ?? op.sourceOutSec! });
+        const source = op.kind === "photo" ? { kind: "photo" as const, shotId: op.shotId } : { kind: "video" as const, shotId: op.shotId, sourceInSec: op.sourceInSec!, sourceOutSec: op.sourceOutSec!, ...(op.sourceDurationSec !== undefined ? { sourceDurationSec: op.sourceDurationSec } : {}) };
         const chapter = work[afterIndex]?.chapter ?? work[0]?.chapter ?? 0;
         work.splice(afterIndex + 1, 0, { clip: { id, source, startSec: 0, durationSec: op.durationSec, transitionIn: { kind: "cut", durationSec: 0 } }, chapter, captions: [], audio: [] });
         break;
@@ -189,20 +193,36 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
       case "setCollageLayout":
       case "setCollageMotion":
       case "setCollageEffect":
-      case "replaceCollageSlot": {
+      case "replaceCollageSlot":
+      case "setCollageCrop":
+      case "addCollageSlot":
+      case "removeCollageSlot": {
         if (!item || !("kind" in item.clip)) return fail(`${op.op} requires a collage clip`);
         const spec = item.clip.spec;
-        if (op.op === "replaceCollageSlot" && !spec.slots.some((slot) => slot.slotId === op.slotId)) return fail(`unknown slotId: ${op.slotId}`);
+        if ((op.op === "replaceCollageSlot" || op.op === "setCollageCrop" || op.op === "removeCollageSlot") && !spec.slots.some((slot) => slot.slotId === op.slotId)) return fail(`unknown slotId: ${op.slotId}`);
+        if (op.op === "addCollageSlot") {
+          const layout = COLLAGE_LAYOUTS.find((candidate) => candidate.id === spec.layoutId)!;
+          if (spec.slots.length >= layout.maxSlots) return fail(`This layout holds up to ${layout.maxSlots} photos`);
+          if (spec.slots.some((slot) => slot.slotId === op.slotId)) return fail(`duplicate slotId: ${op.slotId}`);
+          if (op.kind === "video" && spec.slots.filter((slot) => slot.kind === "video").length >= layout.maxVideoCells) return fail("This layout holds up to 1 video cell");
+        }
+        if (op.op === "removeCollageSlot") {
+          const layout = COLLAGE_LAYOUTS.find((candidate) => candidate.id === spec.layoutId)!;
+          if (spec.slots.length <= layout.minSlots) return fail(`This layout needs at least ${layout.minSlots} photos`);
+        }
         const parsedNext = opIndex + 1 < ops.length ? EditOpSchema.safeParse(ops[opIndex + 1]) : null;
         const nextOp = parsedNext?.success ? parsedNext.data : null;
         const layoutChange = op.op === "setCollageLayout" ? op : nextOp?.op === "setCollageLayout" && nextOp.clipId === op.clipId ? nextOp : null;
         const motionChange = op.op === "setCollageMotion" ? op : nextOp?.op === "setCollageMotion" && nextOp.clipId === op.clipId ? nextOp : null;
         const isLayoutMotionPair = Boolean(layoutChange && motionChange && ((op.op === "setCollageLayout" && nextOp?.op === "setCollageMotion") || (op.op === "setCollageMotion" && nextOp?.op === "setCollageLayout")));
-        const next = isLayoutMotionPair ? { ...spec, layoutId: layoutChange!.layoutId, motionId: motionChange!.motionId }
-          : op.op === "setCollageLayout" ? { ...spec, layoutId: op.layoutId }
+        const next = isLayoutMotionPair ? { ...spec, layoutId: layoutChange!.layoutId, motionId: motionChange!.motionId, slots: spec.slots.map((slot) => ({ ...slot, crop: undefined })) }
+          : op.op === "setCollageLayout" ? { ...spec, layoutId: op.layoutId, slots: spec.slots.map((slot) => ({ ...slot, crop: undefined })) }
           : op.op === "setCollageMotion" ? { ...spec, motionId: op.motionId }
           : op.op === "setCollageEffect" ? { ...spec, effectId: op.effectId }
-          : { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { ...slot, shotId: op.shotId, kind: op.kind } : slot) };
+          : op.op === "replaceCollageSlot" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { ...slot, shotId: op.shotId, kind: op.kind, crop: undefined } : slot) }
+          : op.op === "setCollageCrop" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { ...slot, crop: op.crop } : slot) }
+          : op.op === "addCollageSlot" ? { ...spec, slots: [...spec.slots, { slotId: op.slotId, shotId: op.shotId, kind: op.kind }] }
+          : { ...spec, slots: spec.slots.filter((slot) => slot.slotId !== op.slotId) };
         const changed = collageWithSpec(item.clip, next as CollageClip["spec"]);
         if (typeof changed === "string") return fail(changed);
         item.clip = changed;

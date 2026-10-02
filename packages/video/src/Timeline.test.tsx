@@ -6,8 +6,8 @@ import { fixtureTimeline } from "./fixtureTimeline";
 vi.mock("remotion", () => ({
   AbsoluteFill: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
   Sequence: ({ children, from, durationInFrames }: React.PropsWithChildren<{ from: number; durationInFrames: number }>) => <section data-from={from} data-duration={durationInFrames}>{children}</section>,
-  Img: ({ src }: { src: string }) => <img src={src} />,
-  OffthreadVideo: ({ src }: { src: string }) => <video src={src} />,
+  Img: ({ src, style }: { src: string; style?: React.CSSProperties }) => <img src={src} style={style} />,
+  OffthreadVideo: ({ src, style }: { src: string; style?: React.CSSProperties }) => <video src={src} style={style} />,
   Audio: () => null,
   useCurrentFrame: () => 14,
   useVideoConfig: () => ({ fps: 30, width: 360, height: 640, durationInFrames: 180 }),
@@ -52,7 +52,7 @@ describe("MosaeTimeline", () => {
           layoutId: "torn-paper" as const, motionId: "print-drop" as const, effectId: null,
           seed: "fixture", durationSec: 3,
           slots: [
-            { slotId: "one", shotId: "shot-a", kind: "photo" as const },
+            { slotId: "one", shotId: "shot-a", kind: "photo" as const, crop: { x: 0.7, y: 0.2, scale: 2 } },
             { slotId: "two", shotId: "shot-b", kind: "photo" as const },
             { slotId: "three", shotId: "shot-c", kind: "photo" as const },
           ],
@@ -62,6 +62,8 @@ describe("MosaeTimeline", () => {
     const html = renderToStaticMarkup(<MosaeTimeline timeline={timeline} sources={{ "shot-a": "/a.jpg", "shot-b": "/b.jpg", "shot-c": "/c.jpg" }} />);
     expect(html).toContain('data-from="60" data-duration="90"');
     expect(html).toContain('src="/a.jpg"');
+    expect(html).toContain('object-position:70% 20%');
+    expect(html).toContain('transform:scale(2)');
     expect(html).toContain('src="/b.jpg"');
     expect(html).toContain('src="/c.jpg"');
   });

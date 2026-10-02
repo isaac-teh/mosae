@@ -10,7 +10,11 @@ describe("contextToolbar", () => {
     expect(contextToolbar("slot")).toEqual(["Deselect", "Replace", "Duplicate", "Ask", "Delete"]);
   });
 
-  it("shows collage layout and motion actions without Ask", () => {
-    expect(contextToolbar("collage")).toEqual(["Deselect", "Layout", "Motion", "Duplicate", "Delete"]);
+  it("shows collage layout and cell actions without Ask", () => {
+    expect(contextToolbar("collage")).toEqual(["Deselect", "Layout", "AddCell", "Motion", "Duplicate", "Delete"]);
+  });
+
+  it("shows cell-specific actions while one collage cell is selected", () => {
+    expect(contextToolbar("collageCell")).toEqual(["Back", "ReplaceCell", "RemoveCell"]);
   });
 });

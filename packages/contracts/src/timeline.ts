@@ -24,6 +24,7 @@ const VideoSourceSchema = z.strictObject({
   shotId: z.string().min(1),
   sourceInSec: seconds,
   sourceOutSec: positiveSeconds,
+  sourceDurationSec: positiveSeconds.optional(),
 });
 
 const PhotoSourceSchema = z.strictObject({

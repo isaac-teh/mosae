@@ -50,7 +50,7 @@ function AudioTrack({ clip, fps, sources }: { clip: AudioClip; fps: number; sour
   );
 }
 
-export const MosaeTimeline: React.FC<TimelineProps> = ({ timeline, sources }) => {
+export const MosaeTimeline: React.FC<TimelineProps> = ({ timeline, sources, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }) => {
   const fps = timeline.fps;
   return (
     <AbsoluteFill style={{ backgroundColor: "#15110f", overflow: "hidden" }}>
@@ -60,7 +60,7 @@ export const MosaeTimeline: React.FC<TimelineProps> = ({ timeline, sources }) =>
           from={Math.round(clip.startSec * fps)}
           durationInFrames={Math.max(1, Math.round(clip.durationSec * fps))}
         >
-          {"kind" in clip ? <Collage spec={clip.spec} sources={sources} /> : <ClipBody clip={clip} sources={sources} />}
+          {"kind" in clip ? <Collage spec={clip.spec} sources={sources} clipId={clip.clipId} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} /> : <ClipBody clip={clip} sources={sources} />}
         </Sequence>
       ))}
       {timeline.audioClips.map((clip) => (

@@ -3,8 +3,9 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import type { CollageSpec } from "./schema";
 import { SampleMedia } from "./SampleMedia";
 import { gridTileAt, referenceTime } from "./referenceMotion";
+import { CellInteraction } from "./CellInteraction";
 
-export const NinePhotoGrid: React.FC<{ spec: CollageSpec; sources?: Record<string, string> }> = ({ spec, sources }) => {
+export const NinePhotoGrid: React.FC<{ spec: CollageSpec; sources?: Record<string, string>; clipId?: string; selectedCollageCellId?: string | null; onSelectCollageCell?: (clipId: string, slotId: string) => void; onCommitCollageCrop?: (clipId: string, slotId: string, crop: { x: number; y: number; scale: number }) => void }> = ({ spec, sources, clipId = "", selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const seconds = frame / fps;
@@ -24,6 +25,7 @@ export const NinePhotoGrid: React.FC<{ spec: CollageSpec; sources?: Record<strin
       const motion = gridTileAt(seconds, index, spec.durationSec);
       return <div key={slot.slotId} style={{ position: "absolute", left: `${margin + index % columns * (cellW + gap)}%`, top: `${margin + row * (cellH + gap)}%`, width: `${cellW}%`, height: `${cellH}%`, zIndex: count - index, opacity: motion.opacity, transform: `translateX(${motion.translateX / cellW * 100}%) rotate(${motion.rotation}deg)`, overflow: "hidden", background: "#eee8dd" }}>
         <SampleMedia slot={slot} sources={sources} />
+        <CellInteraction clipId={clipId} slotId={slot.slotId} crop={slot.crop} selected={selectedCollageCellId === `${clipId}:${slot.slotId}`} onSelect={onSelectCollageCell} onCommit={onCommitCollageCrop} />
         {index === Math.floor(count / 2) && caption && <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", padding: "7%", background: "rgba(255,253,247,.26)", color: "#3d3936", fontFamily: "Figtree,sans-serif", fontSize: width > height ? "1.9cqw" : "3.05cqw", fontWeight: 400, lineHeight: 1.5, letterSpacing: ".16em", textAlign: "center", textTransform: "uppercase", overflowWrap: "anywhere" }}>{caption}</div>}
       </div>;
     })}

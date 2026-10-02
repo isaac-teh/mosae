@@ -146,6 +146,24 @@ describe("applyEdits", () => {
     if (!result.ok) expect(result.error).toContain("at most one video cell");
   });
 
+  it("stores normalized collage cell crop and resets it when the layout changes", () => {
+    const cropped = apply([{ op: "setCollageCrop", clipId: "c1", slotId: "s1", crop: { x: 0.7, y: 0.2, scale: 2 } }]);
+    const croppedClip = cropped.timeline.videoClips[3]!;
+    expect("kind" in croppedClip ? croppedClip.spec.slots[0]?.crop : null).toEqual({ x: 0.7, y: 0.2, scale: 2 });
+    const reset = apply([{ op: "setCollageCrop", clipId: "c1", slotId: "s1", crop: { x: 0.7, y: 0.2, scale: 2 } }, { op: "setCollageLayout", clipId: "c1", layoutId: "travel-mosaic" }]);
+    const resetClip = reset.timeline.videoClips[3]!;
+    expect("kind" in resetClip ? resetClip.spec.slots[0]?.crop : null).toBeUndefined();
+  });
+
+  it("adds and removes collage cells within the template limits", () => {
+    const added = apply([{ op: "addCollageSlot", clipId: "c1", slotId: "s4", shotId: "shot-four", kind: "photo" }]);
+    expect(added.timeline.videoClips[3]).toMatchObject({ spec: { layoutId: "torn-paper", slots: [{}, {}, {}, { slotId: "s4", shotId: "shot-four", kind: "photo" }] } });
+    const removed = apply([{ op: "addCollageSlot", clipId: "c1", slotId: "s4", shotId: "shot-four", kind: "photo" }, { op: "removeCollageSlot", clipId: "c1", slotId: "s4" }]);
+    expect(removed.timeline.videoClips[3]).toMatchObject({ spec: { slots: [{}, {}, {}] } });
+    expect(applyEdits(firstCut, [{ op: "removeCollageSlot", clipId: "c1", slotId: "s1" }])).toMatchObject({ ok: false, opIndex: 0 });
+    expect(applyEdits(firstCut, [{ op: "addCollageSlot", clipId: "c1", slotId: "s4", shotId: "shot-four", kind: "video" }])).toMatchObject({ ok: false, opIndex: 0 });
+  });
+
   it("changes the requested shot, collage settings, slot, and soundtrack", () => {
     const swapped = apply([{ op: "swapShot", clipId: "p1", shotId: "replacement" }]).timeline.videoClips[0];
     expect("source" in swapped && swapped.source.shotId).toBe("replacement");
@@ -229,6 +247,13 @@ describe("applyEdits", () => {
     ]);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.timeline.durationSec).toBe(10);
+  });
+
+  it("allows video trims to expand to the source duration metadata", () => {
+    const source = parseTimeline({ ...firstCut, videoClips: firstCut.videoClips.map((clip) => "id" in clip && clip.id === "v1" ? { ...clip, source: { ...clip.source, sourceDurationSec: 12 } } : clip) });
+    const result = applyEdits(source, [{ op: "trim", clipId: "v1", inSec: 0, outSec: 10 }]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.timeline.videoClips.find((clip) => "id" in clip && clip.id === "v1")).toMatchObject({ durationSec: 10, source: { sourceInSec: 0, sourceOutSec: 10, sourceDurationSec: 12 } });
   });
 
   it("preserves the incoming crossfade overlap after moving a clip", () => {

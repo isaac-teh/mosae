@@ -3,6 +3,7 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import type { CollageSpec } from "./schema";
 import { SampleMedia } from "./SampleMedia";
 import { referenceTime, revealAt, scrapbookPhotoAt } from "./referenceMotion";
+import { CellInteraction } from "./CellInteraction";
 
 type Print = { x: number; y: number; w: number; h: number; rotation: number };
 const REFERENCE_PRINTS: Print[] = [
@@ -38,7 +39,7 @@ const DriedFlower: React.FC<{ style: React.CSSProperties }> = ({ style }) => <sv
 
 const Tape: React.FC<{ style: React.CSSProperties; orange?: boolean }> = ({ style, orange }) => <div style={{ position: "absolute", background: orange ? "repeating-linear-gradient(80deg,#c7946088 0 1px,transparent 1px 3px),#dca26fdd" : "repeating-linear-gradient(85deg,#9b7c4733 0 1px,transparent 1px 3px),#c8ab74dd", clipPath: "polygon(0 8%,4% 0,10% 6%,17% 0,25% 5%,36% 0,45% 5%,57% 0,68% 4%,80% 0,94% 5%,100% 0,100% 95%,92% 100%,79% 94%,68% 100%,55% 95%,40% 100%,27% 94%,12% 100%,0 93%)", ...style }} />;
 
-export const BotanicalScrapbook: React.FC<{ spec: CollageSpec; sources?: Record<string, string> }> = ({ spec, sources }) => {
+export const BotanicalScrapbook: React.FC<{ spec: CollageSpec; sources?: Record<string, string>; clipId?: string; selectedCollageCellId?: string | null; onSelectCollageCell?: (clipId: string, slotId: string) => void; onCommitCollageCrop?: (clipId: string, slotId: string, crop: { x: number; y: number; scale: number }) => void }> = ({ spec, sources, clipId = "", selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const seconds = frame / fps;
@@ -68,7 +69,7 @@ export const BotanicalScrapbook: React.FC<{ spec: CollageSpec; sources?: Record<
       const translate = motion.translateY / print.h * 100;
       return <React.Fragment key={slot.slotId}>
         <div style={{ ...position(print), zIndex: 3+index*2, background: "#fffdf7", boxShadow: "0 2px 4px #88654218", opacity: paper*exit, transform: `translateY(${(1-paper)*-18}%) rotate(${print.rotation}deg)` }} />
-        <div style={{ ...position(print), zIndex: 4+index*2, opacity: motion.opacity, transform: `translateY(${translate}%) rotate(${print.rotation}deg)`, padding: "1.2cqw" }}><div style={{ width: "100%", height: "100%", overflow: "hidden" }}><SampleMedia slot={slot} sources={sources} /></div></div>
+        <div style={{ ...position(print), zIndex: 4+index*2, opacity: motion.opacity, transform: `translateY(${translate}%) rotate(${print.rotation}deg)`, padding: "1.2cqw" }}><div style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative" }}><SampleMedia slot={slot} sources={sources} /><CellInteraction clipId={clipId} slotId={slot.slotId} crop={slot.crop} selected={selectedCollageCellId === `${clipId}:${slot.slotId}`} onSelect={onSelectCollageCell} onCommit={onCommitCollageCrop} /></div></div>
       </React.Fragment>;
     })}
     <div style={{ position: "absolute", inset: 0, zIndex: 30, pointerEvents: "none" }}>

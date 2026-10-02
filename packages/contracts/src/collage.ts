@@ -46,8 +46,7 @@ const slotSchema = z.strictObject({
   crop: z.strictObject({
     x: z.number().min(0).max(1),
     y: z.number().min(0).max(1),
-    w: z.number().positive().max(1),
-    h: z.number().positive().max(1),
+    scale: z.number().min(1).max(4),
   }).optional(),
 }).refine((slot) => Boolean(slot.shotId) !== Boolean(slot.src), "provide exactly one of shotId or src");
 
@@ -79,8 +78,9 @@ export const CollageSpecSchema = z.strictObject({
   if (new Set(slotIds).size !== slotIds.length) {
     ctx.addIssue({ code: "custom", path: ["slots"], message: "slotId values must be unique" });
   }
-  if (spec.slots.filter((slot) => slot.kind === "video").length > 1) {
-    ctx.addIssue({ code: "custom", path: ["slots"], message: "at most one video cell" });
+  if (spec.slots.filter((slot) => slot.kind === "video").length > layout.maxVideoCells) {
+    const limit = layout.maxVideoCells === 1 ? "one" : layout.maxVideoCells;
+    ctx.addIssue({ code: "custom", path: ["slots"], message: `at most ${limit} video cell${layout.maxVideoCells === 1 ? "" : "s"}` });
   }
 });
 

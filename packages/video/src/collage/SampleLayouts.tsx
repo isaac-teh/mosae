@@ -5,6 +5,7 @@ import { SampleMedia } from "./SampleMedia";
 import { BotanicalScrapbook } from "./BotanicalScrapbook";
 import { NinePhotoGrid } from "./NinePhotoGrid";
 import { mosaicEntranceAt, mosaicTime } from "./sampleMotion";
+import { CellInteraction } from "./CellInteraction";
 
 export const SAMPLE_LAYOUT_IDS = new Set<string>(["travel-mosaic", "travel-story", "botanical-scrapbook", "nine-photo-grid"]);
 type Rect = { x: number; y: number; w: number; h: number };
@@ -46,15 +47,16 @@ function geometry(spec: CollageSpec, wide: boolean): { cells: Rect[]; title?: Re
   return { cells, title, titleOrder };
 }
 
-export const SampleLayouts: React.FC<{ spec: CollageSpec; sources?: Record<string, string> }> = ({ spec, sources }) => {
+type EditProps = { clipId?: string; selectedCollageCellId?: string | null; onSelectCollageCell?: (clipId: string, slotId: string) => void; onCommitCollageCrop?: (clipId: string, slotId: string, crop: { x: number; y: number; scale: number }) => void };
+export const SampleLayouts: React.FC<{ spec: CollageSpec; sources?: Record<string, string> } & EditProps> = ({ spec, sources, clipId = "", selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const wide = width > height;
   const mosaic = spec.layoutId === "travel-mosaic";
   const seconds = frame / fps;
   const { cells, title, titleOrder } = geometry(spec, wide);
-  if (spec.layoutId === "botanical-scrapbook") return <BotanicalScrapbook spec={spec} sources={sources} />;
-  if (spec.layoutId === "nine-photo-grid") return <NinePhotoGrid spec={spec} sources={sources} />;
+  if (spec.layoutId === "botanical-scrapbook") return <BotanicalScrapbook spec={spec} sources={sources} clipId={clipId} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} />;
+  if (spec.layoutId === "nine-photo-grid") return <NinePhotoGrid spec={spec} sources={sources} clipId={clipId} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} />;
   const entranceStyle = (cell: Rect, order: number): React.CSSProperties => {
     const motion = mosaicEntranceAt(seconds, order, cell, spec.durationSec);
     return { opacity: motion.opacity, transform: `translate(${motion.translateX}%, ${motion.translateY}%) rotate(${motion.rotation}deg)` };
@@ -72,6 +74,7 @@ export const SampleLayouts: React.FC<{ spec: CollageSpec; sources?: Record<strin
       const order = titleOrder !== undefined && index >= titleOrder ? index + 1 : index;
       return <div key={slot.slotId} style={{ ...box(cells[index]), zIndex: index + 1, ...(mosaic ? entranceStyle(cells[index], order) : { opacity: settled }), background: "#fffdf7" }}>
         <div style={{ height: "100%", overflow: "hidden", position: "relative" }}><SampleMedia slot={slot} sources={sources} scale={mosaic ? 1 : 1 + relay} /></div>
+        <CellInteraction clipId={clipId} slotId={slot.slotId} crop={slot.crop} selected={selectedCollageCellId === `${clipId}:${slot.slotId}`} onSelect={onSelectCollageCell} onCommit={onCommitCollageCrop} />
       </div>;
     })}
     {title && <div style={{ ...box(title), ...entranceStyle(title, titleOrder!), background: "#201d20", zIndex: 10, display: "grid", placeItems: "center" }}>
