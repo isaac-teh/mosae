@@ -124,7 +124,7 @@ describe("film editor", () => {
     for (const name of ["Swap", "Trim", "Move"]) expect(host.querySelector(`[aria-label="${name}"]`)).toBeNull();
     expect(host.querySelector('[aria-label="Music"]')).toBeNull();
     expect(host.querySelector('[aria-label="Add"]')).toBeNull();
-    expect(host.querySelector('[aria-label="Ask"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Ask AI"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="Add clip"]')).not.toBeNull();
     expect(host.textContent).toContain("Tap on a clip to edit it");
     expect(host.querySelector('[aria-label="Delete"]')).toBeNull();

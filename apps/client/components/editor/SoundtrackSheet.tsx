@@ -52,6 +52,12 @@ export function SoundtrackSheet({ visible, soundtracks, loading = false, current
     setProgress(0);
   }, [visible, currentSoundtrackId]);
 
+  useEffect(() => {
+    if (visible && !previewId && soundtracks.length) {
+      setPreviewId(soundtracks.find((track) => track.suggested)?.id ?? soundtracks[0]!.id);
+    }
+  }, [visible, previewId, soundtracks]);
+
   const categories = useMemo(() => ["Suggested", ...new Set(soundtracks.map(mood).filter(Boolean))], [soundtracks]);
   const hasSuggestionMetadata = soundtracks.some((track) => track.suggested !== undefined);
   const filtered = useMemo(() => soundtracks.filter((track) => {
@@ -87,7 +93,7 @@ export function SoundtrackSheet({ visible, soundtracks, loading = false, current
     if (!previewSource || Platform.OS !== "web") return;
     if (playing) { audioRef.current?.pause(); setPlaying(false); return; }
     setPlaybackError(false);
-    setPreviewRequested(true);
+    setPreviewRequested(false);
     void audioRef.current?.play().then(() => setPlaying(true)).catch(() => { setPlaying(false); setPlaybackError(true); });
   };
   const progressPercent = duration > 0 ? Math.min(100, (progress / duration) * 100) : 0;
@@ -117,6 +123,7 @@ export function SoundtrackSheet({ visible, soundtracks, loading = false, current
         ref: audioRef,
         key: `${previewTrack?.id}:${previewSource}`,
         src: previewSource,
+        "data-soundtrack-preview": "true",
         preload: "none",
         hidden: true,
         onTimeUpdate: (event: { currentTarget: HTMLAudioElement }) => setProgress(event.currentTarget.currentTime),

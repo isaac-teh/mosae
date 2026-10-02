@@ -1,4 +1,6 @@
 const assets: Record<string, number> = {
+  "music-acoustic-demo": require("../assets/demo/music-acoustic-demo.mp3"),
+  "music-piano-demo": require("../assets/demo/music-piano-demo.mp3"),
   "birthday-song": require("../assets/demo/figma/review-moments/imgMeiClappingAtBirthdayCakeWithParents.png"),
   "strawberry-mochi": require("../assets/demo/figma/review-moments/imgMeiEatingStrawberryMochi.png"),
   "torii-gates": require("../assets/demo/figma/review-moments/imgFatherCarryingDaughterOnShouldersInKy.png"),

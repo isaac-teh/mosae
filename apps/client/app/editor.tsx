@@ -311,7 +311,6 @@ export default function EditorScreen() {
             if (clip && original && editor.firstCut) editor.apply(trimEdit(clip, original, edge, delta, editor.firstCut.durationSec));
           }} onReorder={(id, toIndex) => editor.apply({ op: "move", clipId: id, toIndex })} onDeselect={() => { editor.select(null); setSelectedAudioClipId(null); setSelectedCollageCellId(null); }} onSoundtrack={openSoundtrackPicker} />
       </ScrollView>}
-    {editor.timeline && toolbarSelection === "none" ? <View className="h-[68px] items-center justify-center border-t border-on-screen-muted/25"><Text className="font-sans text-caption text-on-screen-muted">Tap on a clip to edit it</Text></View> : null}
     <ToolBar selection={toolbarSelection} onTool={openTool} disabledActions={disabledToolbarActions} />
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
     {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} onApply={onApply} onClose={() => setTool(null)} /> : null}

@@ -37,6 +37,23 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("SoundtrackSheet", () => {
+  it("opens with the current track ready for bottom-button playback and confirmation", async () => {
+    await render(<SoundtrackSheet visible soundtracks={tracks} currentSoundtrackId="two" previewSourceForTrack={(track) => `/${track.id}.mp3`} onApply={apply} onClose={close} />);
+    expect(host.querySelector("audio")?.getAttribute("src")).toBe("/two.mp3");
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    await click("Play soundtrack preview");
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
+    await click("Confirm soundtrack");
+    expect(apply).toHaveBeenCalledWith({ op: "setSoundtrack", soundtrackId: "two" });
+  });
+
+  it("selects a suggestion after the catalog loads when the film has no music", async () => {
+    await render(<SoundtrackSheet visible loading soundtracks={[]} onApply={apply} onClose={close} />);
+    await render(<SoundtrackSheet visible soundtracks={tracks} previewSourceForTrack={(track) => `/${track.id}.mp3`} onApply={apply} onClose={close} />);
+    expect(host.querySelector("audio")?.getAttribute("src")).toBe("/one.mp3");
+    await click("Confirm soundtrack");
+    expect(apply).toHaveBeenCalledWith({ op: "setSoundtrack", soundtrackId: "one" });
+  });
   it("filters by actual mood and search metadata, previews a real source, and confirms the selected track", async () => {
     await render(<SoundtrackSheet visible soundtracks={tracks} currentSoundtrackId="one" previewSourceForTrack={(track) => `https://media.test/${track.id}.mp3`} onApply={apply} onClose={close} />);
     expect(host.textContent).toContain("CURRENT");

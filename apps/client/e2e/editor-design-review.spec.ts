@@ -26,7 +26,7 @@ async function waitForDecodedPhoto(page: Page) {
 test("starts in Ask mode with no music action; selected photos can be removed and replaced", async ({ page }) => {
   await openEditor(page);
   await page.screenshot({ path: screenshotPath("default"), scale: "css" });
-  await expect(page.getByRole("button", { name: "Ask", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ask AI", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Music", exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Select clip clip-3" }).click();
@@ -151,17 +151,21 @@ test("music search, mood filtering, preview selection, confirm, and cancel are i
   const picker = page.getByRole("button", { name: "Open soundtrack picker" });
   await picker.click();
   await expect(page.getByText("Replace music")).toBeVisible();
-  await expect(page.getByText("Okinawa Ukulele & String Trio", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Preview Okinawa Ukulele & String Trio", exact: true })).toBeVisible();
   await page.getByLabel("Search soundtracks").fill("piano");
-  await expect(page.getByText("Piano & Ambient", { exact: true })).toBeVisible();
-  await expect(page.getByText("Okinawa Ukulele & String Trio", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Preview Piano & Ambient", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Preview Okinawa Ukulele & String Trio", exact: true })).toHaveCount(0);
   await page.getByLabel("Search soundtracks").fill("");
   await page.getByLabel("Soundtrack mood Acoustic Heirloom").click();
-  await expect(page.getByText("Okinawa Ukulele & String Trio", { exact: true })).toBeVisible();
-  await expect(page.getByText("Piano & Ambient", { exact: true })).toHaveCount(0);
-  await page.getByText("Okinawa Ukulele & String Trio", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "Preview Okinawa Ukulele & String Trio", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Preview Piano & Ambient", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Preview Okinawa Ukulele & String Trio", exact: true }).click();
   await expect(page.getByText("Okinawa Ukulele & String Trio").last()).toBeVisible();
-  await expect(page.getByText(/Preview unavailable/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pause soundtrack preview" })).toBeVisible();
+  await page.getByRole("button", { name: "Pause soundtrack preview" }).click();
+  await page.getByRole("button", { name: "Play soundtrack preview" }).click();
+  await expect(page.getByRole("button", { name: "Pause soundtrack preview" })).toBeVisible();
+  await expect.poll(() => page.locator("[data-soundtrack-preview]").evaluate((node) => (node as HTMLAudioElement).currentTime)).toBeGreaterThan(0);
   await page.screenshot({ path: screenshotPath("music-selected"), scale: "css" });
   await page.screenshot({ path: screenshotPath("music-picker"), scale: "css" });
   await page.getByLabel("Close soundtrack").click();
@@ -169,13 +173,13 @@ test("music search, mood filtering, preview selection, confirm, and cancel are i
   await expect(page.getByRole("button", { name: /Music track/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Open soundtrack picker" }).click();
-  await page.getByText("Okinawa Ukulele & String Trio", { exact: true }).click();
+  await page.getByRole("button", { name: "Preview Okinawa Ukulele & String Trio", exact: true }).click();
   await page.getByLabel("Confirm soundtrack").click();
   await expect(page.getByRole("button", { name: /^Music track Okinawa Ukulele & String Trio/ })).toBeVisible();
   await page.getByRole("button", { name: /^Music track Okinawa Ukulele & String Trio/ }).click();
   await page.getByRole("button", { name: "Replace", exact: true }).click();
   await expect(page.getByText("Replace music")).toBeVisible();
-  await page.getByText("Piano & Ambient", { exact: true }).first().click();
+  await page.getByRole("button", { name: "Preview Piano & Ambient", exact: true }).first().click();
   await page.getByLabel("Confirm soundtrack").click();
   await expect(page.getByRole("button", { name: /^Music track Piano & Ambient/ })).toBeVisible();
   await expect(page.getByText("Saved", { exact: true })).toBeVisible({ timeout: 10_000 });
@@ -194,7 +198,7 @@ test("soundtrack picker handles missing plan metadata without breaking the edito
 test("music volume maps exact mute and unity, saves, and survives reload and undo", async ({ page }) => {
   await openEditor(page);
   await page.getByRole("button", { name: "Open soundtrack picker" }).click();
-  await page.getByText("Okinawa Ukulele & String Trio", { exact: true }).click();
+  await page.getByRole("button", { name: "Preview Okinawa Ukulele & String Trio", exact: true }).click();
   await page.getByLabel("Confirm soundtrack").click();
   const music = page.getByRole("button", { name: /^Music track Okinawa Ukulele & String Trio/ });
   await music.click();
@@ -226,7 +230,7 @@ test("music volume maps exact mute and unity, saves, and survives reload and und
 test("music label remains accessible after timeline scroll and Save opens render status", async ({ page }) => {
   await openEditor(page);
   await page.getByRole("button", { name: "Open soundtrack picker" }).click();
-  await page.getByText("Okinawa Ukulele & String Trio", { exact: true }).click();
+  await page.getByRole("button", { name: "Preview Okinawa Ukulele & String Trio", exact: true }).click();
   await page.getByLabel("Confirm soundtrack").click();
   const timeline = page.getByLabel("Unified timeline");
   await timeline.evaluate((node) => { node.scrollLeft = node.scrollWidth; node.dispatchEvent(new Event("scroll", { bubbles: true })); });

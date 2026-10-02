@@ -328,7 +328,7 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
           ],
           audioClips: [], captions: [],
         }),
-        sources: { ...Object.fromEntries(sourceIds.map((shotId, index) => [shotId, `demo:${photos[index]}`])), "fixture-video": "demo:film", "fixture-video-extra": "demo:film" },
+        sources: { ...Object.fromEntries(sourceIds.map((shotId, index) => [shotId, `demo:${photos[index]}`])), "fixture-video": "demo:film", "fixture-video-extra": "demo:film", "st-ukulele": "demo:music-acoustic-demo", "st-piano": "demo:music-piano-demo" },
         thumbnails: { "fixture-video": "demo:timeline-birthday" },
         unusedMedia: [{ shotId: "fixture-video-extra", kind: "video", thumbnailUrl: "demo:timeline-birthday", previewUrl: "demo:film", date: "2026-03-12", eventLabel: "Birthday movie", sourceInSec: 0, sourceOutSec: 8 }],
       };
