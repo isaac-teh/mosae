@@ -7,5 +7,5 @@ const outDir = process.env.MOSAE_REMOTION_BUNDLE_OUT_DIR ?? "/app/remotion-bundl
 
 await mkdir(outDir, { recursive: true });
 console.log(`Bundling Remotion composition to ${outDir}`);
-await bundle({ entryPoint, publicDir, outDir });
+await bundle({ entryPoint, publicDir, outDir, webpackOverride: (config) => ({ ...config, resolve: { ...config.resolve, extensionAlias: { ...config.resolve?.extensionAlias, ".js": [".js", ".ts", ".tsx"] } } }) });
 console.log(`REMOTION_BUNDLE_OK serveUrl=${outDir}`);
