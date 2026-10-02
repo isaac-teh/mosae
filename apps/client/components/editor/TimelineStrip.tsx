@@ -100,9 +100,7 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
         </View>;
       });
       })()}
-    </View>
-    <View className="relative mt-1 h-[48px]">
-      <Pressable role="button" accessibilityLabel="Add clip" onPress={onAddClip} style={{ position: "absolute", left: timeToX(timeline.durationSec, pixelsPerSecond, leadingPadding) + 8, top: 0, width: 40, height: 40, borderRadius: 12, backgroundColor: "#F7F6F2", alignItems: "center", justifyContent: "center" }}>
+      <Pressable role="button" accessibilityLabel="Add clip" onPress={onAddClip} style={{ position: "absolute", left: timeToX(timeline.durationSec, pixelsPerSecond, leadingPadding) + 8, top: 9, zIndex: 21, width: 40, height: 40, borderRadius: 12, backgroundColor: "#F7F6F2", alignItems: "center", justifyContent: "center" }}>
         <Text className="font-sans text-[25px] leading-[28px] text-[#172027]">+</Text>
       </Pressable>
     </View>
