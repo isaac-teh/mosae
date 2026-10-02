@@ -25,7 +25,9 @@ import { TrimControl } from "../components/editor/TrimControl";
 import { MoveMode } from "../components/editor/MoveMode";
 import { AddSheet } from "../components/editor/AddSheet";
 import { CollagePanel } from "../components/editor/CollagePanel";
+import { CollageCellSheet } from "../components/editor/CollageCellSheet";
 import { SoundtrackSheet } from "../components/editor/SoundtrackSheet";
+import { AudioVolumeSheet } from "../components/editor/AudioVolumeSheet";
 import { RemoveConfirm } from "../components/editor/RemoveConfirm";
 import { EditorMenu } from "../components/editor/EditorMenu";
 import { AskSheet } from "../components/editor/AskSheet";
@@ -49,7 +51,7 @@ let root: Root;
 let apply: ReturnType<typeof vi.fn>;
 const onSource = vi.fn();
 const repo = { getAlternatives: vi.fn(async () => [{ shotId: "shot-alt", thumbnailUrl: "alt.jpg" }]) } as unknown as StoryRepository;
-beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; host = document.createElement("div"); document.body.append(host); root = createRoot(host); apply = vi.fn(); onSource.mockClear(); vi.mocked(repo.getAlternatives).mockClear(); });
+beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined); host = document.createElement("div"); document.body.append(host); root = createRoot(host); apply = vi.fn(); onSource.mockClear(); vi.mocked(repo.getAlternatives).mockClear(); });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 async function render(element: React.ReactNode) { await act(async () => root.render(element)); }
 async function click(label: string) { const target = host.querySelector(`[aria-label="${label}"]`) as HTMLElement | null; expect(target, `missing control: ${label}`).not.toBeNull(); await act(async () => target!.click()); }
@@ -62,6 +64,40 @@ describe("editor tool operations", () => {
     expect(repo.getAlternatives).toHaveBeenCalledWith("proposal-1", "m1");
     expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "shot-alt" });
     expect(onSource).toHaveBeenCalledWith("shot-alt", "alt.jpg");
+  });
+
+  it("replaces a photo from already-uploaded project media", async () => {
+    await render(<SwapSheet visible clipId="a" kind="photo" moments={moments} planId={null} momentId={null} repository={repo} onApply={apply} onSource={onSource} onClose={() => {}} />);
+    await click("Replace with Left out moment");
+    expect(onSource).toHaveBeenCalledWith("shot-left", "left.jpg");
+    expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "shot-left" });
+  });
+
+  it("hands a device-selected photo to the project replacement uploader", async () => {
+    const onUploadFile = vi.fn();
+    await render(<SwapSheet visible clipId="a" kind="photo" planId={null} momentId={null} repository={repo} onUploadFile={onUploadFile} onApply={apply} onSource={onSource} onClose={() => {}} />);
+    const input = host.querySelector('[aria-label="Choose replacement photo"]') as HTMLInputElement;
+    const file = new File(["photo"], "replacement.jpg", { type: "image/jpeg" });
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(onUploadFile).toHaveBeenCalledWith(file);
+  });
+
+  it("hands a device-selected photo to the captured collage cell uploader", async () => {
+    const onUploadFile = vi.fn();
+    await render(<CollageCellSheet mode="replace" clip={collage} slotId="s2" moments={moments} onUploadFile={onUploadFile} onApply={apply} onClose={() => {}} />);
+    const input = host.querySelector('[aria-label="Choose replacement cell photo"]') as HTMLInputElement;
+    const file = new File(["photo"], "cell.jpg", { type: "image/jpeg" });
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(onUploadFile).toHaveBeenCalledWith(file, "collage-1", "s2");
+  });
+
+  it("replaces a collage cell from project gallery and installs its preview source", async () => {
+    await render(<CollageCellSheet mode="replace" clip={collage} slotId="s2" moments={moments} sources={{ "shot-left": "https://media.test/photo.jpg" }} onSource={onSource} onApply={apply} onClose={() => {}} />);
+    await click("Replace with Left out moment");
+    expect(onSource).toHaveBeenCalledWith("shot-left", "https://media.test/photo.jpg");
+    expect(apply).toHaveBeenCalledWith({ op: "replaceCollageSlot", clipId: "collage-1", slotId: "s2", shotId: "shot-left", kind: "photo" });
   });
 
   it("trims a video clip in source time", async () => {
@@ -185,7 +221,31 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Timeline ruler label 0:02"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="Chapter Zoo day"]')?.getAttribute("style")).toContain("left: 50px");
     expect(host.querySelector('[aria-label="Select clip a"]')?.parentElement?.getAttribute("style")).toContain("left: 50px");
-    expect(host.querySelector('[aria-label="Music track Sandcastle Days"]')?.getAttribute("style")).toContain("width: 360px");
+    const musicTrack = host.querySelector('[aria-label="Music track Sandcastle Days"]')!;
+    const photoClip = host.querySelector('[aria-label="Select clip a"]')!;
+    expect(musicTrack.getAttribute("style")).toContain("width: 360px");
+    expect(Boolean(musicTrack.compareDocumentPosition(photoClip) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(host.querySelector('[aria-label="Select music Sandcastle Days"]')).not.toBeNull();
+  });
+
+  it("selects an existing music track without opening the soundtrack picker", async () => {
+    const onSelectAudio = vi.fn();
+    const onSoundtrack = vi.fn();
+    const withMusic: Timeline = {
+      ...timeline,
+      audioClips: [{ id: "music-1", role: "music", source: { kind: "soundtrack", soundtrackId: "track-1", sourceInSec: 0, sourceOutSec: 9 }, startSec: 0, gainDb: 0, fadeInSec: 0, fadeOutSec: 0 }],
+    };
+    await render(<TimelineStrip timeline={withMusic} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} onSelectAudio={onSelectAudio} onSoundtrack={onSoundtrack} />);
+    await click("Music track Soundtrack");
+    expect(onSelectAudio).toHaveBeenCalledWith("music-1");
+    expect(onSoundtrack).not.toHaveBeenCalled();
+  });
+
+  it("adds a clip from the plus button at the end of the timeline", async () => {
+    const onAddClip = vi.fn();
+    await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} onAddClip={onAddClip} />);
+    await click("Add clip");
+    expect(onAddClip).toHaveBeenCalledOnce();
   });
 
   it("seeks by the time under the centre playhead when the user scrolls", async () => {
@@ -221,7 +281,7 @@ describe("editor tool operations", () => {
   it("shows selected collage chips, only layouts that fit the slots, and motions allowed by the selected layout", async () => {
     const threeSlotCollage = { ...collage, spec: { ...collage.spec, layoutId: "postcard-stack" as const, slots: collage.spec.slots.slice(0, 3) } };
     await render(<CollagePanel clip={threeSlotCollage} section="Layout" onApply={apply} onClose={() => {}} />);
-    expect(host.querySelector('[aria-label="Layout Postcard stack"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('[aria-label="Layout Postcard stack"]')?.className).toContain("border-white");
     expect(host.querySelector('[aria-label="Motion Stack deal"]')).toBeNull();
     expect(host.querySelector('[aria-label="Effect Vignette"]')).toBeNull();
     for (const label of ["Botanical scrapbook", "Nine-photo grid", "Travel mosaic", "Travel story", "Torn paper mosaic", "Polaroid garland", "Postcard stack", "Route map"]) {
@@ -229,11 +289,8 @@ describe("editor tool operations", () => {
     }
     expect(host.querySelector('[aria-label="Layout Photo table"]')).toBeNull();
     await click("Layout Torn paper mosaic");
-    expect(apply).toHaveBeenLastCalledWith([
-      { op: "setCollageLayout", clipId: "collage-1", layoutId: "torn-paper" },
-      { op: "setCollageMotion", clipId: "collage-1", motionId: "print-drop" },
-    ]);
-    expect(host.querySelector('[aria-label="Layout Torn paper mosaic"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "torn-paper", motionId: "print-drop" } });
+    expect(host.querySelector('[aria-label="Layout Torn paper mosaic"]')?.className).toContain("border-white");
   });
 
   it("shows only motion choices in the collage motion sheet", async () => {
@@ -242,6 +299,18 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Motion Stack deal"]')).not.toBeNull();
     await click("Motion Page turn");
     expect(apply).toHaveBeenLastCalledWith({ op: "setCollageMotion", clipId: "collage-1", motionId: "page-turn" });
+  });
+
+  it("shows a compact layout drawer and applies photo-count changes as one atomic editor update", async () => {
+    apply.mockClear();
+    const threeSlotCollage = { ...collage, spec: { ...collage.spec, slots: collage.spec.slots.slice(0, 3) } };
+    await render(<CollagePanel clip={threeSlotCollage} section="Layout" onApply={apply} onClose={() => {}} />);
+    expect(host.querySelector('[aria-label="Drag down to close layout drawer"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="3 photos"]')?.textContent).toBe("3");
+    await click("Increase number of photos");
+    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, slots: [...threeSlotCollage.spec.slots, { slotId: "empty:collage-1:4", kind: "photo", empty: true }] } });
+    await click("Layout Postcard stack");
+    expect(host.querySelector('[aria-label="Layout Postcard stack"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("previews an Ask proposal without editing, then applies all operations together", async () => {
@@ -259,10 +328,42 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledWith([{ op: "move", clipId: "b", toIndex: 0 }]);
   });
 
-  it("sets the selected soundtrack", async () => {
-    await render(<SoundtrackSheet visible soundtracks={soundtracks} onApply={apply} onClose={() => {}} />);
-    await click("Choose Soft piano");
+  it("previews a selected soundtrack and only applies it after confirmation", async () => {
+    const close = vi.fn();
+    await render(<SoundtrackSheet visible soundtracks={soundtracks} previewSourceForTrack={() => "real-track.mp3"} onApply={apply} onClose={close} />);
+    await click("Preview Soft piano");
+    expect(apply).not.toHaveBeenCalled();
+    expect(host.querySelector("audio")?.getAttribute("src")).toBe("real-track.mp3");
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledOnce();
+    await click("Confirm soundtrack");
     expect(apply).toHaveBeenCalledWith({ op: "setSoundtrack", soundtrackId: "soft-piano" });
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("does not mutate the timeline when soundtrack selection is cancelled", async () => {
+    const close = vi.fn();
+    await render(<SoundtrackSheet visible soundtracks={soundtracks} onApply={apply} onClose={close} />);
+    await click("Preview Soft piano");
+    await click("Close soundtrack");
+    expect(apply).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("Preview unavailable");
+  });
+
+  it("confirms music volume using the slider", async () => {
+    const close = vi.fn();
+    await render(<AudioVolumeSheet visible audioClipId="music-1" gainDb={0} onApply={apply} onClose={close} />);
+    const slider = host.querySelector('[aria-label="Music volume"]') as HTMLInputElement;
+    slider.value = "0";
+    await act(async () => slider.dispatchEvent(new Event("input", { bubbles: true })));
+    await click("Apply audio volume");
+    expect(apply).toHaveBeenCalledWith({ op: "setMusicVolume", audioClipId: "music-1", gainDb: -60 });
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("shows a loading state while the soundtrack catalog is being fetched", async () => {
+    await render(<SoundtrackSheet visible soundtracks={[]} loading onApply={apply} onClose={() => {}} />);
+    expect(host.textContent).toContain("Loading soundtracks");
+    expect(host.textContent).not.toContain("No soundtracks found");
   });
 
   it("confirms removal and exposes undo", async () => {

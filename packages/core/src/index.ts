@@ -2,6 +2,7 @@ export { configureCore, getCoreConfig, type CoreConfig } from "./config";
 export { ensureSignedIn } from "./auth";
 export { apiPost, ApiError } from "./apiClient";
 export { uploadMedia, contentTypeFor, type UploadDeps, type UploadProgress, type UploadPreparationProgress } from "./uploads";
+export { createReplacementGuard, uploadReplacement, type UploadReplacementOptions } from "./editor/uploadReplacement";
 export { setPendingMedia, getPendingMedia, getPendingMediaAssets, setUploadProgress, getUploadProgress, setUploadPreparationProgress, getUploadPreparationProgress, setUploadFailure, getUploadFailure, subscribeUploadProgress } from "./pendingMedia";
 export { prepareUploadFiles, MAX_UPLOAD_IMAGE_SIDE, UPLOAD_JPEG_QUALITY, RESIZE_THRESHOLD_BYTES, PREPARATION_CONCURRENCY } from "./prepareUploadFiles";
 export { isMedia, formatDuration, mediaId } from "./media";

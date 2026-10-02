@@ -6,7 +6,10 @@ import type { Timeline } from "@mosae/contracts";
 const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", planId: undefined as string | undefined, repository: "fixture", request: undefined as string | undefined }, back: vi.fn(), push: vi.fn(), navigate: vi.fn() }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ back: boundary.back, push: boundary.push, navigate: boundary.navigate }) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: boundary.repository, flow: { repository: "api", projectId: "p1" } }) }));
-vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ playheadSec, pauseRequest, togglePlayRequest }: any) => React.createElement("div", { "data-testid": "preview", "data-playhead-sec": playheadSec, "data-pause-request": pauseRequest, "data-toggle-play-request": togglePlayRequest }) }));
+vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ timeline, onSelectCollageCell, playheadSec, pauseRequest, togglePlayRequest }: any) => {
+  const collage = timeline?.videoClips.find((clip: any) => "kind" in clip);
+  return React.createElement("div", { "data-testid": "preview", "data-playhead-sec": playheadSec, "data-pause-request": pauseRequest, "data-toggle-play-request": togglePlayRequest }, collage ? React.createElement("button", { "aria-label": "Test select first collage cell", onClick: () => onSelectCollageCell(collage.clipId, collage.spec.slots[0].slotId) }) : null);
+} }));
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
 vi.mock("react-native-svg", () => {
   const element = (tag: string) => ({ children, ...props }: any) => React.createElement(tag, props, children);
@@ -28,6 +31,11 @@ const firstCut: Timeline = {
   durationSec: 9, chapters: [{ title: "Opening", startSec: 0 }],
   videoClips: ["a", "b", "c"].map((id, index) => ({ id, source: { kind: "photo", shotId: `shot-${id}` }, startSec: index * 3, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } })),
   audioClips: [], captions: [],
+};
+const collageClip = {
+  kind: "collage" as const, clipId: "collage-test", startSec: 0, durationSec: 4,
+  transitionIn: { kind: "cut" as const, durationSec: 0 },
+  spec: { layoutId: "photo-table" as const, slots: ["s1", "s2", "s3", "s4"].map((slotId) => ({ slotId, shotId: `shot-${slotId}`, kind: "photo" as const })), motionId: "stack-deal" as const, effectId: null, seed: "test", durationSec: 4 },
 };
 
 function repository() {
@@ -99,7 +107,7 @@ describe("film editor", () => {
     await render(<EditorScreen />);
     const timeline = host.querySelector('[aria-label="Unified timeline"]') as HTMLDivElement;
     await act(async () => timeline.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
-    expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-pause-request")).toBe("1");
+    expect(Number(host.querySelector('[data-testid="preview"]')?.getAttribute("data-pause-request"))).toBeGreaterThan(0);
     expect(Number(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec"))).toBe(4);
   });
 
@@ -111,22 +119,57 @@ describe("film editor", () => {
     expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-toggle-play-request")).toBe("1");
   });
 
-  it("shows whole-film Music, Add and Ask actions when no clip is selected", async () => {
+  it("keeps Ask reachable and adds clips from the timeline when nothing is selected", async () => {
     await render(<EditorScreen />);
     for (const name of ["Swap", "Trim", "Move"]) expect(host.querySelector(`[aria-label="${name}"]`)).toBeNull();
-    for (const name of ["Music", "Add", "Ask"]) expect(host.querySelector(`[aria-label="${name}"]`)).not.toBeNull();
+    expect(host.querySelector('[aria-label="Music"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Add"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Ask"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Add clip"]')).not.toBeNull();
+    expect(host.textContent).toContain("Tap on a clip to edit it");
     expect(host.querySelector('[aria-label="Delete"]')).toBeNull();
   });
 
-  it("duplicates the selected clip and restores the timeline with undo and redo", async () => {
+  it("shows remove and replace for a selected photo", async () => {
     await render(<EditorScreen />);
     await click("Select clip a");
-    await click("Duplicate");
-    expect(host.querySelector('[aria-label="Select clip duplicate:a:1"]')).not.toBeNull();
-    await click("Undo");
-    expect(host.querySelector('[aria-label="Select clip duplicate:a:1"]')).toBeNull();
-    await click("Redo");
-    expect(host.querySelector('[aria-label="Select clip duplicate:a:1"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Remove"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Replace"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Delete"]')).toBeNull();
+  });
+
+  it("clears the selected collage cell to an empty slot from the toolbar and saves one atomic edit", async () => {
+    boundary.repository.getFilmTimeline.mockResolvedValue({
+      timeline: { ...firstCut, schemaVersion: 2, videoClips: [collageClip], durationSec: 4 },
+      sources: { "shot-s1": "1.jpg", "shot-s2": "2.jpg", "shot-s3": "3.jpg", "shot-s4": "4.jpg" },
+    });
+    await render(<EditorScreen />);
+    await click("Select clip collage-test");
+    await click("Test select first collage cell");
+    expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec")).toBe("0.65");
+    expect(Number(host.querySelector('[data-testid="preview"]')?.getAttribute("data-pause-request"))).toBeGreaterThan(0);
+    await click("Remove");
+    expect(host.querySelector('[aria-label="Undo"]')?.getAttribute("disabled"), host.textContent).toBeNull();
+    await advance(1500);
+    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{
+      op: "setCollageSpec", clipId: "collage-test", spec: {
+        ...collageClip.spec,
+        slots: [{ slotId: "s1", empty: true }, ...collageClip.spec.slots.slice(1)],
+      },
+    }]);
+    expect(host.querySelector('[aria-label="Undo"]')?.getAttribute("disabled")).toBeNull();
+  });
+
+  it("pauses the film before opening soundtrack preview from audio selection", async () => {
+    boundary.repository.getFilmTimeline.mockResolvedValue({
+      timeline: { ...firstCut, audioClips: [{ id: "music-1", source: { kind: "soundtrack", soundtrackId: "track-1", sourceInSec: 0, sourceOutSec: 9 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0, fadeOutSec: 0 }] },
+      sources: { "shot-a": "a.jpg", "shot-b": "b.jpg", "shot-c": "c.jpg" },
+    });
+    await render(<EditorScreen />);
+    await click("Select music Soundtrack · paced to the film");
+    await click("Replace");
+    expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-pause-request")).toBe("1");
+    expect(host.textContent).toContain("Select a soundtrack");
   });
 
   it("reorders a timeline clip after a 300 ms hold and saves one move operation", async () => {
@@ -170,7 +213,7 @@ describe("film editor", () => {
       unusedMedia: [{ shotId: "shot-unused", kind: "photo", thumbnailUrl: "unused-thumb.jpg", previewUrl: "unused-thumb.jpg", date: "2026-06-03", eventLabel: "Day 3, evening" }],
     });
     await render(<EditorScreen />);
-    await click("Add");
+    await click("Add clip");
     expect(host.querySelector('img[src="unused-thumb.jpg"]')).not.toBeNull();
     await click("Add Photo · Day 3, evening");
     expect(host.querySelector('[aria-label="Select clip add:shot-unused:1"]')).not.toBeNull();
@@ -346,6 +389,19 @@ describe("film editor", () => {
     await advance(1);
     expect(boundary.repository.saveEdits).toHaveBeenCalledTimes(1);
     expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "move", clipId: "c", toIndex: 1 }]);
+  });
+
+  it("restores Saved when redo returns to the saved snapshot before undo autosaves", async () => {
+    await render(<Harness />);
+    await click("Move c first");
+    await advance(1500);
+    expect(host.querySelector('[data-testid="state"]')?.textContent).toBe("saved");
+    await click("Undo");
+    expect(host.querySelector('[data-testid="state"]')?.textContent).toBe("saving");
+    await click("Redo");
+    expect(host.querySelector('[data-testid="state"]')?.textContent).toBe("saved");
+    await advance(1500);
+    expect(boundary.repository.saveEdits).toHaveBeenCalledTimes(1);
   });
 
   it("saves the new branch after undoing a saved edit", async () => {

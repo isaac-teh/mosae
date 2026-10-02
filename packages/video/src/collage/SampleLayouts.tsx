@@ -6,8 +6,9 @@ import { BotanicalScrapbook } from "./BotanicalScrapbook";
 import { NinePhotoGrid } from "./NinePhotoGrid";
 import { mosaicEntranceAt, mosaicTime } from "./sampleMotion";
 import { CellInteraction } from "./CellInteraction";
+import { collageGridRects, COLLAGE_GRID_VARIANTS } from "./schema";
 
-export const SAMPLE_LAYOUT_IDS = new Set<string>(["travel-mosaic", "travel-story", "botanical-scrapbook", "nine-photo-grid"]);
+export const SAMPLE_LAYOUT_IDS = new Set<string>(["single-photo", "two-photo-diptych", "travel-mosaic", "travel-story", "botanical-scrapbook", "nine-photo-grid", ...COLLAGE_GRID_VARIANTS.map(({ id }) => id)]);
 type Rect = { x: number; y: number; w: number; h: number };
 const rect = (x: number, y: number, w: number, h: number): Rect => ({ x, y, w, h });
 const box = ({ x, y, w, h }: Rect): React.CSSProperties => ({ position: "absolute", left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%`, boxSizing: "border-box" });
@@ -16,6 +17,7 @@ const box = ({ x, y, w, h }: Rect): React.CSSProperties => ({ position: "absolut
 // collages get a complete grid without duplicating or dropping their photos.
 function geometry(spec: CollageSpec, wide: boolean): { cells: Rect[]; title?: Rect; titleOrder?: number } {
   const count = spec.slots.length;
+  if (COLLAGE_GRID_VARIANTS.some(({ id }) => id === spec.layoutId)) return { cells: collageGridRects(spec.layoutId as typeof COLLAGE_GRID_VARIANTS[number]["id"], count) };
   if (spec.layoutId === "travel-mosaic" && count === 8) return {
     cells: [rect(0,0,24,32),rect(25.5,0,24,32),rect(51,0,49,32),rect(0,33.5,49.5,32),rect(82,33.5,18,32),rect(0,67,24,33),rect(25.5,67,24,33),rect(51,67,49,33)],
     title: rect(51,33.5,29.5,32), titleOrder: 4,

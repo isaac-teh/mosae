@@ -20,11 +20,14 @@ export const EditOpSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("setCollageMotion"), clipId, motionId: z.string().min(1) }),
   z.strictObject({ op: z.literal("setCollageEffect"), clipId, effectId: z.string().min(1).nullable() }),
   z.strictObject({ op: z.literal("replaceCollageSlot"), clipId, slotId: z.string().min(1), shotId, kind: z.enum(["photo", "video"]) }),
-  z.strictObject({ op: z.literal("setCollageCrop"), clipId, slotId: z.string().min(1), crop: z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), scale: z.number().min(1).max(4) }) }),
+  z.strictObject({ op: z.literal("setCollageCrop"), clipId, slotId: z.string().min(1), crop: z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), scale: z.number().min(1).max(4), rotationDeg: z.number().finite().min(-180).max(180).optional() }) }),
+  z.strictObject({ op: z.literal("setPhotoCrop"), clipId, crop: z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), scale: z.number().min(1).max(4), rotationDeg: z.number().finite().min(-180).max(180).optional() }) }),
+  z.strictObject({ op: z.literal("setCollageSpec"), clipId, spec: CollageSpecSchema }),
   z.strictObject({ op: z.literal("addCollageSlot"), clipId, slotId: z.string().min(1), shotId, kind: z.enum(["photo", "video"]) }),
   z.strictObject({ op: z.literal("removeCollageSlot"), clipId, slotId: z.string().min(1) }),
   z.strictObject({ op: z.literal("splitCollage"), clipId }),
   z.strictObject({ op: z.literal("setSoundtrack"), soundtrackId: z.string().min(1) }),
+  z.strictObject({ op: z.literal("setMusicVolume"), audioClipId: clipId, gainDb: z.number().finite().min(-60).max(12) }),
 ]);
 
 export type EditOp = z.infer<typeof EditOpSchema>;
@@ -59,7 +62,7 @@ function attach(firstCut: Timeline): WorkClip[] {
   });
 }
 
-function buildTimeline(firstCut: Timeline, work: WorkClip[], soundtrackId?: string): Timeline {
+function buildTimeline(firstCut: Timeline, work: WorkClip[], soundtrackId?: string, musicGains: Map<string, number> = new Map()): Timeline {
   let cursor = 0;
   const videoClips = work.map((item, index) => {
     const overlap = index > 0 && item.clip.transitionIn?.kind === "crossfade"
@@ -84,11 +87,11 @@ function buildTimeline(firstCut: Timeline, work: WorkClip[], soundtrackId?: stri
     return endSec > startSec ? [{ text: caption.text, startSec, endSec }] : [];
   }));
   const audioClips: AudioClip[] = firstCut.audioClips.flatMap((track) => {
-    if (track.source.kind !== "soundtrack") return [];
-    return [{ ...track, startSec: 0, source: { ...track.source, soundtrackId: soundtrackId ?? track.source.soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, fadeOutSec: Math.min(track.fadeOutSec, durationSec) }];
+    if (track.source.kind !== "soundtrack" || track.role !== "music") return [track];
+    return [{ ...track, startSec: 0, gainDb: musicGains.get(track.id) ?? track.gainDb, source: { ...track.source, soundtrackId: soundtrackId ?? track.source.soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, fadeOutSec: Math.min(track.fadeOutSec, durationSec) }];
   });
   if (soundtrackId && !audioClips.some((track) => track.source.kind === "soundtrack")) {
-    audioClips.push({ id: "editor-soundtrack", source: { kind: "soundtrack", soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, role: "music", startSec: 0, gainDb: -18, fadeInSec: 0.5, fadeOutSec: Math.min(0.5, durationSec) });
+    audioClips.push({ id: "editor-soundtrack", source: { kind: "soundtrack", soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, role: "music", startSec: 0, gainDb: musicGains.get("editor-soundtrack") ?? -18, fadeInSec: 0.5, fadeOutSec: Math.min(0.5, durationSec) });
   }
   work.forEach((item, index) => item.audio.forEach(({ clip, offset }) => {
     if (clip.source.kind !== "asset") return;
@@ -115,6 +118,7 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
     ? [[idOf(item.clip), { inSec: item.clip.source.sourceDurationSec !== undefined ? 0 : item.clip.source.sourceInSec, outSec: item.clip.source.sourceDurationSec ?? item.clip.source.sourceOutSec }] as const]
     : []));
   let soundtrackId: string | undefined;
+  const musicGains = new Map<string, number>();
   const leftOutShotIds: string[] = [];
   for (let opIndex = 0; opIndex < ops.length; opIndex++) {
     const parsed = EditOpSchema.safeParse(ops[opIndex]);
@@ -190,6 +194,20 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         work.splice(afterIndex + 1, 0, { clip: { id, source, startSec: 0, durationSec: op.durationSec, transitionIn: { kind: "cut", durationSec: 0 } }, chapter, captions: [], audio: [] });
         break;
       }
+      case "setPhotoCrop": {
+        if (!item || !("source" in item.clip) || item.clip.source.kind !== "photo") return fail("setPhotoCrop requires a photo clip");
+        item.clip = { ...item.clip, source: { ...item.clip.source, crop: op.crop } };
+        break;
+      }
+      case "setCollageSpec": {
+        if (!item || !("kind" in item.clip)) return fail("setCollageSpec requires a collage clip");
+        const changed = collageWithSpec(item.clip, { ...op.spec, durationSec: item.clip.durationSec });
+        if (typeof changed === "string") return fail(changed);
+        const remainingShotIds = new Set(changed.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []));
+        leftOutShotIds.push(...item.clip.spec.slots.flatMap((slot) => slot.shotId && !remainingShotIds.has(slot.shotId) ? [slot.shotId] : []));
+        item.clip = changed;
+        break;
+      }
       case "setCollageLayout":
       case "setCollageMotion":
       case "setCollageEffect":
@@ -219,7 +237,7 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
           : op.op === "setCollageLayout" ? { ...spec, layoutId: op.layoutId, slots: spec.slots.map((slot) => ({ ...slot, crop: undefined })) }
           : op.op === "setCollageMotion" ? { ...spec, motionId: op.motionId }
           : op.op === "setCollageEffect" ? { ...spec, effectId: op.effectId }
-          : op.op === "replaceCollageSlot" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { ...slot, shotId: op.shotId, kind: op.kind, crop: undefined } : slot) }
+          : op.op === "replaceCollageSlot" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { slotId: slot.slotId, shotId: op.shotId, kind: op.kind } : slot) }
           : op.op === "setCollageCrop" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { ...slot, crop: op.crop } : slot) }
           : op.op === "addCollageSlot" ? { ...spec, slots: [...spec.slots, { slotId: op.slotId, shotId: op.shotId, kind: op.kind }] }
           : { ...spec, slots: spec.slots.filter((slot) => slot.slotId !== op.slotId) };
@@ -232,8 +250,10 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
       case "splitCollage": {
         if (!item || !("kind" in item.clip)) return fail("splitCollage requires a collage clip");
         const collage = item.clip;
-        const each = collage.durationSec / collage.spec.slots.length;
-        const split = collage.spec.slots.map((slot): WorkClip => ({
+        const populatedSlots = collage.spec.slots.filter((slot) => slot.shotId);
+        if (!populatedSlots.length) return fail("Cannot split a collage with no populated slots");
+        const each = collage.durationSec / populatedSlots.length;
+        const split = populatedSlots.map((slot): WorkClip => ({
           clip: { id: `${collage.clipId}:${slot.slotId}`, source: { kind: "photo", shotId: slot.shotId! }, startSec: 0, durationSec: each, transitionIn: { kind: "cut", durationSec: 0 } },
           chapter: item.chapter, captions: [], audio: [],
         }));
@@ -241,11 +261,18 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         break;
       }
       case "setSoundtrack": soundtrackId = op.soundtrackId; break;
+      case "setMusicVolume": {
+        const music = base.timeline.audioClips.find((track) => track.id === op.audioClipId && track.role === "music" && track.source.kind === "soundtrack");
+        const newSoundtrackCreated = op.audioClipId === "editor-soundtrack" && soundtrackId !== undefined;
+        if (!music && !newSoundtrackCreated) return fail("setMusicVolume requires a soundtrack music clip");
+        musicGains.set(op.audioClipId, op.gainDb);
+        break;
+      }
     }
-    const result = safeParseTimeline(buildTimeline(base.timeline, work, soundtrackId));
+    const result = safeParseTimeline(buildTimeline(base.timeline, work, soundtrackId, musicGains));
     if (!result.ok) return fail(result.errors.join("; "));
   }
-  const result = safeParseTimeline(buildTimeline(base.timeline, work, soundtrackId));
+  const result = safeParseTimeline(buildTimeline(base.timeline, work, soundtrackId, musicGains));
   if (!result.ok) return { ok: false, error: result.errors.join("; "), opIndex: Math.max(0, ops.length - 1) };
   return { ok: true, timeline: result.timeline, leftOutShotIds };
 }
@@ -254,7 +281,7 @@ export function mergeOps(ops: EditOp[]): EditOp[] {
   const merged: EditOp[] = [];
   for (const op of ops) {
     const previous = merged.at(-1);
-    if (previous && (op.op === "trim" || op.op === "setPhotoDuration" || op.op === "move") && previous.op === op.op && previous.clipId === op.clipId) {
+    if (previous && ((op.op === "trim" || op.op === "setPhotoDuration" || op.op === "move") && previous.op === op.op && previous.clipId === op.clipId || op.op === "setMusicVolume" && previous.op === "setMusicVolume" && previous.audioClipId === op.audioClipId)) {
       merged[merged.length - 1] = op;
     } else merged.push(op);
   }

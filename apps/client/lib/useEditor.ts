@@ -97,7 +97,11 @@ export function useEditor(projectId: string, generationId: string, repository: S
   }, [projectId, generationId, repository]);
 
   useEffect(() => {
-    if (!loaded || !firstCut || opsKey === savedOpsKey || save.state === "conflict" || save.state === "rendering") return;
+    if (!loaded || !firstCut || save.state === "conflict" || save.state === "rendering") return;
+    if (opsKey === savedOpsKey) {
+      if (save.state === "saving" || save.state === "retrying") setSave({ state: "saved" });
+      return;
+    }
     if (retryAttempt === 0) setSave({ state: "saving" });
     const delay = retryAttempt ? Math.min(1500 * 2 ** retryAttempt, 12000) : 1500;
     const timer = setTimeout(() => { void persist(ops); }, delay);

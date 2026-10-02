@@ -27,9 +27,18 @@ const VideoSourceSchema = z.strictObject({
   sourceDurationSec: positiveSeconds.optional(),
 });
 
+export const PhotoCropSchema = z.strictObject({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  scale: z.number().min(1).max(4),
+  rotationDeg: z.number().finite().min(-180).max(180).optional(),
+});
+export type PhotoCrop = z.infer<typeof PhotoCropSchema>;
+
 const PhotoSourceSchema = z.strictObject({
   kind: z.literal("photo"),
   shotId: z.string().min(1),
+  crop: PhotoCropSchema.optional(),
 });
 
 export const TransitionSchema = z.strictObject({
@@ -43,6 +52,7 @@ export const CropSchema = z.strictObject({
   w: positiveSeconds.max(1),
   h: positiveSeconds.max(1),
 });
+
 
 export const VideoClipSchema = z.strictObject({
   id: z.string().min(1),
@@ -70,7 +80,7 @@ export const CollageClipSchema = z.strictObject({
   transitionIn: TransitionSchema.optional(),
   spec: CollageSpecSchema,
 }).superRefine((clip, context) => {
-  if (clip.spec.slots.some((slot) => !slot.shotId)) {
+  if (clip.spec.slots.some((slot) => !slot.shotId && !slot.empty)) {
     context.addIssue({ code: "custom", path: ["spec", "slots"], message: "timeline collage slots require shotId" });
   }
   if (Math.abs(clip.spec.durationSec - clip.durationSec) > 1e-6) {

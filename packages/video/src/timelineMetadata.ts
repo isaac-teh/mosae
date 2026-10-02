@@ -8,9 +8,12 @@ export type TimelineProps = {
    * usable from a test fixture and from Cloud Run without changing.
    */
   sources: Record<string, string>;
+  selectedClipId?: string | null;
+  onSelectClip?: (clipId: string) => void;
+  onCommitPhotoCrop?: (clipId: string, crop: { x: number; y: number; scale: number; rotationDeg?: number }) => void;
   selectedCollageCellId?: string | null;
   onSelectCollageCell?: (clipId: string, slotId: string) => void;
-  onCommitCollageCrop?: (clipId: string, slotId: string, crop: { x: number; y: number; scale: number }) => void;
+  onCommitCollageCrop?: (clipId: string, slotId: string, crop: { x: number; y: number; scale: number; rotationDeg?: number }) => void;
 };
 
 const FRAME_SIZES = { "16:9": { width: 1920, height: 1080 }, "9:16": { width: 1080, height: 1920 } } as const;
@@ -26,6 +29,7 @@ export function timelineMetadata({ props }: { props: TimelineProps }) {
 
 /** Decibels are the contract's unit; Remotion wants a linear multiplier. */
 export function gainToVolume(gainDb: number): number {
+  if (gainDb <= -60) return 0;
   return Math.max(0, 10 ** (gainDb / 20));
 }
 

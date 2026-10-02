@@ -20,12 +20,33 @@ vi.mock("remotion", () => ({
 }));
 
 import { Collage } from "./Collage";
+import { PhotoInteraction } from "../PhotoInteraction";
 import { focusRelayInputRange } from "./CollageBase";
 import { ALLOWED_COMBOS, ALLOWED_COMBO_KEYS } from "./allowedCombos";
-import { CollageSpecSchema, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, COLLAGE_EFFECTS, slotCountForLayout } from "./schema";
+import { CollageSpecSchema, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, COLLAGE_EFFECTS, COLLAGE_GRID_VARIANTS, collageGridRects, slotCountForLayout } from "./schema";
 import { createCollageSpec } from "./fixtures";
 
 describe("CollageSpec", () => {
+  it("uses six distinct normalized non-overlapping grid geometries at 2, 3, and 4 photos", () => {
+    for (const count of [2, 3, 4]) {
+      const signatures = COLLAGE_GRID_VARIANTS.map(({ id }) => {
+        const rects = collageGridRects(id, count);
+        expect(rects).toHaveLength(count);
+        for (const rect of rects) {
+          expect(rect.x).toBeGreaterThanOrEqual(0); expect(rect.y).toBeGreaterThanOrEqual(0);
+          expect(rect.x + rect.w).toBeLessThanOrEqual(100.001); expect(rect.y + rect.h).toBeLessThanOrEqual(100.001);
+        }
+        for (let i=0;i<rects.length;i++) for (let j=i+1;j<rects.length;j++) {
+          const a=rects[i]!, b=rects[j]!;
+          expect(a.x+a.w <= b.x || b.x+b.w <= a.x || a.y+a.h <= b.y || b.y+b.h <= a.y).toBe(true);
+        }
+        const area=rects.reduce((sum,rect)=>sum+rect.w*rect.h,0);
+        expect(area).toBeGreaterThan(90);
+        return JSON.stringify(rects);
+      });
+      expect(new Set(signatures).size).toBe(6);
+    }
+  });
   it("excludes both Film negative motions from the reviewed library", () => {
     expect(ALLOWED_COMBOS.map((combo) => combo.layoutId)).not.toContain("film-negative");
     expect(COLLAGE_LAYOUTS.map((layout) => layout.id)).not.toContain("film-negative");
@@ -43,6 +64,29 @@ describe("CollageSpec", () => {
       const markup = renderToStaticMarkup(<Collage spec={createCollageSpec(id)} />);
       expect((markup.match(/<img /g) ?? []).length).toBe(count);
     }
+  });
+  it("renders one-photo and two-photo layouts without changing their slot counts", () => {
+    for (const [id, count] of [["single-photo", 1], ["two-photo-diptych", 2]] as const) {
+      const spec = createCollageSpec(id);
+      expect(spec.slots).toHaveLength(count);
+      expect(CollageSpecSchema.safeParse(spec).success).toBe(true);
+      const markup = renderToStaticMarkup(<Collage spec={spec} />);
+      expect((markup.match(/data-collage-cell=/g) ?? []).length).toBe(count);
+    }
+  });
+  it("exposes a selected single photo crop surface with pan, zoom, and rotation gestures", () => {
+    const markup = renderToStaticMarkup(<PhotoInteraction clipId="photo-1" selected onSelect={() => {}} onCommit={() => {}} />);
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain("touch-action:none");
+    expect(markup).toContain("#f38a5b");
+    expect(markup).toContain("12px solid #f38a5b");
+  });
+  it("renders selected collage cells in blue and provides replaceable empty cells", () => {
+    const spec = { ...createCollageSpec("photo-table"), slots: createCollageSpec("photo-table").slots.map((slot, index) => index === 0 ? { slotId: slot.slotId, kind: "photo" as const, empty: true as const } : slot) };
+    const markup = renderToStaticMarkup(<Collage spec={spec} selectedCollageCellId={`:${spec.slots[0]!.slotId}`} />);
+    expect(markup).toContain("Add photo");
+    expect(markup).toContain("#168dff");
+    expect(markup).toContain("12px solid #168dff");
   });
   it("accepts shot ID and URL slot sources, and rejects missing or competing sources", () => {
     const spec = createCollageSpec("route-map");
@@ -71,7 +115,7 @@ describe("CollageSpec", () => {
     };
     const reviewedKeeps = review.combos.filter((combo) => combo.verdict === "keep")
       .map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort();
-    expect(ALLOWED_COMBOS.map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort()).toEqual(reviewedKeeps);
+    expect(ALLOWED_COMBOS.filter(({ layoutId }) => !["single-photo", "two-photo-diptych", ...COLLAGE_GRID_VARIANTS.map(({ id }) => id)].includes(layoutId)).map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort()).toEqual(reviewedKeeps);
 
     for (const layout of COLLAGE_LAYOUTS) for (const motion of COLLAGE_MOTIONS) {
       const spec = createCollageSpec(layout.id, { motionId: motion.id });

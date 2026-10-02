@@ -15,6 +15,8 @@ describe("music library", () => {
   it("puts tracks matching the suggested cadence first", () => {
     const catalog = soundtrackCatalog(tracks, "playful");
     expect(catalog[0]!.id).toBe("lyria-playful");
+    expect(catalog[0]).toMatchObject({ mood: "playful", suggested: true, durationSec: tracks.find((track) => track.id === catalog[0]!.id)!.durationSec });
+    expect(catalog.find((track) => track.id === "lyria-tender")?.suggested).toBe(false);
     expect(catalog).toHaveLength(tracks.length);
   });
 

@@ -20,8 +20,12 @@ test("opens a saved film in the editor, edits it, restores the saved revision, a
   await capture(page, "editor-e2e-01-open.png");
 
   for (const name of ["Swap", "Trim", "Move"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
-  for (const name of ["Remove", "Add", "Ask"]) await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ask", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Music", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add clip", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Select clip clip-1" }).click();
+  await expect(page.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Replace", exact: true })).toBeVisible();
   const endHandle = page.getByRole("button", { name: "Trim end of clip clip-1" });
   const handleBounds = await endHandle.boundingBox();
   if (!handleBounds) throw new Error("Selected clip has no trim handle");
@@ -33,11 +37,16 @@ test("opens a saved film in the editor, edits it, restores the saved revision, a
   await capture(page, "editor-e2e-04-trimmed.png");
 
   await page.getByRole("button", { name: "Select clip collage-1" }).click();
-  const pageTurn = page.getByRole("button", { name: "Motion Page turn" });
-  await pageTurn.click();
-  await expect(pageTurn).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Layout", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Layout", exact: true }).click();
+  const tornPaper = page.getByRole("button", { name: "Layout Torn paper mosaic" });
+  if (await tornPaper.count()) {
+    await tornPaper.click();
+    await expect(tornPaper).toHaveAttribute("aria-pressed", "true");
+  }
   await expect(page.getByRole("img", { name: "Photo 1 thumbnail" })).toBeVisible();
-  await capture(page, "editor-e2e-05-collage-motion.png");
+  await capture(page, "editor-e2e-05-collage-layout.png");
 
   await page.locator('[aria-label="Close collage"]').click();
   await expect(page.getByText("Saved", { exact: true })).toBeVisible({ timeout: 10_000 });
@@ -47,7 +56,7 @@ test("opens a saved film in the editor, edits it, restores the saved revision, a
   await expect(page.getByText("Edit film")).toBeVisible();
   await expect(page.getByRole("button", { name: "Select clip collage-1" })).toBeVisible();
   await page.getByRole("button", { name: "Select clip collage-1" }).click();
-  await expect(page.getByRole("button", { name: "Motion Page turn" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Layout", exact: true })).toBeVisible();
   await capture(page, "editor-e2e-07-reloaded-saved-revision.png");
   await page.locator('[aria-label="Close collage"]').click();
 
@@ -85,8 +94,13 @@ test("shows one aligned timeline on mobile and desktop", async ({ page }) => {
   await expect(page.getByLabel("Timeline ruler tick 2 seconds")).toBeVisible();
   await expect(page.getByRole("button", { name: "Select clip clip-1" })).toBeVisible();
   await page.getByRole("button", { name: "Open soundtrack picker" }).click();
-  await page.getByRole("button", { name: /Choose / }).first().click();
+  await page.getByRole("button", { name: /Preview / }).first().click();
+  await page.getByRole("button", { name: "Confirm soundtrack" }).click();
   await expect(page.getByRole("button", { name: /Music track/ })).toBeVisible();
+  await page.getByRole("button", { name: /Music track/ }).click();
+  await expect(page.getByRole("button", { name: "Volume", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Replace", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close soundtrack" })).toHaveCount(0);
   await page.getByRole("button", { name: "Zoom in timeline" }).click();
   await expect(page.getByLabel("Timeline zoom 44 pixels per second")).toBeVisible();
   await page.getByRole("button", { name: "Zoom out timeline" }).click();
@@ -97,7 +111,8 @@ test("shows one aligned timeline on mobile and desktop", async ({ page }) => {
   await page.reload();
   await expect(page.getByLabel("Unified timeline")).toBeVisible();
   await page.getByRole("button", { name: "Open soundtrack picker" }).click();
-  await page.getByRole("button", { name: /Choose / }).first().click();
+  await page.getByRole("button", { name: /Preview / }).first().click();
+  await page.getByRole("button", { name: "Confirm soundtrack" }).click();
   await expect(page.getByRole("button", { name: /Music track/ })).toBeVisible();
   await page.screenshot({ path: path.join(screenshots, "timeline-unified-1280x800.png"), fullPage: false, scale: "css" });
   expect(passiveTouchWarnings).toEqual([]);

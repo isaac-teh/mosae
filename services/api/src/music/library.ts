@@ -35,11 +35,11 @@ export function libraryPath(track: Pick<LibraryTrack, "file">): string {
  * The catalog shown on the directing screen. Tracks matching the suggested
  * cadence come first, so the pre-selected soundtrack fits the suggested tone.
  */
-export function soundtrackCatalog(tracks: LibraryTrack[], cadence: string | null): { id: string; name: string; description: string }[] {
+export function soundtrackCatalog(tracks: LibraryTrack[], cadence: string | null): { id: string; name: string; description: string; mood: string; durationSec: number; suggested: boolean }[] {
   return [...tracks]
     .map((track, index) => ({ track, index }))
     .sort((a, b) => Number(b.track.cadence === cadence) - Number(a.track.cadence === cadence) || a.index - b.index)
-    .map(({ track }) => ({ id: track.id, name: track.name, description: track.description }));
+    .map(({ track }) => ({ id: track.id, name: track.name, description: track.description, mood: track.cadence, durationSec: track.durationSec, suggested: cadence !== null && track.cadence === cadence }));
 }
 
 /** A soundtrack id's storage path, or null for an id the library doesn't have. */

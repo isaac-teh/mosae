@@ -142,6 +142,28 @@ function stringField(value: unknown, name: string): string {
   return value;
 }
 
+function directionSoundtracks(value: unknown): DirectionOptions["soundtracks"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const item = entry as RecordData;
+    if (typeof item.id !== "string" || !item.id || typeof item.name !== "string" || typeof item.description !== "string") return [];
+    return [{
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      ...(typeof item.mood === "string" && item.mood.trim() ? { mood: item.mood } : {}),
+      ...(typeof item.durationSec === "number" && Number.isFinite(item.durationSec) && item.durationSec > 0 ? { durationSec: item.durationSec } : {}),
+      ...(typeof item.suggested === "boolean" ? { suggested: item.suggested } : {}),
+    }];
+  });
+}
+
+function parseDirectionOptions(value: unknown): DirectionOptions {
+  const options = record(value, "direction options");
+  return { ...options, soundtracks: directionSoundtracks(options.soundtracks) } as unknown as DirectionOptions;
+}
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function isoDate(value: unknown): { year: string; month: number; day: number } | null {
@@ -530,10 +552,10 @@ export function createApiStoryRepository(
     },
     getDirectionOptions: async (planId) => {
       requireProjectId();
-      return await deps.request(
+      return parseDirectionOptions(await deps.request(
         "GET",
         `/api/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(planId)}/direction-options`,
-      ) as DirectionOptions;
+      ));
     },
     directFilm: async (planId, direction) => {
       requireProjectId();

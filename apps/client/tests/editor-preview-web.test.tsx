@@ -92,6 +92,14 @@ describe("web editor preview seeks", () => {
     expect(host.textContent).not.toContain("00:09");
   });
 
+  it("passes selected-photo crop and selection callbacks into the frame renderer", async () => {
+    const onSelectClip = vi.fn();
+    const onCommitPhotoCrop = vi.fn();
+    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} selectedClipId="photo-1" onSelectClip={onSelectClip} onCommitPhotoCrop={onCommitPhotoCrop} />));
+    expect(host.querySelector(".mosae-editor-preview style")?.textContent).toContain("#168dff");
+    expect(playerMock.inputProps.at(-1)).toMatchObject({ selectedClipId: "photo-1", onSelectClip, onCommitPhotoCrop });
+  });
+
   it("toggles playback when the preview surface is tapped", async () => {
     await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} />));
     const preview = host.querySelector('[aria-label="Play preview"]') as HTMLDivElement;

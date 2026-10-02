@@ -2,6 +2,14 @@ import { z } from "zod";
 import { ALLOWED_COMBO_KEYS } from "./collageCombos.js";
 
 export const COLLAGE_LAYOUTS = [
+  { id: "single-photo", label: "Single photo", minSlots: 1, maxSlots: 1, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 1 },
+  { id: "two-photo-diptych", label: "Two-photo diptych", minSlots: 2, maxSlots: 2, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 2 },
+  { id: "grid-wide-top", label: "Wide top + two bottom", minSlots: 1, maxSlots: 9, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
+  { id: "grid-wide-bottom", label: "Two top + wide bottom", minSlots: 1, maxSlots: 9, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
+  { id: "grid-stacked-rows", label: "Three stacked rows", minSlots: 1, maxSlots: 9, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
+  { id: "grid-tall-left", label: "Tall left + two right", minSlots: 1, maxSlots: 9, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
+  { id: "grid-tall-right", label: "Two left + tall right", minSlots: 1, maxSlots: 9, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
+  { id: "grid-three-columns", label: "Three columns", minSlots: 1, maxSlots: 9, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
   { id: "botanical-scrapbook", label: "Botanical scrapbook", minSlots: 3, maxSlots: 6, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 4 },
   { id: "nine-photo-grid", label: "Nine-photo grid", minSlots: 3, maxSlots: 9, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 9 },
   { id: "travel-mosaic", label: "Travel mosaic", minSlots: 3, maxSlots: 8, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 8 },
@@ -11,6 +19,15 @@ export const COLLAGE_LAYOUTS = [
   { id: "polaroid-garland", label: "Polaroid garland", minSlots: 3, maxSlots: 5, aspect: ["9:16"], maxVideoCells: 1, preferredSlots: 4 },
   { id: "postcard-stack", label: "Postcard stack", minSlots: 3, maxSlots: 5, aspect: ["9:16"], maxVideoCells: 1, preferredSlots: 4 },
   { id: "route-map", label: "Route map", minSlots: 3, maxSlots: 5, aspect: ["9:16"], maxVideoCells: 1, preferredSlots: 4 },
+] as const;
+
+export const COLLAGE_GRID_VARIANTS = [
+  { id: "grid-wide-top", label: "Wide top + two bottom" },
+  { id: "grid-wide-bottom", label: "Two top + wide bottom" },
+  { id: "grid-stacked-rows", label: "Three stacked rows" },
+  { id: "grid-tall-left", label: "Tall left + two right" },
+  { id: "grid-tall-right", label: "Two left + tall right" },
+  { id: "grid-three-columns", label: "Three columns" },
 ] as const;
 
 export const COLLAGE_MOTIONS = [
@@ -43,12 +60,14 @@ const slotSchema = z.strictObject({
   shotId: z.string().min(1).optional(),
   src: z.string().min(1).optional(),
   kind: z.enum(["photo", "video"]).optional(),
+  empty: z.literal(true).optional(),
   crop: z.strictObject({
     x: z.number().min(0).max(1),
     y: z.number().min(0).max(1),
     scale: z.number().min(1).max(4),
+    rotationDeg: z.number().finite().min(-180).max(180).optional(),
   }).optional(),
-}).refine((slot) => Boolean(slot.shotId) !== Boolean(slot.src), "provide exactly one of shotId or src");
+}).refine((slot) => slot.empty ? !slot.shotId && !slot.src : Boolean(slot.shotId) !== Boolean(slot.src), "provide one source or mark the slot empty");
 
 export const CollageSpecSchema = z.strictObject({
   layoutId: z.enum(COLLAGE_LAYOUTS.map((layout) => layout.id) as [

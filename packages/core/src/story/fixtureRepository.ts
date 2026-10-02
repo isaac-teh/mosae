@@ -149,8 +149,8 @@ const cadences: Cadence[] = [
 ];
 
 const soundtracks: Soundtrack[] = [
-  { id: "st-ukulele", name: "Okinawa Ukulele & String Trio", description: "Acoustic Heirloom • 2:14 min" },
-  { id: "st-piano", name: "Piano & Ambient", description: "Intimate Heirloom • 2:14 min" },
+  { id: "st-ukulele", name: "Okinawa Ukulele & String Trio", description: "Acoustic Heirloom • 2:14 min", mood: "Acoustic Heirloom", durationSec: 134 },
+  { id: "st-piano", name: "Piano & Ambient", description: "Intimate Heirloom • 2:14 min", mood: "Intimate Heirloom", durationSec: 134 },
 ];
 
 const durations: DurationChoice[] = [
@@ -338,7 +338,7 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
     interpretEdit: async () => ({ reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] }),
     saveEdits: async (projectId, generationId, revision, ops) => {
       const key = `${projectId}/${generationId}`;
-      const current = editDocuments.get(key) ?? { revision: 0, ops: [], updatedAt: null };
+      const current = editDocuments.get(key) ?? readBrowserValue<FilmEdits>(browserEditKey(projectId, generationId)) ?? { revision: 0, ops: [], updatedAt: null };
       if (revision !== current.revision + 1) throw new Error("stale_revision");
       const document = { revision, ops: structuredClone(ops), updatedAt: Date.now() };
       editDocuments.set(key, document);

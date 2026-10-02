@@ -16,6 +16,7 @@ export function CellInteraction({ clipId, slotId, crop, selected, onSelect, onCo
   const origin = useRef<Crop>(crop ?? { x: 0.5, y: 0.5, scale: 1 });
   const start = useRef<Point | null>(null);
   const initialDistance = useRef(0);
+  const initialAngle = useRef(0);
   const preview = useRef<Crop>(origin.current);
   const changed = useRef(false);
   const readPoints = () => [...points.current.values()];
@@ -26,17 +27,21 @@ export function CellInteraction({ clipId, slotId, crop, selected, onSelect, onCo
     changed.current = true;
     const current = readPoints();
     const bounds = event.currentTarget.getBoundingClientRect();
-    let next = { ...origin.current };
+    let next = { ...origin.current, rotationDeg: origin.current.rotationDeg ?? 0 };
     if (current.length > 1) {
-      const distance = Math.hypot(current[0]!.x - current[1]!.x, current[0]!.y - current[1]!.y);
+      const dx = current[1]!.x - current[0]!.x;
+      const dy = current[1]!.y - current[0]!.y;
+      const distance = Math.hypot(dx, dy);
       next.scale = Math.max(1, Math.min(4, origin.current.scale * distance / Math.max(1, initialDistance.current)));
+      const angle = Math.atan2(dy, dx) - initialAngle.current;
+      next.rotationDeg = ((next.rotationDeg + angle * 180 / Math.PI + 540) % 360) - 180;
     } else if (start.current) {
       next.x = Math.max(0, Math.min(1, origin.current.x - (current[0]!.x - start.current.x) / Math.max(1, bounds.width * origin.current.scale)));
       next.y = Math.max(0, Math.min(1, origin.current.y - (current[0]!.y - start.current.y) / Math.max(1, bounds.height * origin.current.scale)));
     }
     preview.current = next;
     const media = event.currentTarget.parentElement?.querySelector<HTMLElement>("[data-collage-media]");
-    if (media) { media.style.objectPosition = `${next.x * 100}% ${next.y * 100}%`; media.style.transform = `scale(${next.scale})`; }
+    if (media) { media.style.objectPosition = `${next.x * 100}% ${next.y * 100}%`; media.style.transform = `scale(${next.scale}) rotate(${next.rotationDeg ?? 0}deg)`; }
   };
   const finish = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!points.current.has(event.pointerId)) return;
@@ -54,13 +59,13 @@ export function CellInteraction({ clipId, slotId, crop, selected, onSelect, onCo
       event.currentTarget.setPointerCapture?.(event.pointerId);
       const current = { x: event.clientX, y: event.clientY };
       if (!points.current.size) { origin.current = crop ?? { x: 0.5, y: 0.5, scale: 1 }; preview.current = origin.current; start.current = current; changed.current = false; }
-      else { const first = readPoints()[0]!; initialDistance.current = Math.hypot(first.x - current.x, first.y - current.y); }
+      else { const first = readPoints()[0]!; initialDistance.current = Math.hypot(first.x - current.x, first.y - current.y); initialAngle.current = Math.atan2(current.y - first.y, current.x - first.x); }
       points.current.set(event.pointerId, current);
       onSelect?.(clipId, slotId);
     }}
     onPointerMove={update}
     onPointerUp={(event) => { event.stopPropagation(); finish(event); }}
     onPointerCancel={finish}
-    onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); const reset = { x: 0.5, y: 0.5, scale: 1 }; origin.current = reset; preview.current = reset; const media = event.currentTarget.parentElement?.querySelector<HTMLElement>("[data-collage-media]"); if (media) { media.style.objectPosition = "50% 50%"; media.style.transform = "scale(1)"; } onCommit?.(clipId, slotId, reset); }}
-    style={{ position: "absolute", inset: 0, zIndex: 100, border: selected ? "2px solid #F5C842" : "2px solid transparent", touchAction: "none", cursor: "grab", boxSizing: "border-box" }} />;
+    onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); const reset = { x: 0.5, y: 0.5, scale: 1, rotationDeg: 0 }; origin.current = reset; preview.current = reset; const media = event.currentTarget.parentElement?.querySelector<HTMLElement>("[data-collage-media]"); if (media) { media.style.objectPosition = "50% 50%"; media.style.transform = "scale(1)"; } onCommit?.(clipId, slotId, reset); }}
+    style={{ position: "absolute", inset: 0, zIndex: 100, border: selected ? "12px solid #168dff" : "2px solid transparent", touchAction: "none", cursor: "grab", boxSizing: "border-box" }} />;
 }

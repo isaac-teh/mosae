@@ -11,6 +11,14 @@ const HEIGHT = 1280;
 const FPS = 30;
 const FRAMES = 150;
 const STILL_MOTION_BY_LAYOUT: Record<CollageSpec["layoutId"], CollageSpec["motionId"]> = {
+  "single-photo": "print-drop",
+  "grid-wide-top": "print-drop",
+  "grid-wide-bottom": "print-drop",
+  "grid-stacked-rows": "print-drop",
+  "grid-tall-left": "print-drop",
+  "grid-tall-right": "print-drop",
+  "grid-three-columns": "print-drop",
+  "two-photo-diptych": "print-drop",
   "travel-mosaic": "print-drop",
   "travel-story": "focus-relay",
   "botanical-scrapbook": "tape-slap",

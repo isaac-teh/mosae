@@ -4,13 +4,14 @@ import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCur
 import { audioTrimFrames, gainToVolume, type TimelineProps } from "./timelineMetadata";
 import { Collage } from "./collage/Collage";
 import { redactImageSource } from "./imageDiagnostic";
+import { PhotoInteraction } from "./PhotoInteraction";
 
 /**
  * Clips carry explicit output-relative start times, so they render as absolute
  * Sequences rather than a TransitionSeries. A crossfade or dip is expressed as
  * the incoming clip's opacity ramp over transitionIn.durationSec.
  */
-function ClipBody({ clip, sources }: { clip: VideoClip; sources: Record<string, string> }) {
+function ClipBody({ clip, sources, selected, onSelect, onCommitPhotoCrop }: { clip: VideoClip; sources: Record<string, string>; selected?: boolean; onSelect?: (clipId: string) => void; onCommitPhotoCrop?: TimelineProps["onCommitPhotoCrop"] }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const src = sources[clip.source.shotId];
@@ -19,7 +20,8 @@ function ClipBody({ clip, sources }: { clip: VideoClip; sources: Record<string, 
   const scale = clip.motion
     ? interpolate(frame, [0, Math.round(clip.durationSec * fps)], [clip.motion.from, clip.motion.to], { extrapolateRight: "clamp" })
     : 1;
-  const style: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover", transform: `scale(${scale})` };
+  const photoTransform = clip.source.kind === "photo" ? clip.source.crop : undefined;
+  const style: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover", objectPosition: photoTransform ? `${photoTransform.x * 100}% ${photoTransform.y * 100}%` : "50% 50%", transform: `scale(${scale * (photoTransform?.scale ?? 1)}) rotate(${photoTransform?.rotationDeg ?? 0}deg)` };
 
   if (!src) return null;
   return (
@@ -27,8 +29,9 @@ function ClipBody({ clip, sources }: { clip: VideoClip; sources: Record<string, 
       {clip.source.kind === "video" ? (
         <OffthreadVideo src={src} trimBefore={Math.round(clip.source.sourceInSec * fps)} style={style} />
       ) : (
-        <Img src={src} style={style} onImageError={(error) => console.error("render_image_decode_failed", { source: redactImageSource(src), error: error.name })} />
+        <Img src={src} data-photo-media="true" style={style} onImageError={(error) => console.error("render_image_decode_failed", { source: redactImageSource(src), error: error.name })} />
       )}
+      {clip.source.kind === "photo" ? <PhotoInteraction clipId={clip.id} selected={selected} transform={photoTransform} onSelect={onSelect} onCommit={onCommitPhotoCrop} /> : <div role="button" aria-label={selected ? "Selected video clip" : "Select video clip"} aria-pressed={Boolean(selected)} onClick={(event) => { event.stopPropagation(); onSelect?.(clip.id); }} style={{ position: "absolute", inset: 0, boxSizing: "border-box", border: selected ? "12px solid #f38a5b" : "3px solid transparent", cursor: "pointer" }} />}
     </AbsoluteFill>
   );
 }
@@ -50,7 +53,7 @@ function AudioTrack({ clip, fps, sources }: { clip: AudioClip; fps: number; sour
   );
 }
 
-export const MosaeTimeline: React.FC<TimelineProps> = ({ timeline, sources, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }) => {
+export const MosaeTimeline: React.FC<TimelineProps> = ({ timeline, sources, selectedClipId, onSelectClip, onCommitPhotoCrop, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }) => {
   const fps = timeline.fps;
   return (
     <AbsoluteFill style={{ backgroundColor: "#15110f", overflow: "hidden" }}>
@@ -60,7 +63,7 @@ export const MosaeTimeline: React.FC<TimelineProps> = ({ timeline, sources, sele
           from={Math.round(clip.startSec * fps)}
           durationInFrames={Math.max(1, Math.round(clip.durationSec * fps))}
         >
-          {"kind" in clip ? <Collage spec={clip.spec} sources={sources} clipId={clip.clipId} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} /> : <ClipBody clip={clip} sources={sources} />}
+          {"kind" in clip ? <Collage spec={clip.spec} sources={sources} clipId={clip.clipId} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} /> : <ClipBody clip={clip} sources={sources} selected={selectedClipId === clip.id} onSelect={onSelectClip} onCommitPhotoCrop={onCommitPhotoCrop} />}
         </Sequence>
       ))}
       {timeline.audioClips.map((clip) => (

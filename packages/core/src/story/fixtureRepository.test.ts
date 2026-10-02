@@ -1,7 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createFixtureStoryRepository } from "./fixtureRepository";
 
 describe("fixture story repository", () => {
+  it("continues the persisted editor revision after a repository reload", async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("window", { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    } });
+    try {
+      const beforeReload = createFixtureStoryRepository({ delayMs: 0 });
+      await beforeReload.saveEdits("fixture", "demo-film", 1, [{ op: "setSoundtrack", soundtrackId: "st-ukulele" }]);
+      const afterReload = createFixtureStoryRepository({ delayMs: 0 });
+      expect((await afterReload.getEdits("fixture", "demo-film")).revision).toBe(1);
+      await expect(afterReload.saveEdits("fixture", "demo-film", 2, [])).resolves.toMatchObject({ revision: 2, ops: [] });
+    } finally { vi.unstubAllGlobals(); }
+  });
   it("provides a collage editor sample and same-event alternatives", async () => {
     const repo = createFixtureStoryRepository({ delayMs: 0 });
     const film = await repo.getFilmTimeline("fixture", "demo-film");
@@ -57,7 +71,7 @@ describe("fixture story repository", () => {
     const options = await createFixtureStoryRepository({ delayMs: 0 }).getDirectionOptions("demo");
     expect(options.note).toBe("Make it feel exciting and warm. Start with us arriving in Tokyo, build up to the birthday cake celebration, and finish with our quiet Kyoto stroll.");
     expect(options.cadences[0]).toMatchObject({ name: "Warm & Nostalgic", description: "Soft acoustic guitar • Kodachrome warmth" });
-    expect(options.soundtracks[0]).toMatchObject({ name: "Okinawa Ukulele & String Trio", description: "Acoustic Heirloom • 2:14 min" });
+    expect(options.soundtracks[0]).toMatchObject({ name: "Okinawa Ukulele & String Trio", description: "Acoustic Heirloom • 2:14 min", mood: "Acoustic Heirloom", durationSec: 134 });
     expect(options.recommendedDuration).toBe("2m");
   });
 

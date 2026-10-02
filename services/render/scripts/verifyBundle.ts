@@ -12,5 +12,5 @@ const outDir = await mkdtemp(join(tmpdir(), "mosae-remotion-bundle-"));
 console.log(`Bundling entryPoint=${entryPoint}`);
 console.log(`Using publicDir=${publicDir}`);
 console.log(`Writing bundle to ${outDir}`);
-const serveUrl = await bundle({ entryPoint, publicDir, outDir });
+const serveUrl = await bundle({ entryPoint, publicDir, outDir, webpackOverride: (config) => ({ ...config, resolve: { ...config.resolve, extensionAlias: { ...config.resolve?.extensionAlias, ".js": [".js", ".ts", ".tsx"] } } }) });
 console.log(`REMOTION_BUNDLE_OK serveUrl=${serveUrl}`);

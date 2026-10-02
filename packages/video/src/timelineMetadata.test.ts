@@ -47,8 +47,9 @@ describe("gainToVolume", () => {
     expect(gainToVolume(-20)).toBeCloseTo(0.1, 6);
   });
 
-  it("clamps to a non-negative volume", () => {
-    expect(gainToVolume(-60)).toBeGreaterThanOrEqual(0);
+  it("maps the mute sentinel to exact silence and retains the next gain step", () => {
+    expect(gainToVolume(-60)).toBe(0);
+    expect(gainToVolume(-59.9)).toBeGreaterThan(0);
   });
 });
 

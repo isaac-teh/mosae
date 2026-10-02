@@ -155,6 +155,62 @@ describe("applyEdits", () => {
     expect("kind" in resetClip ? resetClip.spec.slots[0]?.crop : null).toBeUndefined();
   });
 
+  it("sets one complete collage spec atomically and retains clip duration", () => {
+    const collageClip = firstCut.videoClips[3];
+    if (!(collageClip && "kind" in collageClip)) throw new Error("fixture collage missing");
+    const result = apply([{ op: "setCollageSpec", clipId: "c1", spec: { ...collageClip.spec, effectId: "film-grain", durationSec: 99 } }]);
+    const updated = result.timeline.videoClips[3];
+    expect(updated && "kind" in updated ? updated.spec : null).toMatchObject({ effectId: "film-grain", durationSec: 3 });
+    expect(applyEdits(firstCut, [{ op: "setCollageSpec", clipId: "p1", spec: collageClip.spec }])).toMatchObject({ ok: false, opIndex: 0 });
+    expect(applyEdits(firstCut, [{ op: "setCollageSpec", clipId: "c1", spec: { ...collageClip.spec, layoutId: "not-a-layout" } as never }])).toMatchObject({ ok: false, opIndex: 0 });
+  });
+
+  it("clears a slot atomically, then replaces it without retaining empty or stale slot metadata", () => {
+    const collageClip = firstCut.videoClips[3];
+    if (!(collageClip && "kind" in collageClip)) throw new Error("fixture collage missing");
+    const clearedSpec = { ...collageClip.spec, slots: collageClip.spec.slots.map((slot, index) => index === 0 ? { slotId: slot.slotId, empty: true as const } : slot) };
+    const result = applyEdits(firstCut, [
+      { op: "setCollageSpec", clipId: "c1", spec: clearedSpec },
+      { op: "replaceCollageSlot", clipId: "c1", slotId: "s1", shotId: "replacement-shot", kind: "photo" },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const updated = result.timeline.videoClips[3];
+    expect(updated && "kind" in updated ? updated.spec.slots : null).toHaveLength(3);
+    expect(updated && "kind" in updated ? updated.spec.slots[0] : null).toEqual({ slotId: "s1", shotId: "replacement-shot", kind: "photo" });
+    expect(updated && "kind" in updated ? updated.durationSec : null).toBe(3);
+    expect(result.leftOutShotIds).toEqual(["shot-c1"]);
+  });
+
+  it("splits only populated slots and reports a clear error for an all-empty collage", () => {
+    const collageClip = firstCut.videoClips[3];
+    if (!(collageClip && "kind" in collageClip)) throw new Error("fixture collage missing");
+    const mixedSpec = { ...collageClip.spec, slots: [
+      { slotId: "s1", empty: true as const },
+      { slotId: "s2", shotId: "photo-shot", kind: "photo" as const },
+      { slotId: "s3", shotId: "video-shot", kind: "video" as const },
+    ] };
+    const split = apply([{ op: "setCollageSpec", clipId: "c1", spec: mixedSpec }, { op: "splitCollage", clipId: "c1" }]);
+    expect(split.timeline.videoClips.slice(3)).toMatchObject([
+      { id: "c1:s2", source: { kind: "photo", shotId: "photo-shot" }, durationSec: 1.5 },
+      { id: "c1:s3", source: { kind: "photo", shotId: "video-shot" }, durationSec: 1.5 },
+    ]);
+    expect(split.leftOutShotIds).toEqual(["shot-c1", "shot-c2", "shot-c3"]);
+    const emptySpec = { ...collageClip.spec, slots: collageClip.spec.slots.map((slot) => ({ slotId: slot.slotId, empty: true as const })) };
+    const empty = applyEdits(firstCut, [{ op: "setCollageSpec", clipId: "c1", spec: emptySpec }, { op: "splitCollage", clipId: "c1" }]);
+    expect(empty).toMatchObject({ ok: false, opIndex: 1, error: "Cannot split a collage with no populated slots" });
+  });
+
+  it("stores photo crop only on photo sources and supports collage rotation", () => {
+    const crop = { x: 0.15, y: 0.25, scale: 1.7, rotationDeg: -27 };
+    const photo = apply([{ op: "setPhotoCrop", clipId: "p1", crop }]).timeline.videoClips[0];
+    expect(photo && "source" in photo ? photo.source : null).toMatchObject({ kind: "photo", crop });
+    expect(photo && "crop" in photo ? photo.crop : undefined).toBeUndefined();
+    const collage = apply([{ op: "setCollageCrop", clipId: "c1", slotId: "s1", crop }]).timeline.videoClips[3];
+    expect(collage && "kind" in collage ? collage.spec.slots[0]?.crop : null).toEqual(crop);
+    expect(applyEdits(firstCut, [{ op: "setPhotoCrop", clipId: "v1", crop }])).toMatchObject({ ok: false, opIndex: 0 });
+  });
+
   it("adds and removes collage cells within the template limits", () => {
     const added = apply([{ op: "addCollageSlot", clipId: "c1", slotId: "s4", shotId: "shot-four", kind: "photo" }]);
     expect(added.timeline.videoClips[3]).toMatchObject({ spec: { layoutId: "torn-paper", slots: [{}, {}, {}, { slotId: "s4", shotId: "shot-four", kind: "photo" }] } });
@@ -176,6 +232,28 @@ describe("applyEdits", () => {
     const replaced = apply([{ op: "replaceCollageSlot", clipId: "c1", slotId: "s1", shotId: "other-photo", kind: "photo" }]).timeline.videoClips[3];
     expect("kind" in replaced && replaced.spec.slots[0].shotId).toBe("other-photo");
     expect(apply([{ op: "setSoundtrack", soundtrackId: "new-theme" }]).timeline.audioClips[0].source).toMatchObject({ soundtrackId: "new-theme" });
+  });
+
+  it("changes only music gain and preserves it through subsequent timeline edits", () => {
+    const withOtherAudio = { ...firstCut, audioClips: [...firstCut.audioClips, { id: "fx", source: { kind: "asset" as const, assetId: "shot-p1", sourceInSec: 0, sourceOutSec: 2 }, role: "ambient" as const, startSec: 0, gainDb: -3, fadeInSec: 0, fadeOutSec: 0 }] };
+    const changed = applyEdits(withOtherAudio, [{ op: "setMusicVolume", audioClipId: "music", gainDb: 0 }, { op: "setPhotoDuration", clipId: "p1", sec: 3 }]);
+    expect(changed.ok).toBe(true);
+    if (changed.ok) {
+      expect(changed.timeline.audioClips.find((clip) => clip.role === "music")?.gainDb).toBe(0);
+      expect(changed.timeline.audioClips.find((clip) => clip.id === "fx")?.gainDb).toBe(-3);
+    }
+    expect(applyEdits(firstCut, [{ op: "setMusicVolume", audioClipId: "music", gainDb: 13 }])).toMatchObject({ ok: false, opIndex: 0 });
+  });
+
+  it("rejects volume for an uncreated editor soundtrack and applies it after setSoundtrack", () => {
+    const noMusic = parseTimeline({ ...firstCut, audioClips: [] });
+    expect(applyEdits(noMusic, [{ op: "setMusicVolume", audioClipId: "editor-soundtrack", gainDb: 0 }])).toMatchObject({ ok: false, opIndex: 0 });
+    const created = applyEdits(noMusic, [
+      { op: "setSoundtrack", soundtrackId: "new-theme" },
+      { op: "setMusicVolume", audioClipId: "editor-soundtrack", gainDb: 0 },
+    ]);
+    expect(created.ok).toBe(true);
+    if (created.ok) expect(created.timeline.audioClips).toMatchObject([{ id: "editor-soundtrack", role: "music", gainDb: 0, source: { kind: "soundtrack", soundtrackId: "new-theme" } }]);
   });
 
   it("applies a collage layout and its compatible motion as one validated change", () => {
@@ -292,10 +370,13 @@ describe("applyEdits", () => {
       { op: "move", clipId: "p1", toIndex: 2 },
       { op: "setPhotoDuration", clipId: "p1", sec: 3 },
       { op: "setPhotoDuration", clipId: "p1", sec: 4 },
+      { op: "setMusicVolume", audioClipId: "music", gainDb: 2 },
+      { op: "setMusicVolume", audioClipId: "music", gainDb: 6 },
     ])).toEqual([
       { op: "trim", clipId: "v1", inSec: 5, outSec: 7 },
       { op: "move", clipId: "p1", toIndex: 2 },
       { op: "setPhotoDuration", clipId: "p1", sec: 4 },
+      { op: "setMusicVolume", audioClipId: "music", gainDb: 6 },
     ]);
   });
 });

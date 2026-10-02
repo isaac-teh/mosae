@@ -524,7 +524,7 @@ describe("film adapters", () => {
   });
 
   it("returns the direction options route body unchanged", async () => {
-    const body = { note: "n", rewrites: [], cadences: [], soundtracks: [], durations: [], recommendedDuration: "30s", recommendedCadence: "playful", cadenceReason: "kids laughing" };
+    const body = { note: "n", rewrites: [], cadences: [], soundtracks: [{ id: "lyria-playful", name: "Sandcastle Days", description: "Light and bright", mood: "playful", durationSec: 60.212, suggested: true }], durations: [], recommendedDuration: "30s", recommendedCadence: "playful", cadenceReason: "kids laughing" };
     const deps = dependencies({ request: vi.fn(async () => body) });
     await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getDirectionOptions("proposal-1")).resolves.toEqual(body);
     expect(deps.request).toHaveBeenCalledWith("GET", "/api/projects/project-1/proposals/proposal-1/direction-options");

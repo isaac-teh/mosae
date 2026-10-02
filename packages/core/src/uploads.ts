@@ -45,7 +45,7 @@ async function defaultDeps(): Promise<UploadDeps> {
 
 export async function uploadMedia(
   files: File[],
-  options: { mode: "memory" | "creator"; onProgress?: (p: UploadProgress) => void; onPreparationProgress?: (p: UploadPreparationProgress) => void; onProjectReady?: (projectId: string) => void; onReady?: (ready: { projectId: string; assetIds: string[] }) => void; concurrency?: number },
+  options: { mode: "memory" | "creator"; projectId?: string; onProgress?: (p: UploadProgress) => void; onPreparationProgress?: (p: UploadPreparationProgress) => void; onProjectReady?: (projectId: string) => void; onReady?: (ready: { projectId: string; assetIds: string[] }) => void; concurrency?: number },
   deps?: UploadDeps,
 ): Promise<{ projectId: string; finished: number; failed: number; assetIds: string[] }> {
   const { post, putFile } = deps ?? (await defaultDeps());
@@ -54,11 +54,11 @@ export async function uploadMedia(
   const acceptedOriginal = files.filter((file) => Boolean(contentTypeFor(file)));
   const rejected = files.length - acceptedOriginal.length;
   if (acceptedOriginal.length === 0) return { projectId: "", finished: 0, failed: rejected, assetIds: [] };
-  const { project } = await post<{ project: { id: string } }>("/api/projects", { mode: options.mode });
-  options.onProjectReady?.(project.id);
+  const projectId = options.projectId ?? (await post<{ project: { id: string } }>("/api/projects", { mode: options.mode })).project.id;
+  options.onProjectReady?.(projectId);
   options.onPreparationProgress?.({ totalFiles: acceptedOriginal.length, preparedFiles: 0 });
   const accepted = await prepareUploadFiles(acceptedOriginal, (preparedFiles, totalFiles) => options.onPreparationProgress?.({ preparedFiles, totalFiles }));
-  const base = `/api/projects/${project.id}/upload-sessions`;
+  const base = `/api/projects/${projectId}/upload-sessions`;
 
   const toInput = (f: File) => ({ fileName: f.name, contentType: contentTypeFor(f), sizeBytes: f.size });
   const first = await post<{ session: { id: string }; entries: RegisteredEntry[] }>(base, {
@@ -88,7 +88,7 @@ export async function uploadMedia(
     };
     const report = () => options.onProgress?.({ ...progress, bytesSent: sent.reduce((a, b) => a + b, 0) });
     report();
-    options.onReady?.({ projectId: project.id, assetIds: entries.map(({ assetId }) => assetId) });
+    options.onReady?.({ projectId, assetIds: entries.map(({ assetId }) => assetId) });
 
     let next = 0;
     async function worker() {
@@ -115,7 +115,7 @@ export async function uploadMedia(
     }
 
     await Promise.all(Array.from({ length: Math.min(concurrency, accepted.length) }, worker));
-    return { projectId: project.id, finished: progress.finishedFiles, failed: progress.failedFiles, assetIds: entries.map(({ assetId }) => assetId) };
+    return { projectId, finished: progress.finishedFiles, failed: progress.failedFiles, assetIds: entries.map(({ assetId }) => assetId) };
   } catch (error) {
     mainPathFailed = true;
     throw error;

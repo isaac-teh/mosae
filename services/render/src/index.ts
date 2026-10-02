@@ -24,7 +24,7 @@ mkdirSync(config.outputDir, { recursive: true });
 
 // The bundle is built once per process, not once per request — a webpack build
 // per film adds ten to thirty seconds to every render.
-const bundleOnce = createBundleOnce((entryPoint) => bundle({ entryPoint, publicDir }));
+const bundleOnce = createBundleOnce((entryPoint) => bundle({ entryPoint, publicDir, webpackOverride: (config) => ({ ...config, resolve: { ...config.resolve, extensionAlias: { ...config.resolve?.extensionAlias, ".js": [".js", ".ts", ".tsx"] } } }) }));
 const serveUrl = createBundleSource({ serveUrl: process.env.MOSAE_REMOTION_SERVE_URL, production: process.env.NODE_ENV === "production", bundle: () => bundleOnce(new URL("../../../packages/video/src/index.tsx", import.meta.url).pathname) });
 
 app.get("/health", (_req, res) => {

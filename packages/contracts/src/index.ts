@@ -8,10 +8,12 @@ export {
   ChapterSchema,
   TransitionSchema,
   CropSchema,
+  PhotoCropSchema,
   parseTimeline,
   safeParseTimeline,
   type Timeline,
   type VideoClip,
+  type PhotoCrop,
   type CollageClip,
   type AudioClip,
   type Caption,
@@ -20,10 +22,11 @@ export {
 } from "./timeline.js";
 
 export {
-  COLLAGE_EFFECTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS,
+  COLLAGE_EFFECTS, COLLAGE_GRID_VARIANTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS,
   CollageSpecSchema, slotCountForLayout,
 } from "./collage.js";
 export type { CollageSpec, CollageSlot } from "./collage.js";
+export { collageGridRects, type CollageGridRect, type CollageGridVariant } from "./collageGeometry.js";
 export { ALLOWED_COMBOS, ALLOWED_COMBO_KEYS } from "./collageCombos.js";
 
 export {

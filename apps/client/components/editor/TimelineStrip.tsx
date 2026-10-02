@@ -13,6 +13,7 @@ type TimelineRowsProps = {
   sources: Record<string, string>;
   thumbnails: Record<string, string>;
   selectedClipId: string | null;
+  selectedAudioClipId: string | null;
   soundtrackName: string | null;
   pixelsPerSecond: number;
   leadingPadding: number;
@@ -27,9 +28,11 @@ type TimelineRowsProps = {
   onSlotPointerUp: (event: any, commit: boolean) => void;
   reorderPreview: { clipId: string; toIndex: number; pointerContentX: number } | null;
   onSoundtrack: () => void;
+  onSelectAudio: (audioClipId: string) => void;
+  onAddClip: () => void;
 };
 
-const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails, selectedClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, onDeselect, onSlotPointerDown, onSlotPointerMove, onSlotPointerUp, reorderPreview, onSoundtrack }: TimelineRowsProps) {
+const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails, selectedClipId, selectedAudioClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, onDeselect, onSlotPointerDown, onSlotPointerMove, onSlotPointerUp, reorderPreview, onSoundtrack, onSelectAudio, onAddClip }: TimelineRowsProps) {
   const music = timeline.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   const musicDuration = music ? music.source.sourceOutSec - music.source.sourceInSec : 0;
   const tickSeconds = Array.from({ length: Math.floor(timeline.durationSec) + 1 }, (_, second) => second);
@@ -49,8 +52,17 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
         </View> : null;
       })}
     </View>
+    <View className="relative mt-1 h-[36px]">
+      {selectedClipId || selectedAudioClipId ? <Pressable role="button" accessibilityLabel="Deselect selected audio" onPress={onDeselect} style={{ position: "absolute", zIndex: 0, left: 0, right: 0, top: 0, height: 32 }} /> : null}
+      {music ? <Pressable role="button" accessibilityLabel={`Music track ${soundtrackName ?? "Soundtrack"}`} aria-pressed={selectedAudioClipId === music.id} onPress={() => onSelectAudio(music.id)}
+        style={{ position: "absolute", left: timeToX(music.startSec, pixelsPerSecond, leadingPadding), width: Math.max(1, musicDuration * pixelsPerSecond), height: 32, top: 0, borderWidth: selectedAudioClipId === music.id ? 2 : 0, borderColor: "#FF8F70" }} className="justify-center overflow-hidden rounded-sm bg-[#2B856C] px-2">
+        <Text numberOfLines={1} ellipsizeMode="tail" className="font-sans-medium text-[11px] text-white">♫ {soundtrackName ?? "Soundtrack"}</Text>
+      </Pressable> : <Pressable role="button" accessibilityLabel="Open soundtrack picker" onPress={onSoundtrack} style={{ position: "absolute", left: leadingPadding, width: Math.max(1, timeline.durationSec * pixelsPerSecond), height: 32, top: 0 }} className="justify-center rounded-sm bg-[#1C5548] px-2">
+        <Text numberOfLines={1} className="font-sans text-[11px] text-white">+ Add soundtrack</Text>
+      </Pressable>}
+    </View>
     <View className="relative mt-1 h-[62px]">
-      {selectedClipId ? <Pressable role="button" accessibilityLabel="Deselect selected clip" onPress={onDeselect} style={{ position: "absolute", zIndex: 0, left: 0, right: 0, top: 0, height: 58 }} /> : null}
+      {selectedClipId || selectedAudioClipId ? <Pressable role="button" accessibilityLabel="Deselect selected clip" onPress={onDeselect} style={{ position: "absolute", zIndex: 0, left: 0, right: 0, top: 0, height: 58 }} /> : null}
       {(() => {
         const fromIndex = reorderPreview ? timeline.videoClips.findIndex((clip) => clipId(clip) === reorderPreview.clipId) : -1;
         const displayClips = reorderPreview && fromIndex >= 0 ? reorderSlots(timeline.videoClips, fromIndex, reorderPreview.toIndex) : timeline.videoClips;
@@ -69,7 +81,7 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
           onPointerDown={(event: any) => onTrimPointerDown(clip, edge, event)} onPointerMove={onTrimPointerMove} onPointerUp={(event: any) => onTrimPointerUp(event, true)} onPointerCancel={(event: any) => onTrimPointerUp(event, false)} data-trim-handle="true"
           style={{ position: "absolute", zIndex: 20, left: edge === "start" ? -22 : undefined, right: edge === "end" ? -22 : undefined, top: 7, height: 44, width: 44, borderRadius: 22, backgroundColor: "transparent", borderWidth: 0, alignItems: "center", justifyContent: "center", ...(Platform.OS === "web" ? ({ touchAction: "none" } as unknown as ViewStyle) : {}) }}><View pointerEvents="none" style={{ height: 34, width: 12, borderRadius: 6, backgroundColor: "#F5C842", borderWidth: 1, borderColor: "#2B2B20" }} /></Pressable>;
         const width = Math.max(1, duration * pixelsPerSecond);
-        return <View key={id} className="transition-all duration-200" style={{ position: "absolute", zIndex: lifted ? 30 : selected ? 10 : 1, left: lifted && reorderPreview ? reorderPreview.pointerContentX - width / 2 : timeToX(start, pixelsPerSecond, leadingPadding), width, top: 0, height: 58, borderWidth: 2, borderRadius: 7, overflow: "visible", borderColor: selected ? "#F5C842" : "transparent", backgroundColor: index % 2 ? "#294655" : "#E8E2D5", transform: lifted ? [{ scale: 1.04 }] : undefined, boxShadow: lifted ? "0px 8px 22px rgba(0,0,0,0.35)" : undefined, elevation: lifted ? 8 : 0 }}>
+        return <View key={id} className="transition-all duration-200" style={{ position: "absolute", zIndex: lifted ? 30 : selected ? 10 : 1, left: lifted && reorderPreview ? reorderPreview.pointerContentX - width / 2 : timeToX(start, pixelsPerSecond, leadingPadding), width, top: 0, height: 58, borderWidth: 2, borderRadius: 7, overflow: "visible", borderColor: selected ? "#FF8F70" : "transparent", backgroundColor: index % 2 ? "#294655" : "#E8E2D5", transform: lifted ? [{ scale: 1.04 }] : undefined, boxShadow: lifted ? "0px 8px 22px rgba(0,0,0,0.35)" : undefined, elevation: lifted ? 8 : 0 }}>
           <Pressable role="button" accessibilityLabel={`Select clip ${id}`} aria-pressed={selected} data-timeline-slot="true"
             onPointerDown={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), event)} onPointerMove={onSlotPointerMove} onPointerUp={(event: any) => onSlotPointerUp(event, true)} onPointerCancel={(event: any) => onSlotPointerUp(event, false)}
             onTouchStart={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), { ...event.nativeEvent, currentTarget: event.currentTarget, pointerId: 0 })}
@@ -89,13 +101,10 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
       });
       })()}
     </View>
-    <View className="relative mt-1 h-[36px]">
-      {music ? <Pressable role="button" accessibilityLabel={`Music track ${soundtrackName ?? "Soundtrack"}`} onPress={onSoundtrack}
-        style={{ position: "absolute", left: timeToX(music.startSec, pixelsPerSecond, leadingPadding), width: Math.max(1, musicDuration * pixelsPerSecond), height: 32, top: 0 }} className="justify-center overflow-hidden rounded-sm bg-[#2B856C] px-2">
-        <Text numberOfLines={1} ellipsizeMode="tail" className="font-sans-medium text-[11px] text-white">♫ {soundtrackName ?? "Soundtrack"}</Text>
-      </Pressable> : <Pressable role="button" accessibilityLabel="Open soundtrack picker" onPress={onSoundtrack} style={{ position: "absolute", left: leadingPadding, width: Math.max(1, timeline.durationSec * pixelsPerSecond), height: 32, top: 0 }} className="justify-center rounded-sm bg-[#1C5548] px-2">
-        <Text numberOfLines={1} className="font-sans text-[11px] text-white">+ Add soundtrack</Text>
-      </Pressable>}
+    <View className="relative mt-1 h-[48px]">
+      <Pressable role="button" accessibilityLabel="Add clip" onPress={onAddClip} style={{ position: "absolute", left: timeToX(timeline.durationSec, pixelsPerSecond, leadingPadding) + 8, top: 0, width: 40, height: 40, borderRadius: 12, backgroundColor: "#F7F6F2", alignItems: "center", justifyContent: "center" }}>
+        <Text className="font-sans text-[25px] leading-[28px] text-[#172027]">+</Text>
+      </Pressable>
     </View>
   </View>;
 });
@@ -107,11 +116,12 @@ type TrimDragState = { clipId: string; edge: "start" | "end"; startX: number; ed
 type PendingSlotPress = { clipId: string; fromIndex: number; startX: number; startY: number; pointerId: number; target: any } | null;
 type ActiveSlotReorder = { clipId: string; fromIndex: number; toIndex: number; pointerId: number } | null;
 
-export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {} }: {
+export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, selectedAudioClipId = null, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {}, onSelectAudio = () => {}, onAddClip = () => {} }: {
   timeline: Timeline;
   sources: Record<string, string>;
   thumbnails?: Record<string, string>;
   selectedClipId: string | null;
+  selectedAudioClipId?: string | null;
   playheadSec: number;
   soundtrackName?: string | null;
   onSelect: (clipId: string, startSec: number) => void;
@@ -121,6 +131,8 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
   onReorder?: (clipId: string, toIndex: number) => void;
   onDeselect?: () => void;
   onSoundtrack?: () => void;
+  onSelectAudio?: (audioClipId: string) => void;
+  onAddClip?: () => void;
 }) {
   const [pixelsPerSecond, setPixelsPerSecond] = useState(DEFAULT_PIXELS_PER_SECOND);
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -425,8 +437,11 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
     </View>
     <View ref={viewportRef} className="relative overflow-hidden" style={{ touchAction: "pan-x", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
       <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} style={{ width: "100%" }}>
-        <TimelineRows timeline={timeline} sources={sources} thumbnails={thumbnails} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => { if (suppressNextPress.current) return; if (id === selectedClipId) onDeselect(); else onSelect(id, start); }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} />
+        <TimelineRows timeline={timeline} sources={sources} thumbnails={thumbnails} selectedClipId={selectedClipId} selectedAudioClipId={selectedAudioClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => { if (suppressNextPress.current) return; if (id === selectedClipId) onDeselect(); else onSelect(id, start); }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} onSelectAudio={onSelectAudio} onAddClip={onAddClip} />
       </ScrollView>
+      {timeline.audioClips.some((clip) => clip.role === "music" && clip.source.kind === "soundtrack") ? <Pressable role="button" accessibilityLabel={`Select music ${soundtrackName ?? "Soundtrack"}`} onPress={() => { const music = timeline.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack"); if (music) onSelectAudio(music.id); }} style={{ position: "absolute", zIndex: 8, left: 0, top: 88, width: Math.min(132, viewportWidth), height: 28, justifyContent: "center", paddingHorizontal: 7, backgroundColor: "#236d59", borderRadius: 4 }}>
+        <Text numberOfLines={1} ellipsizeMode="tail" className="font-sans-medium text-[10px] text-white">♫ {soundtrackName ?? "Soundtrack"}</Text>
+      </Pressable> : null}
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />
     </View>
   </View>;

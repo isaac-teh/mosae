@@ -4,7 +4,7 @@ import { Player, type PlayerRef } from "@remotion/player";
 import { MosaeTimeline } from "@mosae/video/timeline";
 import type { Timeline } from "@mosae/contracts";
 
-export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, playheadSec = 0, pauseRequest = 0, togglePlayRequest = 0, onPlayingChange, poster, onError, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }: {
+export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, playheadSec = 0, pauseRequest = 0, togglePlayRequest = 0, onPlayingChange, poster, onError, selectedClipId, onSelectClip, onCommitPhotoCrop, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }: {
   timeline: Timeline;
   sources: Record<string, string>;
   onTimeChange?: (seconds: number) => void;
@@ -15,15 +15,18 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   onPlayingChange?: (playing: boolean) => void;
   poster?: string;
   onError?: (error: Error) => void;
+  selectedClipId?: string | null;
+  onSelectClip?: (clipId: string) => void;
+  onCommitPhotoCrop?: (clipId: string, crop: { x: number; y: number; scale: number; rotationDeg?: number }) => void;
   selectedCollageCellId?: string | null;
   onSelectCollageCell?: (clipId: string, slotId: string) => void;
-  onCommitCollageCrop?: (clipId: string, slotId: string, crop: { x: number; y: number; scale: number }) => void;
+  onCommitCollageCrop?: (clipId: string, slotId: string, crop: { x: number; y: number; scale: number; rotationDeg?: number }) => void;
 }) {
   const player = useRef<PlayerRef>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(playheadSec);
   const lastToggleRequest = useRef(togglePlayRequest);
-  const inputProps = useMemo(() => ({ timeline, sources, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }), [timeline, sources, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop]);
+  const inputProps = useMemo(() => ({ timeline, sources, selectedClipId, onSelectClip, onCommitPhotoCrop, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }), [timeline, sources, selectedClipId, onSelectClip, onCommitPhotoCrop, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop]);
   useEffect(() => {
     const current = player.current;
     if (!current) return;
@@ -82,7 +85,8 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   const first = timeline.videoClips[0];
   const firstShotId = first && ("kind" in first ? first.spec.slots[0]?.shotId : first.source.shotId);
   const loadingPoster = (poster ?? (firstShotId ? sources[firstShotId] : undefined));
-  return <View className="relative size-full overflow-hidden rounded-[14px] bg-[#18211d]">
+  return <View className="mosae-editor-preview relative size-full overflow-hidden rounded-[14px] bg-[#18211d]">
+    <style>{`.mosae-editor-preview [data-collage-cell][aria-pressed="true"] { border-color: #168dff !important; border-width: 12px !important; }`}</style>
     <div role="button" aria-label={playing ? "Pause preview" : "Play preview"} tabIndex={0} onClick={togglePlayback} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); togglePlayback(); } }} style={{ position: "absolute", inset: 0 }}>
     <Player ref={player} component={MosaeTimeline} inputProps={inputProps} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}
       compositionWidth={timeline.aspect === "9:16" ? 1080 : 1920} compositionHeight={timeline.aspect === "9:16" ? 1920 : 1080}
