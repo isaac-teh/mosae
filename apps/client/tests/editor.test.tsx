@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 
 const boundary = vi.hoisted(() => ({ repository: {} as any, params: { projectId: "p1", generationId: "g1", planId: undefined as string | undefined, repository: "fixture", request: undefined as string | undefined }, back: vi.fn(), push: vi.fn(), navigate: vi.fn() }));
+vi.mock("@/lib/demoAssets", () => ({ demoImage: () => 1 }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ back: boundary.back, push: boundary.push, navigate: boundary.navigate }) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: boundary.repository, flow: { repository: "api", projectId: "p1" } }) }));
 vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ timeline, onSelectCollageCell, playheadSec, pauseRequest, togglePlayRequest }: any) => {

@@ -238,3 +238,31 @@ test("music label remains accessible after timeline scroll and Save opens render
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText(/^(Preparing|Rendering|Ready)$/)).toBeVisible({ timeout: 30_000 });
 });
+
+test("existing collage library styles use rendered previews and preserve photos, duration, and undo", async ({ page }) => {
+  await openEditor(page);
+  const before = await filmDuration(page);
+  await page.getByRole("button", { name: "Select clip collage-1", exact: true }).click();
+  await page.getByRole("button", { name: "Layout", exact: true }).click();
+  await page.getByRole("button", { name: "Collage Styles", exact: true }).click();
+  for (const name of ["Photo table", "Torn paper mosaic", "Polaroid garland", "Postcard stack", "Route map", "Botanical scrapbook", "Nine-photo grid", "Travel mosaic", "Travel story"]) {
+    const button = page.getByRole("button", { name: `Layout ${name}`, exact: true });
+    await button.click();
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    const preview = page.getByLabel(`${name} style preview`, { exact: true });
+    await expect(preview).toBeVisible();
+    await expect.poll(() => preview.evaluate((node) => node instanceof HTMLImageElement ? node.complete && node.naturalWidth > 0 : Boolean(node.querySelector("img")?.naturalWidth))).toBe(true);
+    await expect(page.locator("[data-collage-media]")).toHaveCount(4);
+    expect(await filmDuration(page)).toBe(before);
+  }
+  await expect(page.getByRole("button", { name: "Layout Film negative", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Layout Torn paper mosaic", exact: true }).click();
+  await page.getByRole("button", { name: "Motion Tape slap", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Motion Tape slap", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.screenshot({ path: screenshotPath("collage-library-styles"), scale: "css" });
+  await page.getByRole("button", { name: "Close collage", exact: true }).click();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await page.getByRole("button", { name: "Layout", exact: true }).click();
+  await page.getByRole("button", { name: "Collage Styles", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Motion Print drop", exact: true })).toHaveAttribute("aria-pressed", "true");
+});

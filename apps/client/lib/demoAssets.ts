@@ -1,4 +1,19 @@
 const assets: Record<string, number> = {
+  "collage-botanical-scrapbook": require("../assets/collage-library/botanical-scrapbook.jpg"),
+  "collage-botanical-scrapbook-wide": require("../assets/collage-library/botanical-scrapbook-wide.jpg"),
+  "collage-nine-photo-grid": require("../assets/collage-library/nine-photo-grid.jpg"),
+  "collage-nine-photo-grid-wide": require("../assets/collage-library/nine-photo-grid-wide.jpg"),
+  "collage-travel-mosaic": require("../assets/collage-library/travel-mosaic.jpg"),
+  "collage-travel-mosaic-wide": require("../assets/collage-library/travel-mosaic-wide.jpg"),
+  "collage-travel-story": require("../assets/collage-library/travel-story.jpg"),
+  "collage-travel-story-wide": require("../assets/collage-library/travel-story-wide.jpg"),
+
+  "collage-photo-table": require("../assets/collage-library/photo-table.jpg"),
+  "collage-torn-paper": require("../assets/collage-library/torn-paper.jpg"),
+  "collage-polaroid-garland": require("../assets/collage-library/polaroid-garland.jpg"),
+  "collage-postcard-stack": require("../assets/collage-library/postcard-stack.jpg"),
+  "collage-route-map": require("../assets/collage-library/route-map.jpg"),
+
   "music-acoustic-demo": require("../assets/demo/music-acoustic-demo.mp3"),
   "music-piano-demo": require("../assets/demo/music-piano-demo.mp3"),
   "birthday-song": require("../assets/demo/figma/review-moments/imgMeiClappingAtBirthdayCakeWithParents.png"),
