@@ -20,11 +20,12 @@ vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flo
 vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: () => React.createElement("div", { "data-testid": "film-player" }) }));
 vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: () => React.createElement("div", { "data-testid": "film-ready-player" }) }));
 import DirectorScreen from "../app/director";
+import { setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress } from "@mosae/core";
 
 let root: Root;
 let host: HTMLDivElement;
-beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
+beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; URL.createObjectURL = vi.fn(() => "blob:test-photo"); URL.revokeObjectURL = vi.fn(); setPendingMedia([]); setUploadProgress(null); setUploadPreparationProgress(null); setUploadFailure(null); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
+afterEach(async () => { await act(async () => root.unmount()); setPendingMedia([]); setUploadProgress(null); setUploadPreparationProgress(null); setUploadFailure(null); host.remove(); });
 async function renderScreen() { await act(async () => root.render(<DirectorScreen />)); }
 async function click(label: string) { const button = host.querySelector(`button[aria-label="${label}"]`) ?? host.querySelector(`button[aria-label^="${label},"]`) ?? [...host.querySelectorAll("button")].find((item) => item.textContent?.trim() === label); expect(button).toBeTruthy(); await act(async () => button!.dispatchEvent(new MouseEvent("click", { bubbles: true }))); }
 function hasText(text: string) { return host.textContent?.includes(text) ?? false; }
@@ -71,6 +72,24 @@ describe("Director chat", () => {
     expect(history).not.toBeNull();
     expect(history!.style.minHeight).toBe("0");
     expect(history!.style.flexGrow).toBe("1");
+  });
+
+  it("shows the selected photo grid and preparation progress while the chat opens", async () => {
+    setup();
+    setPendingMedia([new File(["photo"], "trip.jpg", { type: "image/jpeg" })]);
+    setUploadPreparationProgress({ preparedFiles: 0, totalFiles: 1 });
+    await renderScreen();
+    expect(hasText("Preparing your photos")).toBe(true);
+    expect(hasText("0 of 1")).toBe(true);
+    expect(host.querySelector('[alt="Selected photo 1"]')).toBeTruthy();
+  });
+
+  it("keeps terminal all-failed upload status visible in the chat", async () => {
+    setup();
+    setUploadProgress({ totalFiles: 1, finishedFiles: 0, failedFiles: 1, bytesSent: 0, totalBytes: 0 });
+    setUploadFailure("None of these photos uploaded. Check your connection and try again.");
+    await renderScreen();
+    expect(hasText("None of these photos uploaded. Check your connection and try again.")).toBe(true);
   });
 
   it("scrolls the director history to the newest message after an occasion chip action", async () => {

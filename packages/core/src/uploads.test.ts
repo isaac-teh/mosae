@@ -59,6 +59,25 @@ describe("uploadMedia", () => {
     expect(progress.at(-1)).toEqual({ totalFiles: 2, finishedFiles: 2, failedFiles: 0, bytesSent: 30, totalBytes: 30 });
   });
 
+  it("announces chat readiness before storage transfers finish", async () => {
+    const { deps } = fakeDeps();
+    let finishUpload!: () => void;
+    let finished = false;
+    const delayedDeps: UploadDeps = {
+      ...deps,
+      putFile: () => new Promise<void>((resolve) => { finishUpload = () => { finished = true; resolve(); }; }),
+    };
+    const onProjectReady = vi.fn();
+    const onReady = vi.fn();
+    const transfer = uploadMedia([file("photo.jpg", 10)], { mode: "memory", onProjectReady, onReady }, delayedDeps);
+    await vi.waitFor(() => expect(onReady).toHaveBeenCalledWith({ projectId: "p1", assetIds: ["a1"] }));
+    expect(onProjectReady).toHaveBeenCalledWith("p1");
+    expect(finished).toBe(false);
+    finishUpload();
+    await transfer;
+    expect(finished).toBe(true);
+  });
+
   it("registers more than 500 files in batches and respects concurrency", async () => {
     const { deps, calls, maxInFlight } = fakeDeps();
     const files = Array.from({ length: 501 }, (_, i) => file(`f${i}.jpg`, 1));
@@ -72,6 +91,30 @@ describe("uploadMedia", () => {
       "/api/projects/p1/upload-sessions/s1/close",
     ]);
     expect(maxInFlight()).toBeLessThanOrEqual(3);
+  });
+
+  it("starts the next file as soon as any pool slot frees, without waiting for a batch", async () => {
+    const starts: string[] = [];
+    const resolvers = new Map<string, () => void>();
+    const { deps } = fakeDeps();
+    const staggered: UploadDeps = {
+      ...deps,
+      putFile: (path) => {
+        const id = path.split("/").at(-2)!;
+        starts.push(id);
+        return new Promise<void>((resolve) => resolvers.set(id, resolve));
+      },
+    };
+    const uploading = uploadMedia(Array.from({ length: 6 }, (_, i) => file(`${i}.jpg`, 1)), { mode: "memory", concurrency: 4 }, staggered);
+    await vi.waitFor(() => expect(starts).toHaveLength(4));
+    resolvers.get("a2")!();
+    await vi.waitFor(() => expect(starts).toHaveLength(5));
+    expect(starts[4]).toBe("a5");
+    resolvers.get("a5")!();
+    await vi.waitFor(() => expect(starts).toHaveLength(6));
+    expect(starts[5]).toBe("a6");
+    for (const resolve of resolvers.values()) resolve();
+    await uploading;
   });
 
   it("reports a failed upload and continues with the rest", async () => {

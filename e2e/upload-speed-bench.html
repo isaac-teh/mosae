@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Local upload speed replay benchmark</title>
+<input id="files" type="file" multiple accept="image/*" />
+<script type="module">
+  import { prepareUploadFiles } from "../packages/core/src/prepareUploadFiles.ts";
+
+  window.runUploadSet = async (resize) => {
+    const started = performance.now();
+    const original = Array.from(document.querySelector("#files").files);
+    const files = resize ? await prepareUploadFiles(original) : original;
+    const next = { value: 0 };
+    async function worker() {
+      while (true) {
+        const index = next.value++;
+        if (index >= files.length) return;
+        const response = await fetch(`http://127.0.0.1:18811/upload/${index}`, { method: "POST", body: files[index] });
+        if (!response.ok) throw new Error(`upload failed: ${response.status}`);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(4, files.length) }, worker));
+    return { milliseconds: performance.now() - started, originalBytes: original.reduce((sum, file) => sum + file.size, 0), uploadedBytes: files.reduce((sum, file) => sum + file.size, 0) };
+  };
+</script>

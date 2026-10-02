@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatPersonQuestion, ChatProposal, ChatSetAsideCard, ChatShaping, ChatTyping } from "@/components/chat";
@@ -9,7 +9,7 @@ import { shouldAutoScrollAfterAction } from "@/lib/chatScroll";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { EditorPreview } from "@/components/editor/EditorPreview";
 import type { Timeline } from "@mosae/contracts";
-import { contentTypeFor, getPendingMediaAssets, personAnswerChips } from "@mosae/core";
+import { contentTypeFor, getPendingMediaAssets, getUploadFailure, getUploadPreparationProgress, getUploadProgress, personAnswerChips, subscribeUploadProgress } from "@mosae/core";
 
 function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
   if (!summary) return "Your film";
@@ -39,13 +39,23 @@ export default function DirectorScreen() {
   const actionPendingScroll = useRef(false);
   const userScrolledUp = useRef(false);
   const [readingAssets, setReadingAssets] = useState<{ assetId: string; uri: string }[]>([]);
+  const [selectedPhotos, setSelectedPhotos] = useState<{ uri: string; index: number }[]>([]);
+  const uploadProgress = useSyncExternalStore(subscribeUploadProgress, getUploadProgress, getUploadProgress);
+  const preparationProgress = useSyncExternalStore(subscribeUploadProgress, getUploadPreparationProgress, getUploadPreparationProgress);
+  const uploadFailure = useSyncExternalStore(subscribeUploadProgress, getUploadFailure, getUploadFailure);
+  const pendingMedia = useSyncExternalStore(subscribeUploadProgress, getPendingMediaAssets, getPendingMediaAssets);
   useEffect(() => {
-    const created = getPendingMediaAssets()
+    const created = pendingMedia
       .filter(({ file, assetId }) => Boolean(assetId) && !contentTypeFor(file).startsWith("video/"))
       .map(({ file, assetId }) => ({ assetId: assetId!, uri: URL.createObjectURL(file) }));
     setReadingAssets(created);
     return () => created.forEach(({ uri }) => URL.revokeObjectURL(uri));
-  }, []);
+  }, [pendingMedia]);
+  useEffect(() => {
+    const created = pendingMedia.flatMap(({ file }, index) => contentTypeFor(file).startsWith("video/") ? [] : [{ uri: URL.createObjectURL(file), index }]);
+    setSelectedPhotos(created);
+    return () => created.forEach(({ uri }) => URL.revokeObjectURL(uri));
+  }, [pendingMedia]);
   const filmItem = state.items.find((item) => item.kind === "film");
   const film = filmItem?.kind === "film" ? filmItem.film : null;
   const onFilmPlayerError = useCallback(() => setFilmPlayerFailed(true), []);
@@ -88,6 +98,18 @@ export default function DirectorScreen() {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       if (contentOffset && contentSize && layoutMeasurement) userScrolledUp.current = contentOffset.y + layoutMeasurement.height < contentSize.height - 32;
     }} scrollEventThrottle={16} style={{ flex: 1, minHeight: 0 }}>
+      {preparationProgress && <View accessibilityRole="progressbar" aria-label="Preparing selected photos" className="gap-3 rounded-md bg-surface-sunken p-3">
+        <View className="flex-row items-center justify-between"><Text className="font-sans-semibold text-label text-ink">Preparing your photos</Text><Text className="font-sans text-caption text-ink-muted">{preparationProgress.preparedFiles} of {preparationProgress.totalFiles}</Text></View>
+        <Text className="font-sans text-caption text-ink-muted">Getting your photos ready while you start your story.</Text>
+        <View className="flex-row flex-wrap gap-2">{selectedPhotos.map(({ uri, index }) => <Image key={`${index}-${uri}`} source={{ uri }} accessibilityLabel={`Selected photo ${index + 1}`} className="size-12 rounded-sm" />)}</View>
+      </View>}
+      {uploadProgress && uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles && <View accessibilityRole="progressbar" aria-label="Uploading selected photos" className="gap-3 rounded-md bg-surface-sunken p-3">
+        <View className="flex-row items-center justify-between"><Text className="font-sans-semibold text-label text-ink">Uploading your photos</Text><Text className="font-sans text-caption text-ink-muted">{uploadProgress.finishedFiles + uploadProgress.failedFiles} of {uploadProgress.totalFiles}</Text></View>
+        <View className="h-1.5 overflow-hidden rounded-pill bg-line"><View className="h-full rounded-pill bg-action" style={{ width: `${uploadProgress.totalBytes ? Math.min(100, Math.round(uploadProgress.bytesSent / uploadProgress.totalBytes * 100)) : 100}%` }} /></View>
+        <Text className="font-sans text-caption text-ink-muted">{(uploadProgress.bytesSent / 1_000_000).toFixed(1)} of {(uploadProgress.totalBytes / 1_000_000).toFixed(1)} MB transferred</Text>
+        <View className="flex-row flex-wrap gap-2">{readingAssets.map(({ assetId, uri }, index) => <Image key={assetId} source={{ uri }} accessibilityLabel={`Selected photo ${index + 1}`} className="size-12 rounded-sm" />)}</View>
+      </View>}
+      {uploadFailure && <View accessibilityRole="alert" className="rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure}</Text></View>}
       {state.items.map((item) => {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveConflict(choice as "keep" | "leave"))} />;
         if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} photos={item.photos} />;

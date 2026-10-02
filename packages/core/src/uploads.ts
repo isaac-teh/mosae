@@ -1,4 +1,5 @@
 import { ref, uploadBytesResumable } from "firebase/storage";
+import { prepareUploadFiles } from "./prepareUploadFiles";
 
 export const ENTRY_BATCH = 500;
 export const DEFAULT_CONCURRENCY = 4;
@@ -10,6 +11,7 @@ export type UploadProgress = {
   bytesSent: number;
   totalBytes: number;
 };
+export type UploadPreparationProgress = { totalFiles: number; preparedFiles: number };
 
 export type UploadDeps = {
   post: <T>(path: string, body?: unknown) => Promise<T>;
@@ -43,16 +45,19 @@ async function defaultDeps(): Promise<UploadDeps> {
 
 export async function uploadMedia(
   files: File[],
-  options: { mode: "memory" | "creator"; onProgress?: (p: UploadProgress) => void; concurrency?: number },
+  options: { mode: "memory" | "creator"; onProgress?: (p: UploadProgress) => void; onPreparationProgress?: (p: UploadPreparationProgress) => void; onProjectReady?: (projectId: string) => void; onReady?: (ready: { projectId: string; assetIds: string[] }) => void; concurrency?: number },
   deps?: UploadDeps,
 ): Promise<{ projectId: string; finished: number; failed: number; assetIds: string[] }> {
   const { post, putFile } = deps ?? (await defaultDeps());
   const concurrency = Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY);
 
-  const accepted = files.filter((file) => Boolean(contentTypeFor(file)));
-  const rejected = files.length - accepted.length;
-  if (accepted.length === 0) return { projectId: "", finished: 0, failed: rejected, assetIds: [] };
+  const acceptedOriginal = files.filter((file) => Boolean(contentTypeFor(file)));
+  const rejected = files.length - acceptedOriginal.length;
+  if (acceptedOriginal.length === 0) return { projectId: "", finished: 0, failed: rejected, assetIds: [] };
   const { project } = await post<{ project: { id: string } }>("/api/projects", { mode: options.mode });
+  options.onProjectReady?.(project.id);
+  options.onPreparationProgress?.({ totalFiles: acceptedOriginal.length, preparedFiles: 0 });
+  const accepted = await prepareUploadFiles(acceptedOriginal, (preparedFiles, totalFiles) => options.onPreparationProgress?.({ preparedFiles, totalFiles }));
   const base = `/api/projects/${project.id}/upload-sessions`;
 
   const toInput = (f: File) => ({ fileName: f.name, contentType: contentTypeFor(f), sizeBytes: f.size });
@@ -82,6 +87,8 @@ export async function uploadMedia(
       totalBytes: accepted.reduce((sum, f) => sum + f.size, 0),
     };
     const report = () => options.onProgress?.({ ...progress, bytesSent: sent.reduce((a, b) => a + b, 0) });
+    report();
+    options.onReady?.({ projectId: project.id, assetIds: entries.map(({ assetId }) => assetId) });
 
     let next = 0;
     async function worker() {

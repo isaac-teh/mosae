@@ -34,7 +34,13 @@ beforeEach(() => {
   state.films = [];
   state.focusEffect = null;
   state.listFilms.mockImplementation(async () => state.films);
-  state.uploadMedia.mockResolvedValue({ projectId: "uploaded-project", finished: 1, failed: 0, assetIds: ["asset-1"] });
+  state.uploadMedia.mockImplementation(async (_files: File[], options: any) => {
+    options.onProjectReady?.("uploaded-project");
+    options.onPreparationProgress?.({ totalFiles: 1, preparedFiles: 0 });
+    options.onReady?.({ projectId: "uploaded-project", assetIds: ["asset-1"] });
+    options.onProgress?.({ totalFiles: 1, finishedFiles: 0, failedFiles: 0, bytesSent: 0, totalBytes: 5 });
+    return { projectId: "uploaded-project", finished: 1, failed: 0, assetIds: ["asset-1"] };
+  });
   state.repository = { listFilms: state.listFilms };
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
@@ -47,7 +53,7 @@ describe("Home", () => {
     const button = [...host.querySelectorAll("button")].find((item) => item.textContent?.includes("Create a new film"));
     await act(async () => button!.click());
     await act(async () => await Promise.resolve());
-    expect(state.uploadMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), expect.objectContaining({ mode: "memory" }));
+    expect(state.uploadMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), expect.objectContaining({ mode: "memory", onProjectReady: expect.any(Function), onPreparationProgress: expect.any(Function), onReady: expect.any(Function), onProgress: expect.any(Function) }));
     expect(state.setPendingMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), ["asset-1"]);
     expect(state.push).toHaveBeenCalledWith({ pathname: "/director", params: { projectId: "uploaded-project", live: "1" } });
     expect(state.push).not.toHaveBeenCalledWith("/pick-memory");

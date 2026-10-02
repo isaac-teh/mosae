@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { type Href, useFocusEffect, useRouter } from "expo-router";
-import { isMedia, setPendingMedia, uploadMedia, type FilmListItem, type UploadProgress } from "@mosae/core";
+import { isMedia, setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress as setSharedUploadProgress, uploadMedia, type FilmListItem, type UploadProgress } from "@mosae/core";
 import { Button, FilmCard } from "@/components/ds";
 import { SettingsIcon } from "@/components/icons";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
@@ -39,18 +39,38 @@ export default function Home() {
     if (media.length === 0 || uploading) return;
     setUploading(true);
     setUploadProgress(null);
+    setSharedUploadProgress(null);
+    setUploadPreparationProgress(null);
+    setUploadFailure(null);
     setUploadError(null);
+    let routed = false;
     try {
-      const result = await uploadMedia(media, { mode: "memory", onProgress: setUploadProgress });
-      if (result.finished === 0) {
+      const result = await uploadMedia(media, {
+        mode: "memory",
+        onProgress: (progress) => { setUploadProgress(progress); setSharedUploadProgress(progress); },
+        onPreparationProgress: setUploadPreparationProgress,
+        onProjectReady: (projectId) => {
+          routed = true;
+          setPendingMedia(media);
+          router.push({ pathname: "/director", params: { projectId, live: "1" } } as unknown as Href);
+        },
+        onReady: ({ projectId, assetIds }) => {
+          routed = true;
+          setPendingMedia(media, assetIds);
+          setUploadPreparationProgress(null);
+        },
+      });
+      if (result.failed > 0) setUploadFailure(result.finished === 0
+        ? "None of these photos uploaded. Check your connection and try again."
+        : `${result.failed} ${result.failed === 1 ? "file" : "files"} couldn't upload. You can keep going with the photos that finished.`);
+      if (result.finished === 0 && !routed) {
         setUploadError("Upload failed. Please try again.");
         return;
       }
-      setPendingMedia(media, result.assetIds);
-      router.push({ pathname: "/director", params: { projectId: result.projectId, live: "1" } } as unknown as Href);
     } catch (error) {
       console.error("upload failed", error);
-      setUploadError("Upload failed. Please try again.");
+      if (!routed) setUploadError("Upload failed. Please try again.");
+      else setUploadFailure("These photos couldn't be prepared or uploaded. Check your connection and try again.");
     } finally {
       setUploading(false);
     }

@@ -6,7 +6,8 @@
     "flow": "playwright test flow.spec.ts",
     "figma-parity": "playwright test figma-parity.spec.ts",
     "screens": "playwright test screens.spec.ts",
-    "story-flow": "playwright test story-flow.spec.ts"
+    "story-flow": "playwright test story-flow.spec.ts",
+    "upload-speed-bench": "node upload-speed-bench.cjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
