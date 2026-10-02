@@ -14,7 +14,7 @@ describe("fixture story repository", () => {
     const { timeline, sources } = await createFixtureStoryRepository({ delayMs: 0 }).getFilmTimeline("fixture", "demo-film");
     expect(timeline.videoClips).toHaveLength(7);
     expect(timeline.chapters.map((chapter) => chapter.title)).toEqual(["Opening", "Candid moments", "Closing"]);
-    expect(Object.keys(sources)).toHaveLength(4);
+    expect(Object.keys(sources)).toHaveLength(6);
     expect(Object.values(sources).every((value) => value.startsWith("demo:"))).toBe(true);
   });
 

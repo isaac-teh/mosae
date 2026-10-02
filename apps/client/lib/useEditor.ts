@@ -9,7 +9,7 @@ type History = { snapshots: EditOp[][]; index: number };
 
 const clipId = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
 const keyOf = (ops: EditOp[]) => JSON.stringify(ops);
-const sourceUri = (value: string) => value.startsWith("demo:") ? Asset.fromModule(demoImage(value.slice(5))).uri : value;
+const sourceUri = (value: string) => value === "demo:film" ? Asset.fromModule(require("../assets/demo/film.mp4")).uri : value.startsWith("demo:") ? Asset.fromModule(demoImage(value.slice(5))).uri : value;
 
 export function useEditor(projectId: string, generationId: string, repository: StoryRepository = getStoryRepository()) {
   const [firstCut, setFirstCut] = useState<Timeline | null>(null);

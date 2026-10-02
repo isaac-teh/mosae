@@ -11,7 +11,7 @@ export type ChatInterpretRequest = { step: "occasion" | "people" | "moments" | "
 export type ChatInterpretResult = { reply: string; change: { kind: string; [key: string]: unknown } };
 export type FilmEdits = { revision: number; ops: EditOp[]; updatedAt: number | null };
 export type FilmRender = { revision: number; status: "pending" | "rendering" | "ready" | "failed"; renderProgress?: number; downloadUrl?: string; outputPath?: string };
-export type EditorMediaItem = { shotId: string; kind: "photo" | "video"; thumbnailUrl: string; previewUrl: string; date: string; eventLabel: string; sourceInSec?: number; sourceOutSec?: number };
+export type EditorMediaItem = { shotId: string; kind: "photo" | "video"; thumbnailUrl: string; previewUrl: string; date: string; eventLabel: string; sourceInSec?: number; sourceOutSec?: number; sourceDurationSec?: number };
 export type FilmTimeline = { timeline: Timeline; sources: Record<string, string>; unusedMedia?: EditorMediaItem[] };
 export type EditInterpretation = { reply: string; ops: EditOp[] };
 

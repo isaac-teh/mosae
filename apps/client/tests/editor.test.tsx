@@ -277,6 +277,7 @@ describe("film editor", () => {
     };
     await act(async () => startHandle!.dispatchEvent(pointer("pointerdown", 100)));
     await act(async () => startHandle!.dispatchEvent(pointer("pointermove", 140)));
+    await advance(20);
     expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec")).toBe("1");
     await act(async () => startHandle!.dispatchEvent(pointer("pointerup", 140)));
     expect(host.textContent).toContain("0:01 / 0:08");

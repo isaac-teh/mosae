@@ -97,7 +97,8 @@ const loadSource = async (projectId: string, shotId: string) => {
   if (!shot.exists) return null;
   const asset = await project.collection("assets").doc(shot.get("assetId") as string).get();
   if (!asset.exists) return null;
-  return { storagePath: asset.get("storagePath") as string, derivatives: asset.get("derivatives") };
+  const media = asset.get("media") as { durationSec?: unknown } | undefined;
+  return { storagePath: asset.get("storagePath") as string, ...(typeof media?.durationSec === "number" && media.durationSec > 0 ? { sourceDurationSec: media.durationSec } : {}), derivatives: asset.get("derivatives") };
 };
 const renderBucket = () => getStorage(getAdminApp()).bucket(config.storageBucket);
 const renderQueue = config.tasks

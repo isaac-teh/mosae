@@ -9,6 +9,7 @@ export type Moment = {
   durationLabel?: string;
   sourceInSec?: number;
   sourceOutSec?: number;
+  sourceDurationSec?: number;
   badge?: string;
   selected: boolean;
   favorite: boolean;

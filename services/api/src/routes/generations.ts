@@ -26,7 +26,7 @@ function handleError(res: Response, error: unknown): void {
 export function generationsRouter(deps: {
   db: Firestore;
   /** Resolve a shot id to the asset whose files back it. */
-  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
+  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; sourceDurationSec?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
   /** The bucket renders are stored in. The admin app has no default bucket. */
   storageBucket?: string;
   /** Map resolved object paths to URLs the editor's browser can load. */
@@ -45,14 +45,15 @@ export function generationsRouter(deps: {
   // A Timeline names shots. Files hang off assets, so the shot is the hop in
   // between — `resolveSources` is deliberately given a flat id-to-file lookup
   // and never learns the project's collection layout.
-  const resolve: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null> =
+  const resolve: (projectId: string, shotId: string) => Promise<{ storagePath: string; sourceDurationSec?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null> =
     deps.loadSource ?? (async (projectId, shotId) => {
       const project = deps.db.collection("projects").doc(projectId);
       const shot = await project.collection("shots").doc(shotId).get();
       if (!shot.exists) return null;
       const asset = await project.collection("assets").doc(shot.get("assetId") as string).get();
       if (!asset.exists) return null;
-      return { storagePath: asset.get("storagePath") as string, derivatives: asset.get("derivatives") };
+      const media = asset.get("media") as { durationSec?: unknown } | undefined;
+      return { storagePath: asset.get("storagePath") as string, ...(typeof media?.durationSec === "number" && media.durationSec > 0 ? { sourceDurationSec: media.durationSec } : {}), derivatives: asset.get("derivatives") };
     });
 
   for (const name of ["projectId", "generationId"]) {
@@ -162,6 +163,12 @@ export function generationsRouter(deps: {
       // Resolve preview-mode sources if timeline exists
       let sources: Record<string, string> | undefined;
       if (generation.timeline) {
+        const videoClips = await Promise.all(generation.timeline.videoClips.map(async (clip) => {
+          if (!("source" in clip) || clip.source.kind !== "video" || clip.source.sourceDurationSec !== undefined) return clip;
+          const source = await resolve(projectId, clip.source.shotId);
+          return source?.sourceDurationSec !== undefined ? { ...clip, source: { ...clip.source, sourceDurationSec: source.sourceDurationSec } } : clip;
+        }));
+        response.timeline = { ...generation.timeline, videoClips };
         if (deps.loadUnusedMedia) response.unusedMedia = await deps.loadUnusedMedia(projectId, generation.timeline);
         const { resolveSources } = await import("../compose/resolveSources.js");
         try {

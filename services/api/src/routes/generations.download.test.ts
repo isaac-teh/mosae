@@ -54,10 +54,10 @@ vi.mock("../firebase/admin.js", () => ({ getAdminApp: () => ({}), adminDb: {} })
 const { generationsRouter } = await import("./generations.js");
 
 function buildApp(db: Firestore, fakeBucket: ReturnType<typeof makeBucket>, sourceDeps: {
-  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
+  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; sourceDurationSec?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
   loadSoundtrack?: (soundtrackId: string) => Promise<string | null>;
   loadSoundtrackLibrary?: () => Promise<{ id: string; path: string }[]>;
-  loadUnusedMedia?: (projectId: string, timeline: unknown) => Promise<{ shotId: string; kind: "photo" | "video"; thumbnailUrl: string; previewUrl: string; date: string; eventLabel: string; sourceInSec?: number; sourceOutSec?: number }[]>;
+  loadUnusedMedia?: (projectId: string, timeline: unknown) => Promise<{ shotId: string; kind: "photo" | "video"; thumbnailUrl: string; previewUrl: string; date: string; eventLabel: string; sourceInSec?: number; sourceOutSec?: number; sourceDurationSec?: number }[]>;
   signReadUrl?: (path: string, expiresAt: number) => Promise<string>;
 } = {}) {
   currentBucket = fakeBucket.bucket;
@@ -74,6 +74,22 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("GET /download — emulator branch", () => {
+  it("returns source video duration metadata for editor trim bounds", async () => {
+    const timeline = {
+      schemaVersion: 1, projectId: "p1", mode: "creator", aspect: "9:16", fps: 30, durationSec: 3,
+      chapters: [{ title: "Trip", startSec: 0 }],
+      videoClips: [{ id: "video-1", source: { kind: "video", shotId: "shot-video", sourceInSec: 2, sourceOutSec: 5 }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }],
+      audioClips: [], captions: [],
+    };
+    const app = buildApp(makeDb({ ...generation, timeline }), makeBucket(), {
+      loadSource: async () => ({ storagePath: "original/video.mp4", sourceDurationSec: 8, derivatives: { thumbPath: "thumb/video.jpg", proxyPath: "proxy/video.mp4" } }),
+      signReadUrl: async (path) => `http://127.0.0.1:9199/download/${path}`,
+    });
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/generations/g1").set("Authorization", "Bearer owner");
+    expect(res.status).toBe(200);
+    expect(res.body.timeline.videoClips[0].source).toMatchObject({ sourceInSec: 2, sourceOutSec: 5, sourceDurationSec: 8 });
+  });
+
   it("returns browser-loadable sources for every clip and the selected soundtrack in a stored generation", async () => {
     const storedTimeline = {
       schemaVersion: 1,

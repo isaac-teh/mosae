@@ -11,6 +11,7 @@ export type UnusedProjectMedia = {
   eventLabel: string;
   sourceInSec?: number;
   sourceOutSec?: number;
+  sourceDurationSec?: number;
 };
 
 export async function loadUnusedProjectMedia(
@@ -50,10 +51,13 @@ export async function loadUnusedProjectMedia(
     const eventLabel = event && typeof event.label === "string" ? event.label : date || "Other day";
     const sourceInSec = typeof shot.sourceStartSec === "number" ? shot.sourceStartSec : undefined;
     const sourceOutSec = typeof shot.sourceEndSec === "number" ? shot.sourceEndSec : undefined;
+    const assetMedia = asset.media && typeof asset.media === "object" ? asset.media as Record<string, unknown> : {};
+    const sourceDurationSec = kind === "video" && typeof assetMedia.durationSec === "number" && assetMedia.durationSec > 0 ? assetMedia.durationSec : undefined;
     return [Promise.all([signReadUrl(thumbnailPath, expiresAt), signReadUrl(previewPath, expiresAt)]).then(([thumbnailUrl, previewUrl]) => ({
       shotId, kind, thumbnailUrl, previewUrl, date, eventLabel,
       ...(sourceInSec !== undefined ? { sourceInSec } : {}),
       ...(sourceOutSec !== undefined ? { sourceOutSec } : {}),
+      ...(sourceDurationSec !== undefined ? { sourceDurationSec } : {}),
       index: typeof shot.index === "number" ? shot.index : 0,
     })).catch(() => null)];
   }));

@@ -319,13 +319,14 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
           durationSec: 22,
           chapters: [{ title: "Opening", startSec: 0 }, { title: "Candid moments", startSec: 7 }, { title: "Closing", startSec: 16 }],
           videoClips: [
-            { id: "clip-1", source: { kind: "photo", shotId: "fixture-1" }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } },
+            { id: "clip-1", source: { kind: "video", shotId: "fixture-video", sourceInSec: 2, sourceOutSec: 5, sourceDurationSec: 8 }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } },
             { kind: "collage", clipId: "collage-1", startSec: 3, durationSec: 4, transitionIn: { kind: "cut", durationSec: 0 }, spec: { layoutId: "photo-table", slots: sourceIds.map((shotId, index) => ({ slotId: `slot-${index + 1}`, shotId, kind: "photo" })), motionId: "stack-deal", effectId: "vignette", seed: "editor-fixture", durationSec: 4 } },
             ...["fixture-2", "fixture-3", "fixture-4", "fixture-1", "fixture-3"].map((shotId, index) => ({ id: `clip-${index + 3}`, source: { kind: "photo", shotId }, startSec: index * 3 + 7, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } })),
           ],
           audioClips: [], captions: [],
         }),
-        sources: Object.fromEntries(sourceIds.map((shotId, index) => [shotId, `demo:${photos[index]}`])),
+        sources: { ...Object.fromEntries(sourceIds.map((shotId, index) => [shotId, `demo:${photos[index]}`])), "fixture-video": "demo:film", "fixture-video-extra": "demo:film" },
+        unusedMedia: [{ shotId: "fixture-video-extra", kind: "video", thumbnailUrl: "demo:timeline-birthday", previewUrl: "demo:film", date: "2026-03-12", eventLabel: "Birthday movie", sourceInSec: 0, sourceOutSec: 8 }],
       };
     },
 

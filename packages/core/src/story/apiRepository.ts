@@ -562,6 +562,7 @@ export function createApiStoryRepository(
           date: stringField(media.date, "unused media date"), eventLabel: stringField(media.eventLabel, "unused event label"),
           ...(typeof media.sourceInSec === "number" ? { sourceInSec: media.sourceInSec } : {}),
           ...(typeof media.sourceOutSec === "number" ? { sourceOutSec: media.sourceOutSec } : {}),
+          ...(typeof media.sourceDurationSec === "number" ? { sourceDurationSec: media.sourceDurationSec } : {}),
         }];
       }) : [];
       return { timeline: parseTimeline(response.timeline), sources: Object.fromEntries(Object.entries(sources).map(([id, path]) => [id, stringField(path, "preview source")])), unusedMedia };
