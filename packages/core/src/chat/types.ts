@@ -24,6 +24,7 @@ export type ChatInput = {
   momentsConfirmed: boolean;
   conflict: { shotIds: string[]; message: string } | null;
   direction: { confirmed: boolean; pace: "gentle" | "lively"; lengthSec: number; focus: string; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" } | null;
+  directionNote?: string;
   generation: { status: "queued" | "running" | "done" | "failed"; stage: "queued" | "composing" | "playable" | "rendering" | "saved" | "failed"; progress: number; stepsDone: number; film: Film | null } | null;
   notes: string[];
 };

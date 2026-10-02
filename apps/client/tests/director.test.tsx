@@ -215,7 +215,7 @@ describe("Director chat", () => {
     setup({ readyPlan: true, people: [{ ...people[0], role: null }] }); await renderScreen();
     await click("Yes, our Japan trip");
     await click("My daughter");
-    for (let i = 0; i < 3 && !hasText("Who is this?"); i++) {
+    for (let i = 0; i < 3 && !host.querySelector('button[aria-label="Looks fine"]'); i++) {
       if (host.querySelector('button[aria-label="No, that\'s everyone"]')) await click("No, that's everyone");
       else if (host.querySelector('button[aria-label="Skip"]')) await click("Skip");
       await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));

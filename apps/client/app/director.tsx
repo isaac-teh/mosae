@@ -90,7 +90,7 @@ export default function DirectorScreen() {
     }} scrollEventThrottle={16} style={{ flex: 1, minHeight: 0 }}>
       {state.items.map((item) => {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveConflict(choice as "keep" | "leave"))} />;
-        if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} />;
+        if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} photos={item.photos} />;
         if (item.kind === "you") return <ChatMessage key={item.id} from="you" text={item.text} />;
         if (item.kind === "typing") {
           const statuses = new Map((item.photoProgress ?? projectSummary?.assetStatuses ?? []).map((asset) => [asset.assetId, asset.status]));
@@ -126,7 +126,7 @@ export default function DirectorScreen() {
             : item.lengthSec > maximumDurationSec
             ? `With these moments, I can make up to ${maximumDurationLabel ?? "the available length"}. I've selected that achievable length.`
             : `For ${durationLabel}, I'll keep ${focusText} and the strongest scenery, and tell you what I left out.`;
-          return <View key={item.id} className="gap-4"><ChatMessage from="mosae" text={`For a ${projectSummary?.days ?? 1}-day trip I'd suggest this. ${directionOptions?.note ?? "Change anything that doesn't feel right."}`} /><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} durations={durationChoices} maximumDurationLabel={maximumDurationLabel} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={(change) => scrollAfterAction(() => actions.setDirection(change))} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good. Shape it." disabled={saving || !directionOptions || durationChoices.length === 0} onPress={() => scrollAfterAction(actions.shapeIt)} /></View>;
+          return <View key={item.id} className="gap-4"><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} durations={durationChoices} maximumDurationLabel={maximumDurationLabel} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={(change) => scrollAfterAction(() => actions.setDirection(change))} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good. Shape it." disabled={saving || !directionOptions || durationChoices.length === 0} onPress={() => scrollAfterAction(actions.shapeIt)} /></View>;
         }
         if (item.kind === "film") return <View key={item.id} className="gap-4">
           <Text accessibilityRole="header" className="font-title text-heading text-positive">Film ready</Text>

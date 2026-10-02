@@ -75,6 +75,7 @@ export function deriveChat(input: ChatInput): ChatState {
     return { items, step, confirmed, placeholder };
   }
 
+  add({ kind: "mosae", id: "occasion-message", text: occasionText(input) });
   add({ kind: "you", id: "occasion-answer", text: input.intent.text });
   input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
   confirmed = 1;
@@ -93,6 +94,7 @@ export function deriveChat(input: ChatInput): ChatState {
     const firstUnanswered = people.findIndex((person) => !answered(person));
     const unanswered = firstUnanswered >= 0 ? people[firstUnanswered] : null;
     people.slice(0, firstUnanswered >= 0 ? firstUnanswered : people.length).forEach((person) => {
+      add({ kind: "mosae", id: `person-question-${person.personId}`, text: `One person appears in ${person.momentCount} moments. Who is this?`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri) });
       add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
     });
     if (unanswered) {
@@ -105,7 +107,10 @@ export function deriveChat(input: ChatInput): ChatState {
 
   if (input.people?.length) {
     [...input.people].sort((a, b) => b.momentCount - a.momentCount).slice(0, 3).forEach((person) => {
-      if (person.skipped || person.name) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+      if (person.skipped || person.name) {
+        add({ kind: "mosae", id: `person-question-${person.personId}`, text: `One person appears in ${person.momentCount} moments. Who is this?`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri) });
+        add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+      }
     });
   }
   confirmed = 2;
@@ -122,14 +127,17 @@ export function deriveChat(input: ChatInput): ChatState {
   }
   const setAside = getSetAsideSummary(input.plan);
   const hasPhotosToReview = setAside.blurry + setAside.duplicates > 0;
-  if (hasPhotosToReview) add({ kind: "set-aside", id: "set-aside", ...setAside });
+  if (hasPhotosToReview && !input.momentsConfirmed) add({ kind: "set-aside", id: "set-aside", ...setAside });
 
   if (hasPhotosToReview && !input.momentsConfirmed) {
     step = "moments";
     return { items, step, confirmed, placeholder };
   }
 
-  if (hasPhotosToReview) add({ kind: "you", id: "moments-answer", text: "Looks fine" });
+  if (hasPhotosToReview) {
+    add({ kind: "mosae", id: "set-aside-message", text: `I've set aside ${setAside.blurry} blurry ${setAside.blurry === 1 ? "shot" : "shots"} and ${setAside.duplicates} near-duplicate${setAside.duplicates === 1 ? "" : "s"}, keeping the best of each burst. Your originals are untouched.` });
+    add({ kind: "you", id: "moments-answer", text: "Looks fine" });
+  }
   confirmed = 3;
   if (!input.direction) {
     step = "direction";
@@ -139,6 +147,7 @@ export function deriveChat(input: ChatInput): ChatState {
 
   if (!input.direction.confirmed) {
     step = "direction";
+    add({ kind: "mosae", id: "direction-question", text: `For a ${input.summary?.days ?? 1}-day trip I'd suggest this. ${input.directionNote ?? "Change anything that doesn't feel right."}` });
     add({
       kind: "direction", id: "direction", pace: input.direction.pace, lengthSec: input.direction.lengthSec,
       focus: input.direction.focus, momentCount: input.plan.totalMomentCount ?? input.plan.moments.length,
@@ -146,6 +155,7 @@ export function deriveChat(input: ChatInput): ChatState {
     return { items, step, confirmed, placeholder };
   }
 
+  add({ kind: "mosae", id: "direction-question", text: `For a ${input.summary?.days ?? 1}-day trip I'd suggest this. ${input.directionNote ?? "Change anything that doesn't feel right."}` });
   add({ kind: "you", id: "direction-answer", text: directionAnswer(input) });
   confirmed = 4;
   if (input.generation?.status === "done" && input.generation.film) {

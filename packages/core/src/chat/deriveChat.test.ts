@@ -73,7 +73,7 @@ describe("deriveChat state table", () => {
   it("derives all twelve saved-project states", () => {
     const cases: { name: string; input: ChatInput; step: ChatState["step"]; confirmed: number; kinds: string[] }[] = [
       { name: "fresh summary pending", input: { ...base(), summary: { ...summary, ready: { ...summary.ready, summary: false }, processed: { ...summary.processed, ingested: 3 } }, intent: null, people: null, peopleConfirmed: false, plan: null }, step: "occasion", confirmed: 0, kinds: ["typing"] },
-      { name: "summary ready", input: { ...base(), intent: null, people: null, peopleConfirmed: false, plan: null }, step: "occasion", confirmed: 0, kinds: ["mosae", "occasion"] },
+      { name: "summary ready", input: { ...base(), intent: null, people: null, peopleConfirmed: false, plan: null }, step: "occasion", confirmed: 0, kinds: ["occasion"] },
       { name: "occasion confirmed, faces pending", input: { ...base(), people: null, peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "typing"] },
       { name: "first unnamed person", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: null, role: null, skipped: false, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "person"] },
       { name: "third person after two named", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: n < 2 ? `Person ${n}` : null, role: n < 2 ? "child" : null, skipped: false, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "you", "person"] },
@@ -82,7 +82,7 @@ describe("deriveChat state table", () => {
       { name: "skipped person counts as answered", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: null, role: null, skipped: n === 0, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "person"] },
       { name: "no people detected", input: { ...base(), people: [], peopleConfirmed: false, momentsConfirmed: false }, step: "direction", confirmed: 3, kinds: ["you", "typing"] },
       { name: "people confirmed and plan ready", input: { ...base(), people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: true }, step: "direction", confirmed: 3, kinds: ["you", "you", "typing"] },
-      { name: "planning conflict", input: { ...base(), conflict: { shotIds: ["m1"], message: "This moment is both kept and left out." } }, step: "direction", confirmed: 3, kinds: ["you", "mosae", "typing"] },
+      { name: "planning conflict", input: { ...base(), conflict: { shotIds: ["m1"], message: "This moment is both kept and left out." } }, step: "direction", confirmed: 3, kinds: ["you", "typing"] },
       { name: "direction options ready", input: { ...base(), momentsConfirmed: true, direction: { confirmed: false, pace: "gentle", lengthSec: 120, focus: "family" } }, step: "direction", confirmed: 3, kinds: ["you", "direction"] },
       { name: "direction confirmed and generation running", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "running", stage: "rendering", progress: 0.7, stepsDone: 2, film: null } }, step: "shaping", confirmed: 4, kinds: ["you", "you", "shaping"] },
       { name: "generation done", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } }, step: "ready", confirmed: 4, kinds: ["you", "you", "film"] },
@@ -92,7 +92,7 @@ describe("deriveChat state table", () => {
       const state = deriveChat(row.input);
       expect(state.step, row.name).toBe(row.step);
       expect(state.confirmed, row.name).toBe(row.confirmed);
-      expect(kinds(state.items), row.name).toEqual(row.kinds);
+      expect(kinds(state.items).filter((kind) => kind !== "mosae"), row.name).toEqual(row.kinds);
     }
   });
 
@@ -105,6 +105,15 @@ describe("deriveChat state table", () => {
     expect(singapore.items[0]).toMatchObject({ kind: "mosae", text: "I've looked through all 10. It looks like a trip to Singapore in early June: Telok Blangah, Siloso Beach. Is that the story?" });
   });
 
+  it("keeps answered AI questions immediately before their replies", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "Mia", role: null, skipped: false, momentCount: 12, sampleShotIds: ["s1"], sampleFaces: [{ shotId: "s1", uri: "face.jpg", bbox: [0, 0, 1, 1] }], days: [] }], peopleConfirmed: true, momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 60, focus: "family" } });
+    const items = state.items;
+    expect(items.findIndex((item) => item.id === "occasion-message")).toBeLessThan(items.findIndex((item) => item.id === "occasion-answer"));
+    expect(items.findIndex((item) => item.id === "person-question-p1")).toBeLessThan(items.findIndex((item) => item.id === "person-answer-p1"));
+    expect(items.find((item) => item.id === "person-question-p1")).toMatchObject({ kind: "mosae", text: "One person appears in 12 moments. Who is this?", photos: ["face.jpg"] });
+    expect(items.findIndex((item) => item.id === "direction-question")).toBeLessThan(items.findIndex((item) => item.id === "direction-answer"));
+  });
+
   it("asks the three people with the most moments, then offers anyone else", () => {
     const people = [
       { personId: "p0", name: "Four", role: "child", skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
@@ -113,7 +122,7 @@ describe("deriveChat state table", () => {
       { personId: "p3", name: null, role: null, skipped: false, momentCount: 1, sampleShotIds: [], days: [] },
     ];
     const state = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null });
-    expect(state.items.map((item) => item.kind === "you" ? item.text : item.kind === "anyone-else" ? "anyone-else" : item.kind)).toEqual(["Our Japan trip", "Most", "Second", "Four", "anyone-else"]);
+    expect(state.items.filter((item) => item.kind !== "mosae").map((item) => item.kind === "you" ? item.text : item.kind === "anyone-else" ? "anyone-else" : item.kind)).toEqual(["Our Japan trip", "Most", "Second", "Four", "anyone-else"]);
   });
 
   it("records Skip as a reply and asks the next person", () => {
@@ -122,8 +131,8 @@ describe("deriveChat state table", () => {
       { personId: "p1", name: null, role: null, skipped: false, momentCount: 20, sampleShotIds: [], days: [] },
     ];
     const state = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null });
-    expect(state.items[1]).toMatchObject({ kind: "you", text: "Skip" });
-    expect(state.items[2]).toMatchObject({ kind: "person", personId: "p1" });
+    expect(state.items.find((item) => item.kind === "you" && item.text === "Skip")).toMatchObject({ kind: "you", text: "Skip" });
+    expect(state.items.find((item) => item.kind === "person")).toMatchObject({ kind: "person", personId: "p1" });
   });
 
   it("carries the person's face previews and bounding boxes to the question item", () => {
@@ -178,7 +187,7 @@ describe("deriveChat state table", () => {
   it("asks names when people have detected roles but no user supplied names", () => {
     const people = ["child", "parent", "parent"].map((role, index) => ({ personId: `p${index}`, name: null, role, skipped: false, momentCount: 30 - index, sampleShotIds: [], days: [] }));
     const state = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null });
-    expect(state.items.map((item) => item.kind)).toEqual(["you", "person"]);
+    expect(state.items.filter((item) => item.kind !== "mosae").map((item) => item.kind)).toEqual(["you", "person"]);
     expect(state.items.at(-1)).toMatchObject({ kind: "person", personId: "p0" });
   });
 
@@ -196,7 +205,7 @@ describe("deriveChat state table", () => {
 
   it("names a conflict on the moments step", () => {
     const state = deriveChat({ ...base(), conflict: { shotIds: ["m1"], message: "This moment is both kept and left out." } });
-    expect(state.items.find((item) => item.kind === "mosae")).toMatchObject({ text: "This moment is both kept and left out." });
+    expect(state.items.find((item) => item.id === "moments-conflict")).toMatchObject({ text: "This moment is both kept and left out." });
   });
 
   it("shows film-ready copy and default placeholder", () => {

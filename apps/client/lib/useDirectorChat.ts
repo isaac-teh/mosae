@@ -49,7 +49,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const durationId = duration?.id ?? options.recommendedDuration;
     const lengthSec = duration?.seconds ?? 120;
     setDirectionSelection((current) => ({ ...current, cadenceId, durationId, soundtrackId: current.soundtrackId ?? options.soundtracks[0]?.id ?? null, collageAmount: options.collageAmount ?? current.collageAmount, motionFeel: options.motionFeel ?? current.motionFeel }));
-    setInput((current) => ({ ...current, direction: { confirmed: false, pace: /gentle|reflective/i.test(cadenceId) ? "gentle" : "lively", lengthSec, focus: "family" } }));
+    setInput((current) => ({ ...current, directionNote: options.note, direction: { confirmed: false, pace: /gentle|reflective/i.test(cadenceId) ? "gentle" : "lively", lengthSec, focus: "family" } }));
   }, [repository]);
 
   const refresh = useCallback(async () => {
@@ -91,7 +91,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           peopleConfirmed: Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)),
           plan,
           momentsConfirmed: hasGeneration || Boolean(plan && !needsFilteredPhotoReview),
-          direction: hasGeneration ? { confirmed: true, pace: "gentle", lengthSec: Math.max(30, film?.durationSec ?? 120), focus: "family" } : null,
+          direction: hasGeneration ? { confirmed: true, pace: "gentle", lengthSec: Math.max(30, film?.durationSec ?? 120), focus: "family", collageAmount: "few", motionFeel: "calm" } : null,
           generation,
         }));
         if (plan && !hasGeneration && !needsFilteredPhotoReview) await loadDirectionOptions(plan.planId);
