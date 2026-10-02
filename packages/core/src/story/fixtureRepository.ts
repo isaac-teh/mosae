@@ -239,7 +239,10 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
       : { proposalId: null, storyText: null, generationId: null, generationStatus: null },
     getSummary: async () => ({ total: 52, photos: 52, clips: 0, days: 4, dateRange: null, places: ["Tokyo", "Kyoto"], country: "Japan", season: "March", processed: { ingested: 52, understood: 52, faces: 52 }, ready: { summary: true, faces: true, plan: true } }),
     interpret: async () => ({ reply: "I didn't catch that. Pick one below, or say it another way.", change: { kind: "unclear" } }),
-    getPeople: async () => [],
+    getPeople: async (projectId: string) => projectId === "face-merge-fixture" ? [
+      { personId: "face-merge-first", name: null, role: "child", ageBand: "child" as const, momentCount: 4, sampleShotIds: ["merge-a1", "merge-a2"], sampleFaces: [{ shotId: "merge-a1", uri: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Crect width='96' height='96' fill='%23efd8c5'/%3E%3Ccircle cx='48' cy='48' r='28' fill='%239b674f'/%3E%3C/svg%3E", bbox: [0, 0, 1, 1] as [number, number, number, number] }], days: [1] },
+      { personId: "face-merge-second", name: null, role: "child", ageBand: "child" as const, momentCount: 3, sampleShotIds: ["merge-b1", "merge-b2"], sampleFaces: [{ shotId: "merge-b1", uri: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Crect width='96' height='96' fill='%23efd8c5'/%3E%3Ccircle cx='48' cy='48' r='28' fill='%239b674f'/%3E%3C/svg%3E", bbox: [0, 0, 1, 1] as [number, number, number, number] }], days: [2] },
+    ] : [],
     createPlan: async (storyText: string, mediaRefs: string[]) => {
       return delayed(() => ({ planId: PLAN_ID }));
     },
@@ -326,6 +329,7 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
           audioClips: [], captions: [],
         }),
         sources: { ...Object.fromEntries(sourceIds.map((shotId, index) => [shotId, `demo:${photos[index]}`])), "fixture-video": "demo:film", "fixture-video-extra": "demo:film" },
+        thumbnails: { "fixture-video": "demo:timeline-birthday" },
         unusedMedia: [{ shotId: "fixture-video-extra", kind: "video", thumbnailUrl: "demo:timeline-birthday", previewUrl: "demo:film", date: "2026-03-12", eventLabel: "Birthday movie", sourceInSec: 0, sourceOutSec: 8 }],
       };
     },

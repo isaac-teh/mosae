@@ -114,6 +114,21 @@ describe("deriveChat state table", () => {
     expect(items.findIndex((item) => item.id === "direction-question")).toBeLessThan(items.findIndex((item) => item.id === "direction-answer"));
   });
 
+  it("keeps merge follow-up questions, sample faces, and answers in the chat history", () => {
+    const state = deriveChat({ ...base(), people: [
+      { personId: "p1", name: "My daughter", role: "child", skipped: false, momentCount: 4, sampleShotIds: [], sampleFaces: [{ shotId: "s1", uri: "face-1", bbox: [0, 0, 1, 1] }], days: [] },
+      { personId: "p2", name: "My daughter", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], sampleFaces: [{ shotId: "s2", uri: "face-2", bbox: [0, 0, 1, 1] }], days: [] },
+    ], peopleConfirmed: false, plan: null, mergeEvents: [{ id: "merge-p2", personId: "p2", targetPersonId: "p1", answer: "My daughter", targetName: "My daughter", sampleFaces: ["face-1"], momentCount: 3, response: "Yes, same person" }] });
+    expect(state.items.find((item) => item.kind === "merge-followup")).toMatchObject({ text: "Same daughter as before?", photos: ["face-1"], answer: "My daughter", response: "Yes, same person" });
+    expect(state.items.findIndex((item) => item.id === "merge-p2")).toBeGreaterThan(state.items.findIndex((item) => item.id === "person-answer-p2"));
+  });
+
+  it("retains the answered merge exchange after its source person is merged out of the refreshed cast", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "My daughter", role: "child", skipped: false, momentCount: 7, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, mergeEvents: [{ id: "merge-p2", personId: "p2", targetPersonId: "p1", answer: "My daughter", targetName: "My daughter", sampleFaces: ["face-1"], momentCount: 3, response: "Yes, same person" }] });
+    expect(state.items).toContainEqual({ kind: "you", id: "person-answer-p2", text: "My daughter" });
+    expect(state.items.find((item) => item.id === "merge-p2")).toMatchObject({ response: "Yes, same person" });
+  });
+
   it("asks the three people with the most moments, then offers anyone else", () => {
     const people = [
       { personId: "p0", name: "Four", role: "child", skipped: false, momentCount: 4, sampleShotIds: [], days: [] },

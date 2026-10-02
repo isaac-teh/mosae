@@ -90,6 +90,25 @@ describe("GET /download — emulator branch", () => {
     expect(res.body.timeline.videoClips[0].source).toMatchObject({ sourceInSec: 2, sourceOutSec: 5, sourceDurationSec: 8 });
   });
 
+  it("returns signed thumbnail derivatives for video timeline slots separately from playback sources", async () => {
+    const timeline = {
+      schemaVersion: 1, projectId: "p1", mode: "creator", aspect: "9:16", fps: 30, durationSec: 3,
+      chapters: [{ title: "Trip", startSec: 0 }],
+      videoClips: [{ id: "video-1", source: { kind: "video", shotId: "shot-video", sourceInSec: 0, sourceOutSec: 3, sourceDurationSec: 8 }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }],
+      audioClips: [], captions: [],
+    };
+    const signed: string[] = [];
+    const app = buildApp(makeDb({ ...generation, timeline }), makeBucket(), {
+      loadSource: async () => ({ storagePath: "original/video.mp4", sourceDurationSec: 8, derivatives: { thumbPath: "thumb/video.jpg", proxyPath: "proxy/video.mp4" } }),
+      signReadUrl: async (path) => { signed.push(path); return `https://storage.test/${path}`; },
+    });
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/generations/g1").set("Authorization", "Bearer owner");
+    expect(res.status).toBe(200);
+    expect(res.body.sources["shot-video"]).toBe("https://storage.test/proxy/video.mp4");
+    expect(res.body.thumbnails).toEqual({ "shot-video": "https://storage.test/thumb/video.jpg" });
+    expect(signed).toEqual(expect.arrayContaining(["thumb/video.jpg", "proxy/video.mp4"]));
+  });
+
   it("returns browser-loadable sources for every clip and the selected soundtrack in a stored generation", async () => {
     const storedTimeline = {
       schemaVersion: 1,

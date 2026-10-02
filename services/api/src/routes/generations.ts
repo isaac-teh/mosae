@@ -179,10 +179,24 @@ export function generationsRouter(deps: {
           for (const track of await deps.loadSoundtrackLibrary?.() ?? []) paths[track.id] = track.path;
           const signReadUrl = deps.signReadUrl;
           if (!signReadUrl) throw new Error("preview URL signer is not configured");
+          const expiresAt = Date.now() + 6 * 60 * 60 * 1000;
           sources = Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([id, objectPath]) => [
             id,
-            await signReadUrl(objectPath, Date.now() + 6 * 60 * 60 * 1000),
+            await signReadUrl(objectPath, expiresAt),
           ])));
+          const videoShotIds = [...new Set(generation.timeline.videoClips.flatMap((clip) =>
+            "source" in clip && clip.source.kind === "video" ? [clip.source.shotId] : [],
+          ))];
+          const thumbnails = await Promise.all(videoShotIds.map(async (shotId) => {
+            try {
+              const asset = await resolve(projectId, shotId);
+              const thumbPath = asset?.derivatives?.thumbPath;
+              return thumbPath ? [shotId, await signReadUrl(thumbPath, expiresAt)] as const : null;
+            } catch {
+              return null;
+            }
+          }));
+          response.thumbnails = Object.fromEntries(thumbnails.filter((entry): entry is readonly [string, string] => entry !== null));
         } catch (error) {
           console.error("generation preview source resolution failed", error);
           return res.status(500).json({ error: "preview_sources_unavailable" });

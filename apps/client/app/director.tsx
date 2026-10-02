@@ -157,6 +157,13 @@ export default function DirectorScreen() {
           <ChatPersonQuestion momentCount={item.momentCount} samples={item.sampleFaces} days={item.days} chips={personAnswerChips(item.ageBand, people.filter((person) => person.personId !== item.personId).map((person) => person.name ?? ""))} onPick={(role) => scrollAfterAction(() => actions.setPerson(item.personId, role))} onTypeName={() => scrollAfterAction(() => setNamingPerson(item.personId))} onSkip={() => scrollAfterAction(() => actions.setPerson(item.personId, "Skip"))} />
           {namingPerson === item.personId && <View className="flex-row gap-2"><TextInput accessibilityLabel="Person name" value={name} onChangeText={setName} className="min-h-11 flex-1 rounded-md border border-line-strong px-3 font-sans text-ink" /><Pressable role="button" onPress={() => scrollAfterAction(() => { if (name.trim()) return actions.setPerson(item.personId, "Type a name", name.trim()); setName(""); setNamingPerson(null); })} className="min-h-11 justify-center px-3"><Text className="font-sans-semibold text-action">Save name</Text></Pressable></View>}
         </View>;
+        if (item.kind === "merge-followup") return <View key={item.id} className="gap-3">
+          <ChatMessage from="mosae" text={item.text} />
+          <View className="flex-row gap-2">{item.photos.slice(0, 2).map((uri, index) => <Image key={`${item.id}-${index}`} source={{ uri }} accessibilityLabel={`Previously identified person ${index + 1}`} className="size-[72px] rounded-md" />)}</View>
+          {item.response
+            ? <ChatMessage from="you" text={item.response === "No, another person" ? `No, another ${item.text.replace(/^Same | as before\?$/g, "")}` : item.response} />
+            : <ChatProposal question={item.answer} replies={[{ id: "same", label: "Yes, same person" }, { id: "different", label: `No, another ${item.text.replace(/^Same | as before\?$/g, "")}` }]} onReply={(choice) => scrollAfterAction(() => actions.resolvePersonMerge(item.id, choice === "same"))} />}
+        </View>;
         if (item.kind === "anyone-else") return <View key={item.id} className="gap-3"><ChatProposal question="Anyone else?" replies={[{ id: "no", label: "No, that's everyone" }]} onReply={() => scrollAfterAction(actions.skipPeople)} /></View>;
         return null;
       })}

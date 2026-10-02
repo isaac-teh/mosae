@@ -34,6 +34,8 @@ export type CastPerson = {
   appearances: number;
   faceIds: string[];
   confidence: "high" | "low";
+  similarPersonId?: string;
+  similarity?: number;
 };
 
 export type Cast = {

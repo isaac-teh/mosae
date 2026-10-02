@@ -104,6 +104,7 @@ export type ConfirmCastInput = {
   /** Empty lets the director choose the focus from who is most often the subject. */
   focus: string[];
   moves?: { faceId: string; personId: string }[];
+  merges?: { fromPersonId: string; toPersonId: string }[];
   /** The plan on screen; the cast is applied to it and a revised version comes back. */
   proposalId?: string;
 };

@@ -1,4 +1,5 @@
 import type { ChatInput, ChatItem, ChatState } from "./types.js";
+import { orderPeopleByMergeSimilarity } from "./personChips.js";
 
 const DEFAULT_PLACEHOLDER = "Tell me anything about the story";
 
@@ -89,14 +90,20 @@ export function deriveChat(input: ChatInput): ChatState {
       return { items, step, confirmed, placeholder };
     }
 
-    const people = [...(input.people ?? [])].sort((a, b) => b.momentCount - a.momentCount).slice(0, 3);
+    const people = orderPeopleByMergeSimilarity(input.people ?? []).slice(0, 3);
     const answered = (person: (typeof people)[number]) => person.skipped || Boolean(person.name);
     const firstUnanswered = people.findIndex((person) => !answered(person));
     const unanswered = firstUnanswered >= 0 ? people[firstUnanswered] : null;
     people.slice(0, firstUnanswered >= 0 ? firstUnanswered : people.length).forEach((person) => {
       add({ kind: "mosae", id: `person-question-${person.personId}`, text: `One person appears in ${person.momentCount} moments. Who is this?`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri) });
       add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+      for (const event of input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? []) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), response: event.response });
     });
+    for (const event of (input.mergeEvents ?? []).filter(({ personId }) => !people.some((person) => person.personId === personId))) {
+      add({ kind: "mosae", id: `person-question-${event.personId}`, text: `One person appears in ${event.momentCount} moments. Who is this?`, photos: (event.questionFaces ?? event.sampleFaces).slice(0, 2) });
+      add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
+      if (!event.automatic) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), response: event.response });
+    }
     if (unanswered) {
       add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days });
     } else {
@@ -105,11 +112,18 @@ export function deriveChat(input: ChatInput): ChatState {
     return { items, step, confirmed, placeholder };
   }
 
+  const mergeEvents = input.mergeEvents ?? [];
+  for (const event of mergeEvents.filter(({ personId }) => !input.people?.some((person) => person.personId === personId))) {
+    add({ kind: "mosae", id: `person-question-${event.personId}`, text: `One person appears in ${event.momentCount} moments. Who is this?`, photos: (event.questionFaces ?? event.sampleFaces).slice(0, 2) });
+    add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
+    if (!event.automatic) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), response: event.response });
+  }
   if (input.people?.length) {
-    [...input.people].sort((a, b) => b.momentCount - a.momentCount).slice(0, 3).forEach((person) => {
+    orderPeopleByMergeSimilarity(input.people).slice(0, 3).forEach((person) => {
       if (person.skipped || person.name) {
         add({ kind: "mosae", id: `person-question-${person.personId}`, text: `One person appears in ${person.momentCount} moments. Who is this?`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri) });
         add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+        for (const event of input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? []) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), response: event.response });
       }
     });
   }

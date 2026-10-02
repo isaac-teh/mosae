@@ -3,7 +3,7 @@ import type { ProjectSummary } from "../chat/types";
 import type { EditOp, Timeline } from "@mosae/contracts";
 import type { PersonAgeBand } from "../chat/personChips";
 
-export type DirectorPerson = { personId: string; name: string | null; role: string | null; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[] };
+export type DirectorPerson = { personId: string; name: string | null; role: string | null; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number };
 export type FilmListStatus = "saved" | "film-ready" | "rendering" | "in-progress";
 export type FilmListItem = { projectId: string; filmId: string | null; planId: string | null; title: string; month: string; duration: string; posterUrl: string; justSaved: boolean; status: FilmListStatus; demo?: boolean };
 export type ProjectResumeState = { proposalId: string | null; storyText: string | null; generationId: string | null; generationStatus: "composing" | "playable" | "rendering" | "saved" | "failed" | null };
@@ -12,7 +12,7 @@ export type ChatInterpretResult = { reply: string; change: { kind: string; [key:
 export type FilmEdits = { revision: number; ops: EditOp[]; updatedAt: number | null };
 export type FilmRender = { revision: number; status: "pending" | "rendering" | "ready" | "failed"; renderProgress?: number; downloadUrl?: string; outputPath?: string };
 export type EditorMediaItem = { shotId: string; kind: "photo" | "video"; thumbnailUrl: string; previewUrl: string; date: string; eventLabel: string; sourceInSec?: number; sourceOutSec?: number; sourceDurationSec?: number };
-export type FilmTimeline = { timeline: Timeline; sources: Record<string, string>; unusedMedia?: EditorMediaItem[] };
+export type FilmTimeline = { timeline: Timeline; sources: Record<string, string>; thumbnails?: Record<string, string>; unusedMedia?: EditorMediaItem[] };
 export type EditInterpretation = { reply: string; ops: EditOp[] };
 
 export interface StoryRepository {

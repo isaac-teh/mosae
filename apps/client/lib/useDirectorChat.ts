@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deriveChat, getSetAsideSummary, getStoryRepository, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
+import { deriveChat, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
 import { mapShapingProgress } from "./shapingProgress";
@@ -193,12 +193,46 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const personName = name ?? (role === "Skip" ? undefined : role);
       peopleEdits.current.set(personId, { name: role === "Skip" ? null : personName ?? null, role: roleValue, skipped: role === "Skip" });
       const updated = people.map((person) => person.personId === personId ? { ...person, role: roleValue, name: personName ?? null, skipped: role === "Skip" } : person);
+      const duplicate = personName && role !== "Skip" ? matchExistingPersonAnswer(personName, people.filter((person) => person.personId !== personId)) : null;
+      const target = duplicate ? people.find((person) => person.personId === duplicate.personId) : undefined;
+      const source = updated.find((person) => person.personId === personId);
+      const duplicateEvent = duplicate && target && source ? { id: `merge-followup-${personId}`, personId, targetPersonId: target.personId, answer: duplicate.answer, targetName: target.name ?? duplicate.answer, sampleFaces: (target.sampleFaces ?? []).slice(0, 2).map((face) => face.uri), questionFaces: (source.sampleFaces ?? []).slice(0, 2).map((face) => face.uri), momentCount: source.momentCount, ...(duplicate.mode === "automatic" ? { automatic: true } : {}) } : undefined;
+      if (duplicate?.mode === "confirm") {
+        const event = duplicateEvent!;
+        setInput((current) => ({ ...current, people: updated, mergeEvents: [...(current.mergeEvents ?? []).filter(({ id }) => id !== event.id), event] }));
+        personSaving.current = false;
+        return;
+      }
       try {
-        const result = await confirmCast(projectId, { people: updated.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
-        const revisedPlan = result.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
-        if (result.proposalId) proposalId.current = result.proposalId;
-        setInput((current) => ({ ...current, people: updated, ...(revisedPlan ? { plan: revisedPlan } : {}), peopleConfirmed: false }));
+        const merge = duplicate?.mode === "automatic" ? [{ fromPersonId: personId, toPersonId: duplicate.personId }] : [];
+        const castPeople = merge.length ? updated.filter((person) => person.personId !== personId) : updated;
+        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(merge.length ? { merges: merge } : {}), ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+        if (result?.proposalId) proposalId.current = result.proposalId;
+        setInput((current) => ({ ...current, people: castPeople, ...(revisedPlan ? { plan: revisedPlan } : {}), peopleConfirmed: false, ...(duplicateEvent ? { mergeEvents: [...(current.mergeEvents ?? []).filter(({ id }) => id !== duplicateEvent.id), duplicateEvent] } : {}) }));
         setError(null);
+      } catch (cause) { setError(reportFailure(cause)); }
+      finally { personSaving.current = false; }
+    },
+    async resolvePersonMerge(eventId: string, samePerson: boolean) {
+      const event = input.mergeEvents?.find(({ id }) => id === eventId);
+      if (!event || personSaving.current) return;
+      personSaving.current = true;
+      const response = samePerson ? "Yes, same person" as const : "No, another person" as const;
+      try {
+        if (samePerson) {
+          const castPeople = (input.people ?? []).filter((person) => person.personId !== event.personId);
+          const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], merges: [{ fromPersonId: event.personId, toPersonId: event.targetPersonId }], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+          const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+          if (result?.proposalId) proposalId.current = result.proposalId;
+          setInput((current) => ({ ...current, people: castPeople, ...(revisedPlan ? { plan: revisedPlan } : {}), peopleConfirmed: false, mergeEvents: current.mergeEvents?.map((item) => item.id === eventId ? { ...item, response } : item) }));
+        } else {
+          const updated = input.people ?? [];
+          const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: updated.map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+          const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+          if (result?.proposalId) proposalId.current = result.proposalId;
+          setInput((current) => ({ ...current, ...(revisedPlan ? { plan: revisedPlan } : {}), mergeEvents: current.mergeEvents?.map((item) => item.id === eventId ? { ...item, response } : item) }));
+        }
       } catch (cause) { setError(reportFailure(cause)); }
       finally { personSaving.current = false; }
     },

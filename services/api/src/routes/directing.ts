@@ -460,6 +460,7 @@ export function directingRouter(deps: {
       const bodySchema = z.strictObject({
         people: z.array(personSchema), focus: z.array(z.string().min(1)),
         moves: z.array(z.strictObject({ faceId: z.string().min(1), personId: z.string().min(1) })).optional(),
+        merges: z.array(z.strictObject({ fromPersonId: z.string().min(1), toPersonId: z.string().min(1) })).optional(),
         /** The current plan: when given, the cast's leave-out and focus are applied to it straight away. */
         proposalId: z.string().min(1).optional(),
       });
@@ -470,9 +471,12 @@ export function directingRouter(deps: {
       if (!currentSnap.exists) { res.status(404).json({ error: "not_found" }); return; }
       const current = currentSnap.data() as Cast;
       const validId = (id: string) => current.people.some((person) => person.personId === id) || id.startsWith("p-");
-      const { people, moves = [] } = parsed.data;
+      const { people, moves = [], merges = [] } = parsed.data;
       let { focus } = parsed.data;
-      if ([...people.map((person) => person.personId), ...focus, ...moves.map((move) => move.personId)].some((id) => !validId(id)) ||
+      const mergeTargets = new Map(merges.map(({ fromPersonId, toPersonId }) => [fromPersonId, toPersonId]));
+      if ([...people.map((person) => person.personId), ...focus, ...moves.map((move) => move.personId), ...merges.flatMap((merge) => [merge.fromPersonId, merge.toPersonId])].some((id) => !validId(id)) ||
+          merges.some(({ fromPersonId, toPersonId }) => fromPersonId === toPersonId || !current.people.some((person) => person.personId === fromPersonId) || !people.some((person) => person.personId === toPersonId) || people.some((person) => person.personId === fromPersonId)) ||
+          new Set(merges.map(({ fromPersonId }) => fromPersonId)).size !== merges.length ||
           focus.some((id) => people.some((person) => person.personId === id && person.excluded)) ||
           new Set(people.map((person) => person.personId)).size !== people.length || new Set(focus).size !== focus.length) {
         res.status(400).json({ error: "invalid_cast" }); return;
@@ -487,7 +491,8 @@ export function directingRouter(deps: {
       const peopleById = new Map<string, CastPerson>();
       const subjectsByShot = shots.map((shot) => photoRoles((shot.analysis?.faces ?? []).map((face) => face.bbox)));
       const facesByShot: NonNullable<PhotoAnalysis["faces"]>[] = shots.map((shot, shotIndex) => (shot.analysis?.faces ?? []).map((face, faceIndex) => {
-        const personId = moved.get(face.faceId) ?? face.characterId;
+        const originalId = moved.get(face.faceId) ?? face.characterId;
+        const personId = originalId ? mergeTargets.get(originalId) ?? originalId : undefined;
         const { characterId: _characterId, name: _name, role: _role, ...faceFields } = face;
         const input = personId ? personInputs.get(personId) : undefined;
         if (personId && input) {
@@ -516,6 +521,7 @@ export function directingRouter(deps: {
         excluded: person.excluded ?? false, appearances: 0, subjectCount: 0, faceIds: [],
       } as CastPerson);
       const core = nextPeople.map((person) => person.personId);
+      focus = focus.map((id) => mergeTargets.get(id) ?? id).filter((id, index, all) => all.indexOf(id) === index);
       if (focus.length === 0) focus = chooseFocus(nextPeople, core);
       for (const shotFaces of facesByShot) for (const face of shotFaces) {
         if (face.characterId) face.role = focus.includes(face.characterId) ? "MAIN" : "SUPPORTING";

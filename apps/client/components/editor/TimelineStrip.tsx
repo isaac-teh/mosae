@@ -11,6 +11,7 @@ const secondsLabel = (seconds: number) => `${Math.floor(seconds / 60)}:${String(
 type TimelineRowsProps = {
   timeline: Timeline;
   sources: Record<string, string>;
+  thumbnails: Record<string, string>;
   selectedClipId: string | null;
   soundtrackName: string | null;
   pixelsPerSecond: number;
@@ -28,7 +29,7 @@ type TimelineRowsProps = {
   onSoundtrack: () => void;
 };
 
-const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, onDeselect, onSlotPointerDown, onSlotPointerMove, onSlotPointerUp, reorderPreview, onSoundtrack }: TimelineRowsProps) {
+const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails, selectedClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, onDeselect, onSlotPointerDown, onSlotPointerMove, onSlotPointerUp, reorderPreview, onSoundtrack }: TimelineRowsProps) {
   const music = timeline.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   const musicDuration = music ? music.source.sourceOutSec - music.source.sourceInSec : 0;
   const tickSeconds = Array.from({ length: Math.floor(timeline.durationSec) + 1 }, (_, second) => second);
@@ -58,7 +59,9 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedCli
         const id = clipId(clip);
         const selected = selectedClipId === id;
         const lifted = reorderPreview?.clipId === id;
-        const uri = sources[shotId(clip) ?? ""];
+        const idForSource = shotId(clip) ?? "";
+        const isVideo = "source" in clip && clip.source.kind === "video";
+        const uri = isVideo ? thumbnails[idForSource] : sources[idForSource];
         const duration = clip.durationSec;
         const start = cursor;
         cursor = start + duration;
@@ -75,7 +78,10 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, selectedCli
             onPress={(event: any) => { event?.stopPropagation?.(); onSelect(id, clip.startSec); }}
             style={{ width: Math.max(1, duration * pixelsPerSecond), height: "100%", overflow: "hidden", borderRadius: 5, backgroundColor: "transparent", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none", ...(Platform.OS === "web" ? ({ touchAction: "pan-x" } as unknown as ViewStyle) : {}) }}
             {...({ draggable: false } as any)}>
-            {uri ? <Image source={{ uri }} resizeMode="cover" pointerEvents="none" {...({ draggable: false } as any)} style={{ width: "100%", height: "100%", pointerEvents: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }} /> : null}
+            {uri && isVideo ? <View pointerEvents="none" accessibilityLabel="Video filmstrip frames" style={{ position: "absolute", inset: 0, flexDirection: "row", overflow: "hidden" }}>
+              {Array.from({ length: Math.max(1, Math.ceil(width / 48)) }, (_, frame) => <Image key={frame} source={{ uri }} accessibilityLabel="Video thumbnail frame" data-video-frame="true" resizeMode="cover" {...({ draggable: false } as any)} style={{ width: 48, height: "100%", borderRightWidth: 1, borderRightColor: "rgba(255,255,255,0.35)", pointerEvents: "none" }} />)}
+            </View> : uri ? <Image source={{ uri }} resizeMode="cover" pointerEvents="none" {...({ draggable: false } as any)} style={{ width: "100%", height: "100%", pointerEvents: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }} /> : null}
+            {isVideo ? <View pointerEvents="none" accessibilityLabel="Video clip badge" className="absolute right-1 top-1 rounded-sm bg-black/75 px-1"><Text className="font-sans-medium text-[8px] text-white">VIDEO</Text></View> : null}
             {"kind" in clip ? <View pointerEvents="none" className="absolute bottom-0 left-0 right-0 items-center bg-screen/75"><Text className="font-sans text-[9px] text-on-screen">Collage</Text></View> : null}
           </Pressable>
           {selected ? <>{makeHandle("start")}{makeHandle("end")}</> : null}
@@ -101,9 +107,10 @@ type TrimDragState = { clipId: string; edge: "start" | "end"; startX: number; ed
 type PendingSlotPress = { clipId: string; fromIndex: number; startX: number; startY: number; pointerId: number; target: any } | null;
 type ActiveSlotReorder = { clipId: string; fromIndex: number; toIndex: number; pointerId: number } | null;
 
-export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {} }: {
+export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {} }: {
   timeline: Timeline;
   sources: Record<string, string>;
+  thumbnails?: Record<string, string>;
   selectedClipId: string | null;
   playheadSec: number;
   soundtrackName?: string | null;
@@ -418,7 +425,7 @@ export function TimelineStrip({ timeline, sources, selectedClipId, playheadSec, 
     </View>
     <View ref={viewportRef} className="relative overflow-hidden" style={{ touchAction: "pan-x", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
       <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} style={{ width: "100%" }}>
-        <TimelineRows timeline={timeline} sources={sources} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => { if (suppressNextPress.current) return; if (id === selectedClipId) onDeselect(); else onSelect(id, start); }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} />
+        <TimelineRows timeline={timeline} sources={sources} thumbnails={thumbnails} selectedClipId={selectedClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => { if (suppressNextPress.current) return; if (id === selectedClipId) onDeselect(); else onSelect(id, start); }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} />
       </ScrollView>
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />
     </View>

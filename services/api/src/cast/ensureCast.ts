@@ -11,6 +11,7 @@ import { castSummary } from "./castSummary.js";
 import { labelledIdentity, labelsCover, type LabelFile } from "./labelledIdentity.js";
 import type { Cast, FaceRef, Interaction } from "./types.js";
 import { embeddingIdentity } from "./embeddingIdentity.js";
+import { closestPersonSimilarity } from "./personSimilarity.js";
 import { faceMatchingThresholds } from "../config.js";
 
 export async function loadCastLabels(photoHashes: string[], fixtureDirectory = fileURLToPath(new URL("../../fixtures/cast/", import.meta.url))): Promise<LabelFile | undefined> {
@@ -89,6 +90,16 @@ export async function ensureCast(
   const identities = embeddingResolver ? embeddingResolver.resolveVectors(vectorFaces) : resolver?.resolve(faces) ?? new Map<string, string>();
   const strangers = resolver?.strangers?.(faces) ?? new Set<string>();
   const cast = buildCast({ faces, identities, interactions, source: resolver?.source ?? "none" });
+  if (vectorFaces.length) {
+    const similarityByPerson = closestPersonSimilarity(vectorFaces.flatMap((face) => {
+      const personId = identities.get(face.faceId);
+      return personId ? [{ personId, vector: face.vector }] : [];
+    }));
+    for (const person of cast.people) {
+      const best = similarityByPerson.get(person.personId);
+      if (best && best.similarity >= 0.7) { person.similarPersonId = best.personId; person.similarity = best.similarity; }
+    }
+  }
   const summary = castSummary(cast, faces, identities);
 
   const batch = db.batch();

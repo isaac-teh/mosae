@@ -109,6 +109,27 @@ describe("character picker routes", () => {
     }
   });
 
+  it("merges people by moving all face identities into the retained cast person", async () => {
+    const projectId = await seedProject();
+    await photo(projectId, "shot-1", [{ ...face("first-face"), characterId: "first" }, { ...face("second-face"), characterId: "second" }]);
+    await adminDb.doc(`projects/${projectId}/cast/current`).set({
+      people: ["first", "second"].map((personId) => ({ personId, name: "My daughter", role: "child", ageBand: "child", appearances: 1, subjectCount: 1, faceIds: [`${personId}-face`], confidence: "high" })),
+      core: ["first", "second"], focus: ["first"], source: "embeddings",
+    });
+    const { url, close } = await listen(await buildApp());
+    try {
+      const res = await fetch(`${url}/api/projects/${projectId}/cast`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
+        people: [{ personId: "first", name: "My daughter", role: "child" }], focus: ["first"], merges: [{ fromPersonId: "second", toPersonId: "first" }],
+      }) });
+      expect(res.status).toBe(200);
+      const body = await res.json() as { cast: { people: Array<{ personId: string; faceIds: string[] }> } };
+      expect(body.cast.people).toHaveLength(1);
+      expect(body.cast.people[0]).toMatchObject({ personId: "first", faceIds: ["first-face", "second-face"] });
+      const saved = await adminDb.doc(`projects/${projectId}/shots/shot-1`).get();
+      expect((saved.get("analysis") as PhotoAnalysis).faces?.map((f) => f.characterId)).toEqual(["first", "first"]);
+    } finally { await close(); }
+  });
+
   it("gets and confirms the cast, moves a face, and recomputes empty focus", async () => {
     const projectId = await seedProject();
     await photo(projectId, "shot-1", [

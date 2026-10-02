@@ -236,15 +236,17 @@ describe("Director chat", () => {
     expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ proposalId: "proposal-2" }));
   });
 
-  it("uses each person's age for chips and hides a self answer already assigned", async () => {
+  it("keeps self answers available and automatically merges the repeated answer", async () => {
     setup({ people: [{ ...people[0], ageBand: "adult" }, { ...people[1], ageBand: "adult" }] }); await renderScreen(); await click("Yes, our Japan trip");
     expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy();
     await click("Me");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(host.querySelector('button[aria-label="Me"]')).toBeNull());
-    expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy();
-    expect(host.querySelector('button[aria-label="Friend"]')).toBeTruthy();
+    await waitFor(() => expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy());
+    await click("Me");
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(2));
+    expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ merges: [{ fromPersonId: "person-2", toPersonId: "person-1" }] }));
+    await waitFor(() => expect(hasText("One person appears in 90 moments. Who is this?")).toBe(true));
   });
 
   it("does not send a second cast edit while the first one is still pending", async () => {

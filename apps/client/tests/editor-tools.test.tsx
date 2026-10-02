@@ -131,6 +131,20 @@ describe("editor tool operations", () => {
     expect(labels.every((label) => Number.parseFloat((label.parentElement as HTMLElement).style.width) > 0)).toBe(true);
   });
 
+  it("renders video poster frames repeatedly across a timeline slot without a video element", async () => {
+    const videoTimeline: Timeline = { ...timeline, durationSec: 8, videoClips: [videoClip] };
+    await render(<TimelineStrip {...({ timeline: videoTimeline, sources: { "video-shot": "proxy.mp4" }, thumbnails: { "video-shot": "poster.jpg" }, selectedClipId: null, playheadSec: 0, onSelect: () => {}, onScrub: () => {} } as any)} />);
+    const slot = host.querySelector('[aria-label="Select clip video-1"]')!;
+    const frames = [...slot.querySelectorAll('[data-video-frame="true"]')];
+    expect(frames.length).toBeGreaterThan(1);
+    expect(frames.every((frame) => (frame as HTMLImageElement).getAttribute("src") === "poster.jpg")).toBe(true);
+    expect(slot.querySelector('[aria-label="Video clip badge"]')?.textContent).toBe("VIDEO");
+    expect(slot.querySelector("video")).toBeNull();
+    const contextMenu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    await act(async () => slot.dispatchEvent(contextMenu));
+    expect(contextMenu.defaultPrevented).toBe(true);
+  });
+
   it("selects a clip at its timeline start while the playhead stays fixed in the centre", async () => {
     const onSelect = vi.fn();
     await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={4.5} onSelect={onSelect} onScrub={() => {}} />);

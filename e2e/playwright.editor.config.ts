@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "../apps/client/e2e",
-  testMatch: ["timeline-trim.spec.ts", "director-history.spec.ts"],
+  testMatch: ["timeline-trim.spec.ts", "director-history.spec.ts", "director-face-merge.spec.ts", "video-thumb.spec.ts"],
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],

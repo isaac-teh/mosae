@@ -10,6 +10,27 @@ const ANSWERS: Record<PersonAgeBand, string[]> = {
 /** Answer suggestions for one face group; relationship and family labels may repeat. */
 export function personAnswerChips(ageBand: PersonAgeBand | null | undefined, assignedAnswers: readonly string[] = []): string[] {
   const answers = ageBand ? [...ANSWERS[ageBand]] : ["Me", "Family", "Friend", "Type a name"];
-  const assigned = new Set(assignedAnswers);
-  return answers.filter((answer) => (answer !== "Me" || !assigned.has("Me")) && (answer !== "My partner" || !assigned.has("My partner")));
+  void assignedAnswers;
+  return answers;
+}
+
+export function matchExistingPersonAnswer(answer: string, people: readonly { personId: string; name: string | null }[]): { personId: string; mode: "automatic" | "confirm"; answer: string } | null {
+  const normalized = answer.trim().replace(/^my\s+/i, "").toLocaleLowerCase();
+  if (!normalized || /^(friend|family)$/.test(normalized)) return null;
+  const match = people.find((person) => person.name?.trim().replace(/^my\s+/i, "").toLocaleLowerCase() === normalized);
+  if (!match) return null;
+  return { personId: match.personId, mode: /^(me|partner)$/.test(normalized) ? "automatic" : "confirm", answer: answer.trim() };
+}
+
+export function orderPeopleByMergeSimilarity<T extends { personId: string; momentCount: number; similarPersonId?: string; similarity?: number }>(people: readonly T[]): T[] {
+  const remaining = new Map(people.map((person) => [person.personId, person]));
+  const ordered: T[] = [];
+  while (remaining.size) {
+    const next = [...remaining.values()].sort((a, b) => b.momentCount - a.momentCount)[0]!;
+    remaining.delete(next.personId);
+    ordered.push(next);
+    const related = next.similarity !== undefined && next.similarity >= 0.7 ? remaining.get(next.similarPersonId ?? "") : undefined;
+    if (related) { ordered.push(related); remaining.delete(related.personId); }
+  }
+  return ordered;
 }

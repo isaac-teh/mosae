@@ -433,7 +433,7 @@ export function createApiStoryRepository(
           try { return { shotId, uri: await thumbnail(assetId), bbox }; }
           catch { return null; }
         }));
-        return { personId, name: typeof person?.name === "string" ? person.name : null, role: typeof person?.role === "string" ? person.role : null, ageBand: person?.ageBand === "child" || person?.ageBand === "teen" || person?.ageBand === "adult" || person?.ageBand === "senior" ? person.ageBand : undefined, momentCount: group.shots.size, sampleShotIds: [...group.shots].slice(0, 4), sampleFaces: samples.filter((sample): sample is NonNullable<typeof sample> => sample !== null), days: [...group.days].sort((a, b) => a - b) } satisfies DirectorPerson;
+        return { personId, name: typeof person?.name === "string" ? person.name : null, role: typeof person?.role === "string" ? person.role : null, ageBand: person?.ageBand === "child" || person?.ageBand === "teen" || person?.ageBand === "adult" || person?.ageBand === "senior" ? person.ageBand : undefined, momentCount: group.shots.size, sampleShotIds: [...group.shots].slice(0, 4), sampleFaces: samples.filter((sample): sample is NonNullable<typeof sample> => sample !== null), days: [...group.days].sort((a, b) => a - b), similarPersonId: typeof person?.similarPersonId === "string" ? person.similarPersonId : undefined, similarity: typeof person?.similarity === "number" ? person.similarity : undefined } satisfies DirectorPerson;
       }))).sort((a, b) => b.momentCount - a.momentCount);
     },
     createPlan: async (storyText, _mediaRefs) => {
@@ -553,6 +553,7 @@ export function createApiStoryRepository(
     getFilmTimeline: async (projectId, generationId) => {
       const response = record(await deps.request("GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}`), "generation");
       const sources = record(response.sources, "preview sources");
+      const thumbnails = response.thumbnails === undefined ? {} : record(response.thumbnails, "video thumbnails");
       const unusedMedia: EditorMediaItem[] = Array.isArray(response.unusedMedia) ? response.unusedMedia.flatMap((value) => {
         const media = record(value, "unused media");
         if (media.kind !== "photo" && media.kind !== "video") return [];
@@ -565,7 +566,7 @@ export function createApiStoryRepository(
           ...(typeof media.sourceDurationSec === "number" ? { sourceDurationSec: media.sourceDurationSec } : {}),
         }];
       }) : [];
-      return { timeline: parseTimeline(response.timeline), sources: Object.fromEntries(Object.entries(sources).map(([id, path]) => [id, stringField(path, "preview source")])), unusedMedia };
+      return { timeline: parseTimeline(response.timeline), sources: Object.fromEntries(Object.entries(sources).map(([id, path]) => [id, stringField(path, "preview source")])), thumbnails: Object.fromEntries(Object.entries(thumbnails).map(([id, path]) => [id, stringField(path, "video thumbnail")])), unusedMedia };
     },
     getEdits: async (projectId, generationId) => record(await deps.request(
       "GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`,

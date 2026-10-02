@@ -77,15 +77,21 @@ describe("createApiStoryRepository", () => {
   it("loads the generation timeline and preview sources for editing", async () => {
     const timeline = { schemaVersion: 1, projectId: "project-1", mode: "memory", aspect: "9:16", fps: 30, durationSec: 3, chapters: [{ title: "Opening", startSec: 0 }], videoClips: [{ id: "c1", source: { kind: "photo", shotId: "s1" }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }], audioClips: [], captions: [] };
     const deps = dependencies({ request: vi.fn(async () => ({ timeline, sources: { s1: "preview.jpg" } })) });
-    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getFilmTimeline("project-1", "g1")).resolves.toEqual({ timeline, sources: { s1: "preview.jpg" }, unusedMedia: [] });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getFilmTimeline("project-1", "g1")).resolves.toEqual({ timeline, sources: { s1: "preview.jpg" }, thumbnails: {}, unusedMedia: [] });
     expect(deps.request).toHaveBeenCalledWith("GET", "/api/projects/project-1/generations/g1");
+  });
+
+  it("keeps signed video thumbnails separate from video preview URLs", async () => {
+    const timeline = { schemaVersion: 1, projectId: "project-1", mode: "memory", aspect: "9:16", fps: 30, durationSec: 3, chapters: [], videoClips: [{ id: "v1", source: { kind: "video", shotId: "video-shot", sourceInSec: 0, sourceOutSec: 3 }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }], audioClips: [], captions: [] };
+    const deps = dependencies({ request: vi.fn(async () => ({ timeline, sources: { "video-shot": "proxy.mp4" }, thumbnails: { "video-shot": "poster.jpg" } })) });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getFilmTimeline("project-1", "g1")).resolves.toEqual({ timeline, sources: { "video-shot": "proxy.mp4" }, thumbnails: { "video-shot": "poster.jpg" }, unusedMedia: [] });
   });
 
   it("loads unused project shots with signed thumbnails and preview sources", async () => {
     const timeline = { schemaVersion: 1, projectId: "project-1", mode: "memory", aspect: "9:16", fps: 30, durationSec: 3, chapters: [], videoClips: [{ id: "c1", source: { kind: "photo", shotId: "used" }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }], audioClips: [], captions: [] };
     const unusedMedia = [{ shotId: "s-unused", kind: "video", thumbnailUrl: "poster.jpg", previewUrl: "proxy.mp4", date: "2026-06-03", eventLabel: "Day 3, evening", sourceInSec: 1, sourceOutSec: 8, sourceDurationSec: 20 }];
-    const deps = dependencies({ request: vi.fn(async () => ({ timeline, sources: {}, unusedMedia })) });
-    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getFilmTimeline("project-1", "g1")).resolves.toEqual({ timeline, sources: {}, unusedMedia });
+    const deps = dependencies({ request: vi.fn(async () => ({ timeline, sources: {}, thumbnails: {}, unusedMedia })) });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getFilmTimeline("project-1", "g1")).resolves.toEqual({ timeline, sources: {}, thumbnails: {}, unusedMedia });
   });
 
   it("reads and saves edit revisions through the authenticated API", async () => {

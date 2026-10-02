@@ -14,6 +14,7 @@ const sourceUri = (value: string) => value === "demo:film" ? Asset.fromModule(re
 export function useEditor(projectId: string, generationId: string, repository: StoryRepository = getStoryRepository()) {
   const [firstCut, setFirstCut] = useState<Timeline | null>(null);
   const [sources, setSources] = useState<Record<string, string>>({});
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [unusedMedia, setUnusedMedia] = useState<EditorMediaItem[]>([]);
   const [history, setHistory] = useState<History>({ snapshots: [[]], index: 0 });
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
@@ -51,6 +52,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
           ...Object.entries(film.sources),
           ...(film.unusedMedia ?? []).map((media) => [media.shotId, media.previewUrl] as const),
         ].map(([id, path]) => [id, sourceUri(path)])));
+        setThumbnails(Object.fromEntries(Object.entries(film.thumbnails ?? {}).map(([id, path]) => [id, sourceUri(path)])));
         setUnusedMedia(film.unusedMedia ?? []);
         setHistory({ snapshots: [edits.ops], index: 0 });
         setSelectedClipId(null);
@@ -224,7 +226,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
   }, [renderRequest, projectId, generationId, repository]);
 
   return {
-    timeline, firstCut, sources, unusedMedia, setSource, ops, selectedClipId, select: setSelectedClipId,
+    timeline, firstCut, sources, thumbnails, unusedMedia, setSource, ops, selectedClipId, select: setSelectedClipId,
     apply, applyMany, undo, redo, reset, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
     save, savedRevision, downloadUrl, renderProgress, renderEtaMinutes, savedFilm, reloadAfterConflict, render, loaded, error, editError,
   };
