@@ -156,3 +156,30 @@ describe("uploadMedia", () => {
     expect(calls.at(-1)?.path).toBe("/api/projects/p1/upload-sessions/s1/close");
   });
 });
+
+it("reports only failed originals and provides session close recovery without reuploading", async () => {
+  const { deps } = fakeDeps({ failPath: "uploads/u/p1/s1/a2/original" });
+  const files = [file("good.jpg", 10), file("failed.jpg", 10)];
+  const failed: File[] = [];
+  let closeRetry: (() => Promise<void>) | undefined;
+  let closes = 0;
+  const post = deps.post;
+  deps.post = async (path, body) => {
+    if (path.endsWith("/close") && ++closes === 1) throw new Error("offline");
+    return post(path, body);
+  };
+  await expect(uploadMedia(files, { mode: "memory", onFileFailed: f => failed.push(f), onCloseFailure: retry => { closeRetry = retry; } }, deps)).rejects.toThrow("offline");
+  expect(failed).toEqual([files[1]]);
+  expect(closeRetry).toBeTypeOf("function");
+  await closeRetry!();
+  expect(closes).toBe(2);
+});
+
+it("settles registered entries after registration aborts before closing", async () => {
+  const { deps, calls } = fakeDeps({ rejectLaterEntries: true });
+  await expect(uploadMedia(Array.from({ length: 501 }, (_, i) => file(`${i}.jpg`, 1)), { mode: "memory" }, deps)).rejects.toThrow("entry_registration_failed");
+  const outcomes = calls.filter(call => call.path.endsWith("/outcome"));
+  expect(outcomes).toHaveLength(500);
+  expect(outcomes.every(call => (call.body as any).kind === "cancelled")).toBe(true);
+  expect(calls.at(-1)?.path).toMatch(/close$/);
+});

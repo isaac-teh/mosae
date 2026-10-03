@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getPendingMedia, getPendingMediaAssets, setPendingMedia } from "./pendingMedia";
+import { getPendingMedia, getPendingMediaAssets, setPendingMedia, setPendingMediaRetry, retryPendingMedia } from "./pendingMedia";
 
 afterEach(() => setPendingMedia([]));
 
@@ -14,4 +14,13 @@ describe("pending uploaded media", () => {
       { file: clip, assetId: "asset-clip" },
     ]);
   });
+});
+
+it("retries through the upload owner only for its project", async () => {
+  let calls = 0;
+  setPendingMediaRetry("project-a", async () => { calls++; });
+  await retryPendingMedia("project-b");
+  expect(calls).toBe(0);
+  await retryPendingMedia("project-a");
+  expect(calls).toBe(1);
 });

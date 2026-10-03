@@ -17,6 +17,8 @@ export type ProjectSummary = {
 };
 
 export type ChatInput = {
+  localMediaPending?: boolean;
+  uploadFailuresAcknowledged?: boolean;
   summary: ProjectSummary | null;
   intent: { text: string } | null;
   people: { personId: string; name: string | null; role: string | null; ageBand?: PersonAgeBand; skipped: boolean; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;

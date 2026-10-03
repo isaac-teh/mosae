@@ -27,6 +27,16 @@ const base = (): ChatInput => ({
 const kinds = (items: ChatItem[]) => items.map((item) => item.kind);
 
 describe("deriveChat state table", () => {
+  it("gates occasion on local transfer, server story readiness and acknowledged failures", () => {
+    const input = { ...base(), intent: null };
+    for (const pending of [
+      { ...input, localMediaPending: true },
+      { ...input, summary: { ...summary, ready: { ...summary.ready, story: false } } },
+      { ...input, summary: { ...summary, processed: { ...summary.processed, understood: 0 } } },
+      { ...input, summary: { ...summary, upload: { expected: 11, settled: 11, failed: 1, cancelled: 0, closed: true } } },
+    ]) expect(deriveChat(pending).items.some(item => item.kind === "occasion")).toBe(false);
+  });
+
   it("attaches individual asset statuses to the existing reading progress item", () => {
     const pending = deriveChat({ ...base(), summary: { ...summary, ready: { ...summary.ready, summary: false }, assetStatuses: [
       { assetId: "a1", kind: "photo", status: "understood" },

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { type Href, useFocusEffect, useRouter } from "expo-router";
-import { isMedia, setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress as setSharedUploadProgress, uploadMedia, type FilmListItem, type UploadProgress } from "@mosae/core";
+import { isMedia, setPendingMediaRetry, setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress as setSharedUploadProgress, uploadMedia, type FilmListItem, type UploadProgress } from "@mosae/core";
 import { Button, FilmCard } from "@/components/ds";
 import { SettingsIcon } from "@/components/icons";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
@@ -44,19 +44,66 @@ export default function Home() {
     setUploadFailure(null);
     setUploadError(null);
     let routed = false;
+    let ownerProjectId: string | undefined;
+    let failedFiles: File[] = [];
+    let successfulFiles = 0;
+    let registered = false;
+    let assetIdsByFile: string[] = [];
+    let closeRetry: (() => Promise<void>) | null = null;
+    const retryUpload = async () => {
+      if (!ownerProjectId) return;
+      if (closeRetry) {
+        try { await closeRetry(); closeRetry = null; }
+        catch { setUploadFailure("The upload session could not finish. Check your connection and try again."); return; }
+      }
+      if (failedFiles.length === 0) { setUploadFailure(null); return; }
+      const retryFiles = failedFiles;
+      failedFiles = [];
+      let retryRegistered = false;
+      let retryFinished = 0;
+      setUploadFailure(null);
+      setUploadPreparationProgress({ totalFiles: retryFiles.length, preparedFiles: 0 });
+      try {
+        const result = await uploadMedia(retryFiles, {
+          mode: "memory", projectId: ownerProjectId,
+          onPreparationProgress: setUploadPreparationProgress,
+          onProgress: (progress) => {
+            retryFinished = progress.finishedFiles;
+            setSharedUploadProgress({ ...progress, totalFiles: successfulFiles + progress.totalFiles, finishedFiles: successfulFiles + progress.finishedFiles });
+          },
+          onCloseFailure: retry => { closeRetry = retry; },
+          onFileFailed: (file) => failedFiles.push(file),
+          onReady: ({ assetIds }) => {
+            retryRegistered = true;
+            retryFiles.forEach((file, index) => { assetIdsByFile[media.indexOf(file)] = assetIds[index]!; });
+            setPendingMedia(media, assetIdsByFile, ownerProjectId);
+            setUploadPreparationProgress(null);
+          },
+        });
+        successfulFiles += result.finished;
+        if (result.failed) setUploadFailure(`${result.failed} files couldn't upload. Try again or continue with uploaded files.`);
+      } catch { successfulFiles += retryFinished; if (!retryRegistered) failedFiles = retryFiles; setUploadFailure("These photos couldn't upload. Check your connection and try again."); }
+      finally { setUploadPreparationProgress(null); }
+    };
     try {
       const result = await uploadMedia(media, {
         mode: "memory",
-        onProgress: (progress) => { setUploadProgress(progress); setSharedUploadProgress(progress); },
+        onCloseFailure: retry => { closeRetry = retry; },
+        onFileFailed: (file) => failedFiles.push(file),
+        onProgress: (progress) => { setUploadProgress(progress); successfulFiles = progress.finishedFiles; setSharedUploadProgress(progress); },
         onPreparationProgress: setUploadPreparationProgress,
         onProjectReady: (projectId) => {
           routed = true;
-          setPendingMedia(media);
+          ownerProjectId = projectId;
+          setPendingMediaRetry(projectId, retryUpload);
+          setPendingMedia(media, [], projectId);
           router.push({ pathname: "/director", params: { projectId, live: "1" } } as unknown as Href);
         },
         onReady: ({ projectId, assetIds }) => {
           routed = true;
-          setPendingMedia(media, assetIds);
+          registered = true;
+          assetIdsByFile = assetIds;
+          setPendingMedia(media, assetIds, projectId);
           setUploadPreparationProgress(null);
         },
       });
@@ -70,7 +117,7 @@ export default function Home() {
     } catch (error) {
       console.error("upload failed", error);
       if (!routed) setUploadError("Upload failed. Please try again.");
-      else setUploadFailure("These photos couldn't be prepared or uploaded. Check your connection and try again.");
+      else { if (!registered) failedFiles = media; setUploadPreparationProgress(null); setUploadFailure("These photos couldn't be prepared or uploaded. Check your connection and try again."); }
     } finally {
       setUploading(false);
     }

@@ -9,7 +9,7 @@ import { shouldAutoScrollAfterAction } from "@/lib/chatScroll";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { EditorPreview } from "@/components/editor/EditorPreview";
 import type { Timeline } from "@mosae/contracts";
-import { contentTypeFor, getPendingMediaAssets, getUploadFailure, getUploadPreparationProgress, getUploadProgress, personAnswerChips, subscribeUploadProgress } from "@mosae/core";
+import { contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, personAnswerChips, subscribeUploadProgress, retryPendingMedia } from "@mosae/core";
 
 function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
   if (!summary) return "Your film";
@@ -29,7 +29,6 @@ export default function DirectorScreen() {
   const params = useLocalSearchParams<{ projectId?: string }>();
   const projectId = params.projectId ?? "";
   const story = useStoryFlow();
-  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow);
   const router = useRouter();
   const [name, setName] = useState("");
   const [namingPerson, setNamingPerson] = useState<string | null>(null);
@@ -40,22 +39,31 @@ export default function DirectorScreen() {
   const userScrolledUp = useRef(false);
   const [readingAssets, setReadingAssets] = useState<{ assetId: string; uri: string }[]>([]);
   const [selectedPhotos, setSelectedPhotos] = useState<{ uri: string; index: number }[]>([]);
-  const uploadProgress = useSyncExternalStore(subscribeUploadProgress, getUploadProgress, getUploadProgress);
-  const preparationProgress = useSyncExternalStore(subscribeUploadProgress, getUploadPreparationProgress, getUploadPreparationProgress);
-  const uploadFailure = useSyncExternalStore(subscribeUploadProgress, getUploadFailure, getUploadFailure);
+  const pendingProjectId = useSyncExternalStore(subscribeUploadProgress, getPendingMediaProjectId, getPendingMediaProjectId);
+  const ownsPendingMedia = pendingProjectId === null || pendingProjectId === projectId;
+  const sharedUploadProgress = useSyncExternalStore(subscribeUploadProgress, getUploadProgress, getUploadProgress);
+  const uploadProgress = ownsPendingMedia ? sharedUploadProgress : null;
+  const sharedPreparationProgress = useSyncExternalStore(subscribeUploadProgress, getUploadPreparationProgress, getUploadPreparationProgress);
+  const preparationProgress = ownsPendingMedia ? sharedPreparationProgress : null;
+  const sharedUploadFailure = useSyncExternalStore(subscribeUploadProgress, getUploadFailure, getUploadFailure);
+  const uploadFailure = ownsPendingMedia ? sharedUploadFailure : null;
   const pendingMedia = useSyncExternalStore(subscribeUploadProgress, getPendingMediaAssets, getPendingMediaAssets);
+  const [uploadFailuresAcknowledged, setUploadFailuresAcknowledged] = useState(false);
+  const localMediaPending = Boolean(preparationProgress) || Boolean(uploadProgress && (uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles || uploadProgress.finishedFiles === 0)) || Boolean((uploadFailure || uploadProgress?.failedFiles) && !uploadFailuresAcknowledged);
+  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged });
+  useEffect(() => { setUploadFailuresAcknowledged(false); }, [uploadProgress?.failedFiles, preparationProgress?.totalFiles]);
   useEffect(() => {
-    const created = pendingMedia
+    const created = (ownsPendingMedia ? pendingMedia : [])
       .filter(({ file, assetId }) => Boolean(assetId) && !contentTypeFor(file).startsWith("video/"))
       .map(({ file, assetId }) => ({ assetId: assetId!, uri: URL.createObjectURL(file) }));
     setReadingAssets(created);
     return () => created.forEach(({ uri }) => URL.revokeObjectURL(uri));
-  }, [pendingMedia]);
+  }, [pendingMedia, ownsPendingMedia]);
   useEffect(() => {
-    const created = pendingMedia.flatMap(({ file }, index) => contentTypeFor(file).startsWith("video/") ? [] : [{ uri: URL.createObjectURL(file), index }]);
+    const created = (ownsPendingMedia ? pendingMedia : []).flatMap(({ file }, index) => contentTypeFor(file).startsWith("video/") ? [] : [{ uri: URL.createObjectURL(file), index }]);
     setSelectedPhotos(created);
     return () => created.forEach(({ uri }) => URL.revokeObjectURL(uri));
-  }, [pendingMedia]);
+  }, [pendingMedia, ownsPendingMedia]);
   const filmItem = state.items.find((item) => item.kind === "film");
   const film = filmItem?.kind === "film" ? filmItem.film : null;
   const onFilmPlayerError = useCallback(() => setFilmPlayerFailed(true), []);
@@ -109,7 +117,10 @@ export default function DirectorScreen() {
         <Text className="font-sans text-caption text-ink-muted">{(uploadProgress.bytesSent / 1_000_000).toFixed(1)} of {(uploadProgress.totalBytes / 1_000_000).toFixed(1)} MB transferred</Text>
         <View className="flex-row flex-wrap gap-2">{readingAssets.map(({ assetId, uri }, index) => <Image key={assetId} source={{ uri }} accessibilityLabel={`Selected photo ${index + 1}`} className="size-12 rounded-sm" />)}</View>
       </View>}
-      {uploadFailure && <View accessibilityRole="alert" className="rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure}</Text></View>}
+      {(uploadFailure || (projectSummary?.upload?.failed ?? 0) + (projectSummary?.upload?.cancelled ?? 0) > 0) && <View accessibilityRole="alert" className="gap-2 rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure ?? `${(projectSummary?.upload?.failed ?? 0) + (projectSummary?.upload?.cancelled ?? 0)} files could not upload.`}</Text>
+        <Button label="Retry uploads" variant="secondary" disabled={Boolean(preparationProgress) || Boolean(uploadProgress && uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles)} onPress={() => { setUploadFailuresAcknowledged(false); void retryPendingMedia(projectId).then((retried) => { if (!retried) router.push("/"); }); }} />
+        {Boolean(uploadProgress ? uploadProgress.finishedFiles : projectSummary && projectSummary.total > 0 && projectSummary.processed.understood > 0) && !uploadFailuresAcknowledged && <Button label="Continue with uploaded files" onPress={() => setUploadFailuresAcknowledged(true)} />}
+      </View>}
       {state.items.map((item) => {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveConflict(choice as "keep" | "leave"))} />;
         if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} photos={item.photos} />;
@@ -190,9 +201,9 @@ export default function DirectorScreen() {
         return null;
       })}
       {state.step === "people" && !state.items.some((item) => item.kind === "person" || item.kind === "anyone-else") && <Button label="Skip for now" variant="quiet" onPress={() => scrollAfterAction(actions.skipPeople)} />}
-      {pendingInterpret && <View className="gap-3"><ChatMessage from="you" text={pendingInterpret.text} /><ChatMessage from="mosae" text={pendingInterpret.reply} /><ChatProposal replies={[{ id: "confirm", label: "Yes, that's right" }, { id: "discard", label: "Not quite" }]} onReply={(choice) => scrollAfterAction(() => choice === "confirm" ? actions.confirmInterpret() : actions.discardInterpret())} /></View>}
+      {pendingInterpret && !localMediaPending && <View className="gap-3"><ChatMessage from="you" text={pendingInterpret.text} /><ChatMessage from="mosae" text={pendingInterpret.reply} /><ChatProposal replies={[{ id: "confirm", label: "Yes, that's right" }, { id: "discard", label: "Not quite" }]} onReply={(choice) => scrollAfterAction(() => choice === "confirm" ? actions.confirmInterpret() : actions.discardInterpret())} /></View>}
       {error && <View className="gap-2"><ChatMessage from="mosae" text={error} /><Pressable role="button" onPress={() => scrollAfterAction(() => { retry(); if (state.step === "occasion") return actions.confirmOccasion(); })} className="min-h-11 self-start justify-center"><Text className="font-sans-semibold text-action">Try again</Text></Pressable></View>}
     </ScrollView>
-    {projectSummary && <ChatComposer placeholder={state.placeholder} disabled={saving} onSend={(text) => scrollAfterAction(() => state.step === "ready" ? actions.askForChange(text) : actions.send(text))} />}
+    {<ChatComposer placeholder={state.placeholder} disabled={saving} onSend={(text) => scrollAfterAction(() => state.step === "ready" ? actions.askForChange(text) : actions.send(text))} />}
   </View>;
 }

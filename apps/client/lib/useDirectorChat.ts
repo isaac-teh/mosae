@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deriveChat, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
+import { deriveChat, canConfirmStory, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
 import { mapShapingProgress } from "./shapingProgress";
@@ -16,7 +16,7 @@ function reportFailure(cause: unknown): string {
   return REQUEST_FAILURE;
 }
 
-export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository(), storyFlow?: { repository: "api" | "fixture"; projectId?: string }) {
+export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository(), storyFlow?: { repository: "api" | "fixture"; projectId?: string }, localState: Pick<ChatInput, "localMediaPending" | "uploadFailuresAcknowledged"> = {}) {
   const [input, setInput] = useState<ChatInput>(EMPTY_INPUT);
   const [summary, setSummary] = useState<ProjectSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +27,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const [directionSelection, setDirectionSelection] = useState<{ cadenceId: string; durationId: Direction["durationId"]; soundtrackId: string | null; focus: string; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful" }>({ cadenceId: "reflective", durationId: "2m", soundtrackId: null, focus: "family", collageAmount: "few", motionFeel: "calm" });
   const proposalId = useRef<string | null>(null);
   const personSaving = useRef(false);
+  const occasionSaving = useRef(false);
   const planLoad = useRef(false);
   const planFailed = useRef(false);
   const resumeProjectId = useRef<string | null>(null);
@@ -37,7 +38,15 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const pollFilmRef = useRef<(filmId: string) => void>(() => {});
   const compositionStartedAt = useRef<number | null>(null);
   const router = useRouter();
-  const state: ChatState = deriveChat(input);
+  const uploadEpoch = useRef(0);
+  const previousLocalPending = useRef(Boolean(localState.localMediaPending));
+  const acceptedSummaryEpoch = useRef(-1);
+  if (previousLocalPending.current !== Boolean(localState.localMediaPending)) {
+    uploadEpoch.current++;
+    previousLocalPending.current = Boolean(localState.localMediaPending);
+  }
+  const confirmationState = { ...localState, localMediaPending: Boolean(localState.localMediaPending) || acceptedSummaryEpoch.current !== uploadEpoch.current };
+  const state: ChatState = deriveChat({ ...input, ...confirmationState });
 
   const loadDirectionOptions = useCallback(async (planId: string) => {
     const options = await repository.getDirectionOptions(planId);
@@ -54,8 +63,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
 
   const refresh = useCallback(async () => {
     if (planFailed.current) return;
+    const refreshEpoch = uploadEpoch.current;
+    const startedWhilePending = previousLocalPending.current;
     const [nextSummary, people] = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId)]);
     if (!mounted.current) return;
+    if (!startedWhilePending && !previousLocalPending.current && refreshEpoch === uploadEpoch.current) acceptedSummaryEpoch.current = refreshEpoch;
     setSummary(nextSummary);
     const mapped = people?.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
@@ -119,10 +131,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
 
   useEffect(() => {
     mounted.current = true;
-    void refresh().catch((cause) => setError(reportFailure(cause)));
-    const timer = setInterval(() => { void refresh().catch((cause) => setError(reportFailure(cause))); }, 3000);
+    void refresh().catch((cause) => { if (!localState.localMediaPending) setError(reportFailure(cause)); });
+    const timer = setInterval(() => { void refresh().catch((cause) => { if (!localState.localMediaPending) setError(reportFailure(cause)); }); }, 3000);
     return () => { mounted.current = false; clearInterval(timer); };
-  }, [refresh]);
+  }, [refresh, localState.localMediaPending]);
 
   useEffect(() => () => { if (generationTimer.current) clearTimeout(generationTimer.current); }, []);
 
@@ -172,18 +184,19 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
 
   const actions = {
     async confirmOccasion(answer?: string, storyTextOverride?: string) {
-      if (saving) return;
+      if (occasionSaving.current || !canConfirmStory({ ...input, ...confirmationState })) return;
+      occasionSaving.current = true;
       planFailed.current = false;
       setSaving(true); setError(null);
       const storyText = storyTextOverride ?? answer ?? pendingInterpret?.text ?? (summary?.country ? `${summary.country} trip` : summary?.places[0] || "Our story");
       try {
-        const result = await repository.createPlan(storyText, []);
+        const result = await repository.createPlan([storyText, ...input.notes].join("\n"), []);
         proposalId.current = result.planId;
         setInput((current) => ({ ...current, intent: { text: answer ?? storyText } }));
         setPendingInterpret(null);
         await refresh();
       } catch (cause) { planFailed.current = true; reportFailure(cause); setError("I couldn't shape this one. Try again."); }
-      finally { setSaving(false); }
+      finally { occasionSaving.current = false; setSaving(false); }
     },
     async setPerson(personId: string, role: string, name?: string) {
       if (personSaving.current) return;
@@ -316,6 +329,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", planId: film.planId, generationId: film.filmId, request: text.trim(), ...(storyFlow ?? {}) } } as any);
     },
     async send(text: string) {
+      if (!text.trim()) return;
+      if (!canConfirmStory({ ...input, ...confirmationState }) && !input.intent) {
+        setInput((current) => ({ ...current, notes: [...current.notes, text.trim()] }));
+        return;
+      }
       if (!summary) return;
       try {
         const step = state.step === "people" || state.step === "moments" || state.step === "direction" ? state.step : "occasion";

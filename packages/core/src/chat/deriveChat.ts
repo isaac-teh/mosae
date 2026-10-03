@@ -52,6 +52,16 @@ export function getSetAsideSummary(plan: ChatInput["plan"]) {
   };
 }
 
+export function canConfirmStory(input: ChatInput): boolean {
+  const summary = input.summary;
+  if (!summary || input.localMediaPending) return false;
+  const upload = summary.upload;
+  if (upload && (!upload.closed || upload.settled < upload.expected)) return false;
+  if (upload && upload.failed + upload.cancelled > 0 && !input.uploadFailuresAcknowledged) return false;
+  if (summary.ready.story !== undefined) return summary.ready.story;
+  return summary.total > 0 && summary.ready.summary && summary.processed.ingested >= summary.total && summary.processed.understood >= summary.total;
+}
+
 export function deriveChat(input: ChatInput): ChatState {
   const items: ChatItem[] = [];
   let step: ChatState["step"] = "occasion";
@@ -64,14 +74,16 @@ export function deriveChat(input: ChatInput): ChatState {
     add({ kind: "typing", id: "summary-wait", text: `Reading your photos, ${processed} of ${total}`, photoProgress: input.summary?.assetStatuses });
   };
 
-  if (!input.summary?.ready.summary) {
+  if ((!input.intent && !canConfirmStory(input)) || !input.summary?.ready.summary) {
     addPhotoProgress();
+    input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
     return { items, step, confirmed, placeholder };
   }
   if (input.summary.photos > 0 && !input.summary.ready.faces) addPhotoProgress();
 
   if (!input.intent) {
     add({ kind: "mosae", id: "occasion-message", text: occasionText(input) });
+    input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
     add({ kind: "occasion", id: "occasion" });
     return { items, step, confirmed, placeholder };
   }

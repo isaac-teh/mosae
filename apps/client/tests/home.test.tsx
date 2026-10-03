@@ -24,6 +24,7 @@ vi.mock("react-native", () => {
 });
 
 import Home from "../app/index";
+import { retryPendingMedia, getUploadProgress } from "@mosae/core";
 import { startDemoTrip } from "@/lib/startDemoTrip";
 
 let root: Root;
@@ -54,7 +55,7 @@ describe("Home", () => {
     await act(async () => button!.click());
     await act(async () => await Promise.resolve());
     expect(state.uploadMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), expect.objectContaining({ mode: "memory", onProjectReady: expect.any(Function), onPreparationProgress: expect.any(Function), onReady: expect.any(Function), onProgress: expect.any(Function) }));
-    expect(state.setPendingMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), ["asset-1"]);
+    expect(state.setPendingMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), ["asset-1"], "uploaded-project");
     expect(state.push).toHaveBeenCalledWith({ pathname: "/director", params: { projectId: "uploaded-project", live: "1" } });
     expect(state.push).not.toHaveBeenCalledWith("/pick-memory");
   });
@@ -141,4 +142,28 @@ describe("Home", () => {
     expect(state.push).toHaveBeenLastCalledWith("/director?repository=api&projectId=active-project");
   });
 
+});
+
+it("retries only failed files in the original project without losing completed progress", async () => {
+  let failedFile: File;
+  state.uploadMedia.mockImplementationOnce(async (files: File[], options: any) => {
+    failedFile = files[0]!;
+    options.onProjectReady("uploaded-project");
+    options.onReady({ projectId: "uploaded-project", assetIds: ["old-failed"] });
+    options.onProgress({ totalFiles: 2, finishedFiles: 1, failedFiles: 1, bytesSent: 5, totalBytes: 5 });
+    options.onFileFailed(failedFile);
+    return { projectId: "uploaded-project", finished: 1, failed: 1, assetIds: ["old-failed"] };
+  });
+  await render();
+  await act(async () => [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Create a new film"))!.click());
+  state.uploadMedia.mockImplementationOnce(async (files: File[], options: any) => {
+    expect(files).toEqual([failedFile]);
+    expect(options.projectId).toBe("uploaded-project");
+    options.onReady({ projectId: "uploaded-project", assetIds: ["new-success"] });
+    options.onProgress({ totalFiles: 1, finishedFiles: 1, failedFiles: 0, bytesSent: 5, totalBytes: 5 });
+    return { projectId: "uploaded-project", finished: 1, failed: 0, assetIds: ["new-success"] };
+  });
+  await act(async () => retryPendingMedia("uploaded-project"));
+  expect(getUploadProgress()).toMatchObject({ totalFiles: 2, finishedFiles: 2, failedFiles: 0 });
+  expect(state.push).toHaveBeenCalledTimes(1);
 });

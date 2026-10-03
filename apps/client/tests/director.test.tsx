@@ -54,7 +54,7 @@ const filmFixture = { filmId: "film-1", planId: "proposal-1", version: 1, title:
 function setup(options: { faces?: boolean; interpret?: () => Promise<any>; createPlan?: () => Promise<any>; people?: any[]; readyPlan?: boolean; applyEdits?: (...args: any[]) => Promise<any>; getFilm?: (...args: any[]) => Promise<any>; getProjectResume?: (...args: any[]) => Promise<any>; saveFilm?: (...args: any[]) => Promise<any>; maximumDurationSec?: number; maximumDurationSecByCadence?: Record<string, number> } = {}) {
   const planReady = options.readyPlan ?? false;
   mocks.repo = {
-    getSummary: vi.fn(async () => ({ ...summary(options.faces ?? true), total: planReady ? 465 : 8, ready: { ...summary(options.faces ?? true).ready, plan: planReady } })), getPeople: vi.fn(async () => options.people ?? people),
+    getSummary: vi.fn(async () => ({ ...summary(options.faces ?? true), total: planReady ? 465 : 8, processed: { ingested: planReady ? 465 : 8, understood: planReady ? 465 : 8, faces: 4 }, ready: { ...summary(options.faces ?? true).ready, plan: planReady } })), getPeople: vi.fn(async () => options.people ?? people),
     createPlan: vi.fn(options.createPlan ?? (async () => ({ planId: "proposal-1" }))),
     interpret: vi.fn(options.interpret ?? (async () => ({ reply: "I understood the Japan trip.", change: { kind: "occasion", storyText: "Japan trip" } }))),
     getPlan: vi.fn(async () => planFixture), applyEdits: vi.fn(options.applyEdits ?? (async () => planFixture)), getDirectionOptions: vi.fn(async () => ({ ...directionOptions, maximumDurationSec: options.maximumDurationSec ?? directionOptions.maximumDurationSec, ...(options.maximumDurationSecByCadence ? { maximumDurationSecByCadence: options.maximumDurationSecByCadence } : {}) })), directFilm: vi.fn(async () => ({ filmId: "film-1" })), getFilm: vi.fn(options.getFilm ?? (async () => filmFixture)), getFilmTimeline: vi.fn(async () => ({ timeline: { durationSec: 124, fps: 30, aspect: "9:16", videoClips: [] }, sources: {} })), getProjectResume: vi.fn(options.getProjectResume ?? (async () => ({ proposalId: null, storyText: null, generationId: null, generationStatus: null }))), saveFilm: vi.fn(options.saveFilm ?? (async () => ({ downloadKey: "https://film.example/first-cut.mp4" }))),
@@ -80,6 +80,8 @@ describe("Director chat", () => {
     setUploadPreparationProgress({ preparedFiles: 0, totalFiles: 1 });
     await renderScreen();
     expect(hasText("Preparing your photos")).toBe(true);
+    expect(hasText("Is that the story?")).toBe(false);
+    expect(host.querySelector('input[aria-label="Tell me anything about the story"]')).toBeTruthy();
     expect(hasText("0 of 1")).toBe(true);
     expect(host.querySelector('[alt="Selected photo 1"]')).toBeTruthy();
   });
@@ -90,6 +92,41 @@ describe("Director chat", () => {
     setUploadFailure("None of these photos uploaded. Check your connection and try again.");
     await renderScreen();
     expect(hasText("None of these photos uploaded. Check your connection and try again.")).toBe(true);
+  });
+
+  it("requires explicit partial-failure continuation and rejects all-failed continuation", async () => {
+    setup();
+    setUploadProgress({ totalFiles: 2, finishedFiles: 1, failedFiles: 1, bytesSent: 1, totalBytes: 1 });
+    setUploadFailure("One file couldn't upload.");
+    await renderScreen();
+    expect(hasText("Yes, our Japan trip")).toBe(false);
+    await click("Continue with uploaded files");
+    expect(hasText("Yes, our Japan trip")).toBe(true);
+    await act(async () => setUploadProgress({ totalFiles: 2, finishedFiles: 0, failedFiles: 2, bytesSent: 0, totalBytes: 0 }));
+    expect(hasText("Continue with uploaded files")).toBe(false);
+    expect(hasText("Retry uploads")).toBe(true);
+  });
+
+  it("retains typed context during preparation without interpreting or planning", async () => {
+    setup(); setUploadPreparationProgress({ totalFiles: 1, preparedFiles: 0 });
+    await renderScreen();
+    const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
+    await act(async () => { (composer as HTMLInputElement).value = "Mia's birthday"; composer.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("Send");
+    expect(hasText("Mia's birthday")).toBe(true);
+    expect(mocks.repo.interpret).not.toHaveBeenCalled();
+    expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+    await act(async () => setUploadPreparationProgress(null));
+    expect(hasText("Mia's birthday")).toBe(true);
+    await click("Yes, our Japan trip");
+    expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip\nMia's birthday", []);
+  });
+
+  it("guards rapid repeated confirmations before React rerenders", async () => {
+    setup({ createPlan: () => new Promise(() => {}) }); await renderScreen();
+    const button = host.querySelector('button[aria-label="Yes, our Japan trip"]')!;
+    await act(async () => { button.dispatchEvent(new MouseEvent("click", { bubbles: true })); button.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    expect(mocks.repo.createPlan).toHaveBeenCalledTimes(1);
   });
 
   it("scrolls the director history to the newest message after an occasion chip action", async () => {
@@ -554,4 +591,13 @@ describe("Director chat", () => {
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", planId: "proposal-1", generationId: "film-1", request: "Make it shorter", repository: "api" } });
     expect(mocks.repo.interpret).not.toHaveBeenCalled();
   });
+});
+
+it("waits for a fresh server snapshot after local transfer completes", async () => {
+  setup(); setUploadProgress({ totalFiles: 2, finishedFiles: 1, failedFiles: 0, bytesSent: 1, totalBytes: 2 });
+  await renderScreen();
+  mocks.repo.getSummary.mockImplementationOnce(() => new Promise(() => {}));
+  await act(async () => setUploadProgress({ totalFiles: 2, finishedFiles: 2, failedFiles: 0, bytesSent: 2, totalBytes: 2 }));
+  expect(hasText("Yes, our Japan trip")).toBe(false);
+  expect(mocks.repo.createPlan).not.toHaveBeenCalled();
 });

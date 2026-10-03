@@ -45,7 +45,7 @@ async function defaultDeps(): Promise<UploadDeps> {
 
 export async function uploadMedia(
   files: File[],
-  options: { mode: "memory" | "creator"; projectId?: string; onProgress?: (p: UploadProgress) => void; onPreparationProgress?: (p: UploadPreparationProgress) => void; onProjectReady?: (projectId: string) => void; onReady?: (ready: { projectId: string; assetIds: string[] }) => void; concurrency?: number },
+  options: { mode: "memory" | "creator"; projectId?: string; onProgress?: (p: UploadProgress) => void; onFileFailed?: (file: File) => void; onCloseFailure?: (retry: () => Promise<void>) => void; onPreparationProgress?: (p: UploadPreparationProgress) => void; onProjectReady?: (projectId: string) => void; onReady?: (ready: { projectId: string; assetIds: string[] }) => void; concurrency?: number },
   deps?: UploadDeps,
 ): Promise<{ projectId: string; finished: number; failed: number; assetIds: string[] }> {
   const { post, putFile } = deps ?? (await defaultDeps());
@@ -67,6 +67,14 @@ export async function uploadMedia(
   const sessionPath = `${base}/${first.session.id}`;
   const entries = [...first.entries];
   let mainPathFailed = false;
+  const unsettledOutcomes = new Map<string, { kind: "cancelled" } | { kind: "failed"; reason: string }>();
+  const settleAndClose = async () => {
+    await Promise.all([...unsettledOutcomes].map(async ([assetId, outcome]) => {
+      await post(`${sessionPath}/entries/${assetId}/outcome`, outcome);
+      unsettledOutcomes.delete(assetId);
+    }));
+    await post(`${sessionPath}/close`);
+  };
 
   try {
     for (let start = ENTRY_BATCH; start < accepted.length; start += ENTRY_BATCH) {
@@ -107,8 +115,11 @@ export async function uploadMedia(
           progress.totalBytes -= accepted[index].size;
           sent[index] = 0;
           progress.failedFiles += 1;
+          options.onFileFailed?.(acceptedOriginal[index]!);
           const reason = (error as { code?: string }).code ?? "upload_error";
-          await post(`${sessionPath}/entries/${entry.assetId}/outcome`, { kind: "failed", reason }).catch(() => undefined);
+          const outcome = { kind: "failed" as const, reason };
+          unsettledOutcomes.set(entry.assetId, outcome);
+          await post(`${sessionPath}/entries/${entry.assetId}/outcome`, outcome).then(() => unsettledOutcomes.delete(entry.assetId)).catch(() => undefined);
         }
         report();
       }
@@ -118,11 +129,13 @@ export async function uploadMedia(
     return { projectId, finished: progress.finishedFiles, failed: progress.failedFiles, assetIds: entries.map(({ assetId }) => assetId) };
   } catch (error) {
     mainPathFailed = true;
+    entries.forEach(({ assetId }) => unsettledOutcomes.set(assetId, { kind: "cancelled" }));
     throw error;
   } finally {
     try {
-      await post(`${sessionPath}/close`);
+      await settleAndClose();
     } catch (error) {
+      options.onCloseFailure?.(settleAndClose);
       if (mainPathFailed) console.error("failed to close upload session", error);
       else throw error;
     }
