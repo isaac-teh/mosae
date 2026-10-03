@@ -95,3 +95,13 @@ describe("StoryProposalSchema", () => {
     expect(StoryProposalSchema.safeParse({ ...valid, leftOut: [{ shotId: "shot-x", reason: "Hidden by you." }] }).success).toBe(true);
   });
 });
+
+describe("optional direction recommendation", () => {
+  it("trims valid copy", () => {
+    expect(StoryProposalSchema.parse({ ...valid, directionRecommendation: "  Portraits at a gentle pace.  " })).toHaveProperty("directionRecommendation", "Portraits at a gentle pace.");
+  });
+  it.each([undefined, null, 42, {}, [], "", "  ", "x".repeat(301)])("preserves a valid legacy proposal for %j", (copy) => {
+    const parsed = StoryProposalSchema.parse({ ...valid, directionRecommendation: copy });
+    expect(parsed).not.toHaveProperty("directionRecommendation", expect.any(String));
+  });
+});

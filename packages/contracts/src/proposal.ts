@@ -62,6 +62,18 @@ export const ProposalConstraintsSchema = z.strictObject({
   photoSwaps: z.record(z.string().min(1), z.string().min(1)).optional(),
 });
 
+/** Optional editorial copy must never invalidate an otherwise usable plan. */
+export function normalizeDirectionRecommendation(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length >= 1 && trimmed.length <= 300 ? trimmed : undefined;
+}
+
+export const DirectionRecommendationSchema = z.preprocess(
+  normalizeDirectionRecommendation,
+  z.string().min(1).max(300).optional(),
+);
+
 const BaseProposalSchema = z.strictObject({
   schemaVersion: z.literal(1),
   id: z.string().min(1),
@@ -77,6 +89,7 @@ const BaseProposalSchema = z.strictObject({
   openQuestions: z.array(z.string().min(1)),
   recommendedCadence: z.enum(CADENCES.map((c) => c.id) as [CadenceId, ...CadenceId[]]).optional(),
   cadenceReason: z.string().min(1).max(200).optional(),
+  directionRecommendation: DirectionRecommendationSchema,
   leftOut: z.array(z.strictObject({ shotId: z.string().min(1), reason: z.string().min(1) })).optional(),
 });
 

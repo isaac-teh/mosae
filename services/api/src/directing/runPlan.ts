@@ -118,6 +118,8 @@ function initialPrompt(job: PlanJob, catalog: string[]): string {
     ...(job.daySummary ? [job.daySummary] : []),
     "Keep every moment worth keeping; the film's length is chosen later.",
     "Also recommend the film's cadence (one of tender, reflective, playful, energetic, celebratory) from the photos' mood, with a short reason.",
+    "Supply directionRecommendation: one short recommendation (1–300 characters) grounded in the user's stated story and observed media, suggesting the direction's mood or pace.",
+    "Do not guess occasions, relationships, locations, or the duration of an occasion. Dates are factual context only and cannot establish a trip. Use neutral wording when evidence is weak: For these moments, I’d suggest this.",
     `Carried constraints: ${JSON.stringify(job.constraints)}`,
     `Prior feedback: ${JSON.stringify(job.constraints.feedback)}`,
     "Working set:",

@@ -3,7 +3,7 @@ import { loadLibrary, soundtrackCatalog } from "../music/library.js";
 import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
-import { CADENCES, DURATION_SECONDS, recommendDuration, type CadenceId, type DurationId } from "@mosae/contracts";
+import { normalizeDirectionRecommendation, CADENCES, DURATION_SECONDS, recommendDuration, type CadenceId, type DurationId } from "@mosae/contracts";
 import { stripProposalEnvelope } from "../store/directingStore.js";
 import { holdsFor } from "../compose/brief.js";
 
@@ -117,8 +117,10 @@ export function directionOptionsRouter(deps: {
         seconds,
       }));
 
+      const recommendation = normalizeDirectionRecommendation(proposalData.directionRecommendation);
       return res.json({
         note,
+        ...(recommendation !== undefined ? { recommendation } : {}),
         rewrites: [],
         cadences: CADENCES.map(({ id, name, description }) => ({ id, name, description })),
         soundtracks: soundtrackCatalog(library, recommendedCadence),

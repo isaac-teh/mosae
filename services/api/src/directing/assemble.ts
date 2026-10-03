@@ -1,4 +1,4 @@
-import { StoryProposalSchema, type CadenceId, type ProposalConstraints, type StoryProposal } from "@mosae/contracts";
+import { normalizeDirectionRecommendation, StoryProposalSchema, type CadenceId, type ProposalConstraints, type StoryProposal } from "@mosae/contracts";
 
 export type SubmittedMoment = {
   shotId: string;
@@ -18,6 +18,7 @@ export type ProposalSubmission = {
   openQuestions: string[];
   recommendedCadence?: CadenceId;
   cadenceReason?: string;
+  directionRecommendation?: string;
 };
 
 export type ProposalAssemblyContext = {
@@ -112,6 +113,7 @@ export function assembleProposal(body: ProposalSubmission, context: ProposalAsse
     mustIncludeMomentIds: context.constraints.mustIncludeMomentIds.map(constraintMomentId).filter((id): id is string => id !== undefined),
   };
 
+  const directionRecommendation = normalizeDirectionRecommendation(body.directionRecommendation);
   const candidate = {
     schemaVersion: 1 as const,
     id: context.proposalId,
@@ -121,6 +123,7 @@ export function assembleProposal(body: ProposalSubmission, context: ProposalAsse
     state: "draft" as const,
     version: context.version,
     title: body.title,
+    ...(directionRecommendation !== undefined ? { directionRecommendation } : {}),
     moments,
     chapters,
     constraints,

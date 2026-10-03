@@ -173,7 +173,7 @@ export function deriveChat(input: ChatInput): ChatState {
 
   if (!input.direction.confirmed) {
     step = "direction";
-    add({ kind: "mosae", id: "direction-question", text: `For a ${input.summary?.days ?? 1}-day trip I'd suggest this. ${input.directionNote ?? "Change anything that doesn't feel right."}` });
+    add({ kind: "mosae", id: "direction-question", text: input.directionNote ?? "For these moments, I’d suggest this." });
     add({
       kind: "direction", id: "direction", pace: input.direction.pace, lengthSec: input.direction.lengthSec,
       focus: input.direction.focus, momentCount: input.plan.totalMomentCount ?? input.plan.moments.length,
@@ -181,7 +181,7 @@ export function deriveChat(input: ChatInput): ChatState {
     return { items, step, confirmed, placeholder };
   }
 
-  add({ kind: "mosae", id: "direction-question", text: `For a ${input.summary?.days ?? 1}-day trip I'd suggest this. ${input.directionNote ?? "Change anything that doesn't feel right."}` });
+  add({ kind: "mosae", id: "direction-question", text: input.directionNote ?? "For these moments, I’d suggest this." });
   add({ kind: "you", id: "direction-answer", text: directionAnswer(input) });
   confirmed = 4;
   if (input.generation?.status === "done" && input.generation.film) {

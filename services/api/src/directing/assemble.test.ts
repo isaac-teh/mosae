@@ -77,3 +77,12 @@ describe("assembleProposal — day chapter titles", () => {
     expect(proposal.chapters.every((c) => c.title === "Day 1 · Siloso Beach")).toBe(true);
   });
 });
+
+describe("contextual recommendation", () => {
+  it.each(["For these portraits, I’d suggest a gentle pace.", "For this celebration, I’d suggest a lively rhythm."])("carries %s unchanged", (copy) => {
+    expect(assembleProposal({ ...body, directionRecommendation: copy } as ProposalSubmission, context)).toHaveProperty("directionRecommendation", copy);
+  });
+  it.each([null, 42, {}, "", "   ", "x".repeat(301)])("discards malformed optional copy %j without rejecting the plan", (copy) => {
+    expect(assembleProposal({ ...body, directionRecommendation: copy } as unknown as ProposalSubmission, context)).not.toHaveProperty("directionRecommendation");
+  });
+});

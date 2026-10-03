@@ -523,6 +523,11 @@ describe("film adapters", () => {
       .resolves.toEqual([{ shotId: "video-2", thumbnailUrl: "thumb:video", kind: "video" }]);
   });
 
+  it.each(["For these portraits, I’d suggest a gentle pace.", "For this celebration, I’d suggest a lively rhythm."])("maps recommendation %s separately from intent", async (recommendation) => {
+    const deps = dependencies({ request: vi.fn(async () => ({ note: "Story intent", recommendation, soundtracks: [] })) });
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getDirectionOptions("proposal-1")).resolves.toMatchObject({ note: "Story intent", recommendation });
+  });
+
   it("returns the direction options route body unchanged", async () => {
     const body = { note: "n", rewrites: [], cadences: [], soundtracks: [{ id: "lyria-playful", name: "Sandcastle Days", description: "Light and bright", mood: "playful", durationSec: 60.212, suggested: true }], durations: [], recommendedDuration: "30s", recommendedCadence: "playful", cadenceReason: "kids laughing" };
     const deps = dependencies({ request: vi.fn(async () => body) });

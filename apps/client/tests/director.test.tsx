@@ -50,7 +50,7 @@ const planFixture = {
   leftOut: [{ shotId: "set-aside-blur", thumbnailUrl: "https://image/blur", reason: "Blurry" }, ...Array.from({ length: 120 }, (_, index) => ({ shotId: `dup-${index}`, thumbnailUrl: "", reason: "Near duplicate" }))],
   edits: { deselectedMomentIds: [], mustIncludeMomentIds: [], hiddenShotIds: [], excludedShotIds: ["previously-excluded", "dup-0"], momentOrder: [], photoSwaps: {} },
 } as any;
-const directionOptions = { note: "Warm, intimate story", rewrites: [], cadences: [{ id: "reflective", name: "Gentle", description: "Unhurried" }, { id: "playful", name: "Lively", description: "Energetic" }], soundtracks: [{ id: "lyria-reflective", name: "Quiet afternoon", description: "Gentle piano" }], durations: [{ id: "30s", label: "30 sec", caption: "Quick", seconds: 30 }, { id: "1m", label: "1 min", caption: "Short", seconds: 60 }, { id: "2m", label: "2 min", caption: "Balanced", seconds: 120 }, { id: "3m", label: "3 min", caption: "Extended", seconds: 180 }, { id: "4m", label: "4 min", caption: "Long", seconds: 240 }, { id: "5m", label: "5 min", caption: "Everything", seconds: 300 }], recommendedDuration: "2m", recommendedCadence: "reflective", cadenceReason: "The photos feel calm", maximumDurationSec: 300 };
+const directionOptions = { recommendation: "For these portraits, I’d suggest a gentle pace.", note: "Warm, intimate story", rewrites: [], cadences: [{ id: "reflective", name: "Gentle", description: "Unhurried" }, { id: "playful", name: "Lively", description: "Energetic" }], soundtracks: [{ id: "lyria-reflective", name: "Quiet afternoon", description: "Gentle piano" }], durations: [{ id: "30s", label: "30 sec", caption: "Quick", seconds: 30 }, { id: "1m", label: "1 min", caption: "Short", seconds: 60 }, { id: "2m", label: "2 min", caption: "Balanced", seconds: 120 }, { id: "3m", label: "3 min", caption: "Extended", seconds: 180 }, { id: "4m", label: "4 min", caption: "Long", seconds: 240 }, { id: "5m", label: "5 min", caption: "Everything", seconds: 300 }], recommendedDuration: "2m", recommendedCadence: "reflective", cadenceReason: "The photos feel calm", maximumDurationSec: 300 };
 const filmFixture = { filmId: "film-1", planId: "proposal-1", version: 1, title: "Japan, autumn", subtitle: "A family trip", place: "Japan", dateLabel: "October", durationSec: 124, posterKey: "poster", savePosterKey: "poster", videoKey: "video", momentCount: 419, audioLabel: "Soft piano", shortcuts: [], status: "ready", videoUrl: "https://film.example/first-cut.mp4", rendering: false, reasons: ["Opens on the train window in Tokyo.", "Mia's reactions lead each day.", "Both moments you kept are in.", "I left out repeated scenery shots."] } as any;
 function setup(options: { faces?: boolean; interpret?: () => Promise<any>; createPlan?: () => Promise<any>; people?: any[]; readyPlan?: boolean; applyEdits?: (...args: any[]) => Promise<any>; getFilm?: (...args: any[]) => Promise<any>; getProjectResume?: (...args: any[]) => Promise<any>; saveFilm?: (...args: any[]) => Promise<any>; maximumDurationSec?: number; maximumDurationSecByCadence?: Record<string, number> } = {}) {
   const planReady = options.readyPlan ?? false;
@@ -466,7 +466,8 @@ describe("Director chat", () => {
     await openMoments();
     await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-1"));
-    expect(hasText("Warm, intimate story")).toBe(true);
+    expect(hasText(directionOptions.recommendation)).toBe(true);
+    expect(hasText("Warm, intimate story")).toBe(false);
     await click("4 min");
     expect(hasText("For 4 minutes, I'll keep")).toBe(true);
     await click("Lively");
@@ -691,4 +692,15 @@ it("finishes slow direction loading after the resumed plan is published", async 
     expect(chat.directionOptions).toEqual(directionOptions);
     await act(async () => root.render(null));
   } finally { vi.useRealTimers(); }
+});
+
+it.each([undefined, "For these portraits, I’d suggest a gentle pace."])("restores contextual recommendation for generated film %s", async (copy) => {
+  setup({ readyPlan: true, people: [], getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Portraits", generationId: "film-1", generationStatus: "saved" }) });
+  mocks.repo.getPlan.mockResolvedValue({ ...planFixture, directionRecommendation: copy });
+  let chat!: ReturnType<typeof useDirectorChat>;
+  function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+  await act(async () => root.render(<Harness />));
+  await waitFor(() => expect(chat.state.items.some(item => item.kind === "film")).toBe(true));
+  expect(chat.state.items.find(item => item.id === "direction-question")).toMatchObject({ text: copy ?? "For these moments, I’d suggest this." });
+  expect(mocks.repo.getDirectionOptions).not.toHaveBeenCalled();
 });

@@ -238,3 +238,12 @@ describe("deriveChat state table", () => {
     expect(state.placeholder).toBe("Ask for a change");
   });
 });
+
+describe("contextual direction copy", () => {
+  it.each([undefined, "For these portraits, I’d suggest a gentle pace.", "For this celebration, I’d suggest a lively rhythm."])("renders the recommendation once with neutral legacy fallback", (copy) => {
+    const state = deriveChat({ ...base(), momentsConfirmed: true, directionNote: copy, direction: { confirmed: false, pace: "gentle", lengthSec: 120, focus: "family" } });
+    const questions = state.items.filter(item => item.id === "direction-question");
+    expect(questions).toHaveLength(1);
+    expect(questions[0]).toMatchObject({ text: copy ?? "For these moments, I’d suggest this." });
+  });
+});

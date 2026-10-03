@@ -3,7 +3,7 @@ import { ensureSignedIn } from "../auth";
 import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
 import { getFirestoreClient } from "../firebase";
-import { parseTimeline, type EditOp } from "@mosae/contracts";
+import { normalizeDirectionRecommendation, parseTimeline, type EditOp } from "@mosae/contracts";
 import type { ChatInterpretRequest, DirectorPerson, EditorMediaItem, FilmEdits, FilmListItem, FilmRender, ProjectResumeState, StoryRepository } from "./repository";
 import type { ProjectSummary } from "../chat/types";
 import type { DirectionOptions, Film } from "./types";
@@ -161,7 +161,7 @@ function directionSoundtracks(value: unknown): DirectionOptions["soundtracks"] {
 
 function parseDirectionOptions(value: unknown): DirectionOptions {
   const options = record(value, "direction options");
-  return { ...options, soundtracks: directionSoundtracks(options.soundtracks) } as unknown as DirectionOptions;
+  return { ...options, recommendation: normalizeDirectionRecommendation(options.recommendation), soundtracks: directionSoundtracks(options.soundtracks) } as unknown as DirectionOptions;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

@@ -44,3 +44,23 @@ describe("planning model transport", () => {
     await expect(model.runTurn({ messages: [], toolDeclarations: planningToolDeclarations })).rejects.toThrow();
   });
 });
+
+describe("optional recommendation transport", () => {
+  it.each([undefined, null, 7, {}, "", " ", "x".repeat(301), "  A gentle portrait film.  "])("normalizes %j and records only the existing call", async (copy) => {
+    const records: UsageRecord[] = [];
+    let calls = 0;
+    const model = createPlanningModel({
+      generateContent: async () => {
+        calls += 1;
+        return { text: JSON.stringify({ type: "submit", submission: { title: "Portraits", moments: [], chapters: [], openQuestions: [], directionRecommendation: copy } }) };
+      },
+      recordUsage: record => { records.push(record); },
+    }, "job-copy");
+    const result = await model.runTurn({ messages: [], toolDeclarations: planningToolDeclarations });
+    expect(result.type).toBe("submit");
+    if (result.type === "submit") expect(result.submission.directionRecommendation).toBe(typeof copy === "string" && copy.trim().length > 0 && copy.trim().length <= 300 ? copy.trim() : undefined);
+    expect(calls).toBe(1);
+    expect(records).toMatchObject([{ stage: "plan", subjectId: "job-copy", attempt: 1 }]);
+    expect(records[0].error).toBeUndefined();
+  });
+});

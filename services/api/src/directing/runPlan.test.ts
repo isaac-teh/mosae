@@ -487,3 +487,16 @@ describe("Budget", () => {
     expect(thrown).toBeInstanceOf(BudgetExhausted);
     expect(thrown).toMatchObject({ budget: "elapsed_time", limit: 120_000 });
   });});
+
+describe("contextual recommendation in existing plan turn", () => {
+  it("grounds the copy and carries it without another model call", async () => {
+    const copy = "For these portraits, I’d suggest a gentle pace.";
+    const script = scripted([{ type: "submit", submission: { ...validSubmission, directionRecommendation: copy } as ProposalSubmission }]);
+    const result = await runPlan(job, { model: script.model, tools: tools() });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.proposal).toHaveProperty("directionRecommendation", copy);
+    expect(script.inputs).toHaveLength(1);
+    expect(script.inputs[0].messages[0].content).toContain("directionRecommendation");
+    expect(script.inputs[0].messages[0].content).toContain("Do not guess");
+  });
+});

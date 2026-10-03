@@ -31,6 +31,8 @@ export { ALLOWED_COMBOS, ALLOWED_COMBO_KEYS } from "./collageCombos.js";
 
 export {
   StoryProposalSchema,
+  DirectionRecommendationSchema,
+  normalizeDirectionRecommendation,
   MomentSchema,
   ProposalChapterSchema,
   ProposalConstraintsSchema,

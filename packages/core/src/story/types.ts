@@ -56,6 +56,7 @@ export type Chapter = {
 };
 
 export type StoryPlan = {
+  directionRecommendation?: string;
   planId: string;
   title: string;
   place: string;
@@ -86,6 +87,7 @@ export type Soundtrack = { id: string; name: string; description: string; mood?:
 export type DurationChoice = { id: "30s" | "1m" | "2m" | "3m" | "4m" | "5m"; label: string; caption: string; seconds: number };
 
 export type DirectionOptions = {
+  recommendation?: string;
   note: string;
   rewrites: string[];
   cadences: Cadence[];

@@ -1,6 +1,8 @@
+import { normalizeDirectionRecommendation } from "@mosae/contracts";
 import type { PlanEdits, StoryPlan } from "./types";
 
 export type ProposalProjectionSource = {
+  directionRecommendation?: string;
   id: string;
   title: string;
   moments: Array<{
@@ -139,6 +141,7 @@ export function projectProposal(
   return {
     planId: proposal.id,
     title: proposal.title,
+    directionRecommendation: normalizeDirectionRecommendation(proposal.directionRecommendation),
     place: project.place ?? "",
     dateRange: project.dateRange ?? "",
     coverImageKey,

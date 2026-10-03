@@ -128,3 +128,8 @@ describe("projectProposal — Review edits", () => {
     expect(plan.leftOut).toEqual([{ shotId: "sx", thumbnailUrl: "thumb:sx", reason: "Hidden by you." }]);
   });
 });
+
+it("preserves the stored recommendation for resumed film transcripts", () => {
+  const copy = "For these portraits, I’d suggest a gentle pace.";
+  expect(projectProposal({ ...proposal, directionRecommendation: copy }, project, shots)).toHaveProperty("directionRecommendation", copy);
+});

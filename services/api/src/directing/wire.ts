@@ -1,5 +1,5 @@
 import type { Firestore, DocumentReference } from "firebase-admin/firestore";
-import { CADENCES, type CadenceId, type StoryProposal } from "@mosae/contracts";
+import { DirectionRecommendationSchema, CADENCES, type CadenceId, type StoryProposal } from "@mosae/contracts";
 import { saveProposal, type SaveProposalResult } from "../store/directingStore.js";
 import type { Asset } from "../store/finalizeStore.js";
 import type { ShotAnalysis } from "../domain/understanding.js";
@@ -307,6 +307,7 @@ const SubmissionSchema = z.object({
   openQuestions: z.array(z.string()),
   recommendedCadence: z.enum(CADENCES.map((c) => c.id) as [CadenceId, ...CadenceId[]]).optional(),
   cadenceReason: z.string().optional(),
+  directionRecommendation: DirectionRecommendationSchema,
 });
 /**
  * Written out by hand rather than taken from `z.toJSONSchema(ActionSchema)`.
@@ -356,6 +357,7 @@ const actionResponseSchema = {
         openQuestions: { type: "array", items: { type: "string" } },
         recommendedCadence: { type: "string", enum: CADENCES.map((c) => c.id) },
         cadenceReason: { type: "string" },
+        directionRecommendation: { type: "string", description: "A short grounded direction recommendation, 1–300 characters." },
       },
       required: ["title", "moments", "chapters", "openQuestions"],
     },
