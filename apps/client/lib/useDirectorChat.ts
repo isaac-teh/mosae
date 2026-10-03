@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState as useReactState, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
 import { deriveChat, canConfirmStory, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
@@ -16,15 +16,30 @@ function reportFailure(cause: unknown): string {
   return REQUEST_FAILURE;
 }
 
+function useProjectState<T>(epochRef: MutableRefObject<number>, epoch: number, initial: T): [T, Dispatch<SetStateAction<T>>] {
+  const [stored, setStored] = useReactState({ epoch, value: initial });
+  if (stored.epoch !== epoch) setStored({ epoch, value: initial });
+  const value = stored.epoch === epoch ? stored.value : initial;
+  return [value, (update) => {
+    if (epochRef.current !== epoch) return;
+    setStored(current => epochRef.current !== epoch ? current : ({ epoch, value: typeof update === "function" ? (update as (value: T) => T)(current.epoch === epoch ? current.value : initial) : update }));
+  }];
+}
+
 export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository(), storyFlow?: { repository: "api" | "fixture"; projectId?: string }, localState: Pick<ChatInput, "localMediaPending" | "uploadFailuresAcknowledged"> = {}) {
-  const [input, setInput] = useState<ChatInput>(EMPTY_INPUT);
-  const [summary, setSummary] = useState<ProjectSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingInterpret, setPendingInterpret] = useState<{ reply: string; text: string } | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [momentState, setMomentState] = useState<Record<string, "keep" | "leave">>({});
-  const [directionOptions, setDirectionOptions] = useState<DirectionOptions | null>(null);
-  const [directionSelection, setDirectionSelection] = useState<{ cadenceId: string; durationId: Direction["durationId"]; soundtrackId: string | null; focus: string; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful" }>({ cadenceId: "reflective", durationId: "2m", soundtrackId: null, focus: "family", collageAmount: "few", motionFeel: "calm" });
+  const projectIdentity = useRef(projectId);
+  const projectEpoch = useRef(0);
+  if (projectIdentity.current !== projectId) { projectIdentity.current = projectId; projectEpoch.current++; }
+  const currentProjectEpoch = projectEpoch.current;
+  const isCurrentProject = () => projectEpoch.current === currentProjectEpoch && projectIdentity.current === projectId;
+  const [input, setInput] = useProjectState<ChatInput>(projectEpoch, currentProjectEpoch, EMPTY_INPUT);
+  const [summary, setSummary] = useProjectState<ProjectSummary | null>(projectEpoch, currentProjectEpoch, null);
+  const [error, setError] = useProjectState<string | null>(projectEpoch, currentProjectEpoch, null);
+  const [pendingInterpret, setPendingInterpret] = useProjectState<{ reply: string; text: string } | null>(projectEpoch, currentProjectEpoch, null);
+  const [saving, setSaving] = useProjectState(projectEpoch, currentProjectEpoch, false);
+  const [momentState, setMomentState] = useProjectState<Record<string, "keep" | "leave">>(projectEpoch, currentProjectEpoch, {});
+  const [directionOptions, setDirectionOptions] = useProjectState<DirectionOptions | null>(projectEpoch, currentProjectEpoch, null);
+  const [directionSelection, setDirectionSelection] = useProjectState<{ cadenceId: string; durationId: Direction["durationId"]; soundtrackId: string | null; focus: string; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful" }>(projectEpoch, currentProjectEpoch, { cadenceId: "reflective", durationId: "2m", soundtrackId: null, focus: "family", collageAmount: "few", motionFeel: "calm" });
   const proposalId = useRef<string | null>(null);
   const personSaving = useRef(false);
   const occasionSaving = useRef(false);
@@ -38,9 +53,27 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const pollFilmRef = useRef<(filmId: string) => void>(() => {});
   const compositionStartedAt = useRef<number | null>(null);
   const router = useRouter();
+  const resetEpoch = useRef(currentProjectEpoch);
+  const refreshRequest = useRef(0);
   const uploadEpoch = useRef(0);
   const previousLocalPending = useRef(Boolean(localState.localMediaPending));
   const acceptedSummaryEpoch = useRef(-1);
+  if (resetEpoch.current !== currentProjectEpoch) {
+    resetEpoch.current = currentProjectEpoch;
+    uploadEpoch.current++;
+    acceptedSummaryEpoch.current = -1;
+    proposalId.current = null;
+    personSaving.current = false;
+    occasionSaving.current = false;
+    planLoad.current = false;
+    planFailed.current = false;
+    resumeProjectId.current = null;
+    peopleEdits.current.clear();
+    skipPeopleForNow.current = false;
+    compositionStartedAt.current = null;
+    if (generationTimer.current) clearTimeout(generationTimer.current);
+    generationTimer.current = null;
+  }
   if (previousLocalPending.current !== Boolean(localState.localMediaPending)) {
     uploadEpoch.current++;
     previousLocalPending.current = Boolean(localState.localMediaPending);
@@ -48,8 +81,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const confirmationState = { ...localState, localMediaPending: Boolean(localState.localMediaPending) || acceptedSummaryEpoch.current !== uploadEpoch.current };
   const state: ChatState = deriveChat({ ...input, ...confirmationState });
 
-  const loadDirectionOptions = useCallback(async (planId: string) => {
-    const options = await repository.getDirectionOptions(planId);
+  const loadDirectionOptions = useCallback(async (planId: string, stillValid: () => boolean = isCurrentProject) => {
+    const options = await repository.getDirectionOptions(planId).catch(cause => {
+      if (isCurrentProject() && stillValid()) throw cause;
+      return null;
+    });
+    if (!options || !isCurrentProject() || !stillValid()) return;
     setDirectionOptions(options);
     const cadenceId = options.recommendedCadence;
     const maximumDurationSec = options.maximumDurationSecByCadence?.[cadenceId] ?? options.maximumDurationSec ?? Infinity;
@@ -59,14 +96,20 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const lengthSec = duration?.seconds ?? 120;
     setDirectionSelection((current) => ({ ...current, cadenceId, durationId, soundtrackId: current.soundtrackId ?? options.soundtracks[0]?.id ?? null, collageAmount: options.collageAmount ?? current.collageAmount, motionFeel: options.motionFeel ?? current.motionFeel }));
     setInput((current) => ({ ...current, directionNote: options.note, direction: { confirmed: false, pace: /gentle|reflective/i.test(cadenceId) ? "gentle" : "lively", lengthSec, focus: "family" } }));
-  }, [repository]);
+  }, [repository, projectId, currentProjectEpoch]);
 
   const refresh = useCallback(async () => {
     if (planFailed.current) return;
     const refreshEpoch = uploadEpoch.current;
+    const requestId = ++refreshRequest.current;
+    const stillValid = () => mounted.current && isCurrentProject() && refreshEpoch === uploadEpoch.current && requestId === refreshRequest.current;
     const startedWhilePending = previousLocalPending.current;
-    const [nextSummary, people] = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId)]);
-    if (!mounted.current) return;
+    const result = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId)]).catch(cause => {
+      if (stillValid()) throw cause;
+      return null;
+    });
+    if (!result || !stillValid()) return;
+    const [nextSummary, people] = result;
     if (!startedWhilePending && !previousLocalPending.current && refreshEpoch === uploadEpoch.current) acceptedSummaryEpoch.current = refreshEpoch;
     setSummary(nextSummary);
     const mapped = people?.map((person: DirectorPerson) => {
@@ -74,18 +117,18 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       return { ...person, ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
     }) ?? null;
     if (resumeProjectId.current !== projectId) {
-      resumeProjectId.current = projectId;
       try {
         const resume = repository.getProjectResume
           ? await repository.getProjectResume(projectId)
           : { proposalId: null, storyText: null, generationId: null, generationStatus: null };
-        if (!mounted.current) return;
-        proposalId.current = resume.proposalId;
+        if (!stillValid()) return;
         const [plan, film] = await Promise.all([
           resume.proposalId ? repository.getPlan(resume.proposalId).catch(() => null) : Promise.resolve(null),
           resume.generationId ? repository.getFilm(resume.generationId).catch(() => null) : Promise.resolve(null),
         ]);
-        if (!mounted.current) return;
+        if (!stillValid()) return;
+        resumeProjectId.current = projectId;
+        proposalId.current = resume.proposalId;
         const confirmedStory = resume.storyText ?? (nextSummary.country ? `Yes, our ${nextSummary.country} trip` : `Yes, that's our story`);
         const hasGeneration = Boolean(resume.generationId && film);
         const setAside = getSetAsideSummary(plan);
@@ -106,11 +149,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           direction: hasGeneration ? { confirmed: true, pace: "gentle", lengthSec: Math.max(30, film?.durationSec ?? 120), focus: "family", collageAmount: "few", motionFeel: "calm" } : null,
           generation,
         }));
-        if (plan && !hasGeneration && !needsFilteredPhotoReview) await loadDirectionOptions(plan.planId);
-        if (resume.generationId && hasGeneration && !isFilmReady) void pollFilmRef.current(resume.generationId);
+        if (plan && !hasGeneration && !needsFilteredPhotoReview) await loadDirectionOptions(plan.planId, stillValid);
+        if (stillValid() && resume.generationId && hasGeneration && !isFilmReady) void pollFilmRef.current(resume.generationId);
       } catch (cause) {
-        resumeProjectId.current = null;
-        throw cause;
+        if (stillValid()) { resumeProjectId.current = null; throw cause; }
       }
       return;
     }
@@ -119,15 +161,17 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       planLoad.current = true;
       try {
         const plan = await repository.getPlan(proposalId.current);
-        if (mounted.current) {
+        if (stillValid()) {
           const setAside = getSetAsideSummary(plan);
           const needsFilteredPhotoReview = setAside.blurry + setAside.duplicates > 0;
           setInput((current) => ({ ...current, plan, momentsConfirmed: !needsFilteredPhotoReview }));
-          if (!needsFilteredPhotoReview) await loadDirectionOptions(plan.planId);
+          if (!needsFilteredPhotoReview) await loadDirectionOptions(plan.planId, stillValid);
         }
-      } finally { planLoad.current = false; }
+      } catch (cause) {
+        if (stillValid()) throw cause;
+      } finally { if (isCurrentProject()) planLoad.current = false; }
     }
-  }, [projectId, repository, input.plan, loadDirectionOptions]);
+  }, [projectId, repository, input.plan, loadDirectionOptions, currentProjectEpoch]);
 
   useEffect(() => {
     mounted.current = true;
@@ -156,7 +200,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const pollFilm = useCallback(async (filmId: string) => {
     try {
       const film = await repository.getFilm(filmId);
-      if (!mounted.current) return;
+      if (!mounted.current || !isCurrentProject()) return;
       if (film.rendering) {
         const stage = film.generationStatus ?? "rendering";
         const compositionProgress = stage === "composing"
@@ -175,11 +219,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         setInput((current) => ({ ...current, generation: { status: "done", stage: film.generationStatus === "saved" ? "saved" : "playable", progress: 1, stepsDone: 3, film } }));
       }
     } catch (cause) {
-      if (!mounted.current) return;
+      if (!mounted.current || !isCurrentProject()) return;
       setInput((current) => ({ ...current, generation: { status: "failed", stage: "failed", progress: current.generation?.progress ?? 0, stepsDone: current.generation?.stepsDone ?? 0, film: null } }));
       setError(reportFailure(cause));
     }
-  }, [repository]);
+  }, [repository, projectId, currentProjectEpoch]);
   pollFilmRef.current = (filmId) => { void pollFilm(filmId); };
 
   const actions = {
@@ -191,12 +235,13 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const storyText = storyTextOverride ?? answer ?? pendingInterpret?.text ?? (summary?.country ? `${summary.country} trip` : summary?.places[0] || "Our story");
       try {
         const result = await repository.createPlan([storyText, ...input.notes].join("\n"), []);
+        if (!isCurrentProject()) return;
         proposalId.current = result.planId;
         setInput((current) => ({ ...current, intent: { text: answer ?? storyText } }));
         setPendingInterpret(null);
         await refresh();
-      } catch (cause) { planFailed.current = true; reportFailure(cause); setError("I couldn't shape this one. Try again."); }
-      finally { occasionSaving.current = false; setSaving(false); }
+      } catch (cause) { if (!isCurrentProject()) return; planFailed.current = true; reportFailure(cause); setError("I couldn't shape this one. Try again."); }
+      finally { if (isCurrentProject()) { occasionSaving.current = false; setSaving(false); } }
     },
     async setPerson(personId: string, role: string, name?: string) {
       if (personSaving.current) return;
@@ -221,11 +266,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const castPeople = merge.length ? updated.filter((person) => person.personId !== personId) : updated;
         const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(merge.length ? { merges: merge } : {}), ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+        if (!isCurrentProject()) return;
         if (result?.proposalId) proposalId.current = result.proposalId;
         setInput((current) => ({ ...current, people: castPeople, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: false, ...(duplicateEvent ? { mergeEvents: [...(current.mergeEvents ?? []).filter(({ id }) => id !== duplicateEvent.id), duplicateEvent] } : {}) }));
         setError(null);
       } catch (cause) { setError(reportFailure(cause)); }
-      finally { personSaving.current = false; }
+      finally { if (isCurrentProject()) personSaving.current = false; }
     },
     async resolvePersonMerge(eventId: string, samePerson: boolean) {
       const event = input.mergeEvents?.find(({ id }) => id === eventId);
@@ -237,17 +283,19 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           const castPeople = (input.people ?? []).filter((person) => person.personId !== event.personId);
           const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], merges: [{ fromPersonId: event.personId, toPersonId: event.targetPersonId }], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
           const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+          if (!isCurrentProject()) return;
           if (result?.proposalId) proposalId.current = result.proposalId;
           setInput((current) => ({ ...current, people: castPeople, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: false, mergeEvents: current.mergeEvents?.map((item) => item.id === eventId ? { ...item, response } : item) }));
         } else {
           const updated = input.people ?? [];
           const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: updated.map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
           const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+          if (!isCurrentProject()) return;
           if (result?.proposalId) proposalId.current = result.proposalId;
           setInput((current) => ({ ...current, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), mergeEvents: current.mergeEvents?.map((item) => item.id === eventId ? { ...item, response } : item) }));
         }
       } catch (cause) { setError(reportFailure(cause)); }
-      finally { personSaving.current = false; }
+      finally { if (isCurrentProject()) personSaving.current = false; }
     },
     async skipPeople() {
       if (personSaving.current) return;
@@ -257,10 +305,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       try {
         const result = await confirmCast(projectId, { people: people.map((person) => ({ personId: person.personId, role: "other" as const, excluded: false })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
         const revisedPlan = result.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+        if (!isCurrentProject()) return;
         if (result.proposalId) proposalId.current = result.proposalId;
         setInput((current) => ({ ...current, people, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: true })); setError(null);
       } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't save this. Please try again."); }
-      finally { personSaving.current = false; }
+      finally { if (isCurrentProject()) personSaving.current = false; }
     },
     async confirmMoments() {
       if (!input.plan || saving) return;
@@ -306,7 +355,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         compositionStartedAt.current = Date.now();
         setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction, generation: { status: "queued", stage: "queued", progress: 0, stepsDone: 0, film: null } }));
         const { filmId } = await repository.directFilm(input.plan.planId, direction);
-        if (mounted.current) { setInput((current) => ({ ...current, generation: current.generation ? { ...current.generation, status: "running", stage: "composing" } : current.generation })); void pollFilm(filmId); }
+        if (mounted.current && isCurrentProject()) { setInput((current) => ({ ...current, generation: current.generation ? { ...current.generation, status: "running", stage: "composing" } : current.generation })); void pollFilm(filmId); }
       } catch (cause) {
         setInput((current) => ({ ...current, generation: { status: "failed", stage: "failed", progress: current.generation?.progress ?? 0, stepsDone: current.generation?.stepsDone ?? 0, film: null } }));
         setError(reportFailure(cause));
@@ -319,6 +368,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       setSaving(true); setError(null);
       try {
         await repository.saveFilm(film.filmId);
+        if (!isCurrentProject()) return;
         router.push({ pathname: "/save-film", params: { filmId: film.filmId, directorChat: "true", ...(storyFlow ?? {}) } } as any);
       } catch (cause) { setError(reportFailure(cause)); }
       finally { setSaving(false); }

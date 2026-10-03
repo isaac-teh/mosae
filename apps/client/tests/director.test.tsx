@@ -12,19 +12,20 @@ vi.mock("react-native", () => {
   return { View: node("div"), ScrollView, Text: node("span"), Pressable: node("button"), TextInput: node("input"), Image: ({ source, accessibilityLabel, ...props }: any) => React.createElement("img", { ...props, src: source?.uri, alt: accessibilityLabel }) };
 });
 
-const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, confirmCast: vi.fn(), push: vi.fn() }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: "project-1" }), useRouter: () => ({ back: vi.fn(), push: mocks.push }) }));
+const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, confirmCast: vi.fn(), push: vi.fn(), projectId: "project-1" }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ back: vi.fn(), push: mocks.push }) }));
 vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typeof import("@mosae/core")>()), getStoryRepository: () => mocks.repo }));
 vi.mock("@/lib/characters", () => ({ confirmCast: (...args: any[]) => mocks.confirmCast(...args) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flowRepo, flow: { repository: "api", projectId: "project-1" } }) }));
 vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: () => React.createElement("div", { "data-testid": "film-player" }) }));
 vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: () => React.createElement("div", { "data-testid": "film-ready-player" }) }));
 import DirectorScreen from "../app/director";
+import { useDirectorChat } from "../lib/useDirectorChat";
 import { setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress } from "@mosae/core";
 
 let root: Root;
 let host: HTMLDivElement;
-beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; URL.createObjectURL = vi.fn(() => "blob:test-photo"); URL.revokeObjectURL = vi.fn(); setPendingMedia([]); setUploadProgress(null); setUploadPreparationProgress(null); setUploadFailure(null); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
+beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; mocks.projectId = "project-1"; URL.createObjectURL = vi.fn(() => "blob:test-photo"); URL.revokeObjectURL = vi.fn(); setPendingMedia([]); setUploadProgress(null); setUploadPreparationProgress(null); setUploadFailure(null); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
 afterEach(async () => { await act(async () => root.unmount()); setPendingMedia([]); setUploadProgress(null); setUploadPreparationProgress(null); setUploadFailure(null); host.remove(); });
 async function renderScreen() { await act(async () => root.render(<DirectorScreen />)); }
 async function click(label: string) { const button = host.querySelector(`button[aria-label="${label}"]`) ?? host.querySelector(`button[aria-label^="${label},"]`) ?? [...host.querySelectorAll("button")].find((item) => item.textContent?.trim() === label); expect(button).toBeTruthy(); await act(async () => button!.dispatchEvent(new MouseEvent("click", { bubbles: true }))); }
@@ -600,4 +601,49 @@ it("waits for a fresh server snapshot after local transfer completes", async () 
   await act(async () => setUploadProgress({ totalFiles: 2, finishedFiles: 2, failedFiles: 0, bytesSent: 2, totalBytes: 2 }));
   expect(hasText("Yes, our Japan trip")).toBe(false);
   expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+});
+
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
+
+it("discards an older upload-epoch refresh after a newer not-ready response", async () => {
+  setup();
+  const oldSummary = deferred<any>();
+  mocks.repo.getSummary.mockImplementationOnce(() => oldSummary.promise);
+  await renderScreen();
+  await act(async () => setUploadPreparationProgress({ totalFiles: 1, preparedFiles: 0 }));
+  mocks.repo.getSummary.mockResolvedValue({ ...summary(), ready: { ...summary().ready, story: false } });
+  await act(async () => setUploadPreparationProgress(null));
+  expect(hasText("Yes, our Japan trip")).toBe(false);
+  await act(async () => oldSummary.resolve({ ...summary(), ready: { ...summary().ready, story: true } }));
+  expect(hasText("Yes, our Japan trip")).toBe(false);
+});
+
+it("clears deferred story notes on project switch and rejects the old in-flight refresh", async () => {
+  setup(); setUploadPreparationProgress({ totalFiles: 1, preparedFiles: 0 }); await renderScreen();
+  const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
+  await act(async () => { (composer as HTMLInputElement).value = "Project A birthday"; composer.dispatchEvent(new Event("input", { bubbles: true })); });
+  await click("Send");
+  const oldSummary = deferred<any>();
+  mocks.repo.getSummary.mockImplementationOnce(() => oldSummary.promise);
+  await act(async () => setUploadPreparationProgress(null));
+  mocks.projectId = "project-b";
+  await renderScreen();
+  expect(hasText("Project A birthday")).toBe(false);
+  await act(async () => oldSummary.resolve({ ...summary(), country: "France" }));
+  expect(hasText("France")).toBe(false);
+  await click("Yes, our Japan trip");
+  expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip", []);
+});
+
+it("keeps the newest refresh within the same upload epoch", async () => {
+  setup();
+  const older = deferred<any>();
+  mocks.repo.getSummary.mockImplementationOnce(() => older.promise);
+  let chat!: ReturnType<typeof useDirectorChat>;
+  function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+  await act(async () => root.render(<Harness />));
+  mocks.repo.getSummary.mockResolvedValue({ ...summary(), ready: { ...summary().ready, story: false } });
+  await act(async () => chat.retry());
+  await act(async () => older.resolve({ ...summary(), ready: { ...summary().ready, story: true } }));
+  expect(chat.state.items.some(item => item.kind === "occasion")).toBe(false);
 });
