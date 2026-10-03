@@ -88,3 +88,17 @@ describe("manifest story readiness (emulator)", () => {
     expect(response.body).toMatchObject({ upload: { expected: 1, settled: 1, closed: true }, ready: { story: false } });
   });
 });
+
+
+it.each(["failed", "cancelled"])("excludes understood asset backed by %s manifest outcome", async (outcome) => {
+  const id = await seed("excluded-owner");
+  await adminDb.doc(`projects/${id}/uploadSessions/first`).set({ closed: true });
+  await adminDb.doc(`projects/${id}/uploadSessions/first/entries/excluded`).set({ outcome });
+  await adminDb.doc(`projects/${id}/assets/excluded`).set({ status: "understood", media: { kind: "photo" } });
+  const server = await listeningServer(await buildApp("excluded-owner"));
+  const summary = async () => (await request(server).get(`/api/projects/${id}/summary`)).body;
+  expect(await summary()).toMatchObject({ upload: { expected: 1, settled: 1, closed: true }, processed: { ingested: 0, understood: 0 }, ready: { story: false } });
+  await adminDb.doc(`projects/${id}/uploadSessions/first/entries/good`).set({ outcome: "finalized" });
+  await adminDb.doc(`projects/${id}/assets/good`).set({ status: "understood", media: { kind: "photo" } });
+  expect(await summary()).toMatchObject({ processed: { ingested: 1, understood: 1 }, ready: { story: true } });
+});

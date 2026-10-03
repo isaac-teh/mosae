@@ -81,6 +81,7 @@ export async function gatherSummaryUpload(db: Firestore, projectId: string, asse
   const sessions = await db.collection("projects").doc(projectId).collection("uploadSessions").get();
   const byId = new Map(assets.map((asset) => [asset.id, asset]));
   const upload = { expected: 0, settled: 0, failed: assets.filter((asset) => asset.status === "failed").length, cancelled: 0, closed: true };
+  const excludedAssetIds: string[] = [];
   let manifestReady = true;
   for (const session of sessions.docs) {
     const entries = await session.ref.collection("entries").get();
@@ -88,6 +89,7 @@ export async function gatherSummaryUpload(db: Firestore, projectId: string, asse
     upload.closed &&= session.get("closed") === true;
     manifestReady &&= sessionSettled({ closed: session.get("closed") === true } as UploadSession, manifest);
     for (const entry of manifest) {
+      if (entry.outcome === "failed" || entry.outcome === "cancelled") excludedAssetIds.push(entry.assetId);
       upload.expected += 1;
       if (entry.outcome !== "pending") upload.settled += 1;
       if (entry.outcome === "cancelled") upload.cancelled += 1;
@@ -95,5 +97,5 @@ export async function gatherSummaryUpload(db: Firestore, projectId: string, asse
       if (entry.outcome === "finalized" && !["understood", "failed"].includes(byId.get(entry.assetId)?.status ?? "")) manifestReady = false;
     }
   }
-  return { upload, manifestReady };
+  return { upload, manifestReady, excludedAssetIds };
 }

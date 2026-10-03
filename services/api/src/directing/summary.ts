@@ -20,8 +20,10 @@ export type ProjectSummary = {
 };
 
 export function summarise(assets: SummaryAsset[], hasPlan: boolean, context: {
-  projectStatus?: string; upload?: ProjectSummary["upload"]; manifestReady?: boolean;
+  projectStatus?: string; upload?: ProjectSummary["upload"]; manifestReady?: boolean; excludedAssetIds?: string[];
 } = {}): ProjectSummary {
+  const excluded = new Set(context.excludedAssetIds);
+  assets = assets.filter((asset) => !asset.id || !excluded.has(asset.id));
   const dates = assets.map((asset) => (asset.media ?? asset.facts)?.localTime?.slice(0, 10) ?? null)
     .filter((date): date is string => !!date && /^\d{4}-\d{2}-\d{2}$/.test(date));
   const uniqueDates = [...new Set(dates)].sort();

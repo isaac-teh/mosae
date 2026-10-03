@@ -33,7 +33,7 @@ describe("gatherFacts (emulator)", () => {
     expect(facts).toEqual({ sessions: 1, openSessions: 1, pendingEntries: 1, assets: 2, ingested: 1, failed: 1 });
     expect(await gatherSummaryUpload(adminDb, s.projectId, [
       { id: s.assetIds[0], status: "understood" }, { id: s.assetIds[1], status: "failed" },
-    ])).toEqual({ upload: { expected: 3, settled: 2, failed: 1, cancelled: 0, closed: false }, manifestReady: false });
+    ])).toEqual({ upload: { expected: 3, settled: 2, failed: 1, cancelled: 0, closed: false }, manifestReady: false, excludedAssetIds: [] });
   });
 });
 

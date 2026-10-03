@@ -50,3 +50,11 @@ describe("authoritative story readiness", () => {
     expect(summarise([asset("photo", null)], false, { projectStatus: "ready", upload: { ...upload, expected: 1, settled: 1, closed: true }, manifestReady: true }).ready.story).toBe(true);
   });
 });
+
+
+it("excludes terminal manifest failures from understood usable media", () => {
+  const failed = { ...asset("photo", null), id: "excluded" };
+  const context = { projectStatus: "ready", excludedAssetIds: ["excluded"], upload: { expected: 1, settled: 1, failed: 1, cancelled: 0, closed: true }, manifestReady: true };
+  expect(summarise([failed], false, context)).toMatchObject({ processed: { ingested: 0, understood: 0, faces: 0 }, ready: { story: false } });
+  expect(summarise([failed, { ...asset("photo", null), id: "good" }], false, context)).toMatchObject({ processed: { ingested: 1, understood: 1, faces: 1 }, ready: { story: true } });
+});
