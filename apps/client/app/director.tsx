@@ -9,7 +9,7 @@ import { shouldAutoScrollAfterAction } from "@/lib/chatScroll";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { EditorPreview } from "@/components/editor/EditorPreview";
 import type { Timeline } from "@mosae/contracts";
-import { contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, personAnswerChips, subscribeUploadProgress, retryPendingMedia } from "@mosae/core";
+import { directionFocus, contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, personAnswerChips, subscribeUploadProgress, retryPendingMedia } from "@mosae/core";
 
 function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
   if (!summary) return "Your film";
@@ -146,20 +146,12 @@ export default function DirectorScreen() {
           </View>;
         }
         if (item.kind === "direction") {
-          const focusOptions = [{ id: "family", label: "Whole family" }, ...people.filter((person) => person.name).map((person) => ({ id: person.personId, label: person.name as string }))];
-          const focusLabel = focusOptions.find((option) => option.id === item.focus)?.label ?? "Whole family";
-          const durationMinutes = item.lengthSec / 60;
-          const durationLabel = item.lengthSec < 60 ? `${item.lengthSec} seconds` : `${durationMinutes} ${durationMinutes === 1 ? "minute" : "minutes"}`;
+          const { options: focusOptions, label: focusLabel } = directionFocus(people, item.focus, true);
+          const durationLabel = directionOptions?.durations.find(({ seconds }) => seconds === item.lengthSec)?.label ?? `${item.lengthSec} sec`;
           const maximumDurationSec = directionOptions?.maximumDurationSecByCadence?.[directionSelection.cadenceId] ?? directionOptions?.maximumDurationSec ?? Infinity;
           const durationChoices = directionOptions?.durations.filter(({ seconds }) => seconds <= maximumDurationSec) ?? [];
-          const maximumDurationLabel = durationChoices.at(-1)?.label ?? (Number.isFinite(maximumDurationSec) ? `about ${Math.round(maximumDurationSec)} sec` : undefined);
-          const focusText = focusLabel === "Whole family" ? "your family moments" : `${focusLabel}'s reactions`;
-          const explanation = durationChoices.length === 0 && Number.isFinite(maximumDurationSec)
-            ? `These moments can make about ${Math.round(maximumDurationSec)} seconds. Add more photos for a longer film.`
-            : item.lengthSec > maximumDurationSec
-            ? `With these moments, I can make up to ${maximumDurationLabel ?? "the available length"}. I've selected that achievable length.`
-            : `For ${durationLabel}, I'll keep ${focusText} and the strongest scenery, and tell you what I left out.`;
-          return <View key={item.id} className="gap-4"><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} durations={durationChoices} maximumDurationLabel={maximumDurationLabel} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={(change) => scrollAfterAction(() => actions.setDirection(change))} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good. Shape it." disabled={saving || !directionOptions || durationChoices.length === 0} onPress={() => scrollAfterAction(actions.shapeIt)} /></View>;
+          const explanation = durationChoices.length ? `For ${durationLabel}, I'll focus on ${focusLabel === "The moments" ? "the moments" : focusLabel} and the strongest scenery, and tell you what I left out.` : "Choose the moments you'd like to include.";
+          return <View key={item.id} className="gap-4"><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} durations={durationChoices} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={(change) => scrollAfterAction(() => actions.setDirection(change))} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good" disabled={saving || !directionOptions || durationChoices.length === 0} onPress={() => scrollAfterAction(actions.shapeIt)} /></View>;
         }
         if (item.kind === "film") return <View key={item.id} className="gap-4">
           <Text accessibilityRole="header" className="font-title text-heading text-positive">Film ready</Text>

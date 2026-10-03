@@ -1,4 +1,5 @@
 import type { ChatInput, ChatItem, ChatState } from "./types.js";
+import { directionFocus } from "./directionFocus.js";
 import { orderPeopleByMergeSimilarity } from "./personChips.js";
 
 const DEFAULT_PLACEHOLDER = "Tell me anything about the story";
@@ -20,7 +21,7 @@ function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string 
 
 function directionAnswer(input: ChatInput): string {
   const direction = input.direction!;
-  const focus = direction.focus === "family" ? "Whole family" : input.people?.find((person) => person.personId === direction.focus)?.name ?? "Whole family";
+  const focus = directionFocus(input.people, direction.focus, true).label;
   const labels: Record<string, string> = { pace: "Pace", lengthSec: "Length", focus: "Focus", collageAmount: "Collages", motionFeel: "Motion" };
   const words = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (first) => first.toUpperCase());
   const displayValue = (key: string, value: unknown) => {

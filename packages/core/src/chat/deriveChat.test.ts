@@ -179,14 +179,14 @@ describe("deriveChat state table", () => {
       direction: { confirmed: true, pace: "lively", lengthSec: 30, focus: "family", collageAmount: "few", motionFeel: "calm" },
     });
     expect(state.items.filter((item) => item.kind === "you" && item.id === "direction-answer")).toEqual([
-      { kind: "you", id: "direction-answer", text: "Pace: Lively\nLength: 30 sec\nFocus: Whole family\nCollages: A few\nMotion: Calm" },
+      { kind: "you", id: "direction-answer", text: "Pace: Lively\nLength: 30 sec\nFocus: Everyone\nCollages: A few\nMotion: Calm" },
     ]);
   });
 
   it("only shows settings rows present on the direction card", () => {
     const state = deriveChat({ ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 60, focus: "family" } });
     expect(state.items.find((item) => item.kind === "you" && item.id === "direction-answer")).toMatchObject({
-      text: "Pace: Gentle\nLength: 60 sec\nFocus: Whole family",
+      text: "Pace: Gentle\nLength: 60 sec\nFocus: The moments",
     });
   });
 
@@ -195,7 +195,7 @@ describe("deriveChat state table", () => {
       confirmed: true, pace: "gentle", lengthSec: 60, focus: "family", visualStyle: "film grain",
     } as ChatInput["direction"] });
     expect(state.items.find((item) => item.kind === "you" && item.id === "direction-answer")).toMatchObject({
-      text: "Pace: Gentle\nLength: 60 sec\nFocus: Whole family\nVisual Style: Film grain",
+      text: "Pace: Gentle\nLength: 60 sec\nFocus: The moments\nVisual Style: Film grain",
     });
   });
 

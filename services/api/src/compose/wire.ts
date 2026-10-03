@@ -200,6 +200,16 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       return fail([`proposal ${generation.proposalId} is not accepted`]);
     }
 
+    // A generation can choose a person or clear an earlier cast/proposal focus.
+    // Apply it to the in-memory proposal so motion and composition use one focus.
+    const selectedFocus = settings.settings.focus;
+    const castSnap = await project.collection("cast").doc("current").get();
+    const stored = castSnap.exists ? castSnap.data() as Cast : null;
+    if (selectedFocus !== undefined && selectedFocus !== "family" && (!stored?.confirmed || !stored.people.some(person => person.personId === selectedFocus && !person.excluded))) {
+      return fail(["Selected focus is no longer in the confirmed cast."]);
+    }
+    const generationFocus = selectedFocus === undefined ? undefined : selectedFocus === "family" ? [] : [selectedFocus];
+    if (generationFocus !== undefined) proposal.proposal.constraints.focusCharacterIds = generationFocus;
     const catalog = await loadComposeCatalog(db, task.projectId, proposal.proposal);
 
     // Person-anchored Ken Burns hint: for each moment that names a focus person
@@ -210,11 +220,10 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
     // empty map, which keeps the film byte-identical to the pre-focus output.
     const focusCenter = await buildFocusCenterMap(db, task.projectId, proposal.proposal);
 
-    const castSnap = await project.collection("cast").doc("current").get();
-    const stored = castSnap.exists ? castSnap.data() as Cast : null;
     // Existing v1 Firestore casts predate subjectCount.
     const storedCast = stored ? {
       ...stored,
+      focus: generationFocus ?? stored.focus,
       people: stored.people.map((person) => ({ ...person, subjectCount: person.subjectCount ?? 0 })),
     } : null;
     const peopleByMoment = new Map<string, Set<string>>();

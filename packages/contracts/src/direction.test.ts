@@ -21,6 +21,11 @@ describe("DirectionSettingsSchema", () => {
     if (result.ok) expect(result.settings).toMatchObject({ collageAmount: "few", motionFeel: "calm" });
   });
 
+  it("accepts an explicit person focus or the aggregate sentinel", () => {
+    for (const focus of ["person-1", "family"]) expect(safeParseDirectionSettings({ ...valid, focus })).toMatchObject({ ok: true, settings: { focus } });
+    expect(safeParseDirectionSettings({ ...valid, focus: "" }).ok).toBe(false);
+  });
+
   it("accepts explicit collage and motion choices", () => {
     expect(safeParseDirectionSettings({ ...valid, collageAmount: "lots", motionFeel: "playful" })).toMatchObject({ ok: true, settings: { collageAmount: "lots", motionFeel: "playful" } });
   });

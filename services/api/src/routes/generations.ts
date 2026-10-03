@@ -105,7 +105,15 @@ export function generationsRouter(deps: {
     }
     const resolvedSettings = settings;
 
+
     try {
+      if (settings.focus !== undefined && settings.focus !== "family") {
+        const castSnap = await deps.db.collection("projects").doc(projectId).collection("cast").doc("current").get();
+        const cast = castSnap.exists ? castSnap.data() as { confirmed?: boolean; people?: { personId: string; excluded?: boolean }[] } : null;
+        if (!cast?.confirmed || !cast.people?.some(person => person.personId === settings.focus && !person.excluded)) {
+          return res.status(400).json({ error: "invalid_focus", details: ["Choose a person in the confirmed cast."] });
+        }
+      }
       const generation = await createGeneration(deps.db, {
         userId,
         projectId,

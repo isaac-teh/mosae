@@ -28,6 +28,8 @@ export const DirectionSettingsSchema = z.strictObject({
   projectId: z.string().min(1),
   version: z.number().int().positive(),
   note: z.string().max(2000),
+  /** family clears person focus; omitted preserves legacy cast/proposal focus. */
+  focus: z.string().min(1).optional(),
   cadenceId: z.enum(cadenceIds),
   /** null means let the director choose a soundtrack. */
   soundtrackId: z.string().min(1).nullable(),

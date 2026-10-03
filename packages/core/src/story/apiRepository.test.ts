@@ -552,10 +552,10 @@ describe("film adapters", () => {
   it("sends explicitly selected collage density and motion feel in generation settings", async () => {
     const deps = dependencies({ request: vi.fn(async (_method: string, path: string) => path.endsWith("/generations") ? { generation: { id: "gen-9" } } : {}) });
     await createApiStoryRepository({ projectId: "project-1" }, deps).directFilm("proposal-1", {
-      note: "", cadenceId: "playful", soundtrackId: null, durationId: null, collageAmount: "lots", motionFeel: "playful",
+      note: "", cadenceId: "playful", soundtrackId: null, durationId: null, collageAmount: "lots", motionFeel: "playful", focus: "person-1",
     });
     const request = vi.mocked(deps.request).mock.calls.find((call) => call[1].endsWith("/generations"));
-    expect(request?.[2]).toMatchObject({ settings: { collageAmount: "lots", motionFeel: "playful" } });
+    expect(request?.[2]).toMatchObject({ settings: { collageAmount: "lots", motionFeel: "playful", focus: "person-1" } });
   });
 
   it("sends the chosen soundtrack — accepts the plan, then posts a generation and returns its id as the film id", async () => {

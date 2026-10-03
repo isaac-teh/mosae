@@ -82,6 +82,13 @@ function buildApp({
 
 describe("generationsRouter", () => {
   describe("POST /api/projects/:id/generations", () => {
+    it.each([["missing", false, true], ["person-1", true, true], ["person-1", false, false]])("rejects focus outside the confirmed included cast (%s)", async (focus, excluded, confirmed) => {
+      const dbMock = { collection: () => ({ doc: () => ({ get: async () => ({ exists: true, get: () => "test-user" }), collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({ confirmed, people: [{ personId: "person-1", excluded }] }) }) }) }) }) }) };
+      const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore }))).post("/api/projects/p1/generations").send({ proposalId: "proposal-1", settings: { ...settings, focus } });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("invalid_focus");
+    });
+
     it("returns 400 when proposalId is missing", async () => {
       // Need an existing project so the route passes ownership check and reaches body validation.
       const dbMock = {
@@ -116,7 +123,7 @@ describe("generationsRouter", () => {
       expect(res.status).toBe(403);
     });
 
-    it("returns 201 when generation is created successfully", async () => {
+    it.each([undefined, "family", "person-1"])("returns 201 for valid generation focus %s", async (focus) => {
       const dbMock = {
         collection: vi.fn((name: string) => ({
           doc: vi.fn().mockReturnValue({
@@ -131,6 +138,7 @@ describe("generationsRouter", () => {
             collection: vi.fn((subName: string) => ({
               doc: vi.fn().mockReturnValue({
                 id: "gen-123",
+                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ confirmed: true, people: [{ personId: "person-1", excluded: false }] }) }),
                 set: vi.fn().mockResolvedValue(undefined),
               }),
             })),
@@ -156,6 +164,7 @@ describe("generationsRouter", () => {
             collection: vi.fn((subName: string) => ({
               doc: vi.fn().mockReturnValue({
                 id: "gen-123",
+                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ confirmed: true, people: [{ personId: "person-1", excluded: false }] }) }),
                 set: vi.fn().mockResolvedValue(undefined),
               }),
             })),
@@ -170,7 +179,7 @@ describe("generationsRouter", () => {
       const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore })))
         .post("/api/projects/p1/generations")
         .set("Authorization", "Bearer user-token")
-        .send({ proposalId: "proposal-1", settings });
+        .send({ proposalId: "proposal-1", settings: { ...settings, ...(focus === undefined ? {} : { focus }) } });
 
       expect(res.status).toBe(201);
     });

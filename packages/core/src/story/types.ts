@@ -105,7 +105,7 @@ export type DirectionOptions = {
   motionFeel?: "calm" | "playful";
 };
 
-export type Direction = { note: string; cadenceId: string; soundtrackId: string | null; durationId: DurationChoice["id"] | null; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
+export type Direction = { focus?: string; note: string; cadenceId: string; soundtrackId: string | null; durationId: DurationChoice["id"] | null; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
 
 export type Film = {
   filmId: string;

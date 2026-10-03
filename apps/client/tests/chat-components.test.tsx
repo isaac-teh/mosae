@@ -160,8 +160,9 @@ describe("director chat components", () => {
 
   it("renders the direction controls and header progress", async () => {
     const onChange = vi.fn();
-    await render(<><ChatDirectionCard pace="gentle" lengthSec={120} durations={[{ id: "30s", label: "30 sec", seconds: 30 }, { id: "1m", label: "1 min", seconds: 60 }, { id: "2m", label: "2 min", seconds: 120 }]} maximumDurationLabel="2 min" focus="family" collageAmount="few" motionFeel="calm" focusOptions={[{ id: "family", label: "Whole family" }, { id: "reactions", label: "Her reactions" }]} onChange={onChange} /><ChatHeader title="Japan, autumn" confirmed={3} ready={false} onBack={vi.fn()} /></>);
+    await render(<><ChatDirectionCard pace="gentle" lengthSec={120} durations={[{ id: "30s", label: "30 sec", seconds: 30 }, { id: "1m", label: "1 min", seconds: 60 }, { id: "2m", label: "2 min", seconds: 120 }]} focus="family" collageAmount="few" motionFeel="calm" focusOptions={[{ id: "family", label: "Everyone" }, { id: "reactions", label: "Her reactions" }]} onChange={onChange} /><ChatHeader title="Japan, autumn" confirmed={3} ready={false} onBack={vi.fn()} /></>);
     expect(host.textContent).toContain("Pace"); expect(host.textContent).toContain("Length"); expect(host.textContent).toContain("Focus");
+    expect(host.textContent).not.toContain("With these moments, I can make up to");
     expect(host.textContent).toContain("Style"); expect(host.textContent).toContain("Collages"); expect(host.textContent).toContain("Motion");
     expect(host.querySelector('[aria-label="A few"]')?.getAttribute("aria-pressed")).toBe("true");
     expect(host.querySelector('[aria-label="Calm"]')?.getAttribute("aria-pressed")).toBe("true");

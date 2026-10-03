@@ -54,13 +54,13 @@ function firestore() {
   return db as unknown as Firestore;
 }
 
-function composeFirestore(proposalData: StoryProposal): Firestore {
+function composeFirestore(proposalData: StoryProposal, focus?: string, excluded = false): Firestore {
   const generationData = {
     schemaVersion: 1,
     proposalId: proposalData.id,
     status: "composing",
     seed: "seed-1",
-    settings: { schemaVersion: 1, id: "settings-1", projectId: "project1", version: 1, note: "", cadenceId: "tender", soundtrackId: null, durationId: "30s", aspect: "9:16", captions: false },
+    settings: { schemaVersion: 1, id: "settings-1", projectId: "project1", version: 1, note: "", cadenceId: "tender", soundtrackId: null, durationId: "30s", aspect: "9:16", captions: false, ...(focus === undefined ? {} : { focus }) },
   };
   const generationSnap = { exists: true, data: () => generationData };
   const proposalSnap = { exists: true, data: () => proposalData };
@@ -71,7 +71,7 @@ function composeFirestore(proposalData: StoryProposal): Firestore {
     collection: (name: string) => {
       if (name === "generations") return { doc: () => ({ get: async () => generationSnap }) };
       if (name === "storyProposals") return { doc: () => ({ get: async () => proposalSnap }) };
-      if (name === "cast") return { doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }) };
+      if (name === "cast") return { doc: () => ({ get: async () => ({ exists: true, data: () => ({ confirmed: true, source: "none", core: [], focus: ["old-focus"], people: [{ personId: "person-1", role: "child", ageBand: "child", appearances: 1, faceIds: [], confidence: "high", excluded }] }) }) }) };
       return emptyCollection;
     },
   };
@@ -122,4 +122,21 @@ describe("createCompose render handoff", () => {
     expect(publishGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ userId: "owner", projectId, generationId }));
     expect(enqueueRender).not.toHaveBeenCalled();
   });
+});
+
+describe("generation focus", () => {
+  it.each([["person-1", ["person-1"]], ["family", []], [undefined, ["old-focus"]]])("applies %s to composition constraints", async (focus, expected) => {
+    vi.mocked(runCompose).mockClear();
+    vi.mocked(runCompose).mockResolvedValue({ ok: true, timeline: {} as never, droppedPicks: [], reasons: [] } as never);
+    const compose = createCompose({ db: composeFirestore(proposal({ focusCharacterIds: ["old-focus"] }), focus), generateStructured: async () => ({}) as never });
+    await expect(compose({ projectId: "project1", generationId: "generation1" })).resolves.toBe("composed");
+    expect(runCompose).toHaveBeenCalledWith(expect.objectContaining({ cast: expect.objectContaining({ focus: expected }), proposal: expect.objectContaining({ constraints: expect.objectContaining({ focusCharacterIds: expected }) }) }), expect.anything());
+  });
+});
+
+it.each([["unknown", false], ["person-1", true]])("refuses invalid composition focus %s", async (focus, excluded) => {
+  vi.mocked(runCompose).mockClear();
+  const compose = createCompose({ db: composeFirestore(proposal(), focus, excluded), generateStructured: async () => ({}) as never });
+  await expect(compose({ projectId: "project1", generationId: "generation1" })).resolves.toBe("failed");
+  expect(runCompose).not.toHaveBeenCalled();
 });
