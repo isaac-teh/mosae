@@ -269,7 +269,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       const found = analysis?.kind === "photo" ? analysis.faces?.find((item) => item.faceId === face.faceId)?.characterId : undefined;
       return found ? [[face.faceId, found] as const] : [];
     }));
-    const summary = storedCast ? castSummary(storedCast, castFaces, identities) : null;
+    const summary = storedCast ? castSummary(storedCast, castFaces, identities, selectedFocus) : null;
 
     // Constructed here, not at module load, and only when a key exists.
     const call: ComposeDeps["generateStructured"] = config.generateStructured

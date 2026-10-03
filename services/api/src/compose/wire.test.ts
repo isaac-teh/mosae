@@ -71,7 +71,7 @@ function composeFirestore(proposalData: StoryProposal, focus?: string, excluded 
     collection: (name: string) => {
       if (name === "generations") return { doc: () => ({ get: async () => generationSnap }) };
       if (name === "storyProposals") return { doc: () => ({ get: async () => proposalSnap }) };
-      if (name === "cast") return { doc: () => ({ get: async () => ({ exists: true, data: () => ({ confirmed: true, source: "none", core: [], focus: ["old-focus"], people: [{ personId: "person-1", role: "child", ageBand: "child", appearances: 1, faceIds: [], confidence: "high", excluded }] }) }) }) };
+      if (name === "cast") return { doc: () => ({ get: async () => ({ exists: true, data: () => ({ confirmed: true, source: "none", core: [], focus: ["old-focus"], people: [{ personId: "person-1", name: "Mum", role: "parent", ageBand: "adult", appearances: 1, faceIds: [], confidence: "high", excluded }, { personId: "child", name: "Mia", role: "child", ageBand: "child", appearances: 1, faceIds: [], confidence: "high" }] }) }) }) };
       return emptyCollection;
     },
   };
@@ -125,12 +125,12 @@ describe("createCompose render handoff", () => {
 });
 
 describe("generation focus", () => {
-  it.each([["person-1", ["person-1"]], ["family", []], [undefined, ["old-focus"]]])("applies %s to composition constraints", async (focus, expected) => {
+  it.each([["person-1", ["person-1"], "Mum"], ["family", [], "everyone"], [undefined, ["old-focus"], "children"]])("applies %s to composition constraints", async (focus, expected, expectedSummary) => {
     vi.mocked(runCompose).mockClear();
     vi.mocked(runCompose).mockResolvedValue({ ok: true, timeline: {} as never, droppedPicks: [], reasons: [] } as never);
     const compose = createCompose({ db: composeFirestore(proposal({ focusCharacterIds: ["old-focus"] }), focus), generateStructured: async () => ({}) as never });
     await expect(compose({ projectId: "project1", generationId: "generation1" })).resolves.toBe("composed");
-    expect(runCompose).toHaveBeenCalledWith(expect.objectContaining({ cast: expect.objectContaining({ focus: expected }), proposal: expect.objectContaining({ constraints: expect.objectContaining({ focusCharacterIds: expected }) }) }), expect.anything());
+    expect(runCompose).toHaveBeenCalledWith(expect.objectContaining({ cast: expect.objectContaining({ focus: expected, summary: expect.stringContaining(`focus: ${expectedSummary};`) }), proposal: expect.objectContaining({ constraints: expect.objectContaining({ focusCharacterIds: expected }) }) }), expect.anything());
   });
 });
 

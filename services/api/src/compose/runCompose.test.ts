@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { runCompose, applyUserOrder, type ComposeJob, type ComposeDeps } from "./runCompose.js";
+import { castSummary } from "../cast/castSummary.js";
 import { safeParseTimeline } from "@mosae/contracts";
 
 describe("applyUserOrder", () => {
@@ -265,15 +266,19 @@ describe("runCompose — failure modes", () => {
 });
 
 describe("runCompose — Gemini mock", () => {
-  it("adds the cast summary to the compose prompt when present", async () => {
+  it.each([["parent", "Mum"], ["family", "everyone"], [undefined, "children"]])("sends the selected focus to the compose model (%s)", async (focus, expectedFocus) => {
+    const summary = castSummary({ source: "none", confirmed: true, core: [], focus: [], people: [
+      { personId: "parent", name: "Mum", role: "parent", ageBand: "adult", subjectCount: 1, appearances: 1, faceIds: [], confidence: "high" },
+      { personId: "child", name: "Mia", role: "child", ageBand: "child", subjectCount: 1, appearances: 1, faceIds: [], confidence: "high" },
+    ] }, [], new Map(), focus)!;
     const mockGenerate = vi.fn().mockResolvedValue({
       clips: [
         { candidateId: "video1#s0@0.15c0", transition: "cut" as const, audio: "keep" as const },
         { candidateId: "photo1#still@c1", transition: "crossfade" as const, audio: "duck" as const, holdSec: 4 },
       ], musicCues: [],
     });
-    await runCompose(makeJob({ cast: { summary: "2 parents, 1 child", core: [], focus: [], peopleByMoment: new Map(), subjectsByMoment: new Map(), namesById: {} } }), makeDeps({ generateStructured: mockGenerate }));
-    expect(mockGenerate.mock.calls[0]?.[0]).toMatchObject({ contents: expect.stringContaining("Cast: 2 parents") });
+    await runCompose(makeJob({ cast: { summary, core: [], focus: [], peopleByMoment: new Map(), subjectsByMoment: new Map(), namesById: {} } }), makeDeps({ generateStructured: mockGenerate }));
+    expect(mockGenerate.mock.calls[0]?.[0]).toMatchObject({ contents: expect.stringContaining(`Cast: 1 parents, 1 children; focus: ${expectedFocus};`) });
   });
 
   it("calls generateStructured with the correct model and stage", async () => {

@@ -4,6 +4,7 @@ export function castSummary(
   cast: Cast,
   faces: FaceRef[],
   identities: Map<string, string>,
+  explicitFocus?: string,
 ): string | null {
   // Firestore casts created before prominence counts were introduced have no
   // subjectCount. Read them as zero while preserving the stored object.
@@ -15,7 +16,10 @@ export function castSummary(
   const parents = people.filter((p) => p.role === "parent").length;
   const children = people.filter((p) => p.role === "child").length;
 
-  const focusText = children > 0 ? "children" : "the family";
+  const selected = people.find(person => person.personId === explicitFocus && !person.excluded);
+  const focusText = explicitFocus === undefined ? (children > 0 ? "children" : "the family")
+    : explicitFocus === "family" ? "everyone"
+    : selected?.name?.trim() || (selected?.role === "parent" ? "a parent" : selected?.role === "child" ? "your child" : "this person");
 
   let k = 0;
   if (cast.core.length > 0) {
