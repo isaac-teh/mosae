@@ -538,9 +538,13 @@ export function directingRouter(deps: {
       // left out come back, and the reasons travel with the new version.
       const source = await readProposal(deps.db, { userId: res.locals.userId, projectId, proposalId: parsed.data.proposalId });
       if (!source) { res.status(404).json({ error: "not_found" }); return; }
+      const assetSnapshots = await deps.db.collection("projects").doc(projectId).collection("assets").get();
+      const qualityByAsset = new Map(assetSnapshots.docs.map((doc) => [doc.id, doc.data()]));
       const leftOut = leaveOutShots(
         shots.map((shot, index) => ({
           shotId: shot.shotId,
+          blurry: qualityByAsset.get(shot.assetId)?.quality?.blurry ?? false,
+          dupOf: qualityByAsset.get(shot.assetId)?.dupOf ?? null,
           faces: (facesByShot[index] ?? []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null, stranger: face.stranger ?? false })),
         })),
         cast,

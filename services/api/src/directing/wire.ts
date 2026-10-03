@@ -157,6 +157,8 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
         const leftOut = leaveOutShots(
           shots.filter((shot) => shot.analysis?.kind === "photo").map((shot) => ({
             shotId: shot.id,
+            blurry: assets.get(shot.assetId)?.quality?.blurry ?? false,
+            dupOf: shot.dupOf,
             faces: ((shot.analysis as PhotoAnalysis).faces ?? []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null, stranger: face.stranger ?? false })),
           })),
           ensured.cast,

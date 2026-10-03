@@ -12,7 +12,7 @@ const auth: RequestHandler = (_req, res, next) => {
 };
 
 function photoShot(shotId: string, faces: PhotoAnalysis["faces"]): PhotoAnalysis {
-  return { kind: "photo", caption: "", subjects: [], setting: "", activities: [], mood: "", shotType: "", aesthetics: 0, keyMomentScore: 0, tags: [], faces };
+  return { kind: "photo", caption: "", subjects: [], setting: "", activities: [], mood: "", shotType: "", aesthetics: 0, keyMomentScore: 0, tags: [], ...(faces ? { faces } : {}) };
 }
 
 const face = (faceId: string): NonNullable<PhotoAnalysis["faces"]>[number] => ({ faceId, bbox: [0.1, 0.2, 0.3, 0.4], confidence: 1 });
@@ -205,6 +205,31 @@ describe("character picker routes", () => {
     } finally {
       await close();
     }
+  });
+
+  it("keeps ingestion blur and duplicate results after confirming the cast", async () => {
+    const projectId = await seedProject();
+    const proposalId = await seedProposal(projectId);
+    await photo(projectId, "shot-1", []);
+    await adminDb.doc(`projects/${projectId}/shots/shot-1`).update({ analysis: photoShot("shot-1", undefined) });
+    await photo(projectId, "shot-2", []);
+    await adminDb.doc(`projects/${projectId}/assets/shot-1`).set({ quality: { blurry: true } });
+    await adminDb.doc(`projects/${projectId}/assets/shot-2`).set({ dupOf: "primary" });
+    await adminDb.doc(`projects/${projectId}/cast/current`).set({ people: [], core: [], focus: [], source: "labelled" });
+    const { url, close } = await listen(await buildApp());
+    try {
+      const res = await fetch(`${url}/api/projects/${projectId}/cast`, {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ people: [], focus: [], proposalId }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json() as { proposalId: string };
+      const next = (await adminDb.doc(`projects/${projectId}/storyProposals/${body.proposalId}`).get()).data()!;
+      expect(next.leftOut).toEqual([
+        { shotId: "shot-1", reason: "Blurry photo." },
+        { shotId: "shot-2", reason: "Near-duplicate: kept the sharpest photo in this burst." },
+      ]);
+    } finally { await close(); }
   });
 
   it("rejects a focus that includes an excluded person", async () => {

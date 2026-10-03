@@ -2,10 +2,10 @@ import { photoRoles, type BBox } from "./prominence.js";
 import type { Cast } from "./types.js";
 
 /** `stranger` marks a face known not to be family; an unrecognised face is just unknown. */
-export type LeaveOutShot = { shotId: string; faces: { bbox: BBox; personId: string | null; stranger?: boolean }[] };
+export type LeaveOutShot = { shotId: string; blurry?: boolean; dupOf?: string | null; faces: { bbox: BBox; personId: string | null; stranger?: boolean }[] };
 export type LeftOut = { shotId: string; reason: string };
 
-/** Returns user-hidden shots and photos whose subjects should not enter planning. */
+/** Returns hidden, low-quality, duplicate, and cast-excluded photos for review. */
 export function leaveOutShots(shots: LeaveOutShot[], cast: Cast, hiddenShotIds: string[]): LeftOut[] {
   const hidden = new Set(hiddenShotIds);
   const inCast = new Set(cast.people.map((person) => person.personId));
@@ -13,6 +13,8 @@ export function leaveOutShots(shots: LeaveOutShot[], cast: Cast, hiddenShotIds: 
   const out: LeftOut[] = [];
   for (const shot of shots) {
     if (hidden.has(shot.shotId)) { out.push({ shotId: shot.shotId, reason: "Hidden by you." }); continue; }
+    if (shot.blurry) { out.push({ shotId: shot.shotId, reason: "Blurry photo." }); continue; }
+    if (shot.dupOf) { out.push({ shotId: shot.shotId, reason: "Near-duplicate: kept the sharpest photo in this burst." }); continue; }
     if (shot.faces.length === 0) continue;
     const roles = photoRoles(shot.faces.map((face) => face.bbox));
     const subjects = shot.faces.filter((_, index) => roles[index] === "subject");

@@ -10,6 +10,18 @@ const BIG: [number, number, number, number] = [0.2, 0.3, 0.7, 0.7];
 const SMALL_EDGE: [number, number, number, number] = [0.05, 0.9, 0.12, 0.97];
 
 describe("leaveOutShots", () => {
+  it("reports stored blur and duplicate results, keeping the burst primary", () => {
+    expect(leaveOutShots([
+      { shotId: "primary", faces: [] },
+      { shotId: "blur", faces: [], blurry: true },
+      { shotId: "duplicate", faces: [], dupOf: "primary" },
+      { shotId: "both", faces: [], blurry: true, dupOf: "primary" },
+    ], cast(), [])).toEqual([
+      { shotId: "blur", reason: "Blurry photo." },
+      { shotId: "duplicate", reason: "Near-duplicate: kept the sharpest photo in this burst." },
+      { shotId: "both", reason: "Blurry photo." },
+    ]);
+  });
   it("keeps a family photo with a background stranger", () => {
     expect(leaveOutShots([{ shotId: "s1", faces: [{ bbox: BIG, personId: "kid" }, { bbox: SMALL_EDGE, personId: null, stranger: true }] }], cast(), [])).toEqual([]);
   });

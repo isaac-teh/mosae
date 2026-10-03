@@ -39,7 +39,7 @@ export async function getProjectFaces(
   const out: { shotId: string; assetId: string; analysis?: PhotoAnalysis }[] = [];
   for (const doc of snap.docs) {
     const analysis = doc.get("analysis") as ShotAnalysis | undefined;
-    if (analysis && analysis.kind === "photo" && Array.isArray(analysis.faces)) {
+    if (analysis && analysis.kind === "photo") {
       // The asset id, not the shot id, is what the thumbnail route signs, and
       // the picker needs that image to crop each face out of.
       out.push({ shotId: doc.id, assetId: doc.get("assetId") as string, analysis });
