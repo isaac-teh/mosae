@@ -647,3 +647,48 @@ it("keeps the newest refresh within the same upload epoch", async () => {
   await act(async () => older.resolve({ ...summary(), ready: { ...summary().ready, story: true } }));
   expect(chat.state.items.some(item => item.kind === "occasion")).toBe(false);
 });
+
+it("accepts valid slow polling responses even when they exceed the polling interval", async () => {
+  vi.useFakeTimers();
+  try {
+    setup();
+    mocks.repo.getSummary.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ ...summary(), ready: { ...summary().ready, story: true } }), 4000)));
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => vi.advanceTimersByTimeAsync(4000));
+    expect(chat.state.items.some(item => item.kind === "occasion")).toBe(true);
+    await act(async () => vi.advanceTimersByTimeAsync(6000));
+    expect(chat.state.items.some(item => item.kind === "occasion")).toBe(true);
+    expect(mocks.repo.getSummary).toHaveBeenCalledTimes(2);
+    await act(async () => root.render(null));
+  } finally { vi.useRealTimers(); }
+});
+
+it("allows slow resumed-project dependencies to finish before the next poll", async () => {
+  vi.useFakeTimers();
+  try {
+    setup({ readyPlan: true, getProjectResume: () => new Promise(resolve => setTimeout(() => resolve({ proposalId: "proposal-1", storyText: "Saved story", generationId: "film-1", generationStatus: "saved" }), 4000)) });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => vi.advanceTimersByTimeAsync(4000));
+    expect(chat.state.items.some(item => item.kind === "film")).toBe(true);
+    await act(async () => root.render(null));
+  } finally { vi.useRealTimers(); }
+});
+
+it("finishes slow direction loading after the resumed plan is published", async () => {
+  vi.useFakeTimers();
+  try {
+    setup({ readyPlan: true, people: [], getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Saved story", generationId: null, generationStatus: null }) });
+    mocks.repo.getPlan.mockResolvedValue({ ...planFixture, leftOut: [] });
+    mocks.repo.getDirectionOptions.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve(directionOptions), 4000)));
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => vi.advanceTimersByTimeAsync(4000));
+    expect(chat.directionOptions).toEqual(directionOptions);
+    await act(async () => root.render(null));
+  } finally { vi.useRealTimers(); }
+});

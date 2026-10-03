@@ -40,6 +40,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const [momentState, setMomentState] = useProjectState<Record<string, "keep" | "leave">>(projectEpoch, currentProjectEpoch, {});
   const [directionOptions, setDirectionOptions] = useProjectState<DirectionOptions | null>(projectEpoch, currentProjectEpoch, null);
   const [directionSelection, setDirectionSelection] = useProjectState<{ cadenceId: string; durationId: Direction["durationId"]; soundtrackId: string | null; focus: string; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful" }>(projectEpoch, currentProjectEpoch, { cadenceId: "reflective", durationId: "2m", soundtrackId: null, focus: "family", collageAmount: "few", motionFeel: "calm" });
+  const currentPlan = useRef(input.plan);
+  currentPlan.current = input.plan;
   const proposalId = useRef<string | null>(null);
   const personSaving = useRef(false);
   const occasionSaving = useRef(false);
@@ -157,7 +159,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       return;
     }
     setInput((current) => ({ ...current, summary: nextSummary, people: nextSummary.ready.faces ? mapped : null, peopleConfirmed: current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) }));
-    if (proposalId.current && nextSummary.ready.plan && !planLoad.current && !input.plan) {
+    if (proposalId.current && nextSummary.ready.plan && !planLoad.current && !currentPlan.current) {
       planLoad.current = true;
       try {
         const plan = await repository.getPlan(proposalId.current);
@@ -171,12 +173,20 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (stillValid()) throw cause;
       } finally { if (isCurrentProject()) planLoad.current = false; }
     }
-  }, [projectId, repository, input.plan, loadDirectionOptions, currentProjectEpoch]);
+  }, [projectId, repository, loadDirectionOptions, currentProjectEpoch]);
 
   useEffect(() => {
     mounted.current = true;
-    void refresh().catch((cause) => { if (!localState.localMediaPending) setError(reportFailure(cause)); });
-    const timer = setInterval(() => { void refresh().catch((cause) => { if (!localState.localMediaPending) setError(reportFailure(cause)); }); }, 3000);
+    let polling = false;
+    const poll = async () => {
+      if (polling) return;
+      polling = true;
+      try { await refresh(); }
+      catch (cause) { if (!localState.localMediaPending) setError(reportFailure(cause)); }
+      finally { polling = false; }
+    };
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 3000);
     return () => { mounted.current = false; clearInterval(timer); };
   }, [refresh, localState.localMediaPending]);
 
