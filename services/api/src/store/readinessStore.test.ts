@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { adminDb } from "../firebase/admin.js";
 import { closeSession, createProject, openSession, recordClientOutcome } from "./projectStore.js";
-import { gatherFacts, settleProject } from "./readinessStore.js";
+import { gatherFacts, gatherSummaryUpload, settleProject } from "./readinessStore.js";
 
 async function seed(count: number) {
   const userId = `u-${crypto.randomUUID()}`;
@@ -31,6 +31,9 @@ describe("gatherFacts (emulator)", () => {
     await finalizeAndIngest(s, s.assetIds[1], "failed");
     const facts = await gatherFacts(adminDb, s.projectId);
     expect(facts).toEqual({ sessions: 1, openSessions: 1, pendingEntries: 1, assets: 2, ingested: 1, failed: 1 });
+    expect(await gatherSummaryUpload(adminDb, s.projectId, [
+      { id: s.assetIds[0], status: "understood" }, { id: s.assetIds[1], status: "failed" },
+    ])).toEqual({ upload: { expected: 3, settled: 2, failed: 1, cancelled: 0, closed: false }, manifestReady: false });
   });
 });
 

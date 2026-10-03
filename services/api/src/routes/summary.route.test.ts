@@ -19,13 +19,15 @@ describe("summary route asset progress", () => {
       get: async () => ({ exists: true, get: (field: string) => field === "userId" ? "owner" : undefined }),
       collection: (name: string) => name === "assets"
         ? { get: async () => ({ docs }) }
-        : { limit: () => ({ get: async () => ({ empty: true }) }) },
+        : name === "uploadSessions" ? { get: async () => ({ docs: [] }) } : { limit: () => ({ get: async () => ({ empty: true }) }) },
     };
     const db = { collection: () => ({ doc: () => projectRef }) } as any;
     const app = express();
     app.use("/api/projects", (await import("./summary.js")).summaryRouter({ db, auth: auth as RequestHandler }));
     const response = await request(await listeningServer(app)).get("/api/projects/project-a/summary");
     expect(response.status).toBe(200);
+    expect(response.body.upload).toEqual({ expected: 0, settled: 0, failed: 0, cancelled: 0, closed: true });
+    expect(response.body.ready.story).toBe(false);
     expect(response.body.assetStatuses).toEqual([
       { assetId: "photo-a", kind: "photo", status: "understood" },
       { assetId: "photo-b", kind: "photo", status: "ingested" },

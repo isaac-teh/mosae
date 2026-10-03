@@ -1,3 +1,4 @@
+import { sessionSettled, type ManifestEntry, type UploadSession } from "../domain/uploadSession.js";
 import type { Firestore } from "firebase-admin/firestore";
 import { newOutboxTask } from "../domain/outbox.js";
 import { READY_STATUS, readinessOf, type ProjectFacts, type ProjectOutcome } from "../domain/readiness.js";
@@ -73,4 +74,26 @@ export async function settleProject(
     }
     throw error;
   }
+}
+
+/** Join every registered manifest entry to its asset, including files not yet registered. */
+export async function gatherSummaryUpload(db: Firestore, projectId: string, assets: { id?: string; status: string }[]) {
+  const sessions = await db.collection("projects").doc(projectId).collection("uploadSessions").get();
+  const byId = new Map(assets.map((asset) => [asset.id, asset]));
+  const upload = { expected: 0, settled: 0, failed: assets.filter((asset) => asset.status === "failed").length, cancelled: 0, closed: true };
+  let manifestReady = true;
+  for (const session of sessions.docs) {
+    const entries = await session.ref.collection("entries").get();
+    const manifest = entries.docs.map((entry) => ({ ...entry.data(), assetId: entry.id })) as ManifestEntry[];
+    upload.closed &&= session.get("closed") === true;
+    manifestReady &&= sessionSettled({ closed: session.get("closed") === true } as UploadSession, manifest);
+    for (const entry of manifest) {
+      upload.expected += 1;
+      if (entry.outcome !== "pending") upload.settled += 1;
+      if (entry.outcome === "cancelled") upload.cancelled += 1;
+      if (entry.outcome === "failed" && byId.get(entry.assetId)?.status !== "failed") upload.failed += 1;
+      if (entry.outcome === "finalized" && !["understood", "failed"].includes(byId.get(entry.assetId)?.status ?? "")) manifestReady = false;
+    }
+  }
+  return { upload, manifestReady };
 }

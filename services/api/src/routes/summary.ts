@@ -1,3 +1,4 @@
+import { gatherSummaryUpload } from "../store/readinessStore.js";
 import { Router, type RequestHandler } from "express";
 import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
@@ -26,7 +27,8 @@ export function summaryRouter(deps: { db: Firestore; auth?: RequestHandler }): R
       const proposalId = projectSnap.get("currentProposalId");
       let hasPlan = typeof proposalId === "string";
       if (!hasPlan) hasPlan = !(await project.collection("storyProposals").limit(1).get()).empty;
-      return res.json(summarise(assets, hasPlan));
+      const manifest = await gatherSummaryUpload(deps.db, req.params.projectId, assets);
+      return res.json(summarise(assets, hasPlan, { ...manifest, projectStatus: projectSnap.get("status") }));
     } catch (error) {
       console.error("summary route failed", error);
       return res.status(500).json({ error: "internal" });

@@ -32,3 +32,21 @@ describe("summarise", () => {
     expect(summary.season).toBe(`${part} October`);
   });
 });
+
+
+describe("authoritative story readiness", () => {
+  const upload = { expected: 12, settled: 1, failed: 0, cancelled: 0, closed: false };
+  it("requires a nonempty understood catalog and planning-ready project", () => {
+    expect(summarise([], false).ready.story).toBe(false);
+    expect(summarise([asset("photo", null)], false).ready.story).toBe(false);
+    expect(summarise([asset("photo", null)], false, { projectStatus: "ready" }).ready.story).toBe(true);
+    expect(summarise([asset("photo", null)], false, { projectStatus: "clustering" }).ready.story).toBe(false);
+  });
+  it("does not count failed assets as ingested or usable", () => {
+    expect(summarise([{ ...asset("photo", null), status: "failed" }], false, { projectStatus: "ready" })).toMatchObject({ processed: { ingested: 0 }, upload: { failed: 1 }, ready: { story: false } });
+  });
+  it("requires closed settled manifests even with an understood asset", () => {
+    expect(summarise([asset("photo", null)], false, { projectStatus: "ready", upload, manifestReady: false }).ready.story).toBe(false);
+    expect(summarise([asset("photo", null)], false, { projectStatus: "ready", upload: { ...upload, expected: 1, settled: 1, closed: true }, manifestReady: true }).ready.story).toBe(true);
+  });
+});

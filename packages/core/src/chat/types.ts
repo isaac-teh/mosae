@@ -11,7 +11,8 @@ export type ProjectSummary = {
   country: string | null;
   season: string | null;
   processed: { ingested: number; understood: number; faces: number };
-  ready: { summary: boolean; faces: boolean; plan: boolean };
+  upload?: { expected: number; settled: number; failed: number; cancelled: number; closed: boolean };
+  ready: { summary: boolean; faces: boolean; plan: boolean; story?: boolean };
   assetStatuses?: { assetId: string; kind: "photo" | "video"; status: "uploaded" | "ingested" | "understood" | "failed" }[];
 };
 
