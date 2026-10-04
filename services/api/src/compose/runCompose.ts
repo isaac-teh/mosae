@@ -158,7 +158,7 @@ export async function runCompose(
   job: ComposeJob,
   deps: ComposeDeps,
 ): Promise<ComposeResult> {
-  const targetSec = job.durationId === "short" ? job.durationSec ?? 0 : DURATION_SECONDS[job.durationId] ?? 60;
+  let targetSec = job.durationId === "short" ? job.durationSec ?? 0 : DURATION_SECONDS[job.durationId] ?? 60;
   if (targetSec < 3 || targetSec > 30 && job.durationId === "short") return { ok: false, reasons: ["invalid short duration"] };
 
   // `buildCandidates` keys its catalog by moment id, because that is what the
@@ -199,7 +199,11 @@ export async function runCompose(
       capacityByMoment.set(candidate.itemId, Math.max(capacityByMoment.get(candidate.itemId) ?? 0, capacity));
     }
     const materialCapacitySec = [...capacityByMoment.values()].reduce((total, seconds) => total + seconds, 0);
-    if (targetSec > materialCapacitySec) return { ok: false, reasons: ["short duration exceeds available material"] };
+    // The cadence on the composition job is authoritative. Client estimates
+    // can become stale when pace changes, so shorten the target to the capacity
+    // calculated from the actual candidates and cadence used for this run.
+    targetSec = Math.min(targetSec, materialCapacitySec);
+    if (targetSec < 3) return { ok: false, reasons: ["short duration has less than three seconds of available material"] };
   }
 
   // Stage 2: composeCall — build the brief and prompt for Gemini

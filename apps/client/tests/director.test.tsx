@@ -615,6 +615,22 @@ describe("Director chat", () => {
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ durationId: "short", durationSec: 15 })));
   });
 
+  it("updates a selected short length when the user changes pace", async () => {
+    setup({ people: [], readyPlan: true, maximumDurationSec: 15, maximumDurationSecByCadence: { reflective: 15, playful: 10 } }); await renderScreen();
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
+    await click("Looks fine");
+    await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
+    expect(hasText("About 15 seconds")).toBe(true);
+
+    await click("Lively");
+
+    expect(hasText("About 10 seconds")).toBe(true);
+    expect(host.querySelector('button[aria-label="Short"]')?.getAttribute("aria-pressed")).toBe("true");
+    await click("Sounds good");
+    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ cadenceId: "playful", durationId: "short", durationSec: 10 })));
+  });
+
   it("maps generation polling progress to the shaping checklist from zero through three", async () => {
     const earlyRender = { ...filmFixture, rendering: true, generationStatus: "rendering", renderProgress: 0.45 };
     const laterRender = { ...filmFixture, rendering: true, generationStatus: "rendering", renderProgress: 0.73 };
@@ -655,6 +671,22 @@ describe("Director chat", () => {
       expect(hasText("Here's your first cut. Tap to watch.")).toBe(true);
       expect(getFilm).toHaveBeenCalledTimes(4);
     } finally { vi.useRealTimers(); }
+  });
+
+  it("shows a failed generation reason in chat and retries composition", async () => {
+    const failed = Object.assign(new Error("short duration exceeds available material"), { code: "generation_failed" });
+    const getFilm = vi.fn().mockRejectedValueOnce(failed).mockResolvedValue(filmFixture);
+    await openMoments(undefined, getFilm);
+    await click("Looks fine");
+    await waitFor(() => expect(hasText("Sounds good")).toBe(true));
+    await click("Sounds good");
+
+    await waitFor(() => expect(hasText("short duration exceeds available material")).toBe(true));
+    expect(hasText("Shaping your film")).toBe(false);
+    expect([...host.querySelectorAll("button")].some((button) => button.textContent?.trim() === "Try again")).toBe(true);
+    await click("Try again");
+
+    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledTimes(2));
   });
 
   it("shows the completed film with three direction notes and opens the editor", async () => {

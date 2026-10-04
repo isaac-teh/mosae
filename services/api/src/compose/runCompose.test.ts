@@ -198,6 +198,24 @@ describe("runCompose — collages", () => {
 // --- Tests ---
 
 describe("runCompose — happy path", () => {
+  it.each([
+    ["tender", 15],
+    ["reflective", 15],
+    ["playful", 10.5],
+    ["energetic", 7.5],
+    ["celebratory", 12],
+  ] as const)("composes a 15-second short from three photos at %s pace by clamping to available material", async (cadenceId, maximum) => {
+    const moments = ["photo1", "photo2", "photo3"].map((id) => ({ id, shotId: `shot-${id}`, kind: "photo" as const, title: id, description: "", rationale: "" }));
+    const proposal = makeProposal({ moments, chapters: [{ id: "ch1", title: "Chapter 1", summary: "", momentIds: moments.map(({ id }) => id) }] });
+    const assets = new Map(moments.map(({ id }) => [id, { kind: "photo" as const, analysis: { caption: id } }]));
+    const deps = makeDeps({ assets, generateStructured: async () => ({ clips: moments.map(({ id }) => ({ candidateId: `${id}#still@c0`, holdSec: 5, transition: "cut", audio: "mute" })), musicCues: [] }) });
+
+    const result = await runCompose(makeJob({ proposal, durationId: "short", durationSec: 15, cadenceId }), deps);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.timeline.durationSec).toBeLessThanOrEqual(maximum * 1.1);
+  });
+
   it("composes an adaptive short duration within its requested limit", async () => {
     const moments = ["photo1", "photo2", "photo3"].map((id, index) => ({ id, shotId: `shot-${index}`, kind: "photo" as const, title: `Photo ${index}`, description: "", rationale: "" }));
     const proposal = makeProposal({ moments, chapters: [{ id: "ch1", title: "Chapter 1", summary: "", momentIds: moments.map(({ id }) => id) }] });
@@ -209,9 +227,10 @@ describe("runCompose — happy path", () => {
     if (result.ok) expect(result.timeline.durationSec).toBeLessThanOrEqual(10);
   });
 
-  it("rejects a short target beyond the available proposal material", async () => {
+  it("clamps a short target to the available proposal material", async () => {
     const result = await runCompose(makeJob({ durationId: "short", durationSec: 29 }), makeDeps());
-    expect(result).toMatchObject({ ok: false, reasons: ["short duration exceeds available material"] });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.timeline.durationSec).toBeLessThanOrEqual(16.5);
   });
 
   it("composes a valid Timeline from an accepted proposal", async () => {
