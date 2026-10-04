@@ -14,11 +14,16 @@ const timeline: Timeline = {
 };
 function setup(owner = "u1", edits = { revision: 2, ops: [{ op: "remove", clipId: "b" }] }) {
   const data: Record<string, unknown> = { "projects/p1": { userId: owner }, "projects/p1/generations/g1": { timeline }, "projects/p1/generations/g1/edits/current": edits };
-  const ref = (path: string): unknown => ({
-    doc: (id: string) => ref(`${path}/${id}`), collection: (id: string) => ref(`${path}/${id}`),
-    get: async () => ({ exists: path in data, data: () => data[path], get: (key: string) => (data[path] as Record<string, unknown>)?.[key] }),
+  const ref = (path: string): any => ({ path,
+    doc: (id: string) => ref(`${path}/${id}`), collection: (id: string) => ref(`${path}/${id}`), limit: () => ({ get: async () => ({ docs: [] }) }),
+    get: async () => ({ exists: path in data, data: () => data[path], get: (key: string) => (data[path] as Record<string, unknown>)?.[key], ref: ref(path) }),
   });
-  const db = { doc: ref, collection: ref } as unknown as Firestore;
+  const db = { doc: ref, collection: ref, runTransaction: async (work: (tx: any) => unknown) => work({
+    get: (document: any) => document.get(),
+    set: (document: any, value: unknown, options?: { merge?: boolean }) => { data[document.path] = options?.merge ? { ...(data[document.path] as object ?? {}), ...(value as object) } : value; },
+    update: (document: any, value: object) => { data[document.path] = { ...(data[document.path] as object), ...value }; },
+    delete: (document: any) => { delete data[document.path]; },
+  }) } as unknown as Firestore;
   const generate = vi.fn(async () => ({ reply: "Hold longer", ops: [{ op: "setPhotoDuration", clipId: "a", sec: 4 }] }));
   const app = express(); app.use(express.json());
   app.use("/api/projects", editInterpretRouter({ db, generate, auth: (_req, res, next) => { res.locals.userId = "u1"; next(); } }));
@@ -41,7 +46,7 @@ describe("scoped edit context", () => {
   it("rejects unknown or removed selections even with an explicit client timeline", async () => {
     const { app, generate } = setup();
     for (const clipId of ["unknown", "b"]) {
-      const response = await send(app, { text: "hold this longer", revision: 2, timeline, context: { scope: { kind: "clip", clipId }, requestId: "r1" } });
+      const response = await send(app, { text: "hold this longer", revision: 2, timeline, context: { scope: { kind: "clip", clipId }, requestId: `r-${clipId}` } });
       expect(response.status).toBe(400); expect(response.body.error).toBe("invalid_scope");
     }
     expect(generate).not.toHaveBeenCalled();

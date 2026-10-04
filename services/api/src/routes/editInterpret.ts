@@ -9,11 +9,13 @@ import { isValidId } from "../domain/ids.js";
 import type { GenerateOptions } from "../gemini/client.js";
 import { DemoLimitReached } from "../gemini/errors.js";
 import { interpretEdit, type InterpretEditModelResult } from "../directing/interpretEdit.js";
-import { EditInterpretationLeaseLost, getEditDocument, beginEditInterpretation, finishEditInterpretation, abandonEditInterpretation, getEditConversation, acknowledgeEditInterpretation, type StoredEditInterpretation } from "../directing/editStore.js";
+import { EditInterpretationLeaseLost, EDIT_INTERPRETATION_LEASE_MS, getEditDocument, beginEditInterpretation, renewEditInterpretation, finishEditInterpretation, abandonEditInterpretation, getEditConversation, acknowledgeEditInterpretation, type StoredEditInterpretation } from "../directing/editStore.js";
 
 export function editInterpretRouter(deps: {
   db: Firestore;
   auth?: RequestHandler;
+  leaseRenewIntervalMs?: number;
+  renewLease?: typeof renewEditInterpretation;
   generate: (options: GenerateOptions<InterpretEditModelResult>, projectId?: string) => Promise<unknown>;
 }): Router {
   const router = Router();
@@ -31,6 +33,9 @@ export function editInterpretRouter(deps: {
     }
     let reservedRequestId: string | undefined;
     let reservationToken: string | undefined;
+    let leaseTimer: ReturnType<typeof setInterval> | undefined;
+    let leaseWasLost = false;
+    let renewalInFlight = false;
     try {
       const [document, generationSnap] = await Promise.all([
         getEditDocument(deps.db, res.locals.userId, req.params.projectId, req.params.generationId),
@@ -48,6 +53,14 @@ export function editInterpretRouter(deps: {
       if (reservation.status !== "started") return res.status(409).json({ error: reservation.status === "conflict" ? "request_id_conflict" : "request_in_progress" });
       reservedRequestId = rawContext.requestId;
       reservationToken = reservation.leaseToken;
+      leaseTimer = setInterval(() => {
+        if (renewalInFlight) return;
+        renewalInFlight = true;
+        void (deps.renewLease ?? renewEditInterpretation)(deps.db, req.params.projectId, req.params.generationId, rawContext.requestId, reservation.leaseToken, Date.now)
+          .then((owned) => { if (!owned) leaseWasLost = true; })
+          .catch(() => { /* A later tick retries while the current lease remains valid. */ })
+          .finally(() => { renewalInFlight = false; });
+      }, deps.leaseRenewIntervalMs ?? Math.floor(EDIT_INTERPRETATION_LEASE_MS / 3));
       if (document.revision !== revision) return res.status(409).json({ error: "stale_revision", currentRevision: document.revision });
       const current = applyEdits(timeline, document.ops as EditOp[]);
       if (!current.ok) return res.status(409).json({ error: "invalid_current_edits" });
@@ -57,11 +70,10 @@ export function editInterpretRouter(deps: {
       const result = await interpretEdit({ text: text.trim(), timeline: current.timeline, ...context, groundedContext }, {
         generate: (options) => deps.generate(options, req.params.projectId),
       });
-      const response = ("kind" in result ? { ...result, requestId: context.requestId } : result.ops.length
-        ? { ...result, kind: "edit", baseRevision: document.revision, requestId: context.requestId }
-        : { ...result, kind: "unsupported", ops: [], requestId: context.requestId }) as StoredEditInterpretation;
+      const response = { ...result, ...(result.kind === "edit" ? { baseRevision: document.revision } : {}), requestId: context.requestId } as StoredEditInterpretation;
       response.reply = response.reply.slice(0, 2000);
       if (response.kind === "edit") response.baseRevision = document.revision;
+      if (leaseWasLost) throw new EditInterpretationLeaseLost();
       await finishEditInterpretation(deps.db, res.locals.userId, req.params.projectId, req.params.generationId, text.trim(), revision, document.ops, response, reservation.leaseToken);
       reservedRequestId = undefined;
       return res.json(response);
@@ -71,6 +83,7 @@ export function editInterpretRouter(deps: {
       console.error("edit interpretation failed", req.params.projectId, req.params.generationId, error);
       return res.status(500).json({ error: "internal" });
     } finally {
+      if (leaseTimer) clearInterval(leaseTimer);
       if (reservedRequestId && reservationToken) await abandonEditInterpretation(deps.db, req.params.projectId, req.params.generationId, reservedRequestId, reservationToken);
     }
   });

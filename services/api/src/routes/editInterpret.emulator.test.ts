@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 import { adminDb } from "../firebase/admin.js";
 import { DemoLimitReached } from "../gemini/errors.js";
-import { beginEditInterpretation, finishEditInterpretation, abandonEditInterpretation, saveEditDocument } from "../directing/editStore.js";
+import { beginEditInterpretation, finishEditInterpretation, abandonEditInterpretation, renewEditInterpretation, saveEditDocument } from "../directing/editStore.js";
 import { editInterpretRouter } from "./editInterpret.js";
 
 const owner = "editor-ask-emulator-owner";
@@ -89,7 +89,9 @@ describe("edit interpretation route (Firestore emulator)", () => {
     const now = Date.now();
     const old = await begin(adminDb, owner, projectId, "g", "r", "payload", () => now);
     expect((await begin(adminDb, owner, projectId, "g", "r", "payload", () => now + 1)).status).toBe("processing");
-    const recovered = await begin(adminDb, owner, projectId, "g", "r", "payload", () => now + 180_001);
+    expect(await renewEditInterpretation(adminDb, projectId, "g", "r", old.status === "started" ? old.leaseToken : "", () => now + 90_000)).toBe(true);
+    expect((await begin(adminDb, owner, projectId, "g", "r", "payload", () => now + 180_001)).status).toBe("processing");
+    const recovered = await begin(adminDb, owner, projectId, "g", "r", "payload", () => now + 220_001);
     expect(recovered.status).toBe("started");
     expect(recovered.leaseToken).toEqual(expect.any(String));
     expect(recovered.leaseToken).not.toBe(old.leaseToken);
@@ -133,5 +135,57 @@ describe("edit interpretation route (Firestore emulator)", () => {
     expect(retried.body.kind).toBe("edit");
     expect(calls).toBe(2);
   });
+
+  it("renews the active route reservation while model work is still running", async () => {
+    const projectId = `ask-renew-${randomUUID()}`;
+    const project = adminDb.doc(`projects/${projectId}`);
+    await project.set({ userId: owner });
+    await project.collection("generations").doc("g").set({ timeline: { ...timeline, projectId } });
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    const renewalResults: boolean[] = [];
+    const app = express(); app.use(express.json());
+    app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, leaseRenewIntervalMs: 500, renewLease: async (...args) => {
+      const renewed = await renewEditInterpretation(...args); renewalResults.push(renewed); return renewed;
+    }, generate: async () => {
+      entered(); await blocked; return { reply: "Moved", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] };
+    } }));
+    const server = await listeningServer(app);
+    const path = `/api/projects/${projectId}/generations/g/edits/interpret`;
+    const payload = { text: "move this", revision: 0, context: { scope: { kind: "film" }, requestId: "renew" } };
+    const first = request(server).post(path).send(payload).then(response => response);
+    await started;
+    for (let attempt = 0; attempt < 30 && !renewalResults.length; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    release();
+    expect(renewalResults.some(Boolean)).toBe(true);
+    expect((await first).status).toBe(200);
+  }, 30_000);
+
+  it("rejects a result after the route renewal reports lost ownership", async () => {
+    const projectId = `ask-lost-${randomUUID()}`;
+    const project = adminDb.doc(`projects/${projectId}`);
+    await project.set({ userId: owner });
+    await project.collection("generations").doc("g").set({ timeline: { ...timeline, projectId } });
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    const app = express(); app.use(express.json());
+    app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, leaseRenewIntervalMs: 5, renewLease: async () => false, generate: async () => {
+      entered(); await blocked; return { reply: "Moved", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] };
+    } }));
+    const server = await listeningServer(app);
+    const path = `/api/projects/${projectId}/generations/g/edits/interpret`;
+    const payload = { text: "move this", revision: 0, context: { scope: { kind: "film" }, requestId: "lost" } };
+    const first = request(server).post(path).send(payload).then(response => response);
+    await started;
+    await new Promise(resolve => setTimeout(resolve, 40));
+    release();
+    const response = await first;
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe("request_lease_lost");
+  }, 30_000);
 
 });

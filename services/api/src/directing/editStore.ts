@@ -95,6 +95,18 @@ export class EditInterpretationLeaseLost extends Error {
   constructor() { super("edit_interpretation_lease_lost"); }
 }
 
+/** Extend an active reservation while the model call is still running. */
+export async function renewEditInterpretation(db: Firestore, projectId: string, generationId: string, requestId: string, leaseToken: string, now = Date.now): Promise<boolean> {
+  const request = conversationRefs(db, projectId, generationId).current.collection("requests").doc(requestKey(requestId));
+  return db.runTransaction(async tx => {
+    const stored = await tx.get(request);
+    const at = now();
+    if (!stored.exists || stored.get("result") || stored.get("leaseToken") !== leaseToken || stored.get("leaseUntil") <= at) return false;
+    tx.update(request, { leaseUntil: at + EDIT_INTERPRETATION_LEASE_MS });
+    return true;
+  });
+}
+
 /** Reserve request IDs before model work. Payload mismatches never replay another request. */
 export async function beginEditInterpretation(db: Firestore, userId: string, projectId: string, generationId: string, requestId: string, fingerprint: string, now = Date.now) {
   const refs = conversationRefs(db, projectId, generationId);
