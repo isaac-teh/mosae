@@ -64,7 +64,8 @@ export interface ComposeJob {
   generationId: string;
   mode: "creator" | "memory";
   aspect: "16:9" | "9:16";
-  durationId: keyof typeof DURATION_SECONDS;
+  durationId: keyof typeof DURATION_SECONDS | "short";
+  durationSec?: number;
   cadenceId: CadenceId;
   seed: string;
   soundtrackId: string | null;
@@ -157,7 +158,8 @@ export async function runCompose(
   job: ComposeJob,
   deps: ComposeDeps,
 ): Promise<ComposeResult> {
-  const targetSec = DURATION_SECONDS[job.durationId] ?? 60;
+  const targetSec = job.durationId === "short" ? job.durationSec ?? 0 : DURATION_SECONDS[job.durationId] ?? 60;
+  if (targetSec < 3 || targetSec > 30 && job.durationId === "short") return { ok: false, reasons: ["invalid short duration"] };
 
   // `buildCandidates` keys its catalog by moment id, because that is what the
   // proposal's chapters name. A Timeline names shots, so the two are joined
@@ -183,6 +185,21 @@ export async function runCompose(
 
   if (candidates.length === 0) {
     return { ok: false, reasons: ["no legal candidates — proposal has no media"] };
+  }
+
+  if (job.durationId === "short") {
+    const hidden = new Set(job.proposal.constraints.hiddenShotIds ?? []);
+    const excluded = new Set(job.proposal.constraints.excludedShotIds ?? []);
+    const deselected = new Set(job.proposal.constraints.deselectedMomentIds ?? []);
+    const capacityByMoment = new Map<string, number>();
+    for (const candidate of candidates) {
+      const shotId = shotIdByMoment.get(candidate.itemId);
+      if (!shotId || hidden.has(shotId) || excluded.has(shotId) || deselected.has(candidate.itemId)) continue;
+      const capacity = candidate.kind === "photo" ? holdsFor(job.cadenceId).max : candidate.lengthSec ?? 0;
+      capacityByMoment.set(candidate.itemId, Math.max(capacityByMoment.get(candidate.itemId) ?? 0, capacity));
+    }
+    const materialCapacitySec = [...capacityByMoment.values()].reduce((total, seconds) => total + seconds, 0);
+    if (targetSec > materialCapacitySec) return { ok: false, reasons: ["short duration exceeds available material"] };
   }
 
   // Stage 2: composeCall — build the brief and prompt for Gemini

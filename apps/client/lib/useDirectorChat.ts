@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState as useReactState, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
-import { directionFocus, deriveChat, canConfirmStory, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
+import { directionFocus, deriveChat, canConfirmStory, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type DurationChoice, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
 import { mapShapingProgress } from "./shapingProgress";
@@ -14,6 +14,13 @@ function reportFailure(cause: unknown): string {
   if (error?.code === "demo_limit_reached") return "Demo limit reached — try the options";
   console.info("Director chat request failed", error?.code ?? error?.message ?? "unknown");
   return REQUEST_FAILURE;
+}
+
+function durationsForCadence(options: DirectionOptions, cadenceId: string): DurationChoice[] {
+  const maximum = options.maximumDurationSecByCadence?.[cadenceId] ?? options.maximumDurationSec ?? Infinity;
+  const standard = options.durations.filter(({ seconds }) => seconds <= maximum);
+  const shortSeconds = Number.isFinite(maximum) ? Math.floor(maximum) : 0;
+  return standard.length || shortSeconds < 3 ? standard : [{ id: "short", label: "Short", caption: `About ${shortSeconds} seconds`, seconds: shortSeconds }];
 }
 
 function useProjectState<T>(epochRef: MutableRefObject<number>, epoch: number, initial: T): [T, Dispatch<SetStateAction<T>>] {
@@ -39,7 +46,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const [saving, setSaving] = useProjectState(projectEpoch, currentProjectEpoch, false);
   const [momentState, setMomentState] = useProjectState<Record<string, "keep" | "leave">>(projectEpoch, currentProjectEpoch, {});
   const [directionOptions, setDirectionOptions] = useProjectState<DirectionOptions | null>(projectEpoch, currentProjectEpoch, null);
-  const [directionSelection, setDirectionSelection] = useProjectState<{ cadenceId: string; durationId: Direction["durationId"]; soundtrackId: string | null; focus: string; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful" }>(projectEpoch, currentProjectEpoch, { cadenceId: "reflective", durationId: "2m", soundtrackId: null, focus: "family", collageAmount: "few", motionFeel: "calm" });
+  const [directionSelection, setDirectionSelection] = useProjectState<{ cadenceId: string; durationId: Direction["durationId"]; durationSec?: number; soundtrackId: string | null; focus: string; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful" }>(projectEpoch, currentProjectEpoch, { cadenceId: "reflective", durationId: "2m", soundtrackId: null, focus: "family", collageAmount: "few", motionFeel: "calm" });
   const directionSelectionRef = useRef(directionSelection);
   directionSelectionRef.current = directionSelection;
   const [focusExplicit, setFocusExplicit] = useProjectState(projectEpoch, currentProjectEpoch, false);
@@ -114,13 +121,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     setDirectionOptions(options);
     const selected = directionSelectionRef.current;
     const cadenceId = preserveSelection && options.cadences.some(({ id }) => id === selected.cadenceId) ? selected.cadenceId : options.recommendedCadence;
-    const maximumDurationSec = options.maximumDurationSecByCadence?.[cadenceId] ?? options.maximumDurationSec ?? Infinity;
-    const availableDurations = options.durations.filter(({ seconds }) => seconds <= maximumDurationSec);
+    const availableDurations = durationsForCadence(options, cadenceId);
     const duration = (preserveSelection ? availableDurations.find(({ id }) => id === selected.durationId) : undefined) ?? availableDurations.find(({ id }) => id === options.recommendedDuration) ?? availableDurations.at(-1) ?? options.durations.find(({ id }) => id === options.recommendedDuration);
     const durationId = duration?.id ?? options.recommendedDuration;
     const lengthSec = duration?.seconds ?? 120;
     const focus = directionFocus(peopleRef.current, focusChoiceRef.current.selected, focusChoiceRef.current.explicit).selected;
-    setDirectionSelection((current) => ({ ...current, focus, cadenceId, durationId, soundtrackId: current.soundtrackId ?? options.soundtracks[0]?.id ?? null, collageAmount: preserveSelection ? current.collageAmount : options.collageAmount ?? current.collageAmount, motionFeel: preserveSelection ? current.motionFeel : options.motionFeel ?? current.motionFeel }));
+    setDirectionSelection((current) => ({ ...current, focus, cadenceId, durationId, ...(durationId === "short" ? { durationSec: lengthSec } : { durationSec: undefined }), soundtrackId: current.soundtrackId ?? options.soundtracks[0]?.id ?? null, collageAmount: preserveSelection ? current.collageAmount : options.collageAmount ?? current.collageAmount, motionFeel: preserveSelection ? current.motionFeel : options.motionFeel ?? current.motionFeel }));
     setInput((current) => ({ ...current, directionNote: options.recommendation ?? "For these moments, I’d suggest this.", direction: { confirmed: false, pace: /gentle|reflective/i.test(cadenceId) ? "gentle" : "lively", lengthSec, focus } }));
   }, [repository, projectId, currentProjectEpoch]);
 
@@ -398,14 +404,18 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     setDirection(patch: { pace?: "gentle" | "lively"; lengthSec?: number; focus?: string; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" }) {
       const next = { ...directionSelection };
       if (patch.pace) next.cadenceId = directionOptions?.cadences.find((cadence) => /gentle|reflective/i.test(`${cadence.id} ${cadence.name}`) === (patch.pace === "gentle"))?.id ?? next.cadenceId;
-      if (patch.lengthSec) next.durationId = directionOptions?.durations.find(({ seconds }) => seconds === patch.lengthSec)?.id ?? directionOptions?.durations.reduce((closest, option) => Math.abs(option.seconds - patch.lengthSec!) < Math.abs(closest.seconds - patch.lengthSec!) ? option : closest, directionOptions.durations[0]!)?.id ?? next.durationId;
+      if (patch.lengthSec) {
+        const selected = directionOptions?.durations.find(({ seconds }) => seconds === patch.lengthSec);
+        next.durationId = selected?.id ?? (patch.lengthSec < 30 ? "short" : directionOptions?.durations.reduce((closest, option) => Math.abs(option.seconds - patch.lengthSec!) < Math.abs(closest.seconds - patch.lengthSec!) ? option : closest, directionOptions.durations[0]!)?.id ?? next.durationId);
+        next.durationSec = next.durationId === "short" ? patch.lengthSec : undefined;
+      }
       if (patch.focus) { next.focus = directionFocus(input.people, patch.focus, true).selected; setFocusExplicit(true); }
       if (patch.collageAmount) next.collageAmount = patch.collageAmount;
       if (patch.motionFeel) next.motionFeel = patch.motionFeel;
       const maximumDurationSec = directionOptions?.maximumDurationSecByCadence?.[next.cadenceId] ?? directionOptions?.maximumDurationSec ?? Infinity;
-      const availableDurations = directionOptions?.durations.filter(({ seconds }) => seconds <= maximumDurationSec) ?? [];
+      const availableDurations = directionOptions ? durationsForCadence(directionOptions, next.cadenceId) : [];
       const selectedDuration = availableDurations.find(({ id }) => id === next.durationId) ?? availableDurations.at(-1);
-      if (selectedDuration) next.durationId = selectedDuration.id;
+      if (selectedDuration) { next.durationId = selectedDuration.id; next.durationSec = selectedDuration.id === "short" ? selectedDuration.seconds : undefined; }
       setDirectionSelection(next);
       setInput((current) => ({ ...current, direction: current.direction
         ? { ...current.direction, ...patch, ...(selectedDuration ? { lengthSec: selectedDuration.seconds } : {}) }
@@ -414,13 +424,15 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     async shapeIt() {
       if (!input.plan || !input.direction || saving || generationSaving.current || input.generation || !directionOptions) return;
       const maximum = directionOptions.maximumDurationSecByCadence?.[directionSelection.cadenceId] ?? directionOptions.maximumDurationSec ?? Infinity;
-      if (!directionOptions.durations.some(duration => duration.id === directionSelection.durationId && duration.seconds <= maximum)) return;
+      const availableDurations = durationsForCadence(directionOptions, directionSelection.cadenceId);
+      const selectedDuration = availableDurations.find(duration => duration.id === directionSelection.durationId && duration.seconds === (duration.id === "short" ? directionSelection.durationSec : duration.seconds));
+      if (!selectedDuration || selectedDuration.seconds > maximum) return;
       generationSaving.current = true;
       setSaving(true); setError(null);
       try {
         const focus = directionFocus(input.people, directionSelection.focus, focusExplicit);
         const focusLabel = focus.label;
-        const direction: Direction & { focus: string } = { note: `${directionOptions?.note ?? ""}${directionOptions?.note ? "\n" : ""}Focus: ${focusLabel}.`, cadenceId: directionSelection.cadenceId, soundtrackId: directionSelection.soundtrackId, durationId: directionSelection.durationId, focus: focus.selected, collageAmount: directionSelection.collageAmount, motionFeel: directionSelection.motionFeel };
+        const direction: Direction & { focus: string } = { note: `${directionOptions?.note ?? ""}${directionOptions?.note ? "\n" : ""}Focus: ${focusLabel}.`, cadenceId: directionSelection.cadenceId, soundtrackId: directionSelection.soundtrackId, durationId: directionSelection.durationId, ...(directionSelection.durationId === "short" ? { durationSec: directionSelection.durationSec } : {}), focus: focus.selected, collageAmount: directionSelection.collageAmount, motionFeel: directionSelection.motionFeel };
         compositionStartedAt.current = Date.now();
         setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction, generation: { status: "queued", stage: "queued", progress: 0, stepsDone: 0, film: null } }));
         const { filmId } = await repository.directFilm(input.plan.planId, direction);

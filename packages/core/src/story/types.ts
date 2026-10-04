@@ -84,7 +84,7 @@ export type CreateOption = "film" | "album" | "share" | "apple-photos";
 
 export type Cadence = { id: string; name: string; description: string };
 export type Soundtrack = { id: string; name: string; description: string; mood?: string; durationSec?: number; suggested?: boolean };
-export type DurationChoice = { id: "30s" | "1m" | "2m" | "3m" | "4m" | "5m"; label: string; caption: string; seconds: number };
+export type DurationChoice = { id: "30s" | "1m" | "2m" | "3m" | "4m" | "5m" | "short"; label: string; caption: string; seconds: number };
 
 export type DirectionOptions = {
   recommendation?: string;
@@ -105,7 +105,7 @@ export type DirectionOptions = {
   motionFeel?: "calm" | "playful";
 };
 
-export type Direction = { focus?: string; note: string; cadenceId: string; soundtrackId: string | null; durationId: DurationChoice["id"] | null; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
+export type Direction = { focus?: string; note: string; cadenceId: string; soundtrackId: string | null; durationId: DurationChoice["id"] | null; durationSec?: number; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
 
 export type Film = {
   filmId: string;

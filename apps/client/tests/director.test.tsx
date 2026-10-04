@@ -571,17 +571,19 @@ describe("Director chat", () => {
     expect(hasText("With these moments, I can make up to")).toBe(false);
   });
 
-  it("does not allow shaping a standard length when the moments cannot reach it", async () => {
-    setup({ people: [], readyPlan: true, maximumDurationSec: 10 }); await renderScreen();
+  it("offers one preselected short length when three photos cannot reach a standard tier", async () => {
+    setup({ people: [], readyPlan: true, maximumDurationSec: 15 }); await renderScreen();
     await click("Yes, our Japan trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
     await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
-    expect(hasText("Add more photos for a longer film")).toBe(false);
-    expect(host.querySelectorAll('button[aria-label="30 sec"]')).toHaveLength(0);
+    expect(host.querySelectorAll('button[aria-label="Short"]')).toHaveLength(1);
+    expect(host.querySelector('button[aria-label="Short"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(hasText("About 15 seconds")).toBe(true);
     expect(host.querySelectorAll('button[aria-label="Sounds good"]')).toHaveLength(1);
-    expect(mocks.repo.directFilm).not.toHaveBeenCalled();
-    expect((host.querySelector('button[aria-label="Sounds good"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((host.querySelector('button[aria-label="Sounds good"]') as HTMLButtonElement).disabled).toBe(false);
+    await click("Sounds good");
+    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ durationId: "short", durationSec: 15 })));
   });
 
   it("maps generation polling progress to the shaping checklist from zero through three", async () => {

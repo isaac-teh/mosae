@@ -198,6 +198,22 @@ describe("runCompose — collages", () => {
 // --- Tests ---
 
 describe("runCompose — happy path", () => {
+  it("composes an adaptive short duration within its requested limit", async () => {
+    const moments = ["photo1", "photo2", "photo3"].map((id, index) => ({ id, shotId: `shot-${index}`, kind: "photo" as const, title: `Photo ${index}`, description: "", rationale: "" }));
+    const proposal = makeProposal({ moments, chapters: [{ id: "ch1", title: "Chapter 1", summary: "", momentIds: moments.map(({ id }) => id) }] });
+    const assets = new Map(moments.map(({ id }) => [id, { kind: "photo" as const, analysis: { caption: id } }]));
+    const deps = makeDeps({ assets, generateStructured: async () => ({ clips: [{ candidateId: "photo1#still@c0", holdSec: 3, transition: "cut", audio: "mute" }], musicCues: [] }) });
+    const result = await runCompose(makeJob({ proposal, durationId: "short", durationSec: 10 }), deps);
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.timeline.durationSec).toBeLessThanOrEqual(10);
+  });
+
+  it("rejects a short target beyond the available proposal material", async () => {
+    const result = await runCompose(makeJob({ durationId: "short", durationSec: 29 }), makeDeps());
+    expect(result).toMatchObject({ ok: false, reasons: ["short duration exceeds available material"] });
+  });
+
   it("composes a valid Timeline from an accepted proposal", async () => {
     const job = makeJob();
     const deps = makeDeps();

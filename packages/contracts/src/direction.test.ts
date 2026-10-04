@@ -58,6 +58,12 @@ describe("DirectionSettingsSchema", () => {
     expect(safeParseDirectionSettings({ ...valid, durationId: "4m" }).ok).toBe(true);
   });
 
+  it("accepts a bounded short duration while preserving standard tiers", () => {
+    expect(safeParseDirectionSettings({ ...valid, durationId: "short", durationSec: 15 })).toMatchObject({ ok: true, settings: { durationId: "short", durationSec: 15 } });
+    expect(safeParseDirectionSettings({ ...valid, durationId: "short", durationSec: 31 }).ok).toBe(false);
+    expect(safeParseDirectionSettings({ ...valid, durationId: "30s" }).ok).toBe(true);
+  });
+
   it("publishes a cadence catalog the client can render", () => {
     expect(CADENCES.map((cadence) => cadence.id)).toContain("tender");
     for (const cadence of CADENCES) expect(cadence.description.length).toBeGreaterThan(0);

@@ -59,6 +59,7 @@ export {
   type DirectionSettings,
   type CadenceId,
   type DurationId,
+  type DirectionDurationId,
 } from "./direction.js";
 
 export {

@@ -565,7 +565,7 @@ export function createApiStoryRepository(
         .catch((error: unknown) => { if ((error as { status?: number }).status !== 409) throw error; });
       const settings = {
         schemaVersion: 1, id: newId(), projectId, version: 1, note: direction.note,
-        cadenceId: direction.cadenceId, soundtrackId: direction.soundtrackId, durationId: direction.durationId,
+        cadenceId: direction.cadenceId, soundtrackId: direction.soundtrackId, durationId: direction.durationId, ...(direction.durationSec === undefined ? {} : { durationSec: direction.durationSec }),
         ...(direction.focus === undefined ? {} : { focus: direction.focus }),
         aspect: "9:16", captions: false,
         collageAmount: direction.collageAmount ?? "few", motionFeel: direction.motionFeel ?? "calm",

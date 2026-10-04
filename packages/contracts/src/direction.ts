@@ -18,9 +18,10 @@ export const CADENCES = [
 ] as const;
 
 export const DURATION_SECONDS = { "30s": 30, "1m": 60, "2m": 120, "3m": 180, "4m": 240, "5m": 300 } as const;
+export const SHORT_DURATION_ID = "short" as const;
 
 const cadenceIds = CADENCES.map((cadence) => cadence.id) as [string, ...string[]];
-const durationIds = Object.keys(DURATION_SECONDS) as [string, ...string[]];
+const durationIds = ["30s", "1m", "2m", "3m", "4m", "5m", SHORT_DURATION_ID] as [string, ...string[]];
 
 export const DirectionSettingsSchema = z.strictObject({
   schemaVersion: z.literal(1),
@@ -35,14 +36,24 @@ export const DirectionSettingsSchema = z.strictObject({
   soundtrackId: z.string().min(1).nullable(),
   /** null means let the director choose a length. */
   durationId: z.enum(durationIds).nullable(),
+  /** Explicit target for the adaptive short option; absent for legacy tiers. */
+  durationSec: z.number().int().min(3).max(29).optional(),
   aspect: z.enum(["16:9", "9:16"]),
   captions: z.boolean().default(false),
   collageAmount: z.enum(["few", "lots", "none"]).default("few"),
   motionFeel: z.enum(["calm", "playful"]).default("calm"),
+}).superRefine((settings, context) => {
+  if (settings.durationId === SHORT_DURATION_ID && settings.durationSec === undefined) {
+    context.addIssue({ code: "custom", path: ["durationSec"], message: "Required for short duration" });
+  }
+  if (settings.durationId !== SHORT_DURATION_ID && settings.durationSec !== undefined) {
+    context.addIssue({ code: "custom", path: ["durationSec"], message: "Only valid for short duration" });
+  }
 });
 
 export type CadenceId = (typeof CADENCES)[number]["id"];
 export type DurationId = keyof typeof DURATION_SECONDS;
+export type DirectionDurationId = DurationId | typeof SHORT_DURATION_ID;
 export type DirectionSettings = z.infer<typeof DirectionSettingsSchema>;
 
 function describe(issue: { path: PropertyKey[]; message: string }): string {

@@ -54,13 +54,13 @@ function firestore() {
   return db as unknown as Firestore;
 }
 
-function composeFirestore(proposalData: StoryProposal, focus?: string, excluded = false): Firestore {
+function composeFirestore(proposalData: StoryProposal, focus?: string, excluded = false, duration: { durationId: string; durationSec?: number } = { durationId: "30s" }): Firestore {
   const generationData = {
     schemaVersion: 1,
     proposalId: proposalData.id,
     status: "composing",
     seed: "seed-1",
-    settings: { schemaVersion: 1, id: "settings-1", projectId: "project1", version: 1, note: "", cadenceId: "tender", soundtrackId: null, durationId: "30s", aspect: "9:16", captions: false, ...(focus === undefined ? {} : { focus }) },
+    settings: { schemaVersion: 1, id: "settings-1", projectId: "project1", version: 1, note: "", cadenceId: "tender", soundtrackId: null, durationId: duration.durationId, ...(duration.durationSec === undefined ? {} : { durationSec: duration.durationSec }), aspect: "9:16", captions: false, ...(focus === undefined ? {} : { focus }) },
   };
   const generationSnap = { exists: true, data: () => generationData };
   const proposalSnap = { exists: true, data: () => proposalData };
@@ -132,6 +132,14 @@ describe("generation focus", () => {
     await expect(compose({ projectId: "project1", generationId: "generation1" })).resolves.toBe("composed");
     expect(runCompose).toHaveBeenCalledWith(expect.objectContaining({ cast: expect.objectContaining({ focus: expected, summary: expect.stringContaining(`focus: ${expectedSummary};`) }), proposal: expect.objectContaining({ constraints: expect.objectContaining({ focusCharacterIds: expected }) }) }), expect.anything());
   });
+});
+
+it("passes the adaptive short target from stored settings to compose", async () => {
+  vi.mocked(runCompose).mockClear();
+  vi.mocked(runCompose).mockResolvedValue({ ok: true, timeline: {} as never, droppedPicks: [], reasons: [] } as never);
+  const compose = createCompose({ db: composeFirestore(proposal(), undefined, false, { durationId: "short", durationSec: 15 }), generateStructured: async () => ({}) as never });
+  await expect(compose({ projectId: "project1", generationId: "generation1" })).resolves.toBe("composed");
+  expect(runCompose).toHaveBeenCalledWith(expect.objectContaining({ durationId: "short", durationSec: 15 }), expect.anything());
 });
 
 it.each([["unknown", false], ["person-1", true]])("refuses invalid composition focus %s", async (focus, excluded) => {
