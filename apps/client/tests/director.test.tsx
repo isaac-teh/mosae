@@ -501,6 +501,29 @@ describe("Director chat", () => {
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ cadenceId: "playful", durationId: "4m", focus: "family", soundtrackId: "lyria-reflective", collageAmount: "lots", motionFeel: "playful" })));
   });
 
+  it("restores selected direction controls after generation creation fails and resubmits them", async () => {
+    await openMoments();
+    await click("Looks fine");
+    await waitFor(() => expect(hasText("Sounds good")).toBe(true));
+    await click("4 min");
+    await click("Lively");
+    await click("The moments");
+    await click("Lots");
+    await click("Playful");
+    mocks.repo.directFilm.mockRejectedValueOnce(new Error("503"));
+    await click("Sounds good");
+    await waitFor(() => expect(hasText("I couldn't do that. Try again?")).toBe(true));
+    expect(host.querySelector('button[aria-label="Sounds good"]')).toBeTruthy();
+    expect(hasText("For 4 min, I'll focus on")).toBe(true);
+    await click("Try again");
+    expect(mocks.repo.directFilm).toHaveBeenCalledTimes(1);
+    await click("Sounds good");
+    await waitFor(() => expect(host.querySelector('[data-testid="film-ready-player"]')).toBeTruthy());
+    expect(mocks.repo.directFilm).toHaveBeenCalledTimes(2);
+    expect(mocks.repo.directFilm.mock.calls[1]).toEqual(mocks.repo.directFilm.mock.calls[0]);
+    expect(mocks.repo.directFilm.mock.calls[1][1]).toMatchObject({ cadenceId: "playful", durationId: "4m", focus: "family", collageAmount: "lots", motionFeel: "playful" });
+  });
+
   it("offers achievable direction lengths without a capacity message", async () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 60 }); await renderScreen();
     await click("Yes, our Japan trip");
@@ -729,4 +752,23 @@ it.each([undefined, "For these portraits, I’d suggest a gentle pace."])("resto
   await waitFor(() => expect(chat.state.items.some(item => item.kind === "film")).toBe(true));
   expect(chat.state.items.find(item => item.id === "direction-question")).toMatchObject({ text: copy ?? "For these moments, I’d suggest this." });
   expect(mocks.repo.getDirectionOptions).not.toHaveBeenCalled();
+});
+
+it("submits one generation for rapid confirmation and preserves a real film polling failure", async () => {
+  setup({ readyPlan: true, people: [], getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Saved story", generationId: null, generationStatus: null }) });
+  mocks.repo.getPlan.mockResolvedValue({ ...planFixture, leftOut: [] });
+  const generation = deferred<{ filmId: string }>();
+  mocks.repo.directFilm.mockImplementation(() => generation.promise);
+  mocks.repo.getFilm.mockRejectedValue(new Error("film unavailable"));
+  let chat!: ReturnType<typeof useDirectorChat>;
+  function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+  await act(async () => root.render(<Harness />));
+  await waitFor(() => expect(chat.directionOptions).toBeTruthy());
+  await act(async () => { void chat.actions.shapeIt(); void chat.actions.shapeIt(); });
+  expect(mocks.repo.directFilm).toHaveBeenCalledTimes(1);
+  await act(async () => generation.resolve({ filmId: "film-1" }));
+  await waitFor(() => expect(chat.error).toBeTruthy());
+  expect(chat.state.step).toBe("shaping");
+  await act(async () => { chat.retry(); await chat.actions.shapeIt(); });
+  expect(mocks.repo.directFilm).toHaveBeenCalledTimes(1);
 });

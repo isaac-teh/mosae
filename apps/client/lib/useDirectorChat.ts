@@ -55,6 +55,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const proposalId = useRef<string | null>(null);
   const personSaving = useRef(false);
   const occasionSaving = useRef(false);
+  const generationSaving = useRef(false);
   const planLoad = useRef(false);
   const planFailed = useRef(false);
   const resumeProjectId = useRef<string | null>(null);
@@ -77,6 +78,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     proposalId.current = null;
     personSaving.current = false;
     occasionSaving.current = false;
+    generationSaving.current = false;
     planLoad.current = false;
     planFailed.current = false;
     resumeProjectId.current = null;
@@ -369,9 +371,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         : { confirmed: false, pace: patch.pace ?? "gentle", lengthSec: selectedDuration?.seconds ?? patch.lengthSec ?? 120, focus: patch.focus ?? "family" } }));
     },
     async shapeIt() {
-      if (!input.plan || !input.direction || saving || !directionOptions) return;
+      if (!input.plan || !input.direction || saving || generationSaving.current || input.generation || !directionOptions) return;
       const maximum = directionOptions.maximumDurationSecByCadence?.[directionSelection.cadenceId] ?? directionOptions.maximumDurationSec ?? Infinity;
       if (!directionOptions.durations.some(duration => duration.id === directionSelection.durationId && duration.seconds <= maximum)) return;
+      generationSaving.current = true;
       setSaving(true); setError(null);
       try {
         const focus = directionFocus(input.people, directionSelection.focus, focusExplicit);
@@ -382,10 +385,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const { filmId } = await repository.directFilm(input.plan.planId, direction);
         if (mounted.current && isCurrentProject()) { setInput((current) => ({ ...current, generation: current.generation ? { ...current.generation, status: "running", stage: "composing" } : current.generation })); void pollFilm(filmId); }
       } catch (cause) {
-        setInput((current) => ({ ...current, generation: { status: "failed", stage: "failed", progress: current.generation?.progress ?? 0, stepsDone: current.generation?.stepsDone ?? 0, film: null } }));
+        if (!isCurrentProject()) return;
+        compositionStartedAt.current = null;
+        setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: false } : null, generation: null }));
         setError(reportFailure(cause));
       }
-      finally { setSaving(false); }
+      finally { if (isCurrentProject()) { generationSaving.current = false; setSaving(false); } }
     },
     async saveFilm() {
       const film = input.generation?.film;
