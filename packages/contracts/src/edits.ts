@@ -87,8 +87,15 @@ function buildTimeline(firstCut: Timeline, work: WorkClip[], soundtrackId?: stri
     return endSec > startSec ? [{ text: caption.text, startSec, endSec }] : [];
   }));
   const audioClips: AudioClip[] = firstCut.audioClips.flatMap((track) => {
-    if (track.source.kind !== "soundtrack" || track.role !== "music") return [track];
-    return [{ ...track, startSec: 0, gainDb: musicGains.get(track.id) ?? track.gainDb, source: { ...track.source, soundtrackId: soundtrackId ?? track.source.soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, fadeOutSec: Math.min(track.fadeOutSec, durationSec) }];
+    const refit = track.source.kind === "soundtrack" && track.role === "music"
+      ? { ...track, startSec: 0, gainDb: musicGains.get(track.id) ?? track.gainDb, source: { ...track.source, soundtrackId: soundtrackId ?? track.source.soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, fadeOutSec: Math.min(track.fadeOutSec, durationSec) }
+      : track;
+    const available = durationSec - refit.startSec;
+    if (available <= 0) return [];
+    const sourceLength = refit.source.sourceOutSec - refit.source.sourceInSec;
+    const fittedLength = Math.min(sourceLength, available);
+    if (fittedLength <= 0) return [];
+    return [{ ...refit, source: { ...refit.source, sourceOutSec: refit.source.sourceInSec + fittedLength } }];
   });
   if (soundtrackId && !audioClips.some((track) => track.source.kind === "soundtrack")) {
     audioClips.push({ id: "editor-soundtrack", source: { kind: "soundtrack", soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, role: "music", startSec: 0, gainDb: musicGains.get("editor-soundtrack") ?? -18, fadeInSec: 0.5, fadeOutSec: Math.min(0.5, durationSec) });

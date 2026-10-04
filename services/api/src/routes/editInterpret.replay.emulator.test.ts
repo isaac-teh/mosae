@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import request from "supertest";
 import { listeningServer } from "../test/listeningServer.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyEdits, type Timeline } from "@mosae/contracts";
+import { applyEdits, safeParseTimeline, type Timeline } from "@mosae/contracts";
 import { adminDb } from "../firebase/admin.js";
 
 const fixturesDir = fileURLToPath(new URL("../../fixtures/gemini/", import.meta.url));
@@ -49,6 +49,7 @@ const trip1Timeline: Timeline = {
     durationSec: [2, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2][index]!,
     transitionIn: { kind: "cut" as const, durationSec: 0 },
   })),
+  audioClips: [{ id: "trip-music", source: { kind: "soundtrack", soundtrackId: "soft-piano", sourceInSec: 0, sourceOutSec: 29 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0.5, fadeOutSec: 0.5 }],
   captions: [],
 };
 
@@ -124,7 +125,12 @@ describe("edit interpretation replay route (Firestore emulator)", () => {
     expect(allDurationResponse.body.ops).toHaveLength(allDurationTimeline.videoClips.length);
     const shortened = applyEdits(allDurationTimeline, allDurationResponse.body.ops);
     expect(shortened.ok).toBe(true);
-    if (shortened.ok) expect(shortened.timeline.videoClips.every((clip) => clip.durationSec === 2)).toBe(true);
+    if (shortened.ok) {
+      expect(shortened.timeline.videoClips.every((clip) => clip.durationSec === 2)).toBe(true);
+      expect(safeParseTimeline(shortened.timeline).ok).toBe(true);
+      const music = shortened.timeline.audioClips.find((clip) => clip.role === "music");
+      expect(music && music.startSec + music.source.sourceOutSec - music.source.sourceInSec).toBe(shortened.timeline.durationSec);
+    }
 
     const collageGenerationId = "generation-live-collage";
     const collageTimeline = freshTimeline(timeline, projectId);

@@ -103,6 +103,18 @@ describe("interpretEdit", () => {
     log.mockRestore();
   });
 
+  it("logs detailed validation failures server-side and returns a plain-language message", async () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const invalidTimeline = { ...timeline, audioClips: [{ id: "too-long", source: { kind: "soundtrack", soundtrackId: "music", sourceInSec: 0, sourceOutSec: 6 }, role: "music", startSec: 1, gainDb: 0, fadeInSec: 0, fadeOutSec: 0 }] } as Timeline;
+    const result = await interpretEdit({ text: "make this shorter", timeline: invalidTimeline }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "setPhotoDuration", clipId: "monkeys", sec: 2 }] }),
+    });
+    expect(result.kind).toBe("unsupported");
+    expect(result.reply).not.toMatch(/audioClips|sourceOutSec|clip end exceeds/i);
+    expect(log).toHaveBeenCalledWith("Ask AI edit could not be applied", expect.objectContaining({ error: expect.stringContaining("audioClips.0.source.sourceOutSec") }));
+    log.mockRestore();
+  });
+
   it("normalizes the reported photo and collage duration aliases as one atomic batch", async () => {
     const collageTimeline: Timeline = {
       ...timeline,
@@ -154,6 +166,36 @@ describe("interpretEdit", () => {
       expect(result.ops[0]).toMatchObject({ slotId: "ai-slot-collage-1" });
       expect(applyEdits(collageTimeline, result.ops).ok).toBe(true);
     }
+  });
+
+  it("selects an approved larger layout when an added collage photo exceeds capacity", async () => {
+    const collageTimeline: Timeline = { ...timeline, schemaVersion: 2, videoClips: [{ kind: "collage", clipId: "collage", startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
+      layoutId: "torn-paper", motionId: "print-drop", effectId: null, seed: "s", durationSec: 6,
+      slots: [1, 2, 3, 4, 5].map((index) => ({ slotId: `slot-${index}`, shotId: `used-${index}`, kind: "photo" as const })),
+    } }] };
+    const groundedContext = { scope: { kind: "clip" as const, clipId: "collage" }, storyIntent: null, constraints: {}, people: [], selected: null,
+      candidates: [{ shotId: "unused-photo", assetId: "asset", kind: "photo" as const, caption: "A lake", personIds: [], sourceStartSec: null, sourceEndSec: null }], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Add more collage", timeline: collageTimeline, groundedContext }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "addCollageSlot", clipId: "collage", slotId: "new-slot", shotId: "unused-photo", kind: "photo" }] }),
+    });
+    expect(result.kind).toBe("edit");
+    if (result.kind === "edit") {
+      expect(result.ops).toMatchObject([{ op: "setCollageLayout", clipId: "collage", layoutId: "travel-mosaic" }, { op: "addCollageSlot", clipId: "collage", shotId: "unused-photo" }]);
+      expect(applyEdits(collageTimeline, result.ops).ok).toBe(true);
+    }
+  });
+
+  it("asks to create a new collage when no approved layout has more capacity", async () => {
+    const collageTimeline: Timeline = { ...timeline, schemaVersion: 2, videoClips: [{ kind: "collage", clipId: "collage", startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
+      layoutId: "nine-photo-grid", motionId: "print-drop", effectId: null, seed: "s", durationSec: 6,
+      slots: Array.from({ length: 9 }, (_, index) => ({ slotId: `slot-${index}`, shotId: `used-${index}`, kind: "photo" as const })),
+    } }] };
+    const groundedContext = { scope: { kind: "clip" as const, clipId: "collage" }, storyIntent: null, constraints: {}, people: [], selected: null,
+      candidates: [{ shotId: "unused-photo", assetId: "asset", kind: "photo" as const, caption: "A lake", personIds: [], sourceStartSec: null, sourceEndSec: null }], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Add more collage", timeline: collageTimeline, groundedContext }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "addCollageSlot", clipId: "collage", slotId: "new-slot", shotId: "unused-photo", kind: "photo" }] }),
+    });
+    expect(result).toEqual({ kind: "clarify", reply: "That collage is full - add these as a new collage instead?", ops: [] });
   });
 
   it("asks which photos when a collage edit tries to use a source outside owned media", async () => {

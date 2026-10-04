@@ -196,7 +196,7 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
       stage: "editor.interpret",
       thinking: "MINIMAL",
       maxSchemaRepairs: 0,
-      contents: [{ text: `Translate the user's request into a small ordered list of allowed edit operations for this film. Return kind=edit with a complete supported batch, kind=clarify for an ambiguous reference, or kind=unsupported for unavailable capabilities. Never return partial operations. Use only IDs from the allowed IDs block; never invent an ID. For addCollageSlot, use the literal slotId "new-slot"; the editor assigns its internal slot id. Preserve current collage sources unless changing them is necessary. For "add more collage", use addCollageSlot with an unused owned photo candidate when one is available; otherwise ask which photos to include. Prefer the smallest number of operations and return no more than 20. The clips summary and clipIds list use the same order. Respect selected scope when resolving "this". An explicit request for all clips or the whole film can affect clips outside the selected clip. For collage layouts and motions, keep the selected layout-motion pair in this allowed list: ${JSON.stringify(ALLOWED_COMBOS)}. Reply briefly and factually.\nAllowed operation schema: ${JSON.stringify(responseSchema)}\nAllowed IDs: ${JSON.stringify(allowedIdsFor(req))}\nClips: ${JSON.stringify(compactTimeline(req.timeline))}\nGrounded context (owned candidates, confirmed people, story, soundtracks, prior conversation): ${JSON.stringify(promptContext(req))}\nScope: ${JSON.stringify(request.scope?.kind === "clip" ? { kind: "clip", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId) } : request.scope?.kind === "slot" ? { kind: "slot", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId), slotIndex: allowedIdsFor(req).slotIds.indexOf(request.scope.slotId) } : { kind: "film" })}\nRequest: ${req.text}` }],
+      contents: [{ text: `Translate the user's request into a small ordered list of allowed edit operations for this film. Return kind=edit with a complete supported batch, kind=clarify for an ambiguous reference, or kind=unsupported for unavailable capabilities. Never return partial operations. Use only IDs from the allowed IDs block; never invent an ID. For addCollageSlot, use the literal slotId "new-slot"; the editor assigns its internal slot id. Preserve current collage sources unless changing them is necessary. For "add more collage", use addCollageSlot with an unused owned photo candidate when one is available; otherwise ask which photos to include. Check collage capacity before adding; if full, choose a layout with enough slots and a compatible motion from the approved combinations below, or ask whether to add the photos as a new collage. Prefer the smallest number of operations and return no more than 20. The clips summary and clipIds list use the same order. Respect selected scope when resolving "this". An explicit request for all clips or the whole film can affect clips outside the selected clip. For collage layouts and motions, keep the selected layout-motion pair in this allowed list: ${JSON.stringify(ALLOWED_COMBOS)}. Reply briefly and factually.\nAllowed operation schema: ${JSON.stringify(responseSchema)}\nAllowed IDs: ${JSON.stringify(allowedIdsFor(req))}\nClips: ${JSON.stringify(compactTimeline(req.timeline))}\nGrounded context (owned candidates, confirmed people, story, soundtracks, prior conversation): ${JSON.stringify(promptContext(req))}\nScope: ${JSON.stringify(request.scope?.kind === "clip" ? { kind: "clip", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId) } : request.scope?.kind === "slot" ? { kind: "slot", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId), slotIndex: allowedIdsFor(req).slotIds.indexOf(request.scope.slotId) } : { kind: "film" })}\nRequest: ${req.text}` }],
       responseSchema,
       validate,
     }));
@@ -246,9 +246,15 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
     if (ops.length > 20 || !ops.length) return { kind: "unsupported", reply: fallbackReply, ops: [] };
     if (invalidContextOp && ops.some((op) => op.op === "addCollageSlot")) return { kind: "clarify", reply: "Which unused photos from this project should I add to the collage?", ops: [] };
     if (invalidContextOp) return { kind: "unsupported", reply: "I couldn't apply that because it refers to a clip or source outside the available project context.", ops: [] };
-    const applied = applyEdits(req.timeline, ops);
-    if (!applied.ok) return { kind: "unsupported", reply: `I couldn't apply that edit: ${applied.error}.`, ops: [] };
-    return { kind: "edit", reply: result.reply?.trim() || "Here are the edits I suggest.", ops };
+    const capacityFit = fitAddedCollageSlots(req.timeline, ops);
+    if (capacityFit.clarify) return { kind: "clarify", reply: capacityFit.clarify, ops: [] };
+    const fittedOps = capacityFit.ops;
+    const applied = applyEdits(req.timeline, fittedOps);
+    if (!applied.ok) {
+      console.warn("Ask AI edit could not be applied", { error: applied.error, opIndex: applied.opIndex });
+      return { kind: "unsupported", reply: "I couldn't apply that edit as requested. Please try a different edit or clarify which clip to change.", ops: [] };
+    }
+    return { kind: "edit", reply: result.reply?.trim() || "Here are the edits I suggest.", ops: fittedOps };
   } catch (error) {
     if (error instanceof DemoLimitReached) throw error;
     if (error instanceof InvalidEditReply) return { kind: error.kind, reply: error.reply, ops: [] };
@@ -263,4 +269,33 @@ export function isWholeFilmRequest(text: string): boolean {
 
 function usedShotIdsForTimeline(timeline: Timeline): Set<string> {
   return new Set(timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId]));
+}
+
+function fitAddedCollageSlots(timeline: Timeline, ops: EditOp[]): { ops: EditOp[]; clarify?: string } {
+  const fitted: EditOp[] = [];
+  for (const op of ops) {
+    if (op.op === "addCollageSlot") {
+      const before = applyEdits(timeline, fitted);
+      if (before.ok) {
+        const target = before.timeline.videoClips.find((clip) => "kind" in clip && clip.clipId === op.clipId);
+        const addResult = applyEdits(before.timeline, [op]);
+        if (target && "kind" in target && !addResult.ok && /This layout holds up to \d+ photos/.test(addResult.error)) {
+          const needed = target.spec.slots.length + 1;
+          const videoCount = target.spec.slots.filter((slot) => slot.kind === "video").length + (op.kind === "video" ? 1 : 0);
+          const choices = ALLOWED_COMBOS.flatMap((combo) => {
+            const layout = COLLAGE_LAYOUTS.find((item) => item.id === combo.layoutId)!;
+            return layout.maxSlots >= needed && layout.maxVideoCells >= videoCount && layout.aspect.some((aspect) => aspect === before.timeline.aspect)
+              ? [{ ...combo, maxSlots: layout.maxSlots, sameMotion: combo.motionId === target.spec.motionId }]
+              : [];
+          }).sort((a, b) => Number(b.sameMotion) - Number(a.sameMotion) || a.maxSlots - b.maxSlots || a.layoutId.localeCompare(b.layoutId));
+          const selected = choices[0];
+          if (!selected) return { ops: [], clarify: "That collage is full - add these as a new collage instead?" };
+          fitted.push({ op: "setCollageLayout", clipId: op.clipId, layoutId: selected.layoutId });
+          if (selected.motionId !== target.spec.motionId) fitted.push({ op: "setCollageMotion", clipId: op.clipId, motionId: selected.motionId });
+        }
+      }
+    }
+    fitted.push(op);
+  }
+  return { ops: fitted };
 }

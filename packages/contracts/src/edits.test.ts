@@ -63,6 +63,25 @@ describe("applyEdits", () => {
     }
   });
 
+  it("refits soundtrack and overlapping audio clips when a duration edit shortens the film", () => {
+    const withAudio: Timeline = { ...firstCut, audioClips: [
+      firstCut.audioClips[0]!,
+      { id: "speech", source: { kind: "asset", assetId: "speech", sourceInSec: 3, sourceOutSec: 8 }, role: "speech", startSec: 3, gainDb: -4, fadeInSec: 0.2, fadeOutSec: 0.3 },
+      { id: "ambient", source: { kind: "asset", assetId: "ambience", sourceInSec: 1, sourceOutSec: 3 }, role: "ambient", startSec: 7, gainDb: -9, fadeInSec: 0.4, fadeOutSec: 0.6 },
+      { id: "tail", source: { kind: "asset", assetId: "tail", sourceInSec: 0, sourceOutSec: 1 }, role: "ambient", startSec: 9, gainDb: -8, fadeInSec: 0, fadeOutSec: 0 },
+    ] };
+    const result = applyEdits(withAudio, [{ op: "setPhotoDuration", clipId: "p1", sec: 0.5 }]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.timeline.durationSec).toBe(8.5);
+      expect(result.timeline.audioClips).toEqual([
+        expect.objectContaining({ id: "music", source: expect.objectContaining({ sourceOutSec: 8.5 }), gainDb: -12, fadeInSec: 0.5, fadeOutSec: 0.5 }),
+        expect.objectContaining({ id: "speech", source: expect.objectContaining({ sourceInSec: 3, sourceOutSec: 8 }), startSec: 3, gainDb: -4, fadeOutSec: 0.3 }),
+        expect.objectContaining({ id: "ambient", source: expect.objectContaining({ sourceInSec: 1, sourceOutSec: 2.5 }), startSec: 7, gainDb: -9, fadeInSec: 0.4, fadeOutSec: 0.6 }),
+      ]);
+    }
+  });
+
   it("allows a half-second video trim and ripples every following clip", () => {
     const result = applyEdits(firstCut, [{ op: "trim", clipId: "v1", inSec: 6.5, outSec: 7 }]);
     expect(result.ok).toBe(true);
