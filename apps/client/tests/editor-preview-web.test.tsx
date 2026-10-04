@@ -48,6 +48,7 @@ describe("web editor preview seeks", () => {
     expect(playerMock.seekTo).toHaveBeenCalledWith(68);
     await act(async () => playerMock.listeners.get("frameupdate")?.({ detail: { frame: 120 } }));
     expect(onTimeChange).toHaveBeenCalledWith(4);
+    expect(host.querySelector(".mosae-editor-preview [role=button]")?.getAttribute("data-current-time")).toBe("4");
   });
 
   it("keeps player inputs stable and never seeks when a playback frame updates", async () => {

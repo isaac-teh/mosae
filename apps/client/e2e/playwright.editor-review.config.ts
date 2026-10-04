@@ -5,7 +5,7 @@ const tallPhone = { width: 412, height: 870 };
 
 export default defineConfig({
   testDir: ".",
-  testMatch: ["editor-design-review.spec.ts"],
+  testMatch: ["editor-design-review.spec.ts", "chat-film-touch.spec.ts"],
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],

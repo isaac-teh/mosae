@@ -21,6 +21,7 @@ vi.mock("remotion", () => ({
 
 import { Collage } from "./Collage";
 import { PhotoInteraction } from "../PhotoInteraction";
+import { CellInteraction } from "./CellInteraction";
 import { focusRelayInputRange } from "./CollageBase";
 import { ALLOWED_COMBOS, ALLOWED_COMBO_KEYS } from "./allowedCombos";
 import { CollageSpecSchema, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, COLLAGE_EFFECTS, COLLAGE_GRID_VARIANTS, collageGridRects, slotCountForLayout } from "./schema";
@@ -71,7 +72,7 @@ describe("CollageSpec", () => {
       expect(spec.slots).toHaveLength(count);
       expect(CollageSpecSchema.safeParse(spec).success).toBe(true);
       const markup = renderToStaticMarkup(<Collage spec={spec} />);
-      expect((markup.match(/data-collage-cell=/g) ?? []).length).toBe(count);
+      expect((markup.match(/data-collage-cell=/g) ?? []).length).toBe(0);
     }
   });
   it("exposes a selected single photo crop surface with pan, zoom, and rotation gestures", () => {
@@ -81,9 +82,17 @@ describe("CollageSpec", () => {
     expect(markup).toContain("#f38a5b");
     expect(markup).toContain("12px solid #f38a5b");
   });
+  it("renders no photo or collage interaction layer when editor handlers are absent", () => {
+    expect(renderToStaticMarkup(<PhotoInteraction clipId="photo-1" />)).toBe("");
+    expect(renderToStaticMarkup(<CellInteraction clipId="collage-1" slotId="slot-1" />)).toBe("");
+  });
+  it("renders photo and collage interaction layers when editor handlers are provided", () => {
+    expect(renderToStaticMarkup(<PhotoInteraction clipId="photo-1" onSelect={() => {}} />)).toContain('data-photo-clip="photo-1"');
+    expect(renderToStaticMarkup(<CellInteraction clipId="collage-1" slotId="slot-1" onSelect={() => {}} />)).toContain('data-collage-cell="collage-1:slot-1"');
+  });
   it("renders selected collage cells in blue and provides replaceable empty cells", () => {
     const spec = { ...createCollageSpec("photo-table"), slots: createCollageSpec("photo-table").slots.map((slot, index) => index === 0 ? { slotId: slot.slotId, kind: "photo" as const, empty: true as const } : slot) };
-    const markup = renderToStaticMarkup(<Collage spec={spec} selectedCollageCellId={`:${spec.slots[0]!.slotId}`} />);
+    const markup = renderToStaticMarkup(<Collage spec={spec} selectedCollageCellId={`:${spec.slots[0]!.slotId}`} onSelectCollageCell={() => {}} />);
     expect(markup).toContain("Add photo");
     expect(markup).toContain("#168dff");
     expect(markup).toContain("12px solid #168dff");
