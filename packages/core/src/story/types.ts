@@ -1,3 +1,11 @@
+import type { EditOp } from "@mosae/contracts";
+
+export type EditScope = { kind: "film" } | { kind: "clip"; clipId: string } | { kind: "slot"; clipId: string; slotId: string };
+export type EditInterpretContext = { scope: EditScope; requestId: string };
+export type EditInterpretation =
+  | { kind: "edit"; reply: string; ops: EditOp[]; baseRevision: number; requestId: string }
+  | { kind: "clarify" | "unsupported"; reply: string; ops: []; requestId: string };
+
 /** A photo or clip the curator picked. `imageKey` resolves to a bundled or remote image in the client. */
 export type Moment = {
   id: string;
@@ -134,3 +142,5 @@ export type Film = {
   /** Why the director placed what it placed, for the Review Film explanation. */
   reasons: string[];
 };
+
+export type EditConversationTurn = { requestId: string; user: string; reply: string; kind: "edit" | "clarify" | "unsupported"; revision: number; status: "pending" | "applied" | "answered" | "failed"; appliedRevision?: number };

@@ -1,4 +1,4 @@
-import type { AlternativeShot, CreateOption, Direction, DirectionOptions, Film, PlanEdits, StoryPlan } from "./types";
+import type { AlternativeShot, CreateOption, Direction, DirectionOptions, Film, PlanEdits, StoryPlan, EditInterpretContext, EditInterpretation, EditConversationTurn } from "./types";
 import type { ProjectSummary } from "../chat/types";
 import type { EditOp, Timeline } from "@mosae/contracts";
 import type { PersonAgeBand } from "../chat/personChips";
@@ -13,7 +13,7 @@ export type FilmEdits = { revision: number; ops: EditOp[]; updatedAt: number | n
 export type FilmRender = { revision: number; status: "pending" | "rendering" | "ready" | "failed"; renderProgress?: number; downloadUrl?: string; outputPath?: string };
 export type EditorMediaItem = { shotId: string; kind: "photo" | "video"; thumbnailUrl: string; previewUrl: string; date: string; eventLabel: string; sourceInSec?: number; sourceOutSec?: number; sourceDurationSec?: number };
 export type FilmTimeline = { timeline: Timeline; sources: Record<string, string>; thumbnails?: Record<string, string>; unusedMedia?: EditorMediaItem[] };
-export type EditInterpretation = { reply: string; ops: EditOp[] };
+export type { EditInterpretContext, EditInterpretation, EditScope } from "./types";
 
 export interface StoryRepository {
   watchReadiness?(projectId: string, onChange: () => void, onError: (error: unknown) => void): () => void;
@@ -37,7 +37,9 @@ export interface StoryRepository {
   getFilm(filmId: string): Promise<Film>;
   getFilmTimeline(projectId: string, generationId: string): Promise<FilmTimeline>;
   getEdits(projectId: string, generationId: string): Promise<FilmEdits>;
-  interpretEdit(projectId: string, generationId: string, text: string, revision: number): Promise<EditInterpretation>;
+  getEditConversation(projectId: string, generationId: string): Promise<EditConversationTurn[]>;
+  acknowledgeEditInterpretation(projectId: string, generationId: string, requestId: string, revision: number): Promise<void>;
+  interpretEdit(projectId: string, generationId: string, text: string, revision: number, context?: EditInterpretContext): Promise<EditInterpretation>;
   saveEdits(projectId: string, generationId: string, revision: number, ops: EditOp[]): Promise<FilmEdits>;
   renderRevision(projectId: string, generationId: string, revision: number): Promise<{ renderId: string }>;
   getRender(projectId: string, generationId: string, revision: number): Promise<FilmRender>;

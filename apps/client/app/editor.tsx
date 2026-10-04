@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Share, Text, View, useWindowDimensions } from "r
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Asset } from "expo-asset";
 import { COLLAGE_LAYOUTS, type EditOp, type Timeline } from "@mosae/contracts";
-import { createReplacementGuard, duplicateClip, trimRange, uploadReplacement, type ContextToolbarAction, type UploadProgress } from "@mosae/core";
+import { createReplacementGuard, duplicateClip, trimRange, uploadReplacement, videoTrimBounds, type ContextToolbarAction, type UploadProgress } from "@mosae/core";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { useEditor } from "@/lib/useEditor";
 import type { StoryPlan, DirectionOptions, Moment } from "@mosae/core";
@@ -18,6 +18,7 @@ import { AudioVolumeSheet } from "@/components/editor/AudioVolumeSheet";
 import { RemoveConfirm } from "@/components/editor/RemoveConfirm";
 import { EditorMenu } from "@/components/editor/EditorMenu";
 import { AskSheet } from "@/components/editor/AskSheet";
+import { aiEditPlaybackStart } from "@/lib/aiEditPlayback";
 import { SwapSheet } from "@/components/editor/SwapSheet";
 import { CollageCellSheet } from "@/components/editor/CollageCellSheet";
 import { RedoIcon, UndoIcon } from "@/components/icons";
@@ -38,9 +39,10 @@ function trimEdit(current: Timeline["videoClips"][number], original: Timeline["v
     return { op: "setCollageDuration", clipId, sec: range.endSec - range.startSec };
   }
   if (current.source.kind === "video" && "source" in original && original.source.kind === "video") {
+    const bounds = videoTrimBounds(current.source);
     const range = trimRange({ startSec: current.source.sourceInSec, endSec: current.source.sourceOutSec, edge,
       requestedSec: (edge === "start" ? current.source.sourceInSec : current.source.sourceOutSec) + deltaSec,
-      minSec: original.source.sourceDurationSec !== undefined ? 0 : original.source.sourceInSec, maxSec: original.source.sourceDurationSec ?? original.source.sourceOutSec });
+      minSec: bounds.minSec, maxSec: bounds.maxSec });
     return { op: "trim", clipId, inSec: range.startSec, outSec: range.endSec };
   }
   const duration = current.durationSec;
@@ -150,7 +152,11 @@ export default function EditorScreen() {
     }
     return applied;
   };
-  const onApplyAsk = (ops: EditOp[]) => { if (editor.applyMany(ops)) setTool(null); };
+  const playAiAt = (ops: EditOp[]) => {
+    setPauseRequest((request) => request + 1);
+    seekTo(editor.timeline && editor.firstCut ? aiEditPlaybackStart(ops, editor.timeline, editor.firstCut) : 0);
+    setTogglePlayRequest((request) => request + 1);
+  };
   const downloadSource = editor.downloadUrl === "film" ? Asset.fromModule(require("../assets/demo/film.mp4")).uri : editor.downloadUrl;
   useEffect(() => {
     let active = true;
@@ -323,7 +329,7 @@ export default function EditorScreen() {
     {(tool === "CollageLayout" || tool === "CollageMotion") && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} aspect={editor.timeline?.aspect} section={tool === "CollageLayout" ? "Layout" : "Motion"} onApply={onApplyCollage} onClose={closePicker} /> : null}
     {(tool === "CollageCellAdd" || (tool === "CollageCellReplace" && selectedCellSlotId)) && selectedClip && "kind" in selectedClip ? <CollageCellSheet mode={tool === "CollageCellAdd" ? "add" : "replace"} clip={selectedClip} slotId={tool === "CollageCellReplace" ? selectedCellSlotId ?? undefined : undefined} moments={collageMoments} sources={editor.sources} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && tool === "CollageCellReplace" ? uploadDeviceReplacement : undefined} onSource={editor.setSource} onApply={onApply} onClose={closePicker} /> : null}
     {tool === "Replace" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={clipId(selectedClip)} kind={selectedClip.source.kind} moments={collageMoments} sources={editor.sources} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && selectedClip.source.kind === "photo" ? (file) => uploadDeviceReplacement(file, clipId(selectedClip)) : undefined} onApply={onApply} onSource={editor.setSource} onClose={closePicker} /> : null}
-    {tool === "Ask" && editor.timeline ? <AskSheet visible projectId={params.projectId || "fixture"} generationId={params.generationId || "demo-film"} revision={editor.savedRevision} timeline={editor.timeline} sources={editor.sources} repository={repository} initialRequest={typeof params.request === "string" ? params.request : selectedClip && !("kind" in selectedClip) ? "For this moment: " : ""} onApply={onApplyAsk} onClose={() => setTool(null)} /> : null}
+    {tool === "Ask" && editor.timeline ? <AskSheet visible projectId={params.projectId || "fixture"} generationId={params.generationId || "demo-film"} repository={repository} scope={selectedClip && selectedCellSlotId ? { kind: "slot", clipId: clipId(selectedClip), slotId: selectedCellSlotId } : selectedClip ? { kind: "clip", clipId: clipId(selectedClip) } : { kind: "film" }} initialRequest={typeof params.request === "string" ? params.request : ""} savePending={editor.savePendingNow} getSnapshotKey={editor.getSnapshotKey} getSavedRevision={editor.getSavedRevision} applyMany={editor.applyMany} undo={editor.undo} onPlayAt={playAiAt} onClose={() => setTool(null)} /> : null}
     {tool === "Soundtrack" ? <SoundtrackSheet visible soundtracks={directions?.soundtracks ?? []} currentSoundtrackId={soundtrackId} previewSourceForTrack={(track) => editor.sources[track.id] ?? null} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {tool === "Volume" && soundtrack && selectedAudioClipId ? <AudioVolumeSheet visible audioClipId={selectedAudioClipId} gainDb={soundtrack.gainDb} onApply={onApply} onClose={() => setTool(null)} /> : null}
   </View>;

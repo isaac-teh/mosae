@@ -10,10 +10,11 @@ import type {
   StoryPlan,
   Soundtrack,
   DurationChoice,
+  EditConversationTurn,
 } from "./types";
 import type { StoryRepository } from "./repository";
 import type { FilmEdits, FilmRender } from "./repository";
-import { parseTimeline } from "@mosae/contracts";
+import { applyEdits, parseTimeline } from "@mosae/contracts";
 
 const PLAN_ID = "demo";
 const FILM_ID = "demo-film";
@@ -215,7 +216,9 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
   let filmState: Film = structuredClone(baseFilm);
   const editDocuments = new Map<string, FilmEdits>();
   const editRenders = new Map<string, FilmRender>();
+  const editConversations = new Map<string, EditConversationTurn[]>();
   const browserEditKey = (projectId: string, generationId: string) => `mosae:fixture-editor:${projectId}/${generationId}`;
+  const browserConversationKey = (projectId: string, generationId: string) => `${browserEditKey(projectId, generationId)}/conversation`;
   const browserRenderKey = (projectId: string, generationId: string, revision: number) => `${browserEditKey(projectId, generationId)}/render/${revision}`;
   const readBrowserValue = <T,>(key: string): T | undefined => {
     try {
@@ -335,7 +338,26 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
     },
 
     getEdits: async (projectId, generationId) => structuredClone(editDocuments.get(`${projectId}/${generationId}`) ?? readBrowserValue<FilmEdits>(browserEditKey(projectId, generationId)) ?? { revision: 0, ops: [], updatedAt: null }),
-    interpretEdit: async () => ({ reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] }),
+    getEditConversation: async (projectId, generationId) => structuredClone(editConversations.get(`${projectId}/${generationId}`) ?? readBrowserValue<EditConversationTurn[]>(browserConversationKey(projectId, generationId)) ?? []),
+    acknowledgeEditInterpretation: async (projectId, generationId, requestId, revision) => {
+      const key = `${projectId}/${generationId}`;
+      const turns = editConversations.get(key) ?? readBrowserValue<EditConversationTurn[]>(browserConversationKey(projectId, generationId)) ?? [];
+      const updated = turns.map((turn) => turn.requestId === requestId ? { ...turn, status: "applied" as const, appliedRevision: revision } : turn);
+      editConversations.set(key, updated);
+      writeBrowserValue(browserConversationKey(projectId, generationId), updated);
+    },
+    interpretEdit: async (projectId, generationId, text, revision, context) => {
+      const requestId = context?.requestId ?? globalThis.crypto.randomUUID();
+      const reply = "Applied a longer hold to the opening photo.";
+      const ops = [{ op: "setPhotoDuration" as const, clipId: "clip-3", sec: 4 }];
+      const key = `${projectId}/${generationId}`;
+      const turns = editConversations.get(key) ?? readBrowserValue<EditConversationTurn[]>(browserConversationKey(projectId, generationId)) ?? [];
+      const turn: EditConversationTurn = { requestId, user: text.slice(0, 2000), reply, kind: "edit", revision, status: "pending" };
+      const updated = [...turns.filter((item) => item.requestId !== requestId), turn].slice(-8);
+      editConversations.set(key, updated);
+      writeBrowserValue(browserConversationKey(projectId, generationId), updated);
+      return { kind: "edit", requestId, baseRevision: revision, reply, ops };
+    },
     saveEdits: async (projectId, generationId, revision, ops) => {
       const key = `${projectId}/${generationId}`;
       const current = editDocuments.get(key) ?? readBrowserValue<FilmEdits>(browserEditKey(projectId, generationId)) ?? { revision: 0, ops: [], updatedAt: null };
@@ -346,7 +368,12 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
       return structuredClone(document);
     },
     renderRevision: async (projectId, generationId, revision) => {
-      const result = { revision, status: "ready" as const, downloadUrl: "film" };
+      const saved = editDocuments.get(`${projectId}/${generationId}`) ?? readBrowserValue<FilmEdits>(browserEditKey(projectId, generationId)) ?? { revision: 0, ops: [], updatedAt: null };
+      if (saved.revision !== revision) throw new Error("stale_revision");
+      const { timeline: firstCut } = await createFixtureStoryRepository({ delayMs: 0 }).getFilmTimeline(projectId, generationId);
+      const applied = applyEdits(firstCut, saved.ops);
+      if (!applied.ok) throw new Error("render_input_invalid");
+      const result = { revision, status: "ready" as const, downloadUrl: "film", inputOps: structuredClone(saved.ops), timeline: applied.timeline };
       editRenders.set(`${projectId}/${generationId}/${revision}`, result);
       writeBrowserValue(browserRenderKey(projectId, generationId, revision), result);
       return { renderId: `${generationId}-edit-${revision}` };

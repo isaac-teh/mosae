@@ -267,6 +267,41 @@ function turnsFor(label: string): Fixture[] {
     .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
 }
 
+function replayEditFixtureForPrompt(fixture: Fixture, currentPrompt: string, idMap: IdMap): unknown {
+  try {
+    const storedRequest = JSON.parse(fixture.request) as { contents?: { text?: string }[] };
+    const storedPrompt = storedRequest.contents?.map((part) => part.text ?? "").join("\n") ?? "";
+    const clips = (prompt: string) => {
+      const value = prompt.match(/(?:^|\n)Clips: (\[[^\n]*\])/)?.[1];
+      return value ? JSON.parse(value) as { clipId: string; chapter: string; caption: string; kind: string }[] : [];
+    };
+    const oldClips = clips(storedPrompt);
+    const currentClips = clips(currentPrompt);
+    const clipIdMap = new Map<string, string>();
+    const used = new Set<number>();
+    for (const [index, oldClip] of oldClips.entries()) {
+      const currentIndex = currentClips.findIndex((clip, candidateIndex) => !used.has(candidateIndex)
+        && clip.chapter === oldClip.chapter && clip.caption === oldClip.caption && clip.kind === oldClip.kind);
+      const fallbackIndex = currentClips[index]?.kind === oldClip.kind && !used.has(index) ? index : -1;
+      const selectedIndex = currentIndex >= 0 ? currentIndex : fallbackIndex;
+      if (selectedIndex >= 0) {
+        used.add(selectedIndex);
+        clipIdMap.set(oldClip.clipId, currentClips[selectedIndex]!.clipId);
+      }
+    }
+    const envelope = JSON.parse(fixture.response) as { text?: string; [key: string]: unknown };
+    if (!envelope?.text) return JSON.parse(unmaskIds(fixture.response, idMap));
+    const body = JSON.parse(envelope.text) as { ops?: { clipId?: string; afterClipId?: string | null }[] };
+    for (const op of body.ops ?? []) {
+      if (op.clipId) op.clipId = clipIdMap.get(op.clipId) ?? op.clipId;
+      if (op.afterClipId) op.afterClipId = clipIdMap.get(op.afterClipId) ?? op.afterClipId;
+    }
+    return JSON.parse(unmaskIds(JSON.stringify({ ...envelope, text: JSON.stringify(body) }), idMap));
+  } catch {
+    return JSON.parse(unmaskIds(fixture.response, idMap));
+  }
+}
+
 /**
  * Exact-key replay is right for a single-shot call: the same photo and the
  * same prompt key to the same answer forever. It is NOT enough for directing,
@@ -293,6 +328,14 @@ export function replayingGenerate(): GenerateFn {
 
     recordMiss(key, masked, label);
     const turns = turnsFor(label);
+    if (label === "edit-interpret") {
+      const promptText = (request as { contents?: { text?: string }[] }).contents?.map((part) => part.text ?? "").join("\n") ?? "";
+      const userRequest = promptText.match(/(?:^|\n)Request: ([^\n]+)/)?.[1];
+      if (userRequest) {
+        const matching = turns.find((turn) => turn.request.includes(`Request: ${userRequest}`) && !turn.request.includes("Your previous response did not match"));
+        if (matching) return replayEditFixtureForPrompt(matching, promptText, idMap);
+      }
+    }
     const ordinal = stageCalls.get(label) ?? 0;
     const fallback = turns[Math.min(ordinal, turns.length - 1)];
     if (!fallback) throw new FixtureMissing(key, masked);

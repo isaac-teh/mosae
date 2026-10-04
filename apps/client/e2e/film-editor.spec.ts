@@ -20,7 +20,11 @@ test("opens a saved film in the editor, edits it, restores the saved revision, a
   await capture(page, "editor-e2e-01-open.png");
 
   for (const name of ["Swap", "Trim", "Move"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Ask", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ask AI", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Ask AI", exact: true }).click();
+  await expect(page.getByText("Ask for an edit")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Ask for an edit" })).toHaveAttribute("placeholder", "Tell me what you want to change.");
+  await page.getByLabel("Close Ask").click();
   await expect(page.getByRole("button", { name: "Music", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Add clip", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Select clip clip-1" }).click();
@@ -45,7 +49,7 @@ test("opens a saved film in the editor, edits it, restores the saved revision, a
     await tornPaper.click();
     await expect(tornPaper).toHaveAttribute("aria-pressed", "true");
   }
-  await expect(page.getByRole("img", { name: "Photo 1 thumbnail" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close collage" })).toBeVisible();
   await capture(page, "editor-e2e-05-collage-layout.png");
 
   await page.locator('[aria-label="Close collage"]').click();
@@ -58,10 +62,48 @@ test("opens a saved film in the editor, edits it, restores the saved revision, a
   await page.getByRole("button", { name: "Select clip collage-1" }).click();
   await expect(page.getByRole("button", { name: "Layout", exact: true })).toBeVisible();
   await capture(page, "editor-e2e-07-reloaded-saved-revision.png");
-  await page.locator('[aria-label="Close collage"]').click();
+
+  await page.getByRole("button", { name: "Select clip clip-3" }).click();
+  await page.getByRole("button", { name: "Ask AI", exact: true }).click();
+  await expect(page.getByLabel("Edit scope")).toHaveText("Selected clip");
+  const ask = page.getByRole("textbox", { name: "Ask for an edit" });
+  await ask.fill("hold this photo longer");
+  await page.getByRole("button", { name: "Suggest edit" }).click();
+  await expect(page.getByText("Applied 1 change.")).toBeVisible();
+  const undoAi = page.getByRole("button", { name: "Undo AI edit" });
+  await expect(undoAi).toBeVisible();
+  await undoAi.click();
+  await expect(undoAi).toHaveCount(0);
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible({ timeout: 10_000 });
+
+  await ask.fill("extend this photo a little more");
+  await page.getByRole("button", { name: "Suggest edit" }).click();
+  await expect(page.getByText("Applied 1 change.")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Undo AI edit" })).toBeVisible();
+  await page.getByLabel("Close Ask").click();
+  const savedOps = await page.evaluate(() => JSON.parse(localStorage.getItem("mosae:fixture-editor:fixture/demo-film") ?? "{}").ops);
+  expect(savedOps).toContainEqual({ op: "setPhotoDuration", clipId: "clip-3", sec: 4 });
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Ask AI", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Ask AI", exact: true }).click();
+  await expect(page.getByText("hold this photo longer")).toBeVisible();
+  await expect(page.getByText("extend this photo a little more")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Undo AI edit" })).toHaveCount(0);
+  await page.getByLabel("Close Ask").click();
 
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Ready")).toBeVisible({ timeout: 10_000 });
+  const renderInput = await page.evaluate(() => {
+    const edit = JSON.parse(localStorage.getItem("mosae:fixture-editor:fixture/demo-film") ?? "{}");
+    const render = JSON.parse(localStorage.getItem(`mosae:fixture-editor:fixture/demo-film/render/${edit.revision}`) ?? "{}");
+    return { edit, render };
+  });
+  expect(renderInput.render.revision).toBe(renderInput.edit.revision);
+  expect(renderInput.render.inputOps).toEqual(renderInput.edit.ops);
+  expect(renderInput.render.timeline.videoClips.find((clip: { id?: string }) => clip.id === "clip-3").durationSec).toBe(4);
+  const renderedDuration = renderInput.render.timeline.durationSec as number;
+  const renderedDurationLabel = `${Math.floor(renderedDuration / 60)}:${String(Math.floor(renderedDuration % 60)).padStart(2, "0")}`;
+  await expect(page.getByText(new RegExp(`/ ${renderedDurationLabel}$`))).toBeVisible();
   const download = page.getByRole("button", { name: "Download rendered film" });
   await expect(download).toBeVisible();
   await capture(page, "editor-e2e-08-render-ready.png");

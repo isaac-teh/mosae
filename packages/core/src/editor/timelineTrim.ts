@@ -10,6 +10,13 @@ export type TrimRangeInput = {
   minimumLengthSec?: number;
 };
 
+export function videoTrimBounds(source: { sourceInSec: number; sourceOutSec: number; sourceStartSec?: number; sourceEndSec?: number; sourceDurationSec?: number }): { minSec: number; maxSec: number } {
+  return {
+    minSec: source.sourceStartSec ?? (source.sourceDurationSec !== undefined ? 0 : source.sourceInSec),
+    maxSec: source.sourceEndSec ?? source.sourceDurationSec ?? source.sourceOutSec,
+  };
+}
+
 /** Clamp one edge of a source or timeline range while preserving its minimum length. */
 export function trimRange({ startSec, endSec, edge, requestedSec, minSec, maxSec, minimumLengthSec = 0.5 }: TrimRangeInput): { startSec: number; endSec: number } {
   const availableLength = Math.max(0, maxSec - minSec);

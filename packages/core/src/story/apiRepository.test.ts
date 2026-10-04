@@ -119,12 +119,30 @@ describe("createApiStoryRepository", () => {
     expect(deps.request).toHaveBeenNthCalledWith(2, "PUT", "/api/projects/project-1/generations/gen-1/edits", { revision: 2, ops: document.ops });
   });
 
+  it("reopens generation conversation and acknowledges a saved AI revision", async () => {
+    const turns = [{ requestId: "r1", user: "move this", reply: "Move it", kind: "edit", revision: 0, status: "pending" }];
+    const deps = dependencies({ request: vi.fn(async () => ({ turns })) });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.getEditConversation("project-1", "gen-1")).resolves.toEqual(turns);
+    await repository.acknowledgeEditInterpretation("project-1", "gen-1", "r1", 1);
+    expect(deps.request).toHaveBeenNthCalledWith(1, "GET", "/api/projects/project-1/generations/gen-1/edits/conversation");
+    expect(deps.request).toHaveBeenNthCalledWith(2, "POST", "/api/projects/project-1/generations/gen-1/edits/acknowledge", { requestId: "r1", revision: 1 });
+  });
+
   it("asks the generation edit interpreter at the requested revision", async () => {
-    const response = { reply: "Move the second photo earlier?", ops: [{ op: "move" as const, clipId: "clip-2", toIndex: 0 }] };
+    const response = { kind: "edit" as const, baseRevision: 3, requestId: "r1", reply: "Move the second photo earlier?", ops: [{ op: "move" as const, clipId: "clip-2", toIndex: 0 }] };
     const deps = dependencies({ request: vi.fn(async () => response) });
     const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
     await expect(repository.interpretEdit("project-1", "gen-1", "move the second photo earlier", 3)).resolves.toEqual(response);
     expect(deps.request).toHaveBeenCalledWith("POST", "/api/projects/project-1/generations/gen-1/edits/interpret", { text: "move the second photo earlier", revision: 3 });
+  });
+
+  it("sends the scoped context with the acknowledged save revision", async () => {
+    const response = { kind: "unsupported", reply: "Try another edit", ops: [], requestId: "r1" };
+    const deps = dependencies({ request: vi.fn(async () => response) });
+    const context = { scope: { kind: "slot" as const, clipId: "c1", slotId: "s1" }, requestId: "r1" };
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).interpretEdit("project-1", "g1", "change this", 4, context)).resolves.toEqual(response);
+    expect(deps.request).toHaveBeenCalledWith("POST", "/api/projects/project-1/generations/g1/edits/interpret", { text: "change this", revision: 4, context });
   });
 
   it("requests and reads an edited render", async () => {

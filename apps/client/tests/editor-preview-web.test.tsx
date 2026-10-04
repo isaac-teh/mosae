@@ -72,6 +72,14 @@ describe("web editor preview seeks", () => {
     expect(playerMock.seekTo).toHaveBeenCalledWith(96);
   });
 
+  it("plays from a newly requested AI edit position", async () => {
+    const props = { timeline, sources: {}, seekRequest: null as { seconds: number } | null, togglePlayRequest: 0 };
+    await act(async () => root.render(<EditorPreview {...props} />));
+    await act(async () => root.render(<EditorPreview {...props} seekRequest={{ seconds: 2.25 }} togglePlayRequest={1} />));
+    expect(playerMock.seekTo).toHaveBeenLastCalledWith(68);
+    expect(playerMock.play).toHaveBeenCalledTimes(1);
+  });
+
   it("starts and pauses playback from the editor control row", async () => {
     const onPlayingChange = vi.fn();
     await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} playheadSec={4.5} onPlayingChange={onPlayingChange} />));

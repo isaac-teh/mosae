@@ -25,6 +25,8 @@ const VideoSourceSchema = z.strictObject({
   sourceInSec: seconds,
   sourceOutSec: positiveSeconds,
   sourceDurationSec: positiveSeconds.optional(),
+  sourceStartSec: seconds.optional(),
+  sourceEndSec: positiveSeconds.optional(),
 });
 
 export const PhotoCropSchema = z.strictObject({

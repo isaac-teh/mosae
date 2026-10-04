@@ -338,19 +338,20 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Layout Postcard stack"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("previews an Ask proposal without editing, then applies all operations together", async () => {
-    const askRepository = { interpretEdit: vi.fn(async () => ({ reply: "Move the second photo earlier?", ops: [{ op: "move" as const, clipId: "b", toIndex: 0 }] })) };
-    await render(<AskSheet visible projectId="p1" generationId="g1" revision={0} timeline={timeline} sources={{}} repository={askRepository} initialRequest="move this earlier" onApply={apply} onClose={() => {}} />);
+  it("applies an Ask edit as one atomic timeline change and keeps Undo available", async () => {
+    const snapshot = { key: "before" };
+    const askRepository = {
+      getEditConversation: vi.fn(async () => []), acknowledgeEditInterpretation: vi.fn(async () => {}),
+      interpretEdit: vi.fn(async () => ({ kind: "edit" as const, baseRevision: 0, requestId: "r1", reply: "Move the second photo earlier.", ops: [{ op: "move" as const, clipId: "b", toIndex: 0 }] })),
+    };
+    await render(<AskSheet visible projectId="p1" generationId="g1" repository={askRepository} scope={{ kind: "film" }} savePending={async () => true} getSnapshotKey={() => snapshot.key} getSavedRevision={() => 0} applyMany={(ops) => { apply(ops); snapshot.key = "after"; return true; }} undo={() => {}} onPlayAt={() => {}} initialRequest="move this earlier" onClose={() => {}} />);
     expect((host.querySelector('[aria-label="Ask for an edit"]') as HTMLInputElement).value).toBe("move this earlier");
     await click("Suggest edit");
-    expect(askRepository.interpretEdit).toHaveBeenCalledWith("p1", "g1", "move this earlier", 0);
-    expect(host.textContent).toContain("Move the second photo earlier?");
-    expect(host.textContent).toContain("Before");
-    expect(host.textContent).toContain("After");
-    expect(apply).not.toHaveBeenCalled();
-    await click("Apply edits");
+    expect(askRepository.interpretEdit).toHaveBeenCalledWith("p1", "g1", "move this earlier", 0, expect.objectContaining({ scope: { kind: "film" } }));
+    expect(host.textContent).toContain("Applied 1 change.");
     expect(apply).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledWith([{ op: "move", clipId: "b", toIndex: 0 }]);
+    expect(host.querySelector('[aria-label="Undo AI edit"]')).not.toBeNull();
   });
 
   it("previews a selected soundtrack and only applies it after confirmation", async () => {

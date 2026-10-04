@@ -267,7 +267,7 @@ describe("applyEdits", () => {
 
   it("adds source-backed clips, splits collage slots into photos, and tracks removed shots", () => {
     const added = apply([{ op: "add", shotId: "new-shot", kind: "video", afterClipId: "p1", durationSec: 2, sourceInSec: 1, sourceOutSec: 3 }]).timeline.videoClips[1];
-    expect("source" in added && added.source).toEqual({ kind: "video", shotId: "new-shot", sourceInSec: 1, sourceOutSec: 3 });
+    expect("source" in added && added.source).toEqual({ kind: "video", shotId: "new-shot", sourceInSec: 1, sourceOutSec: 3, sourceStartSec: 1, sourceEndSec: 3 });
     const split = apply([{ op: "splitCollage", clipId: "c1" }]).timeline.videoClips.slice(3);
     expect(split.map((clip) => "source" in clip ? clip.source : null)).toEqual([
       { kind: "photo", shotId: "shot-c1" }, { kind: "photo", shotId: "shot-c2" }, { kind: "photo", shotId: "shot-c3" },
@@ -332,6 +332,18 @@ describe("applyEdits", () => {
     const result = applyEdits(source, [{ op: "trim", clipId: "v1", inSec: 0, outSec: 10 }]);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.timeline.videoClips.find((clip) => "id" in clip && clip.id === "v1")).toMatchObject({ durationSec: 10, source: { sourceInSec: 0, sourceOutSec: 10, sourceDurationSec: 12 } });
+  });
+
+  it("clears stale candidate bounds when a later replacement has no trusted source bounds", () => {
+    const videoTimeline: Timeline = { ...firstCut, videoClips: firstCut.videoClips.map((clip) => "id" in clip && clip.id === "v1" ? { ...clip, source: { ...clip.source, sourceDurationSec: 8, sourceStartSec: 2 } } : clip) };
+    const result = applyEdits(videoTimeline, [{ op: "swapShot", clipId: "v1", shotId: "second" }]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.timeline.videoClips.find((clip) => "id" in clip && clip.id === "v1")).toMatchObject({ source: { shotId: "second", sourceInSec: 4, sourceOutSec: 7 } });
+    const swapped = result.ok && result.timeline.videoClips.find((clip) => "id" in clip && clip.id === "v1");
+    if (swapped && "source" in swapped) {
+      expect(swapped.source).not.toHaveProperty("sourceStartSec");
+      expect(swapped.source).not.toHaveProperty("sourceDurationSec");
+    }
   });
 
   it("preserves the incoming crossfade overlap after moving a clip", () => {
