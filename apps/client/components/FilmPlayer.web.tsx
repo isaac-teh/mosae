@@ -2,7 +2,7 @@ import { Asset } from "expo-asset";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, View, type ImageSourcePropType } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import { fullscreenMode, seekTimeAtPosition } from "./player-controls";
+import { formatFilmTime, fullscreenMode, seekTimeAtPosition } from "./player-controls";
 
 type FilmPlayerProps = {
   /** A bundled module, or the URL of the rendered film. */
@@ -13,8 +13,6 @@ type FilmPlayerProps = {
   aspect: "portrait" | "landscape";
   compact?: boolean;
 };
-
-const formatTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
 
 export function FilmPlayer({ source, poster, durationSec, initialTimeSec = 0, aspect, compact = false }: FilmPlayerProps) {
   const video = useRef<HTMLVideoElement>(null);
@@ -92,7 +90,7 @@ export function FilmPlayer({ source, poster, durationSec, initialTimeSec = 0, as
     </Pressable>
     <View className={`absolute bottom-0 left-0 right-0 ${compact ? "h-[82px]" : "h-[96px]"} justify-end px-4 pb-3`} style={{ backgroundImage: "linear-gradient(transparent, rgba(0,0,0,.63))" } as never}>
       <div role="slider" aria-label="Film progress" aria-valuemin={0} aria-valuemax={durationSec} aria-valuenow={currentTime} tabIndex={0} onPointerDown={(event) => { setDragging(true); event.currentTarget.setPointerCapture?.(event.pointerId); seekAt(event.clientX, event.currentTarget); }} onPointerMove={(event) => { if (dragging) seekAt(event.clientX, event.currentTarget); }} onPointerUp={() => setDragging(false)} onPointerCancel={() => setDragging(false)} onClick={(event) => seekAt(event.clientX, event.currentTarget)} onKeyDown={seekKey} className="flex h-11 cursor-pointer items-center rounded-full" style={{ touchAction: "none" }}><View className="relative h-[5px] w-full rounded-full bg-surface-raised/40"><View className="h-full rounded-full bg-accent" style={{ width: `${(currentTime / durationSec) * 100}%` }} /><View pointerEvents="none" className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent" style={{ left: `${(currentTime / durationSec) * 100}%` }} /></View></div>
-      <View className="flex-row items-center justify-between"><span className="font-sans text-[11px] leading-4 text-on-screen">{formatTime(currentTime)}</span><View className="flex-row items-center gap-2"><VolumeIcon /><button type="button" aria-label="Fullscreen" onClick={() => void enterFullscreen()} className="flex size-11 items-center justify-center"><FullscreenIcon /></button><span className="font-sans text-[11px] leading-4 text-on-screen">{formatTime(durationSec)}</span></View></View>
+      <View className="flex-row items-center justify-between"><span className="font-sans text-[11px] leading-4 text-on-screen">{formatFilmTime(currentTime)}</span><View className="flex-row items-center gap-2"><VolumeIcon /><button type="button" aria-label="Fullscreen" onClick={() => void enterFullscreen()} className="flex size-11 items-center justify-center"><FullscreenIcon /></button><span className="font-sans text-[11px] leading-4 text-on-screen">{formatFilmTime(durationSec)}</span></View></View>
       </View>
     {fullscreen && <button type="button" aria-label="Close fullscreen" onClick={closeFullscreen} className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex size-11 items-center justify-center rounded-full bg-black/60 text-3xl text-white">×</button>}
   </View>;

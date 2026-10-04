@@ -14,3 +14,8 @@ export function seekTimeAtPosition(clientX: number, left: number, width: number,
   const fraction = Math.max(0, Math.min(1, (clientX - left) / width));
   return fraction * durationSec;
 }
+
+export function formatFilmTime(seconds: number): string {
+  const safeSeconds = Math.max(0, Number.isFinite(seconds) ? seconds : 0);
+  return `${Math.floor(safeSeconds / 60).toString().padStart(2, "0")}:${Math.floor(safeSeconds % 60).toString().padStart(2, "0")}`;
+}

@@ -101,6 +101,41 @@ describe("web editor preview seeks", () => {
     expect(host.textContent).not.toContain("00:09");
   });
 
+  it("shows chat controls with formatted current and total time", async () => {
+    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} controls="chat" />));
+    expect(host.querySelector('[aria-label="Film progress"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Fullscreen"]')).not.toBeNull();
+    expect(host.textContent).toContain("00:00");
+    expect(host.textContent).toContain("00:09");
+  });
+
+  it("seeks the chat preview with a tap and keyboard arrows", async () => {
+    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} controls="chat" />));
+    const slider = host.querySelector('[aria-label="Film progress"]') as HTMLDivElement;
+    vi.spyOn(slider, "getBoundingClientRect").mockReturnValue({ left: 0, width: 100, top: 0, right: 100, bottom: 44, height: 44, x: 0, y: 0, toJSON() {} });
+    await act(async () => slider.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 50 })));
+    expect(playerMock.seekTo).toHaveBeenLastCalledWith(135);
+    await act(async () => slider.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 25 })));
+    await act(async () => slider.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 75 })));
+    await act(async () => slider.dispatchEvent(new MouseEvent("pointerup", { bubbles: true })));
+    expect(playerMock.seekTo).toHaveBeenLastCalledWith(203);
+    await act(async () => slider.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+    expect(playerMock.seekTo).toHaveBeenLastCalledWith(269);
+  });
+
+  it("uses native fullscreen when available and an overlay fallback otherwise", async () => {
+    const requestFullscreen = vi.fn().mockResolvedValue(undefined);
+    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} controls="chat" />));
+    const container = host.querySelector(".mosae-editor-preview") as HTMLDivElement;
+    Object.defineProperty(container, "requestFullscreen", { configurable: true, value: requestFullscreen });
+    await act(async () => (host.querySelector('[aria-label="Fullscreen"]') as HTMLButtonElement).click());
+    expect(requestFullscreen).toHaveBeenCalledOnce();
+
+    Object.defineProperty(container, "requestFullscreen", { configurable: true, value: undefined });
+    await act(async () => (host.querySelector('[aria-label="Fullscreen"]') as HTMLButtonElement).click());
+    expect(host.querySelector('[aria-label="Close fullscreen"]')).not.toBeNull();
+  });
+
   it("passes selected-photo crop and selection callbacks into the frame renderer", async () => {
     const onSelectClip = vi.fn();
     const onCommitPhotoCrop = vi.fn();

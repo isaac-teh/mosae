@@ -1,27 +1,25 @@
-import { expect, test, devices } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-test.use({ ...devices["iPhone 14"], browserName: "webkit" });
-
-test("iPhone fullscreen uses a fixed overlay and keeps tap-to-seek available", async ({ page }) => {
+test("chat preview opens and closes fullscreen, then seeks", async ({ page }) => {
   await page.goto("/director?repository=fixture&projectId=fixture");
   await expect(page.getByRole("heading", { name: "Film ready" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Fullscreen" })).toBeVisible();
-  await page.getByRole("button", { name: "Fullscreen" }).click();
+  const preview = page.locator(".mosae-editor-preview");
+  await expect(preview).toBeVisible();
+  const fullscreen = page.getByRole("button", { name: "Fullscreen" });
+  await expect(fullscreen).toBeVisible();
+  await fullscreen.click();
 
   const close = page.getByRole("button", { name: "Close fullscreen" });
   await expect(close).toBeVisible();
-  const overlay = await close.evaluate((button) => {
-    const root = button.parentElement!;
-    const rect = root.getBoundingClientRect();
+  const overlay = await preview.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
     return {
-      parentIsBody: root.parentElement === document.body,
-      fixed: getComputedStyle(root).position === "fixed",
+      fixed: getComputedStyle(element).position === "fixed",
       bounds: [Math.round(rect.width), Math.round(rect.height)],
       viewport: [window.innerWidth, window.innerHeight],
       overflow: document.body.style.overflow,
     };
   });
-  expect(overlay.parentIsBody).toBe(true);
   expect(overlay.fixed).toBe(true);
   expect(overlay.bounds).toEqual(overlay.viewport);
   expect(overlay.overflow).toBe("hidden");
@@ -32,9 +30,22 @@ test("iPhone fullscreen uses a fixed overlay and keeps tap-to-seek available", a
   if (!bounds) throw new Error("Film progress bar is not laid out");
   await page.mouse.click(bounds.x + bounds.width * 0.7, bounds.y + bounds.height / 2);
   await expect.poll(async () => Number(await slider.getAttribute("aria-valuenow"))).toBeGreaterThan(before);
-  await page.screenshot({ path: "docs/design/screens-pt-feedback-1/pt-08-ios-fullscreen.png" });
 
   await close.click();
   await expect(close).toHaveCount(0);
   expect(await page.locator("body").evaluate((body) => (body as HTMLElement).style.overflow)).toBe("");
+});
+
+test("chat preview still toggles playback from a mobile touch", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.startsWith("chromium-") && testInfo.project.name !== "chromium-mobile");
+  await page.goto("/director?repository=fixture&projectId=fixture");
+  await expect(page.getByRole("heading", { name: "Film ready" })).toBeVisible();
+  const play = page.getByRole("button", { name: "Play preview" });
+  await play.scrollIntoViewIfNeeded();
+  const bounds = await play.boundingBox();
+  if (!bounds) throw new Error("Film preview surface is not laid out");
+  await page.touchscreen.tap(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await expect(page.getByRole("button", { name: "Pause preview" })).toBeVisible();
+  await page.touchscreen.tap(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await expect(page.getByRole("button", { name: "Play preview" })).toBeVisible();
 });

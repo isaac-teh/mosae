@@ -5,7 +5,7 @@ const tallPhone = { width: 412, height: 870 };
 
 export default defineConfig({
   testDir: ".",
-  testMatch: ["editor-design-review.spec.ts", "chat-film-touch.spec.ts"],
+  testMatch: ["editor-design-review.spec.ts", "chat-film-touch.spec.ts", "ios-fullscreen.spec.ts"],
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
@@ -15,6 +15,7 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium-390x844", use: { ...devices["Desktop Chrome"], viewport: phone } },
+    { name: "chromium-mobile", use: { ...devices["Pixel 7"], viewport: phone } },
     { name: "chromium-412x870", use: { ...devices["Desktop Chrome"], viewport: tallPhone } },
     { name: "webkit-390x844", use: { ...devices["iPhone 14"], viewport: phone } },
     { name: "webkit-412x870", use: { ...devices["iPhone 14"], viewport: tallPhone } },
