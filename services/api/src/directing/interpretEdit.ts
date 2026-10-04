@@ -37,7 +37,7 @@ function zodObjectSchema(schema: any): ModelSchema {
   const shape = schema.shape;
   const properties = Object.fromEntries(Object.entries(shape).map(([key, value]) => [key, zodModelSchema(value)]));
   const required = Object.entries(shape).filter(([, value]: [string, any]) => value.def?.type !== "optional").map(([key]) => key);
-  return { type: "OBJECT", properties, ...(required.length ? { required } : {}), additionalProperties: false };
+  return { type: "OBJECT", properties, ...(required.length ? { required } : {}) };
 }
 
 const editOpVariants = (EditOpSchema as any).options as any[];

@@ -28,6 +28,19 @@ describe("interpretEdit", () => {
     expect(prompt).toContain('"caption":"Watching the snow monkeys"');
     expect(prompt).toContain('"time":"00:00–00:03"');
     expect(schema).toMatchObject({ properties: { ops: { type: "ARRAY" } } });
+    const geminiSchemaKeys = new Set(["type", "format", "description", "nullable", "enum", "properties", "required", "items", "anyOf", "minimum", "maximum", "minItems", "maxItems", "propertyOrdering"]);
+    const unsupportedSchemaKeys: string[] = [];
+    const inspectSchema = (value: any, path = "responseSchema") => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return;
+      for (const key of Object.keys(value)) if (!geminiSchemaKeys.has(key)) unsupportedSchemaKeys.push(`${path}.${key}`);
+      for (const [key, child] of Object.entries(value)) {
+        if (key === "properties") for (const [name, property] of Object.entries(child as object)) inspectSchema(property, `${path}.properties.${name}`);
+        else if (key === "items") inspectSchema(child, `${path}.items`);
+        else if (key === "anyOf") (child as unknown[]).forEach((variant, index) => inspectSchema(variant, `${path}.anyOf[${index}]`));
+      }
+    };
+    inspectSchema(schema);
+    expect(unsupportedSchemaKeys).toEqual([]);
     expect((schema as any).properties.ops.items.anyOf.map((variant: any) => variant.properties.op.enum[0])).toEqual(EditOpSchema.options.map((variant: any) => variant.shape.op.value));
     for (const variant of EditOpSchema.options as any[]) {
       const opName = variant.shape.op.value;
