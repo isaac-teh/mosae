@@ -91,12 +91,16 @@ export function useAiEdits(options: {
       updateMessage({ requestId: request.requestId, text, reply: `Applied ${result.ops.length} ${result.ops.length === 1 ? "change" : "changes"}.`, status: "applied", ops: result.ops });
     } catch (cause) {
       if (epoch.current !== activeEpoch) return;
+      const errorCode = cause && typeof cause === "object" && "code" in cause ? (cause as { code?: unknown }).code : undefined;
+      const staleRevision = errorCode === "stale_revision" || (cause instanceof Error && cause.message === "stale_revision");
       const message = cause instanceof Error && cause.message === "edits_changed"
         ? "Your timeline changed while Ask AI was working. Try again with the current edit."
+        : staleRevision
+          ? "Another edit was saved while Ask AI was working. Reload the saved film before asking again."
         : cause instanceof Error && cause.message === "save_failed"
           ? "Could not save this edit. Your timeline is unchanged; try again."
           : "Could not apply that edit. Try again.";
-      if (cause instanceof Error && cause.message === "edits_changed") pendingRetry.current = null;
+      if ((cause instanceof Error && cause.message === "edits_changed") || staleRevision) pendingRetry.current = null;
       setError(message);
       updateMessage({ requestId: request.requestId, text, reply: message, status: "failed" });
     } finally { if (epoch.current === activeEpoch) setBusy(false); }

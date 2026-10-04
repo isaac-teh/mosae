@@ -39,6 +39,56 @@ describe("edit interpretation route (Firestore emulator)", () => {
     const stale = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: "move the snow monkeys earlier", revision: 4 });
     expect(stale.status).toBe(409);
   });
+  it("rejects a model result when edits are saved while interpretation is running", async () => {
+    const projectId = `ask-stale-${randomUUID()}`;
+    const project = adminDb.doc(`projects/${projectId}`);
+    await project.set({ userId: owner });
+    await project.collection("generations").doc("g").set({ timeline: { ...timeline, projectId } });
+    const edits = project.collection("generations").doc("g").collection("edits").doc("current");
+    const app = express(); app.use(express.json());
+    app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, generate: async () => {
+      await edits.set({ revision: 1, ops: [{ op: "remove", clipId: "temple" }], updatedAt: 1 });
+      return { reply: "Move the monkeys", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] };
+    } }));
+    const response = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/g/edits/interpret`).send({ text: "move monkeys", revision: 0, context: { requestId: "stale", scope: { kind: "film" } } });
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({ error: "stale_revision", currentRevision: 1 });
+    expect((await request(await listeningServer(app)).get(`/api/projects/${projectId}/generations/g/edits/conversation`)).body.turns).toEqual([]);
+  });
+  it("rejects a completed request replay after another client saves a newer revision", async () => {
+    const projectId = `ask-replay-stale-${randomUUID()}`;
+    const project = adminDb.doc(`projects/${projectId}`);
+    await project.set({ userId: owner });
+    await project.collection("generations").doc("g").set({ timeline: { ...timeline, projectId } });
+    const app = express(); app.use(express.json());
+    app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, generate: async () => ({ reply: "Move them", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] }) }));
+    const server = await listeningServer(app);
+    const path = `/api/projects/${projectId}/generations/g/edits/interpret`;
+    const payload = { text: "move them", revision: 0, context: { requestId: "same-request", scope: { kind: "film" } } };
+    expect((await request(server).post(path).send(payload)).status).toBe(200);
+    await project.collection("generations").doc("g").collection("edits").doc("current").set({ revision: 1, ops: [{ op: "remove", clipId: "temple" }], updatedAt: 1 });
+    const replay = await request(server).post(path).send(payload);
+    expect(replay.status).toBe(409);
+    expect(replay.body).toEqual({ error: "stale_revision", currentRevision: 1 });
+  });
+  it("replays completed clarification results when the saved revision is unchanged", async () => {
+    const projectId = `ask-clarify-replay-${randomUUID()}`;
+    const project = adminDb.doc(`projects/${projectId}`);
+    await project.set({ userId: owner });
+    await project.collection("generations").doc("g").set({ timeline: { ...timeline, projectId } });
+    let calls = 0;
+    const app = express(); app.use(express.json());
+    app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, generate: async () => { calls++; return { kind: "clarify", reply: "Which clip?", ops: [] }; } }));
+    const server = await listeningServer(app);
+    const path = `/api/projects/${projectId}/generations/g/edits/interpret`;
+    const payload = { text: "change that", revision: 0, context: { requestId: "clarify-replay", scope: { kind: "film" } } };
+    const first = await request(server).post(path).send(payload);
+    expect(first.status).toBe(200);
+    const replay = await request(server).post(path).send(payload);
+    expect(replay.status).toBe(200);
+    expect(replay.body).toEqual(first.body);
+    expect(calls).toBe(1);
+  });
   it("persists bounded generation history, deduplicates requests and acknowledges only saved proposed ops", async () => {
     const projectId = `ask-history-${randomUUID()}`;
     const project = adminDb.doc(`projects/${projectId}`);
@@ -65,7 +115,9 @@ describe("edit interpretation route (Firestore emulator)", () => {
     expect(saved.status).toBe("saved");
     expect((await request(server).post(`${base}/acknowledge`).send({ requestId: "request-one", revision: 1 })).status).toBe(200);
     expect((await request(server).get(`${base}/conversation`)).body.turns).toMatchObject([{ status: "applied", appliedRevision: 1 }]);
-    expect((await request(server).post(`${base}/interpret`).send(payload)).body).toEqual(first.body);
+    const staleReplay = await request(server).post(`${base}/interpret`).send(payload);
+    expect(staleReplay.status).toBe(409);
+    expect(staleReplay.body.error).toBe("stale_revision");
     expect(calls).toBe(1);
     expect((await request(server).get(`/api/projects/${projectId}/generations/g2/edits/conversation`)).body.turns).toEqual([]);
     for (let i = 0; i < 10; i++) {

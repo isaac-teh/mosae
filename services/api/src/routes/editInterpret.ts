@@ -9,7 +9,7 @@ import { isValidId } from "../domain/ids.js";
 import type { GenerateOptions } from "../gemini/client.js";
 import { DemoLimitReached } from "../gemini/errors.js";
 import { interpretEdit, type InterpretEditModelResult } from "../directing/interpretEdit.js";
-import { EditInterpretationLeaseLost, EDIT_INTERPRETATION_LEASE_MS, getEditDocument, beginEditInterpretation, renewEditInterpretation, finishEditInterpretation, abandonEditInterpretation, getEditConversation, acknowledgeEditInterpretation, type StoredEditInterpretation } from "../directing/editStore.js";
+import { EditInterpretationLeaseLost, EditInterpretationStaleRevision, EDIT_INTERPRETATION_LEASE_MS, getEditDocument, beginEditInterpretation, renewEditInterpretation, finishEditInterpretation, abandonEditInterpretation, getEditConversation, acknowledgeEditInterpretation, type StoredEditInterpretation } from "../directing/editStore.js";
 
 export function editInterpretRouter(deps: {
   db: Firestore;
@@ -48,7 +48,10 @@ export function editInterpretRouter(deps: {
       if (!rawContext || typeof rawContext.requestId !== "string" || !rawContext.requestId.trim() || rawContext.requestId.length > 200) return res.status(400).json({ error: "invalid_scope" });
       const fingerprint = createHash("sha256").update(JSON.stringify({ text: text.trim(), revision, scope: rawContext.scope })).digest("hex");
       const reservation = await beginEditInterpretation(deps.db, res.locals.userId, req.params.projectId, req.params.generationId, rawContext.requestId, fingerprint);
-      if (reservation.status === "complete") return res.json(reservation.result);
+      if (reservation.status === "complete") {
+        if (revision !== reservation.currentRevision) return res.status(409).json({ error: "stale_revision", currentRevision: reservation.currentRevision });
+        return res.json(reservation.result);
+      }
       if (reservation.status === "not_found") return res.status(404).json({ error: "not_found" });
       if (reservation.status !== "started") return res.status(409).json({ error: reservation.status === "conflict" ? "request_id_conflict" : "request_in_progress" });
       reservedRequestId = rawContext.requestId;
@@ -79,6 +82,7 @@ export function editInterpretRouter(deps: {
       return res.json(response);
     } catch (error) {
       if (error instanceof EditInterpretationLeaseLost) return res.status(409).json({ error: "request_lease_lost" });
+      if (error instanceof EditInterpretationStaleRevision) return res.status(409).json({ error: "stale_revision", currentRevision: error.currentRevision });
       if (error instanceof DemoLimitReached) return res.status(429).json({ error: "demo_limit_reached", message: error.message });
       console.error("edit interpretation failed", req.params.projectId, req.params.generationId, error);
       return res.status(500).json({ error: "internal" });

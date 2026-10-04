@@ -83,6 +83,22 @@ describe("useAiEdits", () => {
     expect(current.messages.at(-1)?.status).toBe("unsupported");
   });
 
+  it("clears the retry ID when the server rejects a stale saved revision", async () => {
+    const contexts: any[] = [];
+    const repository = { getEditConversation: async () => [], acknowledgeEditInterpretation: vi.fn(), interpretEdit: vi.fn((_p: string, _g: string, _text: string, _revision: number, context: any) => {
+      contexts.push(context);
+      if (contexts.length === 1) return Promise.reject(Object.assign(new Error("stale_revision"), { code: "stale_revision", status: 409 }));
+      return Promise.resolve({ kind: "unsupported", requestId: context.requestId, reply: "Try again", ops: [] });
+    }) } as any;
+    let current!: ReturnType<typeof useAiEdits>;
+    function Harness() { current = useAiEdits({ projectId: "p", generationId: "g", repository, savePending: async () => true, getSnapshotKey: () => "same", getSavedRevision: () => 2, applyMany: vi.fn(() => true), undo: vi.fn(), onPlayAt: vi.fn() }); return null; }
+    await act(async () => root.render(React.createElement(Harness)));
+    await act(async () => { await current.submit("move this", { kind: "film" }); });
+    await act(async () => { await current.submit("move this", { kind: "film" }); });
+    expect(contexts).toHaveLength(2);
+    expect(contexts[1].requestId).not.toBe(contexts[0].requestId);
+  });
+
   it("ignores a response after Ask is cancelled", async () => {
     let resolveInterpret!: (value: any) => void;
     let entered!: () => void;

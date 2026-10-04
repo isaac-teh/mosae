@@ -3,6 +3,9 @@ import type { Firestore } from "firebase-admin/firestore";
 import { EditOpSchema, applyEdits, type EditOp, type Timeline } from "@mosae/contracts";
 
 export type EditDocument = { revision: number; ops: EditOp[]; updatedAt: number | null };
+export class EditInterpretationStaleRevision extends Error {
+  constructor(readonly currentRevision: number) { super("stale_revision"); }
+}
 export const emptyEdits = (): EditDocument => ({ revision: 0, ops: [], updatedAt: null });
 
 export type EditValidation =
@@ -111,13 +114,17 @@ export async function renewEditInterpretation(db: Firestore, projectId: string, 
 export async function beginEditInterpretation(db: Firestore, userId: string, projectId: string, generationId: string, requestId: string, fingerprint: string, now = Date.now) {
   const refs = conversationRefs(db, projectId, generationId);
   const request = refs.current.collection("requests").doc(requestKey(requestId));
+  const edits = refs.generation.collection("edits").doc("current");
   return db.runTransaction(async tx => {
-    const [project, generation, stored] = await Promise.all([tx.get(refs.project), tx.get(refs.generation), tx.get(request)]);
+    const [project, generation, stored, saved] = await Promise.all([tx.get(refs.project), tx.get(refs.generation), tx.get(request), tx.get(edits)]);
     if (!project.exists || project.get("userId") !== userId || !generation.exists) return { status: "not_found" as const };
     if (stored.exists) {
       if (stored.get("fingerprint") !== fingerprint) return { status: "conflict" as const };
       const result = stored.get("result") as StoredEditInterpretation | undefined;
-      if (result) return { status: "complete" as const, result };
+      if (result) {
+        tx.update(request, { lastReplayAt: now() });
+        return { status: "complete" as const, result, currentRevision: saved.exists ? Number(saved.get("revision") ?? 0) : 0 };
+      }
       // Legacy reservations use createdAt; orphaned records without timestamps can recover immediately.
       const leaseUntil = stored.get("leaseUntil") ?? ((stored.get("createdAt") ?? 0) + EDIT_INTERPRETATION_LEASE_MS);
       if (leaseUntil > now()) return { status: "processing" as const };
@@ -131,11 +138,15 @@ export async function beginEditInterpretation(db: Firestore, userId: string, pro
 export async function finishEditInterpretation(db: Firestore, userId: string, projectId: string, generationId: string, user: string, revision: number, priorOps: EditOp[], result: StoredEditInterpretation, leaseToken: string, now = Date.now): Promise<void> {
   const refs = conversationRefs(db, projectId, generationId);
   const request = refs.current.collection("requests").doc(requestKey(result.requestId));
+  const edits = refs.generation.collection("edits").doc("current");
   await db.runTransaction(async tx => {
-    const [owner, generation, stored, history] = await Promise.all([tx.get(refs.project), tx.get(refs.generation), tx.get(request), tx.get(refs.current)]);
+    const [owner, generation, stored, history, saved] = await Promise.all([tx.get(refs.project), tx.get(refs.generation), tx.get(request), tx.get(refs.current), tx.get(edits)]);
     if (owner.get("userId") !== userId || !generation.exists || !stored.exists) throw new Error("not_found");
     if (stored.get("leaseToken") !== leaseToken || stored.get("leaseUntil") <= now()) throw new EditInterpretationLeaseLost();
     if (stored.get("result")) return;
+    const currentRevision = saved.exists ? Number(saved.get("revision") ?? 0) : 0;
+    const currentOps = saved.exists ? (saved.get("ops") ?? []) as EditOp[] : [];
+    if (currentRevision !== revision || JSON.stringify(currentOps) !== JSON.stringify(priorOps)) throw new EditInterpretationStaleRevision(currentRevision);
     const turn: EditConversationTurn = { requestId: result.requestId, user: user.slice(0, 2000), reply: result.reply.slice(0, 2000), kind: result.kind, revision, status: result.kind === "edit" ? "pending" : "answered" };
     tx.set(request, { result, priorOps, revision, turn }, { merge: true });
     const turns = (history.get("turns") ?? []) as EditConversationTurn[];
