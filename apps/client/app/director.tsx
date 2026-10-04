@@ -162,15 +162,19 @@ export default function DirectorScreen() {
         if (item.kind === "film") return <View key={item.id} className="gap-4">
           <Text accessibilityRole="header" className="font-title text-heading text-positive">Film ready</Text>
           <ChatMessage from="mosae" text="Here's your first cut. Tap to watch." />
-          <View className="aspect-[0.8] overflow-hidden rounded-[23px] bg-ink">
-            {filmTimeline?.filmId === item.film.filmId && !filmPlayerFailed
-              ? <EditorPreview timeline={filmTimeline.timeline} sources={filmTimeline.sources} poster={item.film.posterKey || undefined} onError={onFilmPlayerError} />
-              : filmPlayerFailed && item.film.videoUrl
-                ? <FilmPlayer source={item.film.videoUrl} poster={{ uri: item.film.posterKey }} durationSec={item.film.durationSec} aspect="portrait" />
-                : item.film.posterKey
-                  ? <Image source={{ uri: item.film.posterKey }} resizeMode="cover" className="size-full" />
-                  : <View className="flex-1 items-center justify-center"><Text className="font-sans text-body text-on-screen">Loading your film…</Text></View>}
-          </View>
+          {item.film.videoUrl
+            ? <FilmPlayer source={item.film.videoUrl} poster={{ uri: item.film.posterKey }} durationSec={item.film.durationSec} aspect="portrait" />
+            : filmTimeline?.filmId === item.film.filmId && !filmPlayerFailed
+              ? <View className="relative w-full overflow-hidden rounded-[23px] bg-ink" style={{ aspectRatio: 9 / 16 }}>
+                  <EditorPreview timeline={filmTimeline.timeline} sources={filmTimeline.sources} poster={item.film.posterKey || undefined} onError={onFilmPlayerError} />
+                  <View pointerEvents="none" className="absolute left-1/2 top-1/2 size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface-raised"><Text className="text-2xl text-accent">▶</Text></View>
+                </View>
+              : item.film.posterKey
+                ? <View className="relative w-full overflow-hidden rounded-[23px] bg-ink" style={{ aspectRatio: 9 / 16 }}>
+                    <Image source={{ uri: item.film.posterKey }} accessibilityLabel="Film poster" resizeMode="cover" className="size-full" />
+                    <View className="absolute inset-x-0 bottom-0 bg-black/60 p-3"><Text className="font-sans text-caption text-on-screen">{filmPlayerFailed ? "Preview unavailable" : "Preparing your film…"}</Text></View>
+                  </View>
+                : <View className="w-full items-center justify-center rounded-[23px] bg-ink" style={{ aspectRatio: 9 / 16 }}><Text className="font-sans text-body text-on-screen">{filmPlayerFailed ? "Preview unavailable" : "Loading your film…"}</Text></View>}
           <View className="gap-1"><Text className="font-title text-heading text-ink">{item.film.title}</Text><Text className="font-sans text-caption text-ink-muted">{plan?.chapters.length ?? 0} chapters</Text></View>
           <View className="gap-2"><Text className="font-sans-semibold text-button text-ink">How I directed it</Text>{item.film.reasons.slice(0, 3).map((reason, index) => <Text key={`${item.id}-reason-${index}`} className="font-sans text-body text-ink">• {reason}</Text>)}</View>
           <View className="flex-row gap-2"><Button label="Open in editor" variant="secondary" onPress={() => router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", planId: item.film.planId, generationId: item.film.filmId, request: "", ...story.flow } } as any)} /><Button label={item.film.generationStatus === "saved" ? "Saved" : "Save film"} disabled={saving || item.film.generationStatus === "saved"} onPress={() => scrollAfterAction(actions.saveFilm)} /></View>

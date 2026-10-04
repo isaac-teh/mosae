@@ -26,6 +26,19 @@ describe("web film player controls", () => {
     expect((host.querySelector('[aria-label="Film progress"]') as HTMLElement).className).toContain("h-11");
   });
 
+  it("uses the full 9:16 frame for portrait films", async () => {
+    await act(async () => root.render(<FilmPlayer source="film.mp4" poster={{ uri: "poster.jpg" }} durationSec={40} aspect="portrait" />));
+    expect((host.firstElementChild as HTMLElement).style.paddingTop).toBe("177.77777777777777%");
+  });
+
+  it("keeps the poster and reports a media error when the MP4 cannot load", async () => {
+    await act(async () => root.render(<FilmPlayer source="missing.mp4" poster={{ uri: "poster.jpg" }} durationSec={40} aspect="portrait" />));
+    await act(async () => (host.querySelector("video") as HTMLVideoElement).dispatchEvent(new Event("error")));
+    expect(host.querySelector('img[alt="Film poster"]')).not.toBeNull();
+    expect(host.textContent).toContain("Couldn’t play this film. Try again.");
+    expect(host.querySelector('[aria-label="Play"]')).not.toBeNull();
+  });
+
   it("seeks on tap and steps five seconds with keyboard arrows", async () => {
     await act(async () => root.render(<FilmPlayer source="film.mp4" poster={{ uri: "poster.jpg" }} durationSec={40} aspect="portrait" />));
     const slider = host.querySelector('[aria-label="Film progress"]') as HTMLDivElement;

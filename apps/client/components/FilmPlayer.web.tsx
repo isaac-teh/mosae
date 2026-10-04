@@ -21,12 +21,13 @@ export function FilmPlayer({ source, poster, durationSec, initialTimeSec = 0, as
   const container = useRef<HTMLDivElement>(null);
   const pendingSeek = useRef<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [mediaFailed, setMediaFailed] = useState(false);
   const [currentTime, setCurrentTime] = useState(initialTimeSec);
   const [fullscreen, setFullscreen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const sourceUri = typeof source === "string" ? source : Asset.fromModule(source).uri;
   const posterUri = uriOf(poster);
-  const ratio = compact ? "75.6%" : aspect === "portrait" ? "125%" : "56.25%";
+  const ratio = compact ? "75.6%" : aspect === "portrait" ? `${100 / (9 / 16)}%` : "56.25%";
 
   useEffect(() => () => { video.current?.pause(); }, []);
   useEffect(() => {
@@ -45,7 +46,8 @@ export function FilmPlayer({ source, poster, durationSec, initialTimeSec = 0, as
     const element = video.current;
     if (!element) return;
     if (playing) { element.pause(); setPlaying(false); return; }
-    try { await element.play(); setPlaying(true); } catch { setPlaying(false); }
+    setMediaFailed(false);
+    try { await element.play(); setPlaying(true); } catch { setPlaying(false); setMediaFailed(true); }
   };
   const seekAt = (clientX: number, bar: HTMLDivElement) => {
     const bounds = bar.getBoundingClientRect();
@@ -81,9 +83,10 @@ export function FilmPlayer({ source, poster, durationSec, initialTimeSec = 0, as
   const touchStart = useRef<number | null>(null);
 
   return <View ref={container as never} className={`overflow-hidden ${fullscreen ? "fixed inset-0 z-[9999] h-[100dvh] w-screen bg-black" : "relative w-full rounded-[23px] bg-ink"}`} style={fullscreen ? { paddingTop: 0, paddingBottom: "env(safe-area-inset-bottom)", aspectRatio: undefined, backgroundColor: "black" } as never : { paddingTop: ratio }} onTouchStart={(event: any) => { touchStart.current = event.touches[0]?.clientY ?? null; }} onTouchEnd={(event: any) => { const start = touchStart.current; const end = event.changedTouches[0]?.clientY; if (fullscreen && start !== null && end !== undefined && end - start > 90) closeFullscreen(); touchStart.current = null; }}>
-    <video ref={video} src={sourceUri} preload="metadata" playsInline onLoadedMetadata={(event) => { if (pendingSeek.current !== null) { event.currentTarget.currentTime = (pendingSeek.current / durationSec) * event.currentTarget.duration; pendingSeek.current = null; } else if (initialTimeSec > 0) event.currentTarget.currentTime = (initialTimeSec / durationSec) * event.currentTarget.duration; }} onTimeUpdate={(event) => setCurrentTime((event.currentTarget.currentTime / (event.currentTarget.duration || durationSec)) * durationSec)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: fullscreen ? "contain" : "cover" }} />
+    <video ref={video} src={sourceUri} preload="metadata" playsInline onError={() => setMediaFailed(true)} onLoadedMetadata={(event) => { if (pendingSeek.current !== null) { event.currentTarget.currentTime = (pendingSeek.current / durationSec) * event.currentTarget.duration; pendingSeek.current = null; } else if (initialTimeSec > 0) event.currentTarget.currentTime = (initialTimeSec / durationSec) * event.currentTarget.duration; }} onTimeUpdate={(event) => setCurrentTime((event.currentTarget.currentTime / (event.currentTarget.duration || durationSec)) * durationSec)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: fullscreen ? "contain" : "cover" }} />
     {!playing && <img src={posterUri} alt="Film poster" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: compact ? "center" : "53% 54%", transform: compact ? undefined : "scale(1.2)" }} />}
     <View className="absolute inset-0 bg-black/20" pointerEvents="none" />
+    {mediaFailed && <View accessibilityRole="alert" className="absolute inset-x-0 bottom-24 items-center"><span className="rounded-full bg-black/70 px-3 py-1 font-sans text-caption text-on-screen">Couldn’t play this film. Try again.</span></View>}
     <Pressable role="button" accessibilityLabel={playing ? "Pause" : "Play"} onPress={() => void toggle()} className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface-raised ${compact ? "size-[52px]" : "size-16"}`}>
       {playing ? <Svg width={18} height={22} viewBox="0 0 18 22"><Path d="M2 1h4v20H2V1Zm10 0h4v20h-4V1Z" fill="rgb(var(--color-accent))" /></Svg> : <Svg width={22} height={24} viewBox="0 0 22 24"><Path d="M21.15 10.5a2 2 0 0 1 0 3L3.4 23.2A2 2 0 0 1 .3 21.5V2.5A2 2 0 0 1 3.4.8l17.75 9.7Z" fill="rgb(var(--color-accent))" /></Svg>}
     </Pressable>

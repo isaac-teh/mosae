@@ -109,6 +109,12 @@ test("R1 replay: fresh demo reaches direction once and resumes after reload", as
   await expect(page.getByRole("button", { name: "Save film", exact: true })).toBeVisible({ timeout: 120_000 });
   await page.reload();
   await expect(page.getByRole("button", { name: "Save film", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const play = page.getByRole("button", { name: "Play", exact: true });
+  await expect(play).toBeVisible();
+  const video = page.locator("video");
+  await play.click();
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime), { timeout: 15_000 }).toBeGreaterThan(0.2);
   expect(requests.filter(r => r.method === "POST" && /\/generations$/.test(r.path))).toHaveLength(1);
   await evidence(page, "resumed-film");
   await writeFile(path.join(r1Evidence, "demo-requests.json"), JSON.stringify(requests, null, 2));

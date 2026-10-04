@@ -17,8 +17,8 @@ vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: mocks.
 vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typeof import("@mosae/core")>()), getStoryRepository: () => mocks.repo }));
 vi.mock("@/lib/characters", () => ({ confirmCast: (...args: any[]) => mocks.confirmCast(...args) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flowRepo, flow: { repository: "api", projectId: "project-1" } }) }));
-vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: () => React.createElement("div", { "data-testid": "film-player" }) }));
-vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: () => React.createElement("div", { "data-testid": "film-ready-player" }) }));
+vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: ({ source, aspect }: any) => React.createElement("div", { "data-testid": "film-player", "data-source": source, "data-aspect": aspect }) }));
+vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: () => React.createElement("div", { "data-testid": "film-ready-preview" }) }));
 import DirectorScreen from "../app/director";
 import { useDirectorChat } from "../lib/useDirectorChat";
 import { setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress } from "@mosae/core";
@@ -204,11 +204,40 @@ describe("Director chat", () => {
     expect(host.textContent).toContain("Mum");
     expect(host.textContent).toContain("Film ready");
     expect(host.textContent).toContain("Save film");
-    await waitFor(() => expect(host.querySelector('[data-testid="film-ready-player"]')).not.toBeNull());
-    expect(host.querySelector('[data-testid="film-player"]')).toBeNull();
+    await waitFor(() => expect(host.querySelector('[data-testid="film-player"]')).not.toBeNull());
+    expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-source")).toBe(filmFixture.videoUrl);
+    expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-aspect")).toBe("portrait");
+    expect(host.querySelector('[data-testid="film-ready-preview"]')).toBeNull();
     expect(mocks.repo.getProjectResume).toHaveBeenCalledOnce();
     expect(mocks.repo.getFilm).toHaveBeenCalledWith("film-1");
     expect(mocks.repo.getFilmTimeline).toHaveBeenCalledWith("project-1", "film-1");
+  });
+
+  it("keeps the live preview interactive and framed as portrait before an MP4 exists", async () => {
+    setup({
+      readyPlan: true,
+      getFilm: async () => ({ ...filmFixture, videoUrl: null }),
+      getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Our family trip to Japan", generationId: "film-1", generationStatus: "rendering" }),
+    });
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('[data-testid="film-ready-preview"]')).not.toBeNull());
+    expect(host.querySelector('[data-testid="film-player"]')).toBeNull();
+    expect(host.querySelector('[style*="aspect-ratio: 0.5625"]')).not.toBeNull();
+    expect(hasText("▶")).toBe(true);
+  });
+
+  it("shows the real poster and an unavailable state when the live preview fails", async () => {
+    setup({
+      readyPlan: true,
+      getFilm: async () => ({ ...filmFixture, videoUrl: null }),
+      getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Our family trip to Japan", generationId: "film-1", generationStatus: "rendering" }),
+    });
+    mocks.repo.getFilmTimeline.mockRejectedValueOnce(new Error("preview unavailable"));
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('[alt="Film poster"]')).not.toBeNull());
+    expect((host.querySelector('[alt="Film poster"]') as HTMLImageElement).src).toContain("poster");
+    expect(hasText("Preview unavailable")).toBe(true);
+    expect(host.querySelector('[data-testid="film-ready-preview"]')).toBeNull();
   });
 
   it("opens an already saved generation in the Player and marks it saved", async () => {
@@ -218,7 +247,7 @@ describe("Director chat", () => {
       getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Our family trip to Japan", generationId: "film-1", generationStatus: "saved" }),
     });
     await renderScreen();
-    await waitFor(() => expect(host.querySelector('[data-testid="film-ready-player"]')).not.toBeNull());
+    await waitFor(() => expect(host.querySelector('[data-testid="film-player"]')).not.toBeNull());
     const saved = host.querySelector('button[aria-label="Saved"]') as HTMLButtonElement;
     expect(saved).not.toBeNull();
     expect(saved.disabled).toBe(true);
@@ -232,7 +261,7 @@ describe("Director chat", () => {
       getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Our family trip to Japan", generationId: "film-1", generationStatus: "rendering" }),
     });
     await renderScreen();
-    await waitFor(() => expect(host.querySelector('[data-testid="film-ready-player"]')).not.toBeNull());
+    await waitFor(() => expect(host.querySelector('[data-testid="film-player"]')).not.toBeNull());
     expect(mocks.repo.getFilm).toHaveBeenCalledTimes(1);
     expect(mocks.repo.getFilmTimeline).toHaveBeenCalledWith("project-1", "film-1");
   });
@@ -540,7 +569,7 @@ describe("Director chat", () => {
     await click("Try again");
     expect(mocks.repo.directFilm).toHaveBeenCalledTimes(1);
     await click("Sounds good");
-    await waitFor(() => expect(host.querySelector('[data-testid="film-ready-player"]')).toBeTruthy());
+    await waitFor(() => expect(host.querySelector('[data-testid="film-player"]')).toBeTruthy());
     expect(mocks.repo.directFilm).toHaveBeenCalledTimes(2);
     expect(mocks.repo.directFilm.mock.calls[1]).toEqual(mocks.repo.directFilm.mock.calls[0]);
     expect(mocks.repo.directFilm.mock.calls[1][1]).toMatchObject({ cadenceId: "playful", durationId: "4m", focus: "family", collageAmount: "lots", motionFeel: "playful" });
