@@ -92,7 +92,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   const loadingPoster = (poster ?? (firstShotId ? sources[firstShotId] : undefined));
   return <View className="mosae-editor-preview relative size-full overflow-hidden rounded-[14px] bg-[#18211d]">
     <style>{`.mosae-editor-preview [data-collage-cell][aria-pressed="true"] { border-color: #168dff !important; border-width: 12px !important; }`}</style>
-    <div role="button" aria-label={playing ? "Pause preview" : "Play preview"} tabIndex={0} onClick={togglePlayback} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); togglePlayback(); } }} style={{ position: "absolute", inset: 0 }}>
+    <div role="button" aria-label={playing ? "Pause preview" : "Play preview"} data-current-time={currentTime} tabIndex={0} onClick={togglePlayback} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); togglePlayback(); } }} style={{ position: "absolute", inset: 0 }}>
     <Player ref={player} component={MosaeTimeline} inputProps={inputProps} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}
       compositionWidth={timeline.aspect === "9:16" ? 1080 : 1920} compositionHeight={timeline.aspect === "9:16" ? 1920 : 1080}
       fps={timeline.fps} style={{ width: "100%", height: "100%" }} controls={false}

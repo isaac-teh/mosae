@@ -26,6 +26,7 @@ export function PhotoInteraction({ clipId, selected, transform = { x: 0.5, y: 0.
       media.style.transform = `scale(${next.scale}) rotate(${next.rotationDeg ?? 0}deg)`;
     }
   };
+  if (!onSelect && !onCommit) return null;
   const update = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!points.current.has(event.pointerId)) return;
     event.preventDefault();

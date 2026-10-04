@@ -2,13 +2,16 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("expo-asset", () => ({ Asset: { fromModule: (module: unknown) => ({ uri: String(module) }) } }));
+vi.mock("@/lib/demoAssets", () => ({ demoImage: () => 1 }));
+
 const scrollMock = vi.hoisted(() => ({ scrollToEnd: vi.fn() }));
 vi.mock("react-native", () => {
   const ScrollView = React.forwardRef(({ children, accessibilityLabel, onScrollBeginDrag: _onScrollBeginDrag, scrollEventThrottle: _scrollEventThrottle, contentContainerStyle: _contentContainerStyle, contentContainerClassName: _contentContainerClassName, keyboardShouldPersistTaps: _keyboardShouldPersistTaps, ...props }: any, ref: any) => {
     React.useImperativeHandle(ref, () => ({ scrollToEnd: scrollMock.scrollToEnd }), []);
     return React.createElement("div", { ...props, "aria-label": accessibilityLabel }, children);
   });
-  const node = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, editable, ...props }: any) => React.createElement(tag, { ...props, "aria-label": props["aria-label"] ?? accessibilityLabel, disabled: props.disabled ?? (editable === false ? true : undefined), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
+  const node = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, editable, testID, ...props }: any) => React.createElement(tag, { ...props, "data-testid": testID, "aria-label": props["aria-label"] ?? accessibilityLabel, disabled: props.disabled ?? (editable === false ? true : undefined), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
   return { View: node("div"), ScrollView, Text: node("span"), Pressable: node("button"), TextInput: node("input"), Image: ({ source, accessibilityLabel, ...props }: any) => React.createElement("img", { ...props, src: source?.uri, alt: accessibilityLabel }) };
 });
 
@@ -18,7 +21,7 @@ vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typ
 vi.mock("@/lib/characters", () => ({ confirmCast: (...args: any[]) => mocks.confirmCast(...args) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flowRepo, flow: { repository: "api", projectId: "project-1" } }) }));
 vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: ({ source, aspect }: any) => React.createElement("div", { "data-testid": "film-player", "data-source": source, "data-aspect": aspect }) }));
-vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: () => React.createElement("div", { "data-testid": "film-ready-preview" }) }));
+vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ onPlayingChange }: any) => React.createElement("div", { "data-testid": "film-ready-preview" }, React.createElement("button", { "aria-label": "Mock preview playing", onClick: () => onPlayingChange?.(true) }), React.createElement("button", { "aria-label": "Mock preview paused", onClick: () => onPlayingChange?.(false) })) }));
 import DirectorScreen from "../app/director";
 import { useDirectorChat } from "../lib/useDirectorChat";
 import { setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress } from "@mosae/core";
@@ -223,6 +226,10 @@ describe("Director chat", () => {
     await waitFor(() => expect(host.querySelector('[data-testid="film-ready-preview"]')).not.toBeNull());
     expect(host.querySelector('[data-testid="film-player"]')).toBeNull();
     expect(host.querySelector('[style*="aspect-ratio: 0.5625"]')).not.toBeNull();
+    expect(hasText("▶")).toBe(true);
+    await click("Mock preview playing");
+    expect(hasText("▶")).toBe(false);
+    await click("Mock preview paused");
     expect(hasText("▶")).toBe(true);
   });
 

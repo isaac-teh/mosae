@@ -22,6 +22,14 @@ vi.mock("remotion", () => ({
 import { MosaeTimeline } from "./Timeline";
 
 describe("MosaeTimeline", () => {
+  it("renders video selection layers only when an editor selection handler is supplied", () => {
+    const passive = renderToStaticMarkup(<MosaeTimeline timeline={fixtureTimeline} sources={{ film: "/film.mp4" }} />);
+    expect(passive).not.toContain('aria-label="Select video clip"');
+    const onSelectClip = vi.fn();
+    const active = renderToStaticMarkup(<MosaeTimeline timeline={fixtureTimeline} sources={{ film: "/film.mp4" }} onSelectClip={onSelectClip} />);
+    expect(active).toContain('aria-label="Select video clip"');
+  });
+
   it("renders a collage video cell as video", () => {
     const timeline = {
       ...fixtureTimeline, schemaVersion: 2 as const,

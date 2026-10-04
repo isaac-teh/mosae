@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Asset } from "expo-asset";
 import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatPersonQuestion, ChatProposal, ChatSetAsideCard, ChatShaping, ChatTyping } from "@/components/chat";
 import { FilmPlayer } from "@/components/FilmPlayer";
 import { Button } from "@/components/ds";
@@ -8,8 +9,11 @@ import { useDirectorChat } from "@/lib/useDirectorChat";
 import { shouldAutoScrollAfterAction } from "@/lib/chatScroll";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { EditorPreview } from "@/components/editor/EditorPreview";
+import { demoImage } from "@/lib/demoAssets";
 import type { Timeline } from "@mosae/contracts";
 import { directionFocus, contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, personAnswerChips, subscribeUploadProgress, retryPendingMedia } from "@mosae/core";
+
+const previewSourceUri = (value: string) => value === "demo:film" ? Asset.fromModule(require("../assets/demo/film.mp4")).uri : value.startsWith("demo:") ? Asset.fromModule(demoImage(value.slice(5))).uri : value;
 
 function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
   if (!summary) return "Your film";
@@ -34,6 +38,7 @@ export default function DirectorScreen() {
   const [namingPerson, setNamingPerson] = useState<string | null>(null);
   const [filmTimeline, setFilmTimeline] = useState<{ filmId: string; timeline: Timeline; sources: Record<string, string> } | null>(null);
   const [filmPlayerFailed, setFilmPlayerFailed] = useState(false);
+  const [filmPreviewPlaying, setFilmPreviewPlaying] = useState(false);
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
   const actionPendingScroll = useRef(false);
   const userScrolledUp = useRef(false);
@@ -96,7 +101,7 @@ export default function DirectorScreen() {
     if (!film) { setFilmTimeline(null); return () => { active = false; }; }
     setFilmTimeline(null);
     void story.repository.getFilmTimeline(projectId, film.filmId).then((result) => {
-      if (active) setFilmTimeline({ filmId: film.filmId, ...result });
+      if (active) setFilmTimeline({ filmId: film.filmId, timeline: result.timeline, sources: Object.fromEntries(Object.entries(result.sources).map(([id, source]) => [id, previewSourceUri(source)])) });
     }).catch(() => { if (active) setFilmPlayerFailed(true); });
     return () => { active = false; };
   }, [film?.filmId, projectId, story.repository]);
@@ -166,8 +171,8 @@ export default function DirectorScreen() {
             ? <FilmPlayer source={item.film.videoUrl} poster={{ uri: item.film.posterKey }} durationSec={item.film.durationSec} aspect="portrait" />
             : filmTimeline?.filmId === item.film.filmId && !filmPlayerFailed
               ? <View className="relative w-full overflow-hidden rounded-[23px] bg-ink" style={{ aspectRatio: 9 / 16 }}>
-                  <EditorPreview timeline={filmTimeline.timeline} sources={filmTimeline.sources} poster={item.film.posterKey || undefined} onError={onFilmPlayerError} />
-                  <View pointerEvents="none" className="absolute left-1/2 top-1/2 size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface-raised"><Text className="text-2xl text-accent">▶</Text></View>
+                  <EditorPreview timeline={filmTimeline.timeline} sources={filmTimeline.sources} poster={item.film.posterKey || undefined} onError={onFilmPlayerError} onPlayingChange={setFilmPreviewPlaying} />
+                  {!filmPreviewPlaying && <View testID="film-preview-play-overlay" pointerEvents="none" className="absolute left-1/2 top-1/2 size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface-raised"><Text className="text-2xl text-accent">▶</Text></View>}
                 </View>
               : item.film.posterKey
                 ? <View className="relative w-full overflow-hidden rounded-[23px] bg-ink" style={{ aspectRatio: 9 / 16 }}>

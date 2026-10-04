@@ -19,6 +19,7 @@ export function CellInteraction({ clipId, slotId, crop, selected, onSelect, onCo
   const initialAngle = useRef(0);
   const preview = useRef<Crop>(origin.current);
   const changed = useRef(false);
+  if (!onSelect && !onCommit) return null;
   const readPoints = () => [...points.current.values()];
   const update = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!points.current.has(event.pointerId)) return;

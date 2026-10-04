@@ -31,7 +31,7 @@ function ClipBody({ clip, sources, selected, onSelect, onCommitPhotoCrop }: { cl
       ) : (
         <Img src={src} data-photo-media="true" style={style} onImageError={(error) => console.error("render_image_decode_failed", { source: redactImageSource(src), error: error.name })} />
       )}
-      {clip.source.kind === "photo" ? <PhotoInteraction clipId={clip.id} selected={selected} transform={photoTransform} onSelect={onSelect} onCommit={onCommitPhotoCrop} /> : <div role="button" aria-label={selected ? "Selected video clip" : "Select video clip"} aria-pressed={Boolean(selected)} onClick={(event) => { event.stopPropagation(); onSelect?.(clip.id); }} style={{ position: "absolute", inset: 0, boxSizing: "border-box", border: selected ? "12px solid #f38a5b" : "3px solid transparent", cursor: "pointer" }} />}
+      {clip.source.kind === "photo" ? <PhotoInteraction clipId={clip.id} selected={selected} transform={photoTransform} onSelect={onSelect} onCommit={onCommitPhotoCrop} /> : onSelect ? <div role="button" aria-label={selected ? "Selected video clip" : "Select video clip"} aria-pressed={Boolean(selected)} onClick={(event) => { event.stopPropagation(); onSelect(clip.id); }} style={{ position: "absolute", inset: 0, boxSizing: "border-box", border: selected ? "12px solid #f38a5b" : "3px solid transparent", cursor: "pointer" }} /> : null}
     </AbsoluteFill>
   );
 }
