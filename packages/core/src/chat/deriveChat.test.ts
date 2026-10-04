@@ -64,6 +64,18 @@ describe("deriveChat state table", () => {
     expect(pending.items.some((item) => item.kind === "you" && item.text === "Our Japan trip")).toBe(true);
   });
 
+  it("skips person identification for three ready photos with no repeat face", () => {
+    const state = deriveChat({
+      ...base(),
+      summary: { ...summary, total: 3, photos: 3, clips: 0, processed: { ingested: 3, understood: 3, faces: 1 }, ready: { summary: true, faces: true, plan: false } },
+      people: [], peopleConfirmed: false, plan: null,
+    });
+
+    expect(state.items.some((item) => item.id === "faces-wait")).toBe(false);
+    expect(state.step).toBe("moments");
+    expect(state.items.some((item) => item.id === "plan-wait")).toBe(true);
+  });
+
   it("skips the keep/leave step when no blurry or duplicate photos were filtered", () => {
     const state = deriveChat({ ...base(), plan: { ...plan, leftOut: [] } });
     expect(state.step).toBe("direction");

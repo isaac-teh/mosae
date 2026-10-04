@@ -267,6 +267,19 @@ describe("createApiStoryRepository", () => {
     expect(people?.map((person) => person.personId)).toEqual(["repeat"]);
   });
 
+  it("resolves one child across three photos after cast creation", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
+      { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "only-face", characterId: "child", bbox: [0.1, 0.2, 0.4, 0.5] }] },
+      { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "only-face-2", characterId: "child", bbox: [0.1, 0.2, 0.4, 0.5] }] },
+      { shotId: "shot-3", assetId: "asset-3", faces: [{ faceId: "only-face-3", characterId: "child", bbox: [0.1, 0.2, 0.4, 0.5] }] },
+    ] } : { cast: { people: [{ personId: "child", role: "child", ageBand: "child" }] } });
+
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getPeople("project-1")).resolves.toEqual([
+      expect.objectContaining({ personId: "child", momentCount: 3, ageBand: "child" }),
+    ]);
+  });
+
   it("keeps people unresolved while the cast has not been created yet", async () => {
     const deps = dependencies({
       request: vi.fn(async (_method, path) => path.endsWith("/characters")

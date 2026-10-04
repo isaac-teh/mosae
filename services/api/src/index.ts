@@ -45,6 +45,8 @@ import { getStorage } from "firebase-admin/storage";
 import { getAdminApp } from "./firebase/admin.js";
 import { buildOriginalPath } from "./domain/ids.js";
 import { recordFinalize } from "./store/finalizeStore.js";
+import { settleReadyProject } from "./store/settledProject.js";
+import { ensureCast } from "./cast/ensureCast.js";
 
 const config = loadConfig();
 
@@ -60,8 +62,12 @@ const useDevRunner =
   !!process.env.FIREBASE_STORAGE_EMULATOR_HOST;
 
 const settle = async (projectId: string): Promise<void> => {
-  const result = await settleProject(adminDb, projectId, Date.now());
-  if (result.enqueued) await dispatchDue(adminDb, queue, Date.now());
+  await settleReadyProject({
+    projectId,
+    settle: (id) => settleProject(adminDb, id, Date.now()),
+    ensureCast: (id) => ensureCast(adminDb, id, { storageBucket: config.storageBucket }),
+    dispatchDue: () => dispatchDue(adminDb, queue, Date.now()),
+  });
 };
 const understand = createUnderstand({ db: adminDb, bucketName: config.storageBucket, geminiApiKey: config.geminiApiKey, settle });
 const ingest = createIngest({ db: adminDb, bucketName: config.storageBucket, settle, dispatchDue: () => dispatchDue(adminDb, queue, Date.now()).then(() => undefined), understand });
