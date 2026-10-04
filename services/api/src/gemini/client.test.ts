@@ -43,6 +43,13 @@ describe("generateStructured", () => {
     expect(usage[0].error).toContain("schema");
   });
 
+  it("can disable schema repair for a one-call interpreter", async () => {
+    const call = vi.fn().mockResolvedValue(reply('{"ok":"yes"}'));
+    const { deps: d } = deps(call);
+    await expect(generateStructured({ ...base, maxSchemaRepairs: 0 }, d)).rejects.toThrow(/schema/i);
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps file data in an array prompt during schema repair", async () => {
     const call = vi.fn().mockResolvedValueOnce(reply('{"ok":"yes"}')).mockResolvedValueOnce(reply('{"ok":true}'));
     const { deps: d } = deps(call);

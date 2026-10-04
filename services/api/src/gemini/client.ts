@@ -25,6 +25,7 @@ export type GenerateOptions<T> = {
   subjectId?: string;
   thinking?: "MINIMAL" | "LOW";
   signal?: AbortSignal;
+  maxSchemaRepairs?: number;
 };
 
 export type GenerateDeps = {
@@ -74,6 +75,7 @@ const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(r
  */
 export async function generateStructured<T>(options: GenerateOptions<T>, deps: GenerateDeps): Promise<T> {
   const sleep = deps.sleep ?? defaultSleep;
+  const maxSchemaRepairs = options.maxSchemaRepairs ?? MAX_REPAIRS;
   let repairs = 0;
   let diagnostics = "";
   let lastError: unknown;
@@ -115,7 +117,7 @@ export async function generateStructured<T>(options: GenerateOptions<T>, deps: G
         lastError = new Error(`response failed schema validation: ${diagnostics}`);
         await deps.recordUsage({ stage: options.stage, model: options.model, subjectId: options.subjectId, ...tokens, latencyMs: Date.now() - started, estimatedUsd: estimateUsd(options.model, tokens), attempt, error: `schema: ${diagnostics}` });
         repairs += 1;
-        if (repairs > MAX_REPAIRS) {
+        if (repairs > maxSchemaRepairs) {
           schemaFailure = true;
           throw lastError;
         }
