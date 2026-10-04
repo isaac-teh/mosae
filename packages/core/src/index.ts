@@ -16,7 +16,7 @@ export { computeProgress, describeProgress, type ProjectProgress, type ProjectSt
 export { watchProjectProgress, type ProgressDeps } from "./progress/watchProgress";
 export { deriveChat, canConfirmStory, getSetAsideSummary } from "./chat/deriveChat";
 export { matchExistingPersonAnswer, orderPeopleByMergeSimilarity, personAnswerChips, type PersonAgeBand } from "./chat/personChips";
-export { trimRange, type TimelineTrimEdge, type TrimRangeInput } from "./editor/timelineTrim";
+export { trimRange, videoTrimBounds, type TimelineTrimEdge, type TrimRangeInput } from "./editor/timelineTrim";
 export { reorderSlots } from "./editor/reorderSlots";
 export { duplicateClip } from "./editor/duplicateClip";
 export { contextToolbar, type EditorSelection, type ContextToolbarAction } from "./editor/contextToolbar";

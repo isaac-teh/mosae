@@ -105,6 +105,36 @@ describe("interpretEdit", () => {
     expect(slotResult).toMatchObject({ kind: "unsupported", ops: [] });
   });
 
+  it("rejects swapping a video clip to a source whose bounds cannot contain the retained trim", async () => {
+    const videoTimeline: Timeline = { ...timeline, videoClips: [{ id: "video", source: { kind: "video", shotId: "old", sourceInSec: 2, sourceOutSec: 5, sourceDurationSec: 8 }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }] };
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, people: [], selected: null,
+      candidates: [{ shotId: "short", assetId: "asset", kind: "video" as const, caption: "short source", personIds: [], sourceStartSec: 1, sourceEndSec: 4 }], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "replace the clip", timeline: videoTimeline, groundedContext }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "swapShot", clipId: "video", shotId: "short" }] }),
+    });
+    expect(result).toMatchObject({ kind: "unsupported", ops: [] });
+  });
+
+  it("rejects a later trim in the same batch when it exceeds a replacement video duration", async () => {
+    const videoTimeline: Timeline = { ...timeline, videoClips: [{ id: "video", source: { kind: "video", shotId: "old", sourceInSec: 2, sourceOutSec: 5, sourceDurationSec: 10 }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }] };
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, people: [], selected: null,
+      candidates: [{ shotId: "short", assetId: "asset", kind: "video" as const, caption: "short source", personIds: [], sourceStartSec: 0, sourceEndSec: 6 }], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "replace then trim", timeline: videoTimeline, groundedContext }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "swapShot", clipId: "video", shotId: "short" }, { op: "trim", clipId: "video", inSec: 1, outSec: 7 }] }),
+    });
+    expect(result).toMatchObject({ kind: "unsupported", ops: [] });
+  });
+
+  it("rejects a later trim below a replacement video's available source start", async () => {
+    const videoTimeline: Timeline = { ...timeline, videoClips: [{ id: "video", source: { kind: "video", shotId: "old", sourceInSec: 3, sourceOutSec: 5, sourceDurationSec: 10 }, startSec: 0, durationSec: 2, transitionIn: { kind: "cut", durationSec: 0 } }] };
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, people: [], selected: null,
+      candidates: [{ shotId: "trimmed", assetId: "asset", kind: "video" as const, caption: "trimmed source", personIds: [], sourceStartSec: 3, sourceEndSec: 8 }], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "replace then trim", timeline: videoTimeline, groundedContext }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "swapShot", clipId: "video", shotId: "trimmed" }, { op: "trim", clipId: "video", inSec: 2, outSec: 5 }] }),
+    });
+    expect(result).toMatchObject({ kind: "unsupported", ops: [] });
+  });
+
   it("lets the typed demo limit reach the API route", async () => {
     const limit = new DemoLimitReached();
     await expect(interpretEdit({ text: "make it calmer", timeline }, { generate: async () => { throw limit; } })).rejects.toBe(limit);

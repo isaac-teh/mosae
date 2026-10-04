@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Share, Text, View, useWindowDimensions } from "r
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Asset } from "expo-asset";
 import { COLLAGE_LAYOUTS, type EditOp, type Timeline } from "@mosae/contracts";
-import { createReplacementGuard, duplicateClip, trimRange, uploadReplacement, type ContextToolbarAction, type UploadProgress } from "@mosae/core";
+import { createReplacementGuard, duplicateClip, trimRange, uploadReplacement, videoTrimBounds, type ContextToolbarAction, type UploadProgress } from "@mosae/core";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { useEditor } from "@/lib/useEditor";
 import type { StoryPlan, DirectionOptions, Moment } from "@mosae/core";
@@ -39,9 +39,10 @@ function trimEdit(current: Timeline["videoClips"][number], original: Timeline["v
     return { op: "setCollageDuration", clipId, sec: range.endSec - range.startSec };
   }
   if (current.source.kind === "video" && "source" in original && original.source.kind === "video") {
+    const bounds = videoTrimBounds(original.source);
     const range = trimRange({ startSec: current.source.sourceInSec, endSec: current.source.sourceOutSec, edge,
       requestedSec: (edge === "start" ? current.source.sourceInSec : current.source.sourceOutSec) + deltaSec,
-      minSec: original.source.sourceDurationSec !== undefined ? 0 : original.source.sourceInSec, maxSec: original.source.sourceDurationSec ?? original.source.sourceOutSec });
+      minSec: bounds.minSec, maxSec: bounds.maxSec });
     return { op: "trim", clipId, inSec: range.startSec, outSec: range.endSec };
   }
   const duration = current.durationSec;

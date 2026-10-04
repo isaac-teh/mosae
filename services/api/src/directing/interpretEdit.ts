@@ -91,13 +91,26 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
     }));
   const context = req.groundedContext;
   const candidates = context ? new Map(context.candidates.map((candidate) => [candidate.shotId, candidate])) : null;
-  const invalidContextOp = result.ops.some((op) => {
+  const ops = result.ops.map((op) => {
+    if (op.op !== "swapShot") return op;
+    const candidate = candidates?.get(op.shotId);
+    const { sourceStartSec: _modelStart, sourceEndSec: _modelEnd, ...trustedBase } = op;
+    return candidate?.kind === "video" && candidate.sourceEndSec !== null
+      ? { ...trustedBase, sourceStartSec: candidate.sourceStartSec ?? 0, sourceEndSec: candidate.sourceEndSec }
+      : trustedBase;
+  });
+  const invalidContextOp = ops.some((op) => {
     if (violatesScope(op, req.scope ?? context?.scope)) return true;
     if (op.op === "swapShot" || op.op === "add" || op.op === "replaceCollageSlot") {
       const candidate = candidates?.get(op.shotId);
       const target = op.op === "swapShot" ? req.timeline.videoClips.find(clip => ("kind" in clip ? clip.clipId : clip.id) === op.clipId) : undefined;
       const expectedKind = op.op === "swapShot" ? target && !(("kind" in target)) ? target.source.kind : undefined : op.kind;
       if (candidates !== null && (!candidate || (expectedKind !== undefined && candidate.kind !== expectedKind))) return true;
+      if (op.op === "swapShot" && target && !("kind" in target) && target.source.kind === "video" && candidate) {
+        const from = target.source.sourceInSec ?? 0;
+        const to = target.source.sourceOutSec ?? target.source.sourceDurationSec ?? target.durationSec;
+        if (candidate.sourceStartSec === null || candidate.sourceEndSec === null || from < candidate.sourceStartSec || to > candidate.sourceEndSec) return true;
+      }
       if (op.op === "add" && op.kind === "video" && candidate && (candidate.sourceStartSec === null || candidate.sourceEndSec === null || op.sourceInSec === undefined || op.sourceOutSec === undefined || op.sourceInSec < candidate.sourceStartSec || op.sourceOutSec > candidate.sourceEndSec)) return true;
     }
     if (op.op === "setSoundtrack") return context !== undefined && !context.soundtracks.some((track) => track.id === op.soundtrackId);
@@ -106,8 +119,8 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
   });
   if (result.kind === "clarify") return { kind: "clarify", reply: result.reply?.trim() || "Could you clarify what you mean?", ops: [] };
   if (result.kind === "unsupported") return { kind: "unsupported", reply: result.reply?.trim() || fallbackReply, ops: [] };
-  if (result.ops.length > 20 || !result.ops.length || invalidContextOp || !applyEdits(req.timeline, result.ops).ok) return { kind: "unsupported", reply: fallbackReply, ops: [] };
-    return { kind: "edit", reply: result.reply?.trim() || "Here are the edits I suggest.", ops: result.ops };
+  if (ops.length > 20 || !ops.length || invalidContextOp || !applyEdits(req.timeline, ops).ok) return { kind: "unsupported", reply: fallbackReply, ops: [] };
+    return { kind: "edit", reply: result.reply?.trim() || "Here are the edits I suggest.", ops };
   } catch (error) {
     if (error instanceof DemoLimitReached) throw error;
     return { kind: "unsupported", reply: fallbackReply, ops: [] };

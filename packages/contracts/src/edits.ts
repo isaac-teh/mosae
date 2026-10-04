@@ -8,7 +8,7 @@ const seconds = z.number().finite().nonnegative();
 const positiveSeconds = z.number().finite().positive();
 
 export const EditOpSchema = z.discriminatedUnion("op", [
-  z.strictObject({ op: z.literal("swapShot"), clipId, shotId }),
+  z.strictObject({ op: z.literal("swapShot"), clipId, shotId, sourceStartSec: seconds.optional(), sourceEndSec: positiveSeconds.optional() }),
   z.strictObject({ op: z.literal("trim"), clipId, inSec: seconds, outSec: positiveSeconds }),
   z.strictObject({ op: z.literal("setPhotoDuration"), clipId, sec: positiveSeconds }),
   z.strictObject({ op: z.literal("setCollageDuration"), clipId, sec: positiveSeconds }),
@@ -115,7 +115,7 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
   if (ops.length === 0) return { ok: true, timeline: base.timeline, leftOutShotIds: [] };
   let work = attach(base.timeline);
   const videoBounds = new Map(work.flatMap((item) => "source" in item.clip && item.clip.source.kind === "video"
-    ? [[idOf(item.clip), { inSec: item.clip.source.sourceDurationSec !== undefined ? 0 : item.clip.source.sourceInSec, outSec: item.clip.source.sourceDurationSec ?? item.clip.source.sourceOutSec }] as const]
+    ? [[idOf(item.clip), { inSec: item.clip.source.sourceStartSec ?? (item.clip.source.sourceDurationSec !== undefined ? 0 : item.clip.source.sourceInSec), outSec: item.clip.source.sourceEndSec ?? item.clip.source.sourceDurationSec ?? item.clip.source.sourceOutSec }] as const]
     : []));
   let soundtrackId: string | undefined;
   const musicGains = new Map<string, number>();
@@ -132,7 +132,12 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
     switch (op.op) {
       case "swapShot": {
         if (!item || !("source" in item.clip)) return fail("swapShot requires a photo or video clip");
-        item.clip = { ...item.clip, source: { ...item.clip.source, shotId: op.shotId } } as VideoClip;
+        const source = item.clip.source;
+        const replacementSource = source.kind === "video"
+          ? (({ sourceDurationSec: _oldDuration, sourceStartSec: _oldStart, sourceEndSec: _oldEnd, ...boundsFree }) => ({ ...boundsFree, shotId: op.shotId, ...(op.sourceStartSec !== undefined ? { sourceStartSec: op.sourceStartSec } : {}), ...(op.sourceEndSec !== undefined ? { sourceEndSec: op.sourceEndSec } : {}) }))(source)
+          : { ...source, shotId: op.shotId };
+        item.clip = { ...item.clip, source: replacementSource } as VideoClip;
+        if (item.clip.source.kind === "video") videoBounds.set(op.clipId, op.sourceEndSec !== undefined ? { inSec: op.sourceStartSec ?? 0, outSec: op.sourceEndSec } : { inSec: item.clip.source.sourceInSec, outSec: item.clip.source.sourceOutSec });
         break;
       }
       case "trim": {
@@ -188,8 +193,8 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         if (op.kind === "video" && op.sourceDurationSec !== undefined && op.sourceOutSec! > op.sourceDurationSec) return fail("video add source range exceeds the asset duration");
         const count = ops.slice(0, opIndex + 1).filter((prior) => prior.op === "add" && prior.shotId === op.shotId).length;
         const id = `add:${op.shotId}:${count}`;
-        if (op.kind === "video") videoBounds.set(id, { inSec: op.sourceDurationSec !== undefined ? 0 : op.sourceInSec!, outSec: op.sourceDurationSec ?? op.sourceOutSec! });
-        const source = op.kind === "photo" ? { kind: "photo" as const, shotId: op.shotId } : { kind: "video" as const, shotId: op.shotId, sourceInSec: op.sourceInSec!, sourceOutSec: op.sourceOutSec!, ...(op.sourceDurationSec !== undefined ? { sourceDurationSec: op.sourceDurationSec } : {}) };
+        if (op.kind === "video") videoBounds.set(id, { inSec: op.sourceInSec!, outSec: op.sourceOutSec! });
+        const source = op.kind === "photo" ? { kind: "photo" as const, shotId: op.shotId } : { kind: "video" as const, shotId: op.shotId, sourceInSec: op.sourceInSec!, sourceOutSec: op.sourceOutSec!, sourceStartSec: op.sourceInSec!, sourceEndSec: op.sourceOutSec!, ...(op.sourceDurationSec !== undefined ? { sourceDurationSec: op.sourceDurationSec } : {}) };
         const chapter = work[afterIndex]?.chapter ?? work[0]?.chapter ?? 0;
         work.splice(afterIndex + 1, 0, { clip: { id, source, startSec: 0, durationSec: op.durationSec, transitionIn: { kind: "cut", durationSec: 0 } }, chapter, captions: [], audio: [] });
         break;

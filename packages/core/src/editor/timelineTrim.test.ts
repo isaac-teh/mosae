@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { trimRange } from "./timelineTrim";
+import { trimRange, videoTrimBounds } from "./timelineTrim";
 
 describe("timeline trim math", () => {
   it("trims the left edge", () => {
@@ -24,5 +24,10 @@ describe("timeline trim math", () => {
       .toEqual({ startSec: 3, endSec: 6 });
     expect(trimRange({ startSec: 4, endSec: 6, edge: "end", requestedSec: 10, minSec: 3, maxSec: 7 }))
       .toEqual({ startSec: 4, endSec: 7 });
+  });
+
+  it("uses a replaced video's available source start and end", () => {
+    expect(videoTrimBounds({ sourceInSec: 4, sourceOutSec: 5, sourceStartSec: 3, sourceEndSec: 7, sourceDurationSec: 12 }))
+      .toEqual({ minSec: 3, maxSec: 7 });
   });
 });
