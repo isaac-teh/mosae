@@ -5,7 +5,8 @@ import { listeningServer } from "../test/listeningServer.js";
 import { describe, expect, it } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 import { adminDb } from "../firebase/admin.js";
-import { saveEditDocument } from "../directing/editStore.js";
+import { DemoLimitReached } from "../gemini/errors.js";
+import { beginEditInterpretation, finishEditInterpretation, abandonEditInterpretation, saveEditDocument } from "../directing/editStore.js";
 import { editInterpretRouter } from "./editInterpret.js";
 
 const owner = "editor-ask-emulator-owner";
@@ -77,4 +78,60 @@ describe("edit interpretation route (Firestore emulator)", () => {
     expect((await request(server).get(`${base}/conversation`)).status).toBe(404);
     expect((await request(server).post(`${base}/acknowledge`).send({ requestId: "request-one", revision: 1 })).status).toBe(404);
   });
+  it("recovers expired reservations and fences completion and cleanup from former owners", async () => {
+    const projectId = `ask-lease-${randomUUID()}`;
+    const project = adminDb.doc(`projects/${projectId}`);
+    await project.set({ userId: owner });
+    await project.collection("generations").doc("g").set({ timeline: { ...timeline, projectId } });
+    const begin = beginEditInterpretation;
+    const finish = finishEditInterpretation;
+    const abandon = abandonEditInterpretation;
+    const now = Date.now();
+    const old = await begin(adminDb, owner, projectId, "g", "r", "payload", () => now);
+    expect((await begin(adminDb, owner, projectId, "g", "r", "payload", () => now + 1)).status).toBe("processing");
+    const recovered = await begin(adminDb, owner, projectId, "g", "r", "payload", () => now + 180_001);
+    expect(recovered.status).toBe("started");
+    expect(recovered.leaseToken).toEqual(expect.any(String));
+    expect(recovered.leaseToken).not.toBe(old.leaseToken);
+    expect((await begin(adminDb, owner, projectId, "g", "r", "different", () => now + 180_002)).status).toBe("conflict");
+    const result = { kind: "edit" as const, requestId: "r", reply: "Move it", baseRevision: 0, ops: [{ op: "move" as const, clipId: "monkeys", toIndex: 1 }] };
+    if (old.status !== "started" || recovered.status !== "started") throw new Error("reservation_not_acquired");
+    await expect(finish(adminDb, owner, projectId, "g", "move", 0, [], result, old.leaseToken, () => now + 180_002)).rejects.toThrow("edit_interpretation_lease_lost");
+    await abandon(adminDb, projectId, "g", "r", old.leaseToken);
+    expect((await begin(adminDb, owner, projectId, "g", "r", "payload", () => now + 180_003)).status).toBe("processing");
+    await finish(adminDb, owner, projectId, "g", "move", 0, [], result, recovered.leaseToken, () => now + 180_004);
+    expect((await begin(adminDb, owner, projectId, "g", "r", "payload", () => now + 360_000)).status).toBe("complete");
+    await expect(finish(adminDb, owner, projectId, "g", "old", 0, [], { ...result, reply: "wrong owner" }, old.leaseToken, () => now + 180_005)).rejects.toThrow("edit_interpretation_lease_lost");
+  });
+
+  it("deduplicates live model work and retries ordinary failures with the same request ID", async () => {
+    const projectId = `ask-retry-${randomUUID()}`;
+    const project = adminDb.doc(`projects/${projectId}`);
+    await project.set({ userId: owner });
+    await project.collection("generations").doc("g").set({ timeline: { ...timeline, projectId } });
+    let entered!: () => void, release!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const blocked = new Promise<void>(resolve => { release = resolve; });
+    let calls = 0;
+    const app = express(); app.use(express.json());
+    app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, generate: async () => {
+      calls++; if (calls === 1) { entered(); await blocked; throw new DemoLimitReached(); }
+      return { reply: "Move it", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] };
+    } }));
+    const server = await listeningServer(app);
+    const path = `/api/projects/${projectId}/generations/g/edits/interpret`;
+    const payload = { text: "move this", revision: 0, context: { scope: { kind: "film" }, requestId: "retry" } };
+    const first = request(server).post(path).send(payload).then(response => response);
+    await started;
+    expect((await request(server).post(path).send(payload)).body.error).toBe("request_in_progress");
+    expect(calls).toBe(1);
+    release();
+    expect((await first).status).toBe(429);
+    expect((await request(server).post(path).send({ ...payload, text: "different" })).body.error).toBe("request_id_conflict");
+    const retried = await request(server).post(path).send(payload);
+    expect(retried.status).toBe(200);
+    expect(retried.body.kind).toBe("edit");
+    expect(calls).toBe(2);
+  });
+
 });

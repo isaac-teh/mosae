@@ -9,7 +9,7 @@ import { isValidId } from "../domain/ids.js";
 import type { GenerateOptions } from "../gemini/client.js";
 import { DemoLimitReached } from "../gemini/errors.js";
 import { interpretEdit, type InterpretEditModelResult } from "../directing/interpretEdit.js";
-import { getEditDocument, beginEditInterpretation, finishEditInterpretation, abandonEditInterpretation, getEditConversation, acknowledgeEditInterpretation, type StoredEditInterpretation } from "../directing/editStore.js";
+import { EditInterpretationLeaseLost, getEditDocument, beginEditInterpretation, finishEditInterpretation, abandonEditInterpretation, getEditConversation, acknowledgeEditInterpretation, type StoredEditInterpretation } from "../directing/editStore.js";
 
 export function editInterpretRouter(deps: {
   db: Firestore;
@@ -30,6 +30,7 @@ export function editInterpretRouter(deps: {
       return res.status(400).json({ error: "invalid_request" });
     }
     let reservedRequestId: string | undefined;
+    let reservationToken: string | undefined;
     try {
       const [document, generationSnap] = await Promise.all([
         getEditDocument(deps.db, res.locals.userId, req.params.projectId, req.params.generationId),
@@ -46,6 +47,7 @@ export function editInterpretRouter(deps: {
       if (reservation.status === "not_found") return res.status(404).json({ error: "not_found" });
       if (reservation.status !== "started") return res.status(409).json({ error: reservation.status === "conflict" ? "request_id_conflict" : "request_in_progress" });
       reservedRequestId = rawContext.requestId;
+      reservationToken = reservation.leaseToken;
       if (document.revision !== revision) return res.status(409).json({ error: "stale_revision", currentRevision: document.revision });
       const current = applyEdits(timeline, document.ops as EditOp[]);
       if (!current.ok) return res.status(409).json({ error: "invalid_current_edits" });
@@ -60,15 +62,16 @@ export function editInterpretRouter(deps: {
         : { ...result, kind: "unsupported", ops: [], requestId: context.requestId }) as StoredEditInterpretation;
       response.reply = response.reply.slice(0, 2000);
       if (response.kind === "edit") response.baseRevision = document.revision;
-      await finishEditInterpretation(deps.db, res.locals.userId, req.params.projectId, req.params.generationId, text.trim(), revision, document.ops, response);
+      await finishEditInterpretation(deps.db, res.locals.userId, req.params.projectId, req.params.generationId, text.trim(), revision, document.ops, response, reservation.leaseToken);
       reservedRequestId = undefined;
       return res.json(response);
     } catch (error) {
+      if (error instanceof EditInterpretationLeaseLost) return res.status(409).json({ error: "request_lease_lost" });
       if (error instanceof DemoLimitReached) return res.status(429).json({ error: "demo_limit_reached", message: error.message });
       console.error("edit interpretation failed", req.params.projectId, req.params.generationId, error);
       return res.status(500).json({ error: "internal" });
     } finally {
-      if (reservedRequestId) await abandonEditInterpretation(deps.db, req.params.projectId, req.params.generationId, reservedRequestId);
+      if (reservedRequestId && reservationToken) await abandonEditInterpretation(deps.db, req.params.projectId, req.params.generationId, reservedRequestId, reservationToken);
     }
   });
   router.get("/:projectId/generations/:generationId/edits/conversation", async (req, res) => {

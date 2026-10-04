@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Firestore } from "firebase-admin/firestore";
 import { EditOpSchema, applyEdits, type EditOp, type Timeline } from "@mosae/contracts";
 
@@ -89,8 +90,13 @@ export async function getEditConversation(db: Firestore, userId: string, project
   return ((await refs.current.get()).get("turns") ?? []).slice(-8);
 }
 
+export const EDIT_INTERPRETATION_LEASE_MS = 120_000;
+export class EditInterpretationLeaseLost extends Error {
+  constructor() { super("edit_interpretation_lease_lost"); }
+}
+
 /** Reserve request IDs before model work. Payload mismatches never replay another request. */
-export async function beginEditInterpretation(db: Firestore, userId: string, projectId: string, generationId: string, requestId: string, fingerprint: string) {
+export async function beginEditInterpretation(db: Firestore, userId: string, projectId: string, generationId: string, requestId: string, fingerprint: string, now = Date.now) {
   const refs = conversationRefs(db, projectId, generationId);
   const request = refs.current.collection("requests").doc(requestKey(requestId));
   return db.runTransaction(async tx => {
@@ -99,18 +105,24 @@ export async function beginEditInterpretation(db: Firestore, userId: string, pro
     if (stored.exists) {
       if (stored.get("fingerprint") !== fingerprint) return { status: "conflict" as const };
       const result = stored.get("result") as StoredEditInterpretation | undefined;
-      return result ? { status: "complete" as const, result } : { status: "processing" as const };
+      if (result) return { status: "complete" as const, result };
+      // Legacy reservations use createdAt; orphaned records without timestamps can recover immediately.
+      const leaseUntil = stored.get("leaseUntil") ?? ((stored.get("createdAt") ?? 0) + EDIT_INTERPRETATION_LEASE_MS);
+      if (leaseUntil > now()) return { status: "processing" as const };
     }
-    tx.set(request, { fingerprint, createdAt: Date.now() });
-    return { status: "started" as const };
+    const leaseToken = randomUUID();
+    const at = now();
+    tx.set(request, { fingerprint, createdAt: at, leaseUntil: at + EDIT_INTERPRETATION_LEASE_MS, leaseToken });
+    return { status: "started" as const, leaseToken };
   });
 }
-export async function finishEditInterpretation(db: Firestore, userId: string, projectId: string, generationId: string, user: string, revision: number, priorOps: EditOp[], result: StoredEditInterpretation): Promise<void> {
+export async function finishEditInterpretation(db: Firestore, userId: string, projectId: string, generationId: string, user: string, revision: number, priorOps: EditOp[], result: StoredEditInterpretation, leaseToken: string, now = Date.now): Promise<void> {
   const refs = conversationRefs(db, projectId, generationId);
   const request = refs.current.collection("requests").doc(requestKey(result.requestId));
   await db.runTransaction(async tx => {
     const [owner, generation, stored, history] = await Promise.all([tx.get(refs.project), tx.get(refs.generation), tx.get(request), tx.get(refs.current)]);
     if (owner.get("userId") !== userId || !generation.exists || !stored.exists) throw new Error("not_found");
+    if (stored.get("leaseToken") !== leaseToken || stored.get("leaseUntil") <= now()) throw new EditInterpretationLeaseLost();
     if (stored.get("result")) return;
     const turn: EditConversationTurn = { requestId: result.requestId, user: user.slice(0, 2000), reply: result.reply.slice(0, 2000), kind: result.kind, revision, status: result.kind === "edit" ? "pending" : "answered" };
     tx.set(request, { result, priorOps, revision, turn }, { merge: true });
@@ -138,7 +150,7 @@ export async function acknowledgeEditInterpretation(db: Firestore, userId: strin
   });
 }
 
-export async function abandonEditInterpretation(db: Firestore, projectId: string, generationId: string, requestId: string): Promise<void> {
+export async function abandonEditInterpretation(db: Firestore, projectId: string, generationId: string, requestId: string, leaseToken: string): Promise<void> {
   const request = conversationRefs(db, projectId, generationId).current.collection("requests").doc(requestKey(requestId));
-  await db.runTransaction(async tx => { const stored = await tx.get(request); if (stored.exists && !stored.get("result")) tx.delete(request); });
+  await db.runTransaction(async tx => { const stored = await tx.get(request); if (stored.exists && !stored.get("result") && stored.get("leaseToken") === leaseToken) tx.update(request, { leaseUntil: 0 }); });
 }
