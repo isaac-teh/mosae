@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { listeningServer } from "../test/listeningServer.js";
 import { describe, expect, it } from "vitest";
-import type { Timeline } from "@mosae/contracts";
+import { applyEdits, type Timeline } from "@mosae/contracts";
 import { adminDb } from "../firebase/admin.js";
 import { DemoLimitReached } from "../gemini/errors.js";
 import { beginEditInterpretation, finishEditInterpretation, abandonEditInterpretation, renewEditInterpretation, saveEditDocument } from "../directing/editStore.js";
@@ -38,6 +38,35 @@ describe("edit interpretation route (Firestore emulator)", () => {
     expect(response.body).toMatchObject({ kind: "edit", baseRevision: 0, requestId: expect.any(String), reply: "Move the monkeys earlier?", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] });
     const stale = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: "move the snow monkeys earlier", revision: 4 });
     expect(stale.status).toBe(409);
+  });
+  it("expands an explicit all-clips request beyond selected-clip scope and applies duration aliases", async () => {
+    if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error("FIRESTORE_EMULATOR_HOST must point at the already-running emulator");
+    const projectId = `ask-all-duration-${randomUUID()}`;
+    const generationId = "generation-1";
+    await adminDb.doc(`projects/${projectId}`).set({ id: projectId, userId: owner });
+    const current = { ...timeline, projectId };
+    await adminDb.doc(`projects/${projectId}/generations/${generationId}`).set({ timeline: current });
+    const generate = async (options: { contents: unknown }) => {
+      expect((options.contents as { text: string }[])[0]!.text).toContain('Scope: {"kind":"film"}');
+      return { kind: "edit", reply: "Set all clips to 2 seconds.", ops: [
+        { op: "setPhotoDuration", clipId: "monkeys", durationSec: 2 },
+        { op: "setPhotoDuration", clipId: "temple", durationSec: 2 },
+      ] };
+    };
+    const app = express(); app.use(express.json());
+    app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, generate }));
+    const response = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({
+      text: "Adjust duration to 2s for all", revision: 0,
+      context: { scope: { kind: "clip", clipId: "monkeys" }, requestId: "all-duration-scope" },
+    });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ kind: "edit", ops: [
+      { op: "setPhotoDuration", clipId: "monkeys", sec: 2 },
+      { op: "setPhotoDuration", clipId: "temple", sec: 2 },
+    ] });
+    const applied = applyEdits(current, response.body.ops);
+    expect(applied.ok).toBe(true);
+    if (applied.ok) expect(applied.timeline.videoClips.every((clip) => clip.durationSec === 2)).toBe(true);
   });
   it("rejects a model result when edits are saved while interpretation is running", async () => {
     const projectId = `ask-stale-${randomUUID()}`;

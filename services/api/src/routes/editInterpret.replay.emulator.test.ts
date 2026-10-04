@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import request from "supertest";
 import { listeningServer } from "../test/listeningServer.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Timeline } from "@mosae/contracts";
+import { applyEdits, type Timeline } from "@mosae/contracts";
 import { adminDb } from "../firebase/admin.js";
 
 const fixturesDir = fileURLToPath(new URL("../../fixtures/gemini/", import.meta.url));
@@ -33,6 +33,7 @@ const examples = [
   { text: "drop the airport bits", op: "remove", clipId: "clip-airport" },
   { text: "make the temple collage calmer", op: "setCollageMotion", clipId: "collage-temple" },
 ];
+const recordLiveGemini = process.env.MOCK_GEMINI === "record";
 const trip1Timeline: Timeline = {
   ...timeline,
   durationSec: 29,
@@ -79,7 +80,7 @@ describe("edit interpretation replay route (Firestore emulator)", () => {
       const request = JSON.parse(fixture.request) as { contents?: { text?: string }[] };
       return request.contents?.map((part) => part.text ?? "").join("\n") ?? "";
     });
-    for (const phrase of ["move the snow monkeys earlier", "drop the airport bits", "make the temple collage calmer", "move the zoo photos earlier"]) {
+    for (const phrase of ["move the snow monkeys earlier", "drop the airport bits", "make the temple collage calmer", "move the zoo photos earlier", "Adjust duration to 2s for all", "Add more collage"]) {
       expect(fixturePrompts.some((prompt) => prompt.includes(`Request: ${phrase}`)), `recording for ${phrase}`).toBe(true);
     }
     vi.stubEnv("MOCK_GEMINI", "replay");
@@ -110,5 +111,87 @@ describe("edit interpretation replay route (Firestore emulator)", () => {
     expect(tripResponse.body.reply).toContain("Singapore Zoo");
     expect(tripResponse.body.ops).toHaveLength(4);
     expect(tripResponse.body.ops.map((op: { clipId: string }) => op.clipId)).toEqual(currentTripTimeline.videoClips.slice(4, 8).map(clipId));
+
+    const allDurationGenerationId = "generation-live-duration";
+    const allDurationTimeline = freshTimeline(trip1Timeline, projectId);
+    await adminDb.doc(`projects/${projectId}/generations/${allDurationGenerationId}`).set({ timeline: allDurationTimeline });
+    const allDurationResponse = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${allDurationGenerationId}/edits/interpret`).send({
+      text: "Adjust duration to 2s for all", revision: 0,
+      context: { scope: { kind: "clip", clipId: clipId(allDurationTimeline.videoClips[0]!) }, requestId: "all-duration-replay" },
+    });
+    expect(allDurationResponse.status).toBe(200);
+    expect(allDurationResponse.body.kind).toBe("edit");
+    expect(allDurationResponse.body.ops).toHaveLength(allDurationTimeline.videoClips.length);
+    const shortened = applyEdits(allDurationTimeline, allDurationResponse.body.ops);
+    expect(shortened.ok).toBe(true);
+    if (shortened.ok) expect(shortened.timeline.videoClips.every((clip) => clip.durationSec === 2)).toBe(true);
+
+    const collageGenerationId = "generation-live-collage";
+    const collageTimeline = freshTimeline(timeline, projectId);
+    await adminDb.doc(`projects/${projectId}/generations/${collageGenerationId}`).set({ timeline: collageTimeline });
+    const collageResponse = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${collageGenerationId}/edits/interpret`).send({
+      text: "Add more collage", revision: 0,
+      context: { scope: { kind: "clip", clipId: clipId(collageTimeline.videoClips[2]!) }, requestId: "more-collage-replay" },
+    });
+    expect(collageResponse.status).toBe(200);
+    if (collageResponse.body.kind === "edit") {
+      expect(collageResponse.body.ops.some((op: { op: string; shotId?: string }) => op.op === "addCollageSlot" && Boolean(op.shotId))).toBe(true);
+      expect(applyEdits(collageTimeline, collageResponse.body.ops).ok).toBe(true);
+    } else {
+      expect(collageResponse.body).toMatchObject({ kind: "clarify", ops: [] });
+      expect(collageResponse.body.reply).toMatch(/photo|which/i);
+    }
   });
+
+  it.skipIf(!recordLiveGemini)("records only the two reported live Ask AI prompts", async () => {
+    if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error("FIRESTORE_EMULATOR_HOST must point at the already-running emulator");
+    vi.resetModules();
+    const [{ editInterpretRouter }, { generateStructured }, { createGeminiClient }] = await Promise.all([
+      import("./editInterpret.js"), import("../gemini/client.js"), import("../gemini/wire.js"),
+    ]);
+    const projectId = `ask-live-record-${randomUUID()}`;
+    await adminDb.doc(`projects/${projectId}`).set({ id: projectId, userId: owner });
+    let liveCalls = 0;
+    const gemini = createGeminiClient(process.env.GEMINI_API_KEY);
+    const app = express();
+    app.use(express.json());
+    app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, generate: (options) => generateStructured(options, {
+      generateContent: async (input) => {
+        if (liveCalls >= 2) throw new Error("live Gemini call cap exceeded");
+        liveCalls += 1;
+        try { return await gemini(input); }
+        catch (error) { console.error("live Gemini request failed", error); throw error; }
+      },
+      recordUsage: () => {},
+    }) }));
+
+    const durationTimeline = freshTimeline(trip1Timeline, projectId);
+    await adminDb.doc(`projects/${projectId}/generations/duration`).set({ timeline: durationTimeline });
+    const duration = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/duration/edits/interpret`).send({
+      text: "Adjust duration to 2s for all", revision: 0,
+      context: { scope: { kind: "clip", clipId: clipId(durationTimeline.videoClips[0]!) }, requestId: "live-all-duration" },
+    });
+    expect(duration.status).toBe(200);
+    expect(duration.body.kind).toBe("edit");
+    expect(duration.body.ops).toHaveLength(durationTimeline.videoClips.length);
+    const applied = applyEdits(durationTimeline, duration.body.ops);
+    expect(applied.ok).toBe(true);
+    if (applied.ok) expect(applied.timeline.videoClips.every((clip) => clip.durationSec === 2)).toBe(true);
+
+    const collageTimeline = freshTimeline(timeline, projectId);
+    await adminDb.doc(`projects/${projectId}/generations/collage`).set({ timeline: collageTimeline });
+    const collage = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/collage/edits/interpret`).send({
+      text: "Add more collage", revision: 0,
+      context: { scope: { kind: "clip", clipId: clipId(collageTimeline.videoClips[2]!) }, requestId: "live-more-collage" },
+    });
+    expect(collage.status).toBe(200);
+    if (collage.body.kind === "edit") {
+      expect(collage.body.ops.some((op: { op: string; shotId?: string }) => op.op === "addCollageSlot" && Boolean(op.shotId))).toBe(true);
+      expect(applyEdits(collageTimeline, collage.body.ops).ok).toBe(true);
+    } else {
+      expect(collage.body).toMatchObject({ kind: "clarify", ops: [] });
+      expect(collage.body.reply).toMatch(/photo|which/i);
+    }
+    expect(liveCalls).toBeLessThanOrEqual(2);
+  }, 120_000);
 });

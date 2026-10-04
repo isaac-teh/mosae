@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Timeline } from "@mosae/contracts";
+import { applyEdits, type Timeline } from "@mosae/contracts";
 import { interpretEdit, type InterpretEditModelResult } from "./interpretEdit.js";
+import { EditOpSchema, type EditOp } from "@mosae/contracts";
 import { DemoLimitReached } from "../gemini/errors.js";
 
 const timeline: Timeline = {
@@ -27,9 +28,124 @@ describe("interpretEdit", () => {
     expect(prompt).toContain('"caption":"Watching the snow monkeys"');
     expect(prompt).toContain('"time":"00:00–00:03"');
     expect(schema).toMatchObject({ properties: { ops: { type: "ARRAY" } } });
-    expect((schema as any).properties.ops.items.properties.motionId.enum).toContain("page-turn");
+    expect((schema as any).properties.ops.items.anyOf.map((variant: any) => variant.properties.op.enum[0])).toEqual(EditOpSchema.options.map((variant: any) => variant.shape.op.value));
+    for (const variant of EditOpSchema.options as any[]) {
+      const opName = variant.shape.op.value;
+      const modelVariant = (schema as any).properties.ops.items.anyOf.find((candidate: any) => candidate.properties.op.enum[0] === opName);
+      expect(Object.keys(modelVariant.properties).sort(), `${opName} fields`).toEqual(Object.keys(variant.shape).sort());
+      expect([...modelVariant.required].sort(), `${opName} required fields`).toEqual(Object.entries(variant.shape).filter(([, field]: any) => !field.isOptional()).map(([name]) => name).sort());
+    }
+    expect((schema as any).properties.ops.items.anyOf.flatMap((variant: any) => Object.values(variant.properties) as any[]).filter((field: any) => field.enum).every((field: any) => field.enum.length > 0)).toBe(true);
+    expect((schema as any).properties.ops.items.anyOf.find((variant: any) => variant.properties.op.enum[0] === "setCollageMotion").properties.motionId.enum).toContain("page-turn");
+    expect((schema as any).properties.ops.items.anyOf.find((variant: any) => variant.properties.op.enum[0] === "setPhotoDuration").properties.clipId.enum).toEqual(["monkeys", "temple"]);
+    expect((schema as any).properties.ops.items.anyOf.find((variant: any) => variant.properties.op.enum[0] === "setCollageSpec").properties.spec.properties.slots.items.properties.empty.type).toBe("BOOLEAN");
     expect(prompt).toContain('"layoutId":"photo-table","motionId":"page-turn"');
     expect(prompt).toContain("Preserve current collage sources unless changing them is necessary");
+  });
+
+  it("enumerates only owned candidates and soundtrack ids in the operation schema", async () => {
+    let schema: any;
+    const result = await interpretEdit({ text: "replace this", timeline, groundedContext: {
+      scope: { kind: "film" }, storyIntent: null, constraints: {}, people: [], selected: null,
+      candidates: [{ shotId: "owned-shot", assetId: "owned-asset", kind: "photo", caption: "A mountain", personIds: [], sourceStartSec: null, sourceEndSec: null }],
+      soundtracks: [{ id: "owned-track", name: "Piano", description: "Soft", cadence: "slow", durationSec: 60, storagePath: "music/piano.mp3" }], conversation: [],
+    } }, { generate: async (options) => { schema = options.responseSchema; return { kind: "clarify", reply: "Which clip?", ops: [] }; } });
+    expect(result.kind).toBe("clarify");
+    const variants = schema.properties.ops.items.anyOf;
+    expect(variants.find((variant: any) => variant.properties.op.enum[0] === "swapShot").properties.shotId.enum).toEqual(["owned-shot"]);
+    expect(variants.find((variant: any) => variant.properties.op.enum[0] === "setSoundtrack").properties.soundtrackId.enum).toEqual(["owned-track"]);
+  });
+
+  it("normalizes the known durationSec alias and logs the repair", async () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await interpretEdit({ text: "set this to two seconds", timeline, scope: { kind: "clip", clipId: "monkeys" } }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "setPhotoDuration", clipId: "monkeys", durationSec: 2 }] }),
+    });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "setPhotoDuration", clipId: "monkeys", sec: 2 }] });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("durationSec"));
+    log.mockRestore();
+  });
+
+  it("normalizes the reported photo and collage duration aliases as one atomic batch", async () => {
+    const collageTimeline: Timeline = {
+      ...timeline,
+      schemaVersion: 2,
+      videoClips: [timeline.videoClips[0]!, { kind: "collage", clipId: "collage", startSec: 3, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
+        layoutId: "photo-table", motionId: "page-turn", effectId: null, seed: "s", durationSec: 3,
+        slots: [1, 2, 3, 4].map((index) => ({ slotId: `slot-${index}`, shotId: `source-${index}`, kind: "photo" as const })),
+      } }],
+    };
+    const warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await interpretEdit({ text: "Adjust duration to 2s for all", timeline: collageTimeline }, {
+      generate: async () => ({ kind: "edit", ops: [
+        { op: "setPhotoDuration", clipId: "monkeys", durationSec: 2 },
+        { op: "setCollageDuration", clipId: "collage", durationSec: 2 },
+      ] }),
+    });
+    expect(result).toMatchObject({ kind: "edit", ops: [
+      { op: "setPhotoDuration", clipId: "monkeys", sec: 2 },
+      { op: "setCollageDuration", clipId: "collage", sec: 2 },
+    ] });
+    expect(warnings).toHaveBeenCalledTimes(2);
+    warnings.mockRestore();
+  });
+
+  it("clarifies a collage request when no unused owned photos are available", async () => {
+    const result = await interpretEdit({ text: "Add more collage", timeline, groundedContext: {
+      scope: { kind: "film" }, storyIntent: null, constraints: {}, people: [], selected: null,
+      candidates: [], soundtracks: [], conversation: [],
+    } }, { generate: async () => ({ kind: "clarify", reply: "Which photos should I add to the collage?", ops: [] }) });
+    expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/which photos/i), ops: [] });
+  });
+
+  it("adds a collage slot only with an unused owned photo and assigns a safe slot id", async () => {
+    const collageTimeline: Timeline = {
+      ...timeline,
+      schemaVersion: 2,
+      videoClips: [{ kind: "collage", clipId: "collage", startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
+        layoutId: "photo-table", motionId: "page-turn", effectId: null, seed: "s", durationSec: 6,
+        slots: [1, 2, 3, 4].map((index) => ({ slotId: `slot-${index}`, shotId: `used-${index}`, kind: "photo" as const })),
+      } }],
+    };
+    const groundedContext = { scope: { kind: "clip" as const, clipId: "collage" }, storyIntent: null, constraints: {}, people: [], selected: null,
+      candidates: [{ shotId: "unused-photo", assetId: "asset", kind: "photo" as const, caption: "A lake", personIds: [], sourceStartSec: null, sourceEndSec: null }], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Add more collage", timeline: collageTimeline, scope: groundedContext.scope, groundedContext }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "addCollageSlot", clipId: "collage", slotId: "new-slot", shotId: "unused-photo", kind: "photo" }] }),
+    });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "addCollageSlot", clipId: "collage", shotId: "unused-photo" }] });
+    if (result.kind === "edit") {
+      expect(result.ops[0]).toMatchObject({ slotId: "ai-slot-collage-1" });
+      expect(applyEdits(collageTimeline, result.ops).ok).toBe(true);
+    }
+  });
+
+  it("asks which photos when a collage edit tries to use a source outside owned media", async () => {
+    const collageTimeline: Timeline = {
+      ...timeline,
+      schemaVersion: 2,
+      videoClips: [{ kind: "collage", clipId: "collage", startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
+        layoutId: "photo-table", motionId: "page-turn", effectId: null, seed: "s", durationSec: 6,
+        slots: [1, 2, 3, 4].map((index) => ({ slotId: `slot-${index}`, shotId: `used-${index}`, kind: "photo" as const })),
+      } }],
+    };
+    const result = await interpretEdit({ text: "Add more collage", timeline: collageTimeline, groundedContext: {
+      scope: { kind: "clip", clipId: "collage" }, storyIntent: null, constraints: {}, people: [], selected: null, candidates: [], soundtracks: [], conversation: [],
+    } }, { generate: async () => ({ kind: "edit", ops: [{ op: "addCollageSlot", clipId: "collage", slotId: "invented", shotId: "invented-photo", kind: "photo" }] }) });
+    expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/unused photos/i), ops: [] });
+  });
+
+  it("asks before applying a whole-film request from selected-clip scope", async () => {
+    const result = await interpretEdit({ text: "Adjust duration to 2s for all", timeline, scope: { kind: "clip", clipId: "monkeys" } }, {
+      generate: async () => ({ kind: "clarify", reply: "Apply to all clips?", ops: [] }),
+    });
+    expect(result).toMatchObject({ kind: "clarify", reply: "Apply to all clips?", ops: [] });
+  });
+
+  it("reports missing required operation fields in plain language", async () => {
+    const result = await interpretEdit({ text: "add a clip", timeline }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "add", kind: "photo", afterClipId: "monkeys" }] }),
+    });
+    expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/photo|which/i), ops: [] });
   });
 
   it("returns the fallback reply when model operations are empty or invalid", async () => {
@@ -39,7 +155,7 @@ describe("interpretEdit", () => {
     const empty = await interpretEdit({ text: "make it calmer", timeline }, { generate });
     const invalid = await interpretEdit({ text: "make it calmer", timeline }, { generate });
     expect(empty).toEqual({ kind: "unsupported", reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] });
-    expect(invalid).toEqual({ kind: "unsupported", reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] });
+    expect(invalid).toMatchObject({ kind: "unsupported", reply: expect.stringContaining("unknown clipId"), ops: [] });
   });
 
   it("rejects source operations that are outside the owned candidate context", async () => {
@@ -80,7 +196,7 @@ describe("interpretEdit", () => {
     const result = await interpretEdit({ text: "lower the music", timeline: withMusic, groundedContext }, { generate: async () => ({ kind: "edit", reply: "Lowered", ops: [{ op: "setMusicVolume", audioClipId: "music", gainDb: -20 }] }) });
     expect(result.kind).toBe("edit");
     const invalidGain = await interpretEdit({ text: "raise music", timeline: withMusic, groundedContext }, { generate: async () => ({ kind: "edit", ops: [{ op: "setMusicVolume", audioClipId: "music", gainDb: 13 }] }) });
-    expect(invalidGain).toMatchObject({ kind: "unsupported", ops: [] });
+    expect(invalidGain).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/required detail|invalid/i), ops: [] });
   });
 
   it("rejects a partly invalid batch instead of returning a partial edit", async () => {

@@ -8,7 +8,7 @@ import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
 import type { GenerateOptions } from "../gemini/client.js";
 import { DemoLimitReached } from "../gemini/errors.js";
-import { interpretEdit, type InterpretEditModelResult } from "../directing/interpretEdit.js";
+import { interpretEdit, isWholeFilmRequest, type InterpretEditModelResult } from "../directing/interpretEdit.js";
 import { EditInterpretationLeaseLost, EditInterpretationStaleRevision, EDIT_INTERPRETATION_LEASE_MS, getEditDocument, beginEditInterpretation, renewEditInterpretation, finishEditInterpretation, abandonEditInterpretation, getEditConversation, acknowledgeEditInterpretation, type StoredEditInterpretation } from "../directing/editStore.js";
 
 export function editInterpretRouter(deps: {
@@ -67,8 +67,12 @@ export function editInterpretRouter(deps: {
       if (document.revision !== revision) return res.status(409).json({ error: "stale_revision", currentRevision: document.revision });
       const current = applyEdits(timeline, document.ops as EditOp[]);
       if (!current.ok) return res.status(409).json({ error: "invalid_current_edits" });
-      const context = validateEditContext(current.timeline, rawContext);
-      if (!context) return res.status(400).json({ error: "invalid_scope" });
+      const validatedContext = validateEditContext(current.timeline, rawContext);
+      if (!validatedContext) return res.status(400).json({ error: "invalid_scope" });
+      // The Release 2 spec allows an explicit whole-film request to affect
+      // clips beyond the current selection. Load and validate context at that
+      // broader scope before asking Gemini to form an atomic batch.
+      const context = isWholeFilmRequest(text.trim()) ? { ...validatedContext, scope: { kind: "film" as const } } : validatedContext;
       const groundedContext = await loadEditContext(deps.db, res.locals.userId, req.params.projectId, req.params.generationId, context.scope);
       const result = await interpretEdit({ text: text.trim(), timeline: current.timeline, ...context, groundedContext }, {
         generate: (options) => deps.generate(options, req.params.projectId),
