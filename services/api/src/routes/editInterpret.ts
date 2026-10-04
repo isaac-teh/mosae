@@ -1,3 +1,4 @@
+import { validateEditContext } from "../directing/editContext.js";
 import { Router, type RequestHandler } from "express";
 import type { Firestore } from "firebase-admin/firestore";
 import { applyEdits, type EditOp, type Timeline } from "@mosae/contracts";
@@ -37,10 +38,14 @@ export function editInterpretRouter(deps: {
       if (!timeline) return res.status(404).json({ error: "timeline_unavailable" });
       const current = applyEdits(timeline, document.ops as EditOp[]);
       if (!current.ok) return res.status(409).json({ error: "invalid_current_edits" });
-      const result = await interpretEdit({ text: text.trim(), timeline: current.timeline }, {
+      const context = validateEditContext(current.timeline, req.body.context);
+      if (!context) return res.status(400).json({ error: "invalid_scope" });
+      const result = await interpretEdit({ text: text.trim(), timeline: current.timeline, ...context }, {
         generate: (options) => deps.generate(options, req.params.projectId),
       });
-      return res.json(result);
+      return res.json(result.ops.length
+        ? { ...result, kind: "edit", baseRevision: document.revision, requestId: context.requestId }
+        : { ...result, kind: "unsupported", ops: [], requestId: context.requestId });
     } catch (error) {
       if (error instanceof DemoLimitReached) return res.status(429).json({ error: "demo_limit_reached", message: error.message });
       console.error("edit interpretation failed", req.params.projectId, req.params.generationId, error);

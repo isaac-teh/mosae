@@ -33,7 +33,7 @@ describe("edit interpretation route (Firestore emulator)", () => {
     app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, generate }));
     const response = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: "move the snow monkeys earlier", revision: 0 });
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ reply: "Move the monkeys earlier?", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] });
+    expect(response.body).toMatchObject({ kind: "edit", baseRevision: 0, requestId: expect.any(String), reply: "Move the monkeys earlier?", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] });
     const stale = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: "move the snow monkeys earlier", revision: 4 });
     expect(stale.status).toBe(409);
   });

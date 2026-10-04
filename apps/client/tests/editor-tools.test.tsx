@@ -339,7 +339,7 @@ describe("editor tool operations", () => {
   });
 
   it("previews an Ask proposal without editing, then applies all operations together", async () => {
-    const askRepository = { interpretEdit: vi.fn(async () => ({ reply: "Move the second photo earlier?", ops: [{ op: "move" as const, clipId: "b", toIndex: 0 }] })) };
+    const askRepository = { interpretEdit: vi.fn(async () => ({ kind: "edit" as const, baseRevision: 0, requestId: "r1", reply: "Move the second photo earlier?", ops: [{ op: "move" as const, clipId: "b", toIndex: 0 }] })) };
     await render(<AskSheet visible projectId="p1" generationId="g1" revision={0} timeline={timeline} sources={{}} repository={askRepository} initialRequest="move this earlier" onApply={apply} onClose={() => {}} />);
     expect((host.querySelector('[aria-label="Ask for an edit"]') as HTMLInputElement).value).toBe("move this earlier");
     await click("Suggest edit");

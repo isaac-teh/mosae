@@ -6,7 +6,7 @@ import { getFirestoreClient } from "../firebase";
 import { normalizeDirectionRecommendation, parseTimeline, type EditOp } from "@mosae/contracts";
 import type { ChatInterpretRequest, DirectorPerson, EditorMediaItem, FilmEdits, FilmListItem, FilmRender, ProjectResumeState, StoryRepository } from "./repository";
 import type { ProjectSummary } from "../chat/types";
-import type { DirectionOptions, Film } from "./types";
+import type { DirectionOptions, Film, EditInterpretation } from "./types";
 import {
   projectProposal,
   type ProjectProjectionSource,
@@ -594,9 +594,9 @@ export function createApiStoryRepository(
     getEdits: async (projectId, generationId) => record(await deps.request(
       "GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`,
     ), "edits") as FilmEdits,
-    interpretEdit: async (projectId, generationId, text, revision) => record(await deps.request(
-      "POST", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits/interpret`, { text, revision },
-    ), "edit interpretation") as { reply: string; ops: EditOp[] },
+    interpretEdit: async (projectId, generationId, text, revision, context) => record(await deps.request(
+      "POST", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits/interpret`, { text, revision, ...(context ? { context } : {}) },
+    ), "edit interpretation") as EditInterpretation,
     saveEdits: async (projectId, generationId, revision, ops) => record(await deps.request(
       "PUT", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`, { revision, ops },
     ), "edits") as FilmEdits,
