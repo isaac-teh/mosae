@@ -1,5 +1,5 @@
 import { ref, uploadBytes, uploadBytesResumable } from "firebase/storage";
-import { prepareUploadFiles } from "./prepareUploadFiles";
+import { prepareUploadFiles, RAW_UPLOAD_MAX_FILES } from "./prepareUploadFiles";
 
 export const ENTRY_BATCH = 500;
 export const DEFAULT_CONCURRENCY = 4;
@@ -104,7 +104,8 @@ export async function uploadMedia(
     bytesSent: sent.reduce((total, bytes) => total + bytes, 0),
     assetStatuses: statuses.filter((status): status is UploadFileProgress => Boolean(status)),
   });
-  options.onPreparationProgress?.({ totalFiles: acceptedOriginal.length, preparedFiles: 0 });
+  const shrinking = acceptedOriginal.length >= RAW_UPLOAD_MAX_FILES;
+  if (shrinking) options.onPreparationProgress?.({ totalFiles: acceptedOriginal.length, preparedFiles: 0 });
   report();
 
   const pending: PendingRegistration[] = [];
@@ -188,14 +189,15 @@ export async function uploadMedia(
 
   try {
     await prepareUploadFiles(acceptedOriginal, (preparedFiles, total) => {
-      options.onPreparationProgress?.({ preparedFiles, totalFiles: total });
-    }, async (index, file) => {
+      if (shrinking) options.onPreparationProgress?.({ preparedFiles, totalFiles: total });
+    }, async (index, file, prepareMs) => {
       progress.totalBytes += file.size - acceptedOriginal[index]!.size;
       report();
       const entry = await registerPrepared(index, file);
       statuses[index] = { assetId: entry.assetId, status: "uploading" };
       report();
       const task = withUploadSlot(async () => {
+        const uploadStarted = performance.now();
         try {
           await putFile(entry.storagePath, file, (bytes) => { sent[index] = bytes; report(); });
           sent[index] = file.size;
@@ -212,6 +214,7 @@ export async function uploadMedia(
           outcomes.set(entry.assetId, outcome);
           if (sessionPath) await post(`${sessionPath}/entries/${entry.assetId}/outcome`, outcome).then(() => outcomes.delete(entry.assetId)).catch(() => undefined);
         }
+        console.info("upload_timing", { fileName: file.name, prepareMs, uploadMs: performance.now() - uploadStarted, bytes: file.size });
         report();
       });
       uploadTasks.push(task);

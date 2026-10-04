@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { type Href, useFocusEffect, useRouter } from "expo-router";
-import { isMedia, setPendingMediaRetry, setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress as setSharedUploadProgress, uploadMedia, type FilmListItem, type UploadProgress } from "@mosae/core";
+import { isMedia, setPendingMediaRetry, setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress as setSharedUploadProgress, uploadMedia, type FilmListItem, type UploadPreparationProgress, type UploadProgress } from "@mosae/core";
 import { Button, FilmCard } from "@/components/ds";
 import { SettingsIcon } from "@/components/icons";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
@@ -14,6 +14,7 @@ export default function Home() {
   const [demoError, setDemoError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const [preparationProgress, setPreparationProgress] = useState<UploadPreparationProgress | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const router = useRouter();
   const story = useStoryFlow();
@@ -39,6 +40,7 @@ export default function Home() {
     if (media.length === 0 || uploading) return;
     setUploading(true);
     setUploadProgress(null);
+    setPreparationProgress(null);
     setSharedUploadProgress(null);
     setUploadPreparationProgress(null);
     setUploadFailure(null);
@@ -66,7 +68,7 @@ export default function Home() {
       try {
         const result = await uploadMedia(retryFiles, {
           mode: "memory", projectId: ownerProjectId,
-          onPreparationProgress: setUploadPreparationProgress,
+          onPreparationProgress: (progress) => { setPreparationProgress(progress); setUploadPreparationProgress(progress); },
           onProgress: (progress) => {
             retryFinished = progress.finishedFiles;
             setSharedUploadProgress({ ...progress, totalFiles: successfulFiles + progress.totalFiles, finishedFiles: successfulFiles + progress.finishedFiles });
@@ -81,13 +83,13 @@ export default function Home() {
           onReady: () => {
             retryRegistered = true;
             setPendingMedia(media, assetIdsByFile, ownerProjectId);
-            setUploadPreparationProgress(null);
+            setPreparationProgress(null); setUploadPreparationProgress(null);
           },
         });
         successfulFiles += result.finished;
         if (result.failed) setUploadFailure(`${result.failed} files couldn't upload. Try again or continue with uploaded files.`);
       } catch { successfulFiles += retryFinished; if (!retryRegistered) failedFiles = retryFiles; setUploadFailure("These photos couldn't upload. Check your connection and try again."); }
-      finally { setUploadPreparationProgress(null); }
+      finally { setPreparationProgress(null); setUploadPreparationProgress(null); }
     };
     try {
       const result = await uploadMedia(media, {
@@ -95,7 +97,7 @@ export default function Home() {
         onCloseFailure: retry => { closeRetry = retry; },
         onFileFailed: (file) => failedFiles.push(file),
         onProgress: (progress) => { setUploadProgress(progress); successfulFiles = progress.finishedFiles; setSharedUploadProgress(progress); },
-        onPreparationProgress: setUploadPreparationProgress,
+        onPreparationProgress: (progress) => { setPreparationProgress(progress); setUploadPreparationProgress(progress); },
         onProjectReady: (projectId) => {
           routed = true;
           ownerProjectId = projectId;
@@ -112,7 +114,7 @@ export default function Home() {
           routed = true;
           registered = true;
           setPendingMedia(media, assetIdsByFile, projectId);
-          setUploadPreparationProgress(null);
+          setPreparationProgress(null); setUploadPreparationProgress(null);
         },
       });
       if (result.failed > 0) setUploadFailure(result.finished === 0
@@ -125,7 +127,7 @@ export default function Home() {
     } catch (error) {
       console.error("upload failed", error);
       if (!routed) setUploadError("Upload failed. Please try again.");
-      else { if (!registered) failedFiles = media; setUploadPreparationProgress(null); setUploadFailure("These photos couldn't be prepared or uploaded. Check your connection and try again."); }
+      else { if (!registered) failedFiles = media; setPreparationProgress(null); setUploadPreparationProgress(null); setUploadFailure("These photos couldn't be prepared or uploaded. Check your connection and try again."); }
     } finally {
       setUploading(false);
     }
@@ -190,7 +192,7 @@ export default function Home() {
               <Text role="heading" aria-level={1} className="font-title text-title text-ink">Many moments.{"\n"}One story.</Text>
               <Text className="mt-3 font-sans text-body leading-6 text-ink-muted">Bring in the photos and clips from a trip or celebration. You say what mattered. Mosaé shapes it into a film you can change at every step.</Text>
               <View className="mt-5"><Button label="＋  Create a new film" onPress={createFilm} /></View>
-              {uploading ? <Text accessibilityRole="progressbar" className="mt-2 text-center font-sans text-caption text-ink-muted">{uploadProgress ? `Uploading ${uploadProgress.finishedFiles + uploadProgress.failedFiles} of ${uploadProgress.totalFiles}` : "Uploading…"}</Text> : null}
+              {uploading ? <Text accessibilityRole="progressbar" className="mt-2 text-center font-sans text-caption text-ink-muted">{preparationProgress ? `Preparing ${preparationProgress.preparedFiles} of ${preparationProgress.totalFiles}` : uploadProgress ? `Uploading ${uploadProgress.finishedFiles + uploadProgress.failedFiles} of ${uploadProgress.totalFiles} · ${(uploadProgress.bytesSent / 1_000_000).toFixed(1)} of ${(uploadProgress.totalBytes / 1_000_000).toFixed(1)} MB` : "Uploading…"}</Text> : null}
               {uploadError ? <Text className="mt-2 text-center font-sans text-caption text-critical">{uploadError}</Text> : null}
               <Pressable role="button" disabled={demoBusy} onPress={() => void tryDemo()} className="mt-3 min-h-11 items-center justify-center"><Text className="font-sans-medium text-label text-action">{demoBusy ? "Preparing demo trip…" : "Try with a demo trip"}</Text></Pressable>
               {demoError ? <Text className="font-sans text-caption text-critical">{demoError}</Text> : null}

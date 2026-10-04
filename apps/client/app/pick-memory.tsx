@@ -50,7 +50,7 @@ export default function PickMemoryScreen() {
     if (!anySelected) return;
     setUploading(true);
     setProgress(null);
-    setPreparation({ preparedFiles: 0, totalFiles: selected.length });
+    setPreparation(null);
     setError(null);
     try {
       const result = await uploadMedia(
@@ -86,7 +86,7 @@ export default function PickMemoryScreen() {
       ? preparation
         ? `Preparing ${preparation.preparedFiles} of ${preparation.totalFiles}`
         : progress
-          ? `Uploading ${progress.finishedFiles + progress.failedFiles} of ${progress.totalFiles}`
+          ? `Uploading ${progress.finishedFiles + progress.failedFiles} of ${progress.totalFiles} · ${(progress.bytesSent / 1_000_000).toFixed(1)} of ${(progress.totalBytes / 1_000_000).toFixed(1)} MB`
           : "Uploading..."
       : `${selected.length} selected`);
 

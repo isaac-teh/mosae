@@ -4,7 +4,8 @@ import piexif from "piexifjs";
 export const RESIZE_THRESHOLD_BYTES = 1_500_000;
 export const MAX_UPLOAD_IMAGE_SIDE = 2048;
 export const UPLOAD_JPEG_QUALITY = 0.82;
-export const PREPARATION_CONCURRENCY = 3;
+export const RAW_UPLOAD_MAX_FILES = 50;
+export const PREPARATION_CONCURRENCY = 2;
 
 function rational(value: number): [number, number] {
   let denominator = 10_000;
@@ -78,24 +79,31 @@ function imageFile(file: File): boolean {
 export async function prepareUploadFiles(
   files: File[],
   onProgress?: (preparedFiles: number, totalFiles: number) => void,
-  onFilePrepared?: (index: number, file: File) => void | Promise<void>,
+  onFilePrepared?: (index: number, file: File, prepareMs: number) => void | Promise<void>,
 ): Promise<File[]> {
+  const shouldShrink = files.length >= RAW_UPLOAD_MAX_FILES;
   const prepared = new Array<File>(files.length);
   let next = 0;
   let completed = 0;
+  const fileCallbacks: Promise<void>[] = [];
   async function worker() {
     while (next < files.length) {
       const index = next++;
       const file = files[index];
-      prepared[index] = await prepareOne(file);
+      const started = performance.now();
+      prepared[index] = shouldShrink ? await prepareOne(file) : file;
       completed++;
-      onProgress?.(completed, files.length);
-      await onFilePrepared?.(index, prepared[index]!);
+      if (shouldShrink) onProgress?.(completed, files.length);
+      const notification = onFilePrepared?.(index, prepared[index]!, shouldShrink ? performance.now() - started : 0);
+      if (notification) fileCallbacks.push(Promise.resolve(notification));
     }
   }
-  const results = await Promise.allSettled(Array.from({ length: Math.min(PREPARATION_CONCURRENCY, files.length) }, worker));
+  const results = await Promise.allSettled(Array.from({ length: Math.min(shouldShrink ? PREPARATION_CONCURRENCY : files.length, files.length) }, worker));
+  const callbackResults = await Promise.allSettled(fileCallbacks);
   const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
   if (failed) throw failed.reason;
+  const failedCallback = callbackResults.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failedCallback) throw failedCallback.reason;
   return prepared;
 }
 
@@ -103,7 +111,19 @@ async function prepareOne(file: File): Promise<File> {
     if (!imageFile(file) || file.size < RESIZE_THRESHOLD_BYTES || typeof createImageBitmap !== "function") return file;
     let bitmap: ImageBitmap | undefined;
     try {
-      const metadata = exifFrom(await exifr.parse(file, { gps: true, reviveValues: false }) as Record<string, any> | undefined);
+      let parsed: Record<string, any> | undefined;
+      try { parsed = await exifr.parse(file, { gps: true, reviveValues: false, firstChunkSize: 128 * 1024, chunkSize: 64 * 1024, chunkLimit: 4 }) as Record<string, any> | undefined; }
+      catch { /* the compatibility path can still resize without metadata */ }
+      const metadata = exifFrom(parsed);
+      let fast: Blob | null = null;
+      try { fast = await prepareInWorker(file, parsed); } catch { /* use the main-thread compatibility path */ }
+      if (fast) {
+        try {
+          const resized = await addMetadataAndName(file, fast, metadata);
+          if (resized === file || resized.size >= file.size) return file;
+          return resized;
+        } catch { /* use the main-thread compatibility path */ }
+      }
       bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
       const scale = Math.min(1, MAX_UPLOAD_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
       const canvas = document.createElement("canvas");
@@ -139,4 +159,50 @@ async function prepareOne(file: File): Promise<File> {
     } finally {
       bitmap?.close();
     }
+}
+
+async function prepareInWorker(file: File, parsed: Record<string, any> | undefined): Promise<Blob | null> {
+  if (typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined" || typeof createImageBitmap !== "function") return null;
+  const width = Number(parsed?.ImageWidth ?? parsed?.ExifImageWidth);
+  const height = Number(parsed?.ImageHeight ?? parsed?.ExifImageHeight);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+  const scale = Math.min(1, MAX_UPLOAD_IMAGE_SIDE / Math.max(width, height));
+  const resizeWidth = Math.max(1, Math.round(width * scale));
+  const resizeHeight = Math.max(1, Math.round(height * scale));
+  const source = `onmessage=async(e)=>{try{const {file,width,height}=e.data;const bitmap=await createImageBitmap(file,{resizeWidth:width,resizeHeight:height,resizeQuality:"medium",imageOrientation:"from-image"});const canvas=new OffscreenCanvas(width,height);const ctx=canvas.getContext("2d");if(!ctx)throw Error("canvas_context_unavailable");ctx.drawImage(bitmap,0,0,width,height);bitmap.close();const blob=await canvas.convertToBlob({type:"image/jpeg",quality:${UPLOAD_JPEG_QUALITY}});postMessage({blob})}catch(error){postMessage({error:String(error)})}}`;
+  const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+  try {
+    return await new Promise<Blob>((resolve, reject) => {
+      const worker = new Worker(url);
+      worker.onmessage = (event: MessageEvent<{ blob?: Blob; error?: string }>) => {
+        worker.terminate();
+        if (event.data.blob) resolve(event.data.blob);
+        else reject(new Error(event.data.error ?? "worker_resize_failed"));
+      };
+      worker.onerror = () => { worker.terminate(); reject(new Error("worker_resize_failed")); };
+      worker.postMessage({ file, width: resizeWidth, height: resizeHeight });
+    });
+  } finally { URL.revokeObjectURL(url); }
+}
+
+async function addMetadataAndName(file: File, blob: Blob, metadata: any): Promise<File> {
+  if (!blob.size) return file;
+  let output = blob;
+  if (metadata) {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error ?? new Error("file_read_failed"));
+      reader.onload = () => resolve(String(reader.result));
+      reader.readAsDataURL(blob);
+    });
+    const inserted = piexif.insert(piexif.dump(metadata), dataUrl);
+    const [, encoded] = inserted.split(",", 2);
+    if (!encoded) return file;
+    const binary = atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    output = new Blob([bytes], { type: "image/jpeg" });
+  }
+  const baseName = file.name.replace(/\.[^.]+$/, "");
+  return new File([output], `${baseName}.jpg`, { type: "image/jpeg", lastModified: file.lastModified });
 }

@@ -87,6 +87,19 @@ describe("Director chat", () => {
     expect(host.querySelector('[alt="Selected photo 1"]')).toBeTruthy();
   });
 
+  it("shows preparation and transfer progress inside one combined card", async () => {
+    setup();
+    setPendingMedia([new File(["photo"], "trip.jpg", { type: "image/jpeg" })]);
+    setUploadPreparationProgress({ preparedFiles: 1, totalFiles: 50 });
+    setUploadProgress({ totalFiles: 50, finishedFiles: 0, failedFiles: 0, bytesSent: 10, totalBytes: 100, assetStatuses: [] });
+    await renderScreen();
+    expect(host.querySelectorAll('[aria-label="Preparing and uploading selected photos"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[aria-label="Preparing selected photos"]')).toHaveLength(0);
+    expect(host.querySelectorAll('[aria-label="Uploading selected photos"]')).toHaveLength(0);
+    expect(hasText("Preparing 1 of 50")).toBe(true);
+    expect(hasText("0.0 of 0.0 MB transferred")).toBe(true);
+  });
+
   it("shows an uploading status for locally registered photo thumbnails", async () => {
     setup();
     const photo = new File(["photo"], "trip.jpg", { type: "image/jpeg" });

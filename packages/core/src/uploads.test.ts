@@ -65,6 +65,23 @@ describe("uploadMedia", () => {
     expect(progress.some((p) => p.assetStatuses?.some((asset) => asset.status === "uploading"))).toBe(true);
   });
 
+  it("uploads small batches as the original files and reports their exact byte total", async () => {
+    const originals = [file("one.jpg", 13), file("two.jpg", 27)];
+    const sent: File[] = [];
+    const preparation = vi.fn();
+    const progress: UploadProgress[] = [];
+    const { deps } = fakeDeps();
+    await uploadMedia(originals, {
+      mode: "memory",
+      onPreparationProgress: preparation,
+      onProgress: (value) => progress.push(value),
+    }, { ...deps, putFile: async (_path, value, onBytes) => { sent.push(value); onBytes(value.size); } });
+    expect(sent).toEqual(originals);
+    expect(preparation).not.toHaveBeenCalled();
+    expect(progress.at(-1)?.totalBytes).toBe(40);
+    expect(progress.at(-1)?.bytesSent).toBe(40);
+  });
+
   it("starts uploading each file before preparation has finished for the whole selection", async () => {
     const preparedCounts: number[] = [];
     const countsWhenUploadStarts: number[] = [];

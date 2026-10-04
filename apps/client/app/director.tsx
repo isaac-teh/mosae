@@ -106,17 +106,13 @@ export default function DirectorScreen() {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       if (contentOffset && contentSize && layoutMeasurement) userScrolledUp.current = contentOffset.y + layoutMeasurement.height < contentSize.height - 32;
     }} scrollEventThrottle={16} style={{ flex: 1, minHeight: 0 }}>
-      {preparationProgress && <View accessibilityRole="progressbar" aria-label="Preparing selected photos" className="gap-3 rounded-md bg-surface-sunken p-3">
-        <Text className="font-sans-semibold text-label text-ink">Preparing {preparationProgress.preparedFiles} of {preparationProgress.totalFiles}</Text>
-        <Text className="font-sans text-caption text-ink-muted">Getting your photos ready while you start your story.</Text>
-        <View className="flex-row flex-wrap gap-2">{selectedPhotos.map(({ uri, index }) => <Image key={`${index}-${uri}`} source={{ uri }} accessibilityLabel={`Selected photo ${index + 1}`} className="size-12 rounded-sm" />)}</View>
-      </View>}
-      {uploadProgress && uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles && <View accessibilityRole="progressbar" aria-label="Uploading selected photos" className="gap-3 rounded-md bg-surface-sunken p-3">
-        <View className="flex-row items-center justify-between"><Text className="font-sans-semibold text-label text-ink">Uploading your photos</Text><Text className="font-sans text-caption text-ink-muted">{uploadProgress.finishedFiles + uploadProgress.failedFiles} of {uploadProgress.totalFiles}</Text></View>
-        <View className="h-1.5 overflow-hidden rounded-pill bg-line"><View className="h-full rounded-pill bg-action" style={{ width: `${uploadProgress.totalBytes ? Math.min(100, Math.round(uploadProgress.bytesSent / uploadProgress.totalBytes * 100)) : 100}%` }} /></View>
-        <Text className="font-sans text-caption text-ink-muted">{(uploadProgress.bytesSent / 1_000_000).toFixed(1)} of {(uploadProgress.totalBytes / 1_000_000).toFixed(1)} MB transferred</Text>
-        <View className="flex-row flex-wrap gap-2">{readingAssets.map(({ assetId, uri }, index) => {
-          const local = uploadProgress.assetStatuses?.find((asset) => asset.assetId === assetId)?.status;
+      {(preparationProgress || uploadProgress && uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles) && <View accessibilityRole="progressbar" aria-label="Preparing and uploading selected photos" className="gap-3 rounded-md bg-surface-sunken p-3">
+        <View className="flex-row items-center justify-between"><Text className="font-sans-semibold text-label text-ink">{preparationProgress ? `Preparing ${preparationProgress.preparedFiles} of ${preparationProgress.totalFiles}` : "Uploading your photos"}</Text>{uploadProgress && <Text className="font-sans text-caption text-ink-muted">{uploadProgress.finishedFiles + uploadProgress.failedFiles} of {uploadProgress.totalFiles}</Text>}</View>
+        {preparationProgress && <Text className="font-sans text-caption text-ink-muted">Getting your photos ready while you start your story.</Text>}
+        {uploadProgress && <><View className="h-1.5 overflow-hidden rounded-pill bg-line"><View className="h-full rounded-pill bg-action" style={{ width: `${uploadProgress.totalBytes ? Math.min(100, Math.round(uploadProgress.bytesSent / uploadProgress.totalBytes * 100)) : 100}%` }} /></View>
+        <Text className="font-sans text-caption text-ink-muted">{(uploadProgress.bytesSent / 1_000_000).toFixed(1)} of {(uploadProgress.totalBytes / 1_000_000).toFixed(1)} MB transferred</Text></>}
+        <View className="flex-row flex-wrap gap-2">{preparationProgress ? selectedPhotos.map(({ uri, index }) => <Image key={`${index}-${uri}`} source={{ uri }} accessibilityLabel={`Selected photo ${index + 1}`} className="size-12 rounded-sm" />) : readingAssets.map(({ assetId, uri }, index) => {
+          const local = uploadProgress?.assetStatuses?.find((asset) => asset.assetId === assetId)?.status;
           const server = projectSummary?.assetStatuses?.find((asset) => asset.assetId === assetId)?.status;
           const status = server === "understood" ? "understood" : server === "ingested" || server === "uploaded" ? "uploaded" : local;
           const label = status === "understood" ? "understood" : status === "uploaded" ? "uploaded" : status === "failed" ? "failed" : "uploading";
