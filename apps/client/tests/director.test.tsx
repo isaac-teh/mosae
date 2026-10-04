@@ -820,3 +820,26 @@ it("allows explicit new composition after a resumed terminal failure", async () 
   await act(async () => chat.actions.shapeIt());
   await waitFor(() => expect(chat.state.items.some(item => item.kind === "film")).toBe(true));
 });
+
+it("retries missing direction options after resumed terminal failure without replacing a generation", async () => {
+  setup({ readyPlan: true, people: [], getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Saved story", generationId: "film-1", generationStatus: "failed" }) });
+  mocks.repo.getFilm.mockRejectedValue(Object.assign(new Error("composition failed"), { code: "generation_failed" }));
+  mocks.repo.getDirectionOptions.mockRejectedValueOnce(new Error("options temporarily unavailable"))
+    .mockResolvedValue({ ...directionOptions, collageAmount: "few", motionFeel: "calm" });
+  let chat!: ReturnType<typeof useDirectorChat>;
+  function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+  await act(async () => root.render(<Harness />));
+  await waitFor(() => expect(chat.error).toBeTruthy());
+  expect(chat.directionOptions).toBeNull();
+  await act(async () => chat.actions.setDirection({ collageAmount: "lots", motionFeel: "playful" }));
+  await act(async () => { chat.retry(); chat.retry(); });
+  await waitFor(() => expect(chat.directionOptions).toBeTruthy());
+  expect(chat.error).toBeNull();
+  expect(chat.directionSelection).toMatchObject({ collageAmount: "lots", motionFeel: "playful" });
+  expect(mocks.repo.directFilm).not.toHaveBeenCalled();
+  mocks.repo.getFilm.mockResolvedValue(filmFixture);
+  await act(async () => { void chat.actions.shapeIt(); void chat.actions.shapeIt(); });
+  await waitFor(() => expect(chat.state.items.some(item => item.kind === "film")).toBe(true));
+  expect(mocks.repo.directFilm).toHaveBeenCalledTimes(1);
+  expect(mocks.repo.directFilm.mock.calls[0][1]).toMatchObject({ collageAmount: "lots", motionFeel: "playful" });
+});

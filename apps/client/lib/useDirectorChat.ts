@@ -40,6 +40,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const [momentState, setMomentState] = useProjectState<Record<string, "keep" | "leave">>(projectEpoch, currentProjectEpoch, {});
   const [directionOptions, setDirectionOptions] = useProjectState<DirectionOptions | null>(projectEpoch, currentProjectEpoch, null);
   const [directionSelection, setDirectionSelection] = useProjectState<{ cadenceId: string; durationId: Direction["durationId"]; soundtrackId: string | null; focus: string; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful" }>(projectEpoch, currentProjectEpoch, { cadenceId: "reflective", durationId: "2m", soundtrackId: null, focus: "family", collageAmount: "few", motionFeel: "calm" });
+  const directionSelectionRef = useRef(directionSelection);
+  directionSelectionRef.current = directionSelection;
   const [focusExplicit, setFocusExplicit] = useProjectState(projectEpoch, currentProjectEpoch, false);
   const resolvedFocus = directionFocus(input.people, directionSelection.focus, focusExplicit);
   const peopleRef = useRef(input.people);
@@ -65,6 +67,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const generationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeFilmId = useRef<string | null>(null);
   const filmReadPending = useRef(false);
+  const pendingDirectionOptions = useRef<string | null>(null);
+  const directionOptionsLoading = useRef(false);
   const pollFilmRef = useRef<(filmId: string) => void>(() => {});
   const compositionStartedAt = useRef<number | null>(null);
   const router = useRouter();
@@ -89,6 +93,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     compositionStartedAt.current = null;
     activeFilmId.current = null;
     filmReadPending.current = false;
+    pendingDirectionOptions.current = null;
+    directionOptionsLoading.current = false;
     if (generationTimer.current) clearTimeout(generationTimer.current);
     generationTimer.current = null;
   }
@@ -99,23 +105,38 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const confirmationState = { ...localState, localMediaPending: Boolean(localState.localMediaPending) || acceptedSummaryEpoch.current !== uploadEpoch.current };
   const state: ChatState = deriveChat({ ...input, ...confirmationState });
 
-  const loadDirectionOptions = useCallback(async (planId: string, stillValid: () => boolean = isCurrentProject) => {
+  const loadDirectionOptions = useCallback(async (planId: string, stillValid: () => boolean = isCurrentProject, preserveSelection = false) => {
     const options = await repository.getDirectionOptions(planId).catch(cause => {
       if (isCurrentProject() && stillValid()) throw cause;
       return null;
     });
     if (!options || !isCurrentProject() || !stillValid()) return;
     setDirectionOptions(options);
-    const cadenceId = options.recommendedCadence;
+    const selected = directionSelectionRef.current;
+    const cadenceId = preserveSelection && options.cadences.some(({ id }) => id === selected.cadenceId) ? selected.cadenceId : options.recommendedCadence;
     const maximumDurationSec = options.maximumDurationSecByCadence?.[cadenceId] ?? options.maximumDurationSec ?? Infinity;
     const availableDurations = options.durations.filter(({ seconds }) => seconds <= maximumDurationSec);
-    const duration = availableDurations.find(({ id }) => id === options.recommendedDuration) ?? availableDurations.at(-1) ?? options.durations.find(({ id }) => id === options.recommendedDuration);
+    const duration = (preserveSelection ? availableDurations.find(({ id }) => id === selected.durationId) : undefined) ?? availableDurations.find(({ id }) => id === options.recommendedDuration) ?? availableDurations.at(-1) ?? options.durations.find(({ id }) => id === options.recommendedDuration);
     const durationId = duration?.id ?? options.recommendedDuration;
     const lengthSec = duration?.seconds ?? 120;
     const focus = directionFocus(peopleRef.current, focusChoiceRef.current.selected, focusChoiceRef.current.explicit).selected;
-    setDirectionSelection((current) => ({ ...current, focus, cadenceId, durationId, soundtrackId: current.soundtrackId ?? options.soundtracks[0]?.id ?? null, collageAmount: options.collageAmount ?? current.collageAmount, motionFeel: options.motionFeel ?? current.motionFeel }));
+    setDirectionSelection((current) => ({ ...current, focus, cadenceId, durationId, soundtrackId: current.soundtrackId ?? options.soundtracks[0]?.id ?? null, collageAmount: preserveSelection ? current.collageAmount : options.collageAmount ?? current.collageAmount, motionFeel: preserveSelection ? current.motionFeel : options.motionFeel ?? current.motionFeel }));
     setInput((current) => ({ ...current, directionNote: options.recommendation ?? "For these moments, I’d suggest this.", direction: { confirmed: false, pace: /gentle|reflective/i.test(cadenceId) ? "gentle" : "lively", lengthSec, focus } }));
   }, [repository, projectId, currentProjectEpoch]);
+
+  const recoverDirectionOptions = useCallback(async (planId: string) => {
+    if (directionOptionsLoading.current || !isCurrentProject()) return;
+    directionOptionsLoading.current = true;
+    pendingDirectionOptions.current = planId;
+    try {
+      await loadDirectionOptions(planId, () => mounted.current && isCurrentProject(), true);
+      if (mounted.current && isCurrentProject()) { pendingDirectionOptions.current = null; setError(null); }
+    } catch (cause) {
+      if (mounted.current && isCurrentProject()) setError(reportFailure(cause));
+    } finally {
+      if (isCurrentProject()) directionOptionsLoading.current = false;
+    }
+  }, [loadDirectionOptions, projectId, currentProjectEpoch]);
 
   const refresh = useCallback(async () => {
     if (planFailed.current) return;
@@ -259,7 +280,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         activeFilmId.current = null;
         compositionStartedAt.current = null;
         setInput(current => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: false } : null, generation: null }));
-        if (!directionOptions && proposalId.current) await loadDirectionOptions(proposalId.current);
+        if (!directionOptions && proposalId.current) await recoverDirectionOptions(proposalId.current);
       } else {
         setInput((current) => ({ ...current, generation: { status: "failed", stage: "failed", progress: current.generation?.progress ?? 0, stepsDone: current.generation?.stepsDone ?? 0, film: null } }));
       }
@@ -267,7 +288,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     } finally {
       if (isCurrentProject()) filmReadPending.current = false;
     }
-  }, [repository, projectId, currentProjectEpoch, directionOptions, loadDirectionOptions]);
+  }, [repository, projectId, currentProjectEpoch, directionOptions, recoverDirectionOptions]);
   pollFilmRef.current = (filmId) => { void pollFilm(filmId); };
 
   const actions = {
@@ -445,5 +466,5 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     confirmInterpret() { if (pendingInterpret) void actions.confirmOccasion(pendingInterpret.text); },
     discardInterpret() { setPendingInterpret(null); },
   };
-  return { state, actions, error, retry: () => { setError(null); if (activeFilmId.current) void pollFilm(activeFilmId.current); else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); }); }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection, people: input.people ?? [] };
+  return { state, actions, error, retry: () => { setError(null); if (activeFilmId.current) void pollFilm(activeFilmId.current); else if (pendingDirectionOptions.current) void recoverDirectionOptions(pendingDirectionOptions.current); else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); }); }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection, people: input.people ?? [] };
 }
