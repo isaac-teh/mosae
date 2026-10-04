@@ -65,6 +65,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const personSaving = useRef(false);
   const occasionSaving = useRef(false);
   const generationSaving = useRef(false);
+  const compositionRetryAvailable = useRef(false);
   const planLoad = useRef(false);
   const planFailed = useRef(false);
   const resumeProjectId = useRef<string | null>(null);
@@ -286,12 +287,15 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       if ((cause as { code?: string })?.code === "generation_failed") {
         activeFilmId.current = null;
         compositionStartedAt.current = null;
+        compositionRetryAvailable.current = true;
         setInput(current => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: false } : null, generation: null }));
         if (!directionOptions && proposalId.current) await recoverDirectionOptions(proposalId.current);
+        const message = (cause as { message?: unknown })?.message;
+        setError(typeof message === "string" && message ? `${message}. Check the pace and length, then try again.` : "Your film could not be composed. Check the pace and length, then try again.");
       } else {
         setInput((current) => ({ ...current, generation: { status: "failed", stage: "failed", progress: current.generation?.progress ?? 0, stepsDone: current.generation?.stepsDone ?? 0, film: null } }));
+        setError(reportFailure(cause));
       }
-      setError(reportFailure(cause));
     } finally {
       if (isCurrentProject()) filmReadPending.current = false;
     }
@@ -429,6 +433,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const selectedDuration = availableDurations.find(duration => duration.id === directionSelection.durationId && duration.seconds === (duration.id === "short" ? directionSelection.durationSec : duration.seconds));
       if (!selectedDuration || selectedDuration.seconds > maximum) return;
       generationSaving.current = true;
+      compositionRetryAvailable.current = false;
       setSaving(true); setError(null);
       try {
         const focus = directionFocus(input.people, directionSelection.focus, focusExplicit);
@@ -479,5 +484,5 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     confirmInterpret() { if (pendingInterpret) void actions.confirmOccasion(pendingInterpret.text); },
     discardInterpret() { setPendingInterpret(null); },
   };
-  return { state, actions, error, retry: () => { setError(null); if (activeFilmId.current) void pollFilm(activeFilmId.current); else if (pendingDirectionOptions.current) void recoverDirectionOptions(pendingDirectionOptions.current); else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); }); }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection, people: input.people ?? [] };
+  return { state, actions, error, retry: () => { setError(null); if (compositionRetryAvailable.current) { compositionRetryAvailable.current = false; void actions.shapeIt(); } else if (activeFilmId.current) void pollFilm(activeFilmId.current); else if (pendingDirectionOptions.current) void recoverDirectionOptions(pendingDirectionOptions.current); else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); }); }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection, people: input.people ?? [] };
 }
