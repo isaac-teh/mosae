@@ -754,7 +754,7 @@ it.each([undefined, "For these portraits, I’d suggest a gentle pace."])("resto
   expect(mocks.repo.getDirectionOptions).not.toHaveBeenCalled();
 });
 
-it("submits one generation for rapid confirmation and preserves a real film polling failure", async () => {
+it("submits one generation for rapid confirmation and recovers a transient film polling failure without replacing its generation", async () => {
   setup({ readyPlan: true, people: [], getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Saved story", generationId: null, generationStatus: null }) });
   mocks.repo.getPlan.mockResolvedValue({ ...planFixture, leftOut: [] });
   const generation = deferred<{ filmId: string }>();
@@ -769,6 +769,54 @@ it("submits one generation for rapid confirmation and preserves a real film poll
   await act(async () => generation.resolve({ filmId: "film-1" }));
   await waitFor(() => expect(chat.error).toBeTruthy());
   expect(chat.state.step).toBe("shaping");
-  await act(async () => { chat.retry(); await chat.actions.shapeIt(); });
+  mocks.repo.getFilm.mockResolvedValue(filmFixture);
+  await act(async () => { chat.retry(); chat.retry(); await chat.actions.shapeIt(); });
+  await waitFor(() => expect(chat.state.items.some(item => item.kind === "film")).toBe(true));
+  expect(mocks.repo.getFilm).toHaveBeenCalledTimes(2);
+  expect(mocks.repo.getFilm).toHaveBeenLastCalledWith("film-1");
   expect(mocks.repo.directFilm).toHaveBeenCalledTimes(1);
+});
+
+it("restores selected direction after a terminal composition failure for explicit resubmission", async () => {
+  setup({ readyPlan: true, people: [], getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Saved story", generationId: null, generationStatus: null }) });
+  mocks.repo.getPlan.mockResolvedValue({ ...planFixture, leftOut: [] });
+  mocks.repo.getFilm.mockRejectedValueOnce(Object.assign(new Error("composition failed"), { code: "generation_failed" })).mockResolvedValue(filmFixture);
+  let chat!: ReturnType<typeof useDirectorChat>;
+  function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+  await act(async () => root.render(<Harness />));
+  await waitFor(() => expect(chat.directionOptions).toBeTruthy());
+  await act(async () => chat.actions.setDirection({ motionFeel: "playful", collageAmount: "lots" }));
+  await act(async () => chat.actions.shapeIt());
+  await waitFor(() => expect(chat.error).toBeTruthy());
+  expect(chat.state.step).toBe("direction");
+  expect(chat.directionSelection).toMatchObject({ motionFeel: "playful", collageAmount: "lots" });
+  await act(async () => chat.actions.shapeIt());
+  await waitFor(() => expect(chat.state.items.some(item => item.kind === "film")).toBe(true));
+  expect(mocks.repo.directFilm).toHaveBeenCalledTimes(2);
+});
+
+it("recovers a resumed generation whose initial film read fails", async () => {
+  setup({ readyPlan: true, people: [], getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Saved story", generationId: "film-1", generationStatus: "composing" }) });
+  mocks.repo.getFilm.mockRejectedValueOnce(new Error("temporary unavailable")).mockRejectedValueOnce(new Error("still unavailable")).mockResolvedValue(filmFixture);
+  let chat!: ReturnType<typeof useDirectorChat>;
+  function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+  await act(async () => root.render(<Harness />));
+  await waitFor(() => expect(chat.error).toBeTruthy());
+  await act(async () => chat.retry());
+  await waitFor(() => expect(chat.state.items.some(item => item.kind === "film")).toBe(true));
+  expect(mocks.repo.directFilm).not.toHaveBeenCalled();
+});
+
+it("allows explicit new composition after a resumed terminal failure", async () => {
+  setup({ readyPlan: true, people: [], getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Saved story", generationId: "film-1", generationStatus: "failed" }) });
+  mocks.repo.getFilm.mockRejectedValue(Object.assign(new Error("composition failed"), { code: "generation_failed" }));
+  let chat!: ReturnType<typeof useDirectorChat>;
+  function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+  await act(async () => root.render(<Harness />));
+  await waitFor(() => expect(chat.error).toBeTruthy());
+  await waitFor(() => expect(chat.directionOptions).toBeTruthy());
+  expect(chat.state.step).toBe("direction");
+  mocks.repo.getFilm.mockResolvedValue(filmFixture);
+  await act(async () => chat.actions.shapeIt());
+  await waitFor(() => expect(chat.state.items.some(item => item.kind === "film")).toBe(true));
 });

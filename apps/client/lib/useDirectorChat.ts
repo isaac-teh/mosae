@@ -63,6 +63,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const skipPeopleForNow = useRef(false);
   const mounted = useRef(true);
   const generationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeFilmId = useRef<string | null>(null);
+  const filmReadPending = useRef(false);
   const pollFilmRef = useRef<(filmId: string) => void>(() => {});
   const compositionStartedAt = useRef<number | null>(null);
   const router = useRouter();
@@ -85,6 +87,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     peopleEdits.current.clear();
     skipPeopleForNow.current = false;
     compositionStartedAt.current = null;
+    activeFilmId.current = null;
+    filmReadPending.current = false;
     if (generationTimer.current) clearTimeout(generationTimer.current);
     generationTimer.current = null;
   }
@@ -145,10 +149,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         resumeProjectId.current = projectId;
         proposalId.current = resume.proposalId;
         const confirmedStory = resume.storyText ?? (nextSummary.country ? `Yes, our ${nextSummary.country} trip` : `Yes, that's our story`);
-        const hasGeneration = Boolean(resume.generationId && film);
+        const hasGeneration = Boolean(resume.generationId);
         const setAside = getSetAsideSummary(plan);
         const needsFilteredPhotoReview = setAside.blurry + setAside.duplicates > 0;
-        const isFilmReady = resume.generationStatus === "playable" || resume.generationStatus === "rendering" || resume.generationStatus === "saved";
+        const isFilmReady = Boolean(film) && (resume.generationStatus === "playable" || resume.generationStatus === "rendering" || resume.generationStatus === "saved");
         const generation = hasGeneration ? isFilmReady
           ? { status: "done" as const, stage: resume.generationStatus!, progress: 1, stepsDone: 3, film }
           : { status: "running" as const, stage: resume.generationStatus === "rendering" ? "rendering" as const : "composing" as const, progress: 0, stepsDone: 2, film: null }
@@ -222,6 +226,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   }, [input.generation?.status, input.generation?.stage]);
 
   const pollFilm = useCallback(async (filmId: string) => {
+    if (filmReadPending.current || !isCurrentProject()) return;
+    filmReadPending.current = true;
+    if (generationTimer.current) clearTimeout(generationTimer.current);
+    generationTimer.current = null;
+    activeFilmId.current = filmId;
     try {
       const film = await repository.getFilm(filmId);
       if (!mounted.current || !isCurrentProject()) return;
@@ -240,14 +249,25 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         } }));
         generationTimer.current = setTimeout(() => { void pollFilm(filmId); }, 1500);
       } else {
+        activeFilmId.current = null;
+        setError(null);
         setInput((current) => ({ ...current, generation: { status: "done", stage: film.generationStatus === "saved" ? "saved" : "playable", progress: 1, stepsDone: 3, film } }));
       }
     } catch (cause) {
       if (!mounted.current || !isCurrentProject()) return;
-      setInput((current) => ({ ...current, generation: { status: "failed", stage: "failed", progress: current.generation?.progress ?? 0, stepsDone: current.generation?.stepsDone ?? 0, film: null } }));
+      if ((cause as { code?: string })?.code === "generation_failed") {
+        activeFilmId.current = null;
+        compositionStartedAt.current = null;
+        setInput(current => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: false } : null, generation: null }));
+        if (!directionOptions && proposalId.current) await loadDirectionOptions(proposalId.current);
+      } else {
+        setInput((current) => ({ ...current, generation: { status: "failed", stage: "failed", progress: current.generation?.progress ?? 0, stepsDone: current.generation?.stepsDone ?? 0, film: null } }));
+      }
       setError(reportFailure(cause));
+    } finally {
+      if (isCurrentProject()) filmReadPending.current = false;
     }
-  }, [repository, projectId, currentProjectEpoch]);
+  }, [repository, projectId, currentProjectEpoch, directionOptions, loadDirectionOptions]);
   pollFilmRef.current = (filmId) => { void pollFilm(filmId); };
 
   const actions = {
@@ -425,5 +445,5 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     confirmInterpret() { if (pendingInterpret) void actions.confirmOccasion(pendingInterpret.text); },
     discardInterpret() { setPendingInterpret(null); },
   };
-  return { state, actions, error, retry: () => { setError(null); void refresh(); }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection, people: input.people ?? [] };
+  return { state, actions, error, retry: () => { setError(null); if (activeFilmId.current) void pollFilm(activeFilmId.current); else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); }); }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection, people: input.people ?? [] };
 }

@@ -102,6 +102,7 @@ test("R1 replay: fresh demo reaches direction once and resumes after reload", as
   await expect(page.getByRole("button", { name: "Everyone", exact: true })).toBeVisible();
   await expect(page.getByText(/These moments can make about|Add more photos for a longer film|For a \d+-day trip/)).toHaveCount(0);
   expect(requests.filter(r => r.method === "POST" && /\/story-intents$/.test(r.path))).toHaveLength(1);
+  await expect(page.getByText("For these moments, I’d suggest this.", { exact: true })).toBeVisible();
   await evidence(page, "demo-direction");
   await confirm.click();
   await writeFile(path.join(r1Evidence, "demo-requests.json"), JSON.stringify(requests, null, 2));
@@ -153,9 +154,13 @@ test("R1 synthetic portrait fixture: sole named focus, contextual recommendation
   await page.goto("/");
   const authorization = (await tokenRequest).headers().authorization;
   const uid = JSON.parse(Buffer.from(authorization.split(".")[1]!, "base64url").toString()).user_id;
-  const projects = await db.collection("projects").get();
-  const source = projects.docs.find(doc => doc.get("demo") === "trip1-v2" && doc.get("currentProposalId"));
-  expect(source, "run the real demo replay test first to provide its recorded plan").toBeTruthy();
+  await page.getByText("Try with a demo trip", { exact: true }).click();
+  await page.waitForURL("**/director?**", { timeout: 120_000 });
+  const sourceId = new URL(page.url()).searchParams.get("projectId")!;
+  await page.getByRole("button", { name: /^Yes,/ }).click();
+  const sourceRef = db.collection("projects").doc(sourceId);
+  await expect.poll(async () => (await sourceRef.get()).get("currentProposalId"), { timeout: 60_000 }).toBeTruthy();
+  const source = await sourceRef.get();
   const ref = db.collection("projects").doc();
   const proposalId = "portrait-proposal";
   const original = (await source!.ref.collection("storyProposals").doc(source!.get("currentProposalId")).get()).data()!;

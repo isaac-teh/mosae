@@ -585,7 +585,7 @@ describe("film adapters", () => {
 
   it("throws a failed film's reasons instead of showing an empty player", async () => {
     const deps = filmDependencies({ [genPath]: generation({ status: "failed", timeline: null, failureReasons: ["every pick was dropped"] }) });
-    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1")).rejects.toThrow("every pick was dropped");
+    await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getFilm("gen-1")).rejects.toMatchObject({ message: "every pick was dropped", code: "generation_failed" });
   });
 
   it("maps a playable film with no video yet, its reasons and its poster", async () => {

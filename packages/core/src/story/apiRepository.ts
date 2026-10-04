@@ -629,7 +629,7 @@ export function createApiStoryRepository(
         `projects/${projectId}/generations/${filmId}`,
         (value) => isStatus(value, "saved", "failed"),
       ), "generation");
-      if (generation.status === "failed") throw new Error(failureMessage(generation));
+      if (generation.status === "failed") throw Object.assign(new Error(failureMessage(generation)), { code: "generation_failed" });
       return { downloadKey: await downloadUrl(filmId) };
     },
   };
@@ -672,7 +672,7 @@ export function createApiStoryRepository(
       ? await deps.listenUntil(generationPath, (value) => Boolean(value) && !isStatus(value, "composing"))
       : await deps.listenDocument(generationPath);
     const generation = record(generationValue, "generation");
-    if (generation.status === "failed") throw new Error(failureMessage(generation));
+    if (generation.status === "failed") throw Object.assign(new Error(failureMessage(generation)), { code: "generation_failed" });
 
     const planId = stringField(generation.proposalId, "proposal id");
     const timeline = generation.timeline && typeof generation.timeline === "object" ? record(generation.timeline, "timeline") : null;

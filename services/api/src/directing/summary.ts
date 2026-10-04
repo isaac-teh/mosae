@@ -24,6 +24,13 @@ export function summarise(assets: SummaryAsset[], hasPlan: boolean, context: {
 } = {}): ProjectSummary {
   const excluded = new Set(context.excludedAssetIds);
   assets = assets.filter((asset) => !asset.id || !excluded.has(asset.id));
+  const assetStatuses = assets.flatMap((asset) => {
+    const kind = (asset.media ?? asset.facts)?.kind;
+    return asset.id && (kind === "photo" || kind === "video") ? [{ assetId: asset.id, kind, status: asset.status }] : [];
+  });
+  const upload = context.upload ?? { expected: 0, settled: 0, failed: assets.filter((asset) => asset.status === "failed").length, cancelled: 0, closed: true };
+  // Failed processing stays visible for acknowledgement, but is not reviewed media.
+  assets = assets.filter((asset) => asset.status !== "failed");
   const dates = assets.map((asset) => (asset.media ?? asset.facts)?.localTime?.slice(0, 10) ?? null)
     .filter((date): date is string => !!date && /^\d{4}-\d{2}-\d{2}$/.test(date));
   const uniqueDates = [...new Set(dates)].sort();
@@ -47,7 +54,6 @@ export function summarise(assets: SummaryAsset[], hasPlan: boolean, context: {
   const ingested = assets.filter((asset) => asset.status === "ingested" || asset.status === "understood").length;
   const understood = assets.filter((asset) => asset.status === "understood").length;
   const facePhotos = photos.filter((asset) => asset.hasFaces).length;
-  const upload = context.upload ?? { expected: 0, settled: 0, failed: assets.filter((asset) => asset.status === "failed").length, cancelled: 0, closed: true };
   const usable = assets.filter((asset) => asset.status !== "failed");
   const story = usable.length > 0 && usable.every((asset) => asset.status === "understood")
     && upload.closed && upload.settled === upload.expected && (context.manifestReady ?? true)
@@ -59,9 +65,6 @@ export function summarise(assets: SummaryAsset[], hasPlan: boolean, context: {
     places: places.slice(0, 6), country, season,
     processed: { ingested, understood, faces: facePhotos },
     ready: { summary: ingested === assets.length, faces: photos.every((asset) => asset.status === "understood"), plan: hasPlan, story },
-    assetStatuses: assets.flatMap((asset) => {
-      const kind = (asset.media ?? asset.facts)?.kind;
-      return asset.id && (kind === "photo" || kind === "video") ? [{ assetId: asset.id, kind, status: asset.status }] : [];
-    }),
+    assetStatuses,
   };
 }

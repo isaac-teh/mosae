@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { deriveChat, canConfirmStory } from "../../../../packages/core/src/chat/deriveChat.js";
+import type { ChatInput } from "../../../../packages/core/src/chat/types.js";
 import { summarise, type SummaryAsset } from "./summary.js";
 
 const asset = (kind: "photo" | "video", localTime: string | null, place?: string): SummaryAsset => ({
@@ -57,4 +59,18 @@ it("excludes terminal manifest failures from understood usable media", () => {
   const context = { projectStatus: "ready", excludedAssetIds: ["excluded"], upload: { expected: 1, settled: 1, failed: 1, cancelled: 0, closed: true }, manifestReady: true };
   expect(summarise([failed], false, context)).toMatchObject({ processed: { ingested: 0, understood: 0, faces: 0 }, ready: { story: false } });
   expect(summarise([failed, { ...asset("photo", null), id: "good" }], false, context)).toMatchObject({ processed: { ingested: 1, understood: 1, faces: 1 }, ready: { story: true } });
+});
+
+it.each([true, false])("continues with understood media after acknowledged processing failure (manifest %s)", (manifest) => {
+  const result = summarise([
+    { ...asset("photo", "2026-06-01T10:00:00", "Tokyo"), id: "good" },
+    { ...asset("photo", "2026-10-20T10:00:00", "Kyoto"), id: "failed", status: "failed" },
+  ], false, { projectStatus: "ready_with_errors", ...(manifest ? { upload: { expected: 2, settled: 2, failed: 1, cancelled: 0, closed: true }, manifestReady: true } : {}) });
+  const input: ChatInput = { summary: result, intent: null, people: [], peopleConfirmed: true, plan: null, momentsConfirmed: false, conflict: null, direction: null, generation: null, notes: [] };
+  expect(canConfirmStory(input)).toBe(false);
+  expect(result).toMatchObject({ total: 1, photos: 1, days: 1, places: ["Tokyo"], upload: { failed: 1 }, processed: { ingested: 1, understood: 1, faces: 1 }, ready: { summary: true, faces: true, story: true } });
+  expect(result.assetStatuses).toContainEqual({ assetId: "failed", kind: "photo", status: "failed" });
+  const chat = deriveChat({ ...input, uploadFailuresAcknowledged: true });
+  expect(chat.items).toContainEqual({ kind: "occasion", id: "occasion" });
+  expect(chat.items.find(item => item.id === "occasion-message")).toMatchObject({ text: expect.stringContaining("all 1") });
 });
