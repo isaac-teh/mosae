@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const phone = { width: 390, height: 844 };
-const tallPhone = { width: 412, height: 870 };
+const tallPhone = { width: 412, height: 915 };
 
 export default defineConfig({
   testDir: ".",
@@ -16,8 +16,8 @@ export default defineConfig({
   projects: [
     { name: "chromium-390x844", use: { ...devices["Desktop Chrome"], viewport: phone } },
     { name: "chromium-mobile", use: { ...devices["Pixel 7"], viewport: phone } },
-    { name: "chromium-412x870", use: { ...devices["Desktop Chrome"], viewport: tallPhone } },
-    { name: "webkit-390x844", use: { ...devices["iPhone 14"], viewport: phone } },
-    { name: "webkit-412x870", use: { ...devices["iPhone 14"], viewport: tallPhone } },
+    { name: "chromium-412x915", use: { ...devices["Desktop Chrome"], viewport: tallPhone } },
+    { name: "webkit-390x844", use: { ...devices["iPhone 13"], viewport: phone } },
+    { name: "webkit-412x870", use: { ...devices["iPhone 13"], viewport: tallPhone } },
   ],
 });

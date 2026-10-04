@@ -113,7 +113,9 @@ describe("web editor preview seeks", () => {
     await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} controls="chat" />));
     const slider = host.querySelector('[aria-label="Film progress"]') as HTMLDivElement;
     vi.spyOn(slider, "getBoundingClientRect").mockReturnValue({ left: 0, width: 100, top: 0, right: 100, bottom: 44, height: 44, x: 0, y: 0, toJSON() {} });
-    await act(async () => slider.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 50 })));
+    const tap = new Event("touchstart", { bubbles: true });
+    Object.defineProperty(tap, "touches", { value: [{ clientX: 50 }] });
+    await act(async () => slider.dispatchEvent(tap));
     expect(playerMock.seekTo).toHaveBeenLastCalledWith(135);
     await act(async () => slider.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 25 })));
     await act(async () => slider.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 75 })));
@@ -133,7 +135,7 @@ describe("web editor preview seeks", () => {
 
     Object.defineProperty(container, "requestFullscreen", { configurable: true, value: undefined });
     await act(async () => (host.querySelector('[aria-label="Fullscreen"]') as HTMLButtonElement).click());
-    expect(host.querySelector('[aria-label="Close fullscreen"]')).not.toBeNull();
+    expect(document.body.querySelector('[aria-label="Close fullscreen"]')).not.toBeNull();
   });
 
   it("passes selected-photo crop and selection callbacks into the frame renderer", async () => {
