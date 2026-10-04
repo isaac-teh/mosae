@@ -16,6 +16,32 @@ describe("fixture story repository", () => {
       await expect(afterReload.saveEdits("fixture", "demo-film", 2, [])).resolves.toMatchObject({ revision: 2, ops: [] });
     } finally { vi.unstubAllGlobals(); }
   });
+  it("replays a deterministic editor Ask batch and persists its applied conversation turn", async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("window", { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) } });
+    try {
+      const repo = createFixtureStoryRepository({ delayMs: 0 });
+      const response = await repo.interpretEdit("fixture", "demo-film", "hold the opening longer", 0, { scope: { kind: "film" }, requestId: "ask-1" });
+      expect(response).toMatchObject({ kind: "edit", requestId: "ask-1", ops: [{ op: "setPhotoDuration", clipId: "clip-3", sec: 4 }] });
+      await repo.saveEdits("fixture", "demo-film", 1, response.ops);
+      await repo.acknowledgeEditInterpretation("fixture", "demo-film", response.requestId, 1);
+      const reopened = createFixtureStoryRepository({ delayMs: 0 });
+      await expect(reopened.getEditConversation("fixture", "demo-film")).resolves.toMatchObject([{ requestId: "ask-1", user: "hold the opening longer", status: "applied", appliedRevision: 1 }]);
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it("renders the exact saved edit revision and resulting preview timeline", async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("window", { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) } });
+    try {
+      const repo = createFixtureStoryRepository({ delayMs: 0 });
+      const ops = [{ op: "setPhotoDuration" as const, clipId: "clip-3", sec: 4 }];
+      await repo.saveEdits("fixture", "demo-film", 1, ops);
+      await repo.renderRevision("fixture", "demo-film", 1);
+      const render = JSON.parse(storage.get("mosae:fixture-editor:fixture/demo-film/render/1") ?? "{}");
+      expect(render.inputOps).toEqual(ops);
+      expect(render.timeline.videoClips.find((clip: { id?: string }) => clip.id === "clip-3").durationSec).toBe(4);
+    } finally { vi.unstubAllGlobals(); }
+  });
   it("provides a collage editor sample and same-event alternatives", async () => {
     const repo = createFixtureStoryRepository({ delayMs: 0 });
     const film = await repo.getFilmTimeline("fixture", "demo-film");

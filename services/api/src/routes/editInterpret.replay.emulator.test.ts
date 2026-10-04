@@ -1,6 +1,6 @@
 import express, { type RequestHandler } from "express";
 import { randomUUID } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import request from "supertest";
 import { listeningServer } from "../test/listeningServer.js";
@@ -51,13 +51,37 @@ const trip1Timeline: Timeline = {
   captions: [],
 };
 
+function freshTimeline(source: Timeline, projectId: string): Timeline {
+  const ids = new Map<string, string>();
+  const freshId = (id: string) => {
+    if (!ids.has(id)) ids.set(id, `${id}-${randomUUID()}`);
+    return ids.get(id)!;
+  };
+  return {
+    ...source,
+    projectId,
+    videoClips: source.videoClips.map((clip) => "kind" in clip
+      ? { ...clip, clipId: freshId(clip.clipId), spec: { ...clip.spec, slots: clip.spec.slots.map((slot) => ({ ...slot, slotId: freshId(slot.slotId), ...(slot.shotId ? { shotId: freshId(slot.shotId) } : {}) })) } }
+      : { ...clip, id: freshId(clip.id), source: { ...clip.source, shotId: freshId(clip.source.shotId) } }),
+  };
+}
+
+const clipId = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
+
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
 
 describe("edit interpretation replay route (Firestore emulator)", () => {
   it("replays the recorded Ask examples and the trip1 zoo edit through the owned-generation route", async () => {
     if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error("FIRESTORE_EMULATOR_HOST must point at the already-running emulator");
     const fixtures = readdirSync(fixturesDir).filter((name) => name.startsWith("edit-interpret-") && name.endsWith(".json"));
-    expect(fixtures).toHaveLength(5); // four earlier turns plus the real trip1 zoo request
+    const fixturePrompts = fixtures.map((name) => {
+      const fixture = JSON.parse(readFileSync(new URL(`../../fixtures/gemini/${name}`, import.meta.url), "utf8")) as { request: string };
+      const request = JSON.parse(fixture.request) as { contents?: { text?: string }[] };
+      return request.contents?.map((part) => part.text ?? "").join("\n") ?? "";
+    });
+    for (const phrase of ["move the snow monkeys earlier", "drop the airport bits", "make the temple collage calmer", "move the zoo photos earlier"]) {
+      expect(fixturePrompts.some((prompt) => prompt.includes(`Request: ${phrase}`)), `recording for ${phrase}`).toBe(true);
+    }
     vi.stubEnv("MOCK_GEMINI", "replay");
     vi.resetModules();
     const [{ editInterpretRouter }, { generateStructured }, { createGeminiClient }] = await Promise.all([
@@ -70,17 +94,21 @@ describe("edit interpretation replay route (Firestore emulator)", () => {
     app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, generate: (options) => generateStructured(options, { generateContent: createGeminiClient(), recordUsage: () => {} }) }));
     for (const [index, example] of examples.entries()) {
       const generationId = `generation-${index}`;
-      await adminDb.doc(`projects/${projectId}/generations/${generationId}`).set({ timeline: { ...timeline, projectId } });
+      const currentTimeline = freshTimeline(timeline, projectId);
+      await adminDb.doc(`projects/${projectId}/generations/${generationId}`).set({ timeline: currentTimeline });
       const response = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: example.text, revision: 0 });
       expect(response.status, example.text).toBe(200);
-      expect(response.body.ops).toContainEqual(expect.objectContaining({ op: example.op, clipId: example.clipId }));
+      const originalIndex = timeline.videoClips.findIndex((clip) => clipId(clip) === example.clipId);
+      expect(response.body.ops).toContainEqual(expect.objectContaining({ op: example.op, clipId: clipId(currentTimeline.videoClips[originalIndex]!) }));
+      expect(response.body.ops.every((op: { clipId?: string }) => !op.clipId || currentTimeline.videoClips.some((clip) => clipId(clip) === op.clipId))).toBe(true);
     }
     const tripGenerationId = "generation-trip1-zoo";
-    await adminDb.doc(`projects/${projectId}/generations/${tripGenerationId}`).set({ timeline: { ...trip1Timeline, projectId } });
+    const currentTripTimeline = freshTimeline(trip1Timeline, projectId);
+    await adminDb.doc(`projects/${projectId}/generations/${tripGenerationId}`).set({ timeline: currentTripTimeline });
     const tripResponse = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${tripGenerationId}/edits/interpret`).send({ text: "move the zoo photos earlier", revision: 0 });
     expect(tripResponse.status).toBe(200);
     expect(tripResponse.body.reply).toContain("Singapore Zoo");
     expect(tripResponse.body.ops).toHaveLength(4);
-    expect(tripResponse.body.ops.map((op: { clipId: string }) => op.clipId)).toEqual(trip1Timeline.videoClips.slice(4, 8).map((clip) => "id" in clip ? clip.id : clip.clipId));
+    expect(tripResponse.body.ops.map((op: { clipId: string }) => op.clipId)).toEqual(currentTripTimeline.videoClips.slice(4, 8).map(clipId));
   });
 });
