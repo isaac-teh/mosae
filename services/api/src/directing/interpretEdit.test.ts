@@ -23,7 +23,7 @@ describe("interpretEdit", () => {
       }),
     });
     expect(result).toEqual({ kind: "edit", reply: "Move the snow monkeys before the temple?", ops: [{ op: "move", clipId: "monkeys", toIndex: 0 }] });
-    expect(prompt).toContain('"clipId":"monkeys"');
+    expect(prompt).toContain('"clipIds":["monkeys","temple"]');
     expect(prompt).toContain('"chapter":"Snow monkeys"');
     expect(prompt).toContain('"caption":"Watching the snow monkeys"');
     expect(prompt).toContain('"time":"00:00–00:03"');
@@ -50,23 +50,47 @@ describe("interpretEdit", () => {
     }
     expect((schema as any).properties.ops.items.anyOf.flatMap((variant: any) => Object.values(variant.properties) as any[]).filter((field: any) => field.enum).every((field: any) => field.enum.length > 0)).toBe(true);
     expect((schema as any).properties.ops.items.anyOf.find((variant: any) => variant.properties.op.enum[0] === "setCollageMotion").properties.motionId.enum).toContain("page-turn");
-    expect((schema as any).properties.ops.items.anyOf.find((variant: any) => variant.properties.op.enum[0] === "setPhotoDuration").properties.clipId.enum).toEqual(["monkeys", "temple"]);
+    expect((schema as any).properties.ops.items.anyOf.find((variant: any) => variant.properties.op.enum[0] === "setPhotoDuration").properties.clipId.enum).toBeUndefined();
     expect((schema as any).properties.ops.items.anyOf.find((variant: any) => variant.properties.op.enum[0] === "setCollageSpec").properties.spec.properties.slots.items.properties.empty.type).toBe("BOOLEAN");
     expect(prompt).toContain('"layoutId":"photo-table","motionId":"page-turn"');
     expect(prompt).toContain("Preserve current collage sources unless changing them is necessary");
   });
 
-  it("enumerates only owned candidates and soundtrack ids in the operation schema", async () => {
+  it("lists owned candidates and soundtrack ids once in the prompt instead of repeating id enums in the schema", async () => {
     let schema: any;
+    let prompt = "";
     const result = await interpretEdit({ text: "replace this", timeline, groundedContext: {
       scope: { kind: "film" }, storyIntent: null, constraints: {}, people: [], selected: null,
       candidates: [{ shotId: "owned-shot", assetId: "owned-asset", kind: "photo", caption: "A mountain", personIds: [], sourceStartSec: null, sourceEndSec: null }],
       soundtracks: [{ id: "owned-track", name: "Piano", description: "Soft", cadence: "slow", durationSec: 60, storagePath: "music/piano.mp3" }], conversation: [],
-    } }, { generate: async (options) => { schema = options.responseSchema; return { kind: "clarify", reply: "Which clip?", ops: [] }; } });
+    } }, { generate: async (options) => { schema = options.responseSchema; prompt = (options.contents as { text: string }[])[0]!.text; return { kind: "clarify", reply: "Which clip?", ops: [] }; } });
     expect(result.kind).toBe("clarify");
     const variants = schema.properties.ops.items.anyOf;
-    expect(variants.find((variant: any) => variant.properties.op.enum[0] === "swapShot").properties.shotId.enum).toEqual(["owned-shot"]);
-    expect(variants.find((variant: any) => variant.properties.op.enum[0] === "setSoundtrack").properties.soundtrackId.enum).toEqual(["owned-track"]);
+    expect(variants.find((variant: any) => variant.properties.op.enum[0] === "swapShot").properties.shotId.enum).toBeUndefined();
+    expect(variants.find((variant: any) => variant.properties.op.enum[0] === "setSoundtrack").properties.soundtrackId.enum).toBeUndefined();
+    expect(prompt).toContain('"shotIds":["shot-monkeys","shot-temple","owned-shot"]');
+    expect(prompt).toContain('"soundtrackIds":["owned-track"]');
+  });
+
+  it("keeps the response schema under 20K and constant as film ID counts grow", async () => {
+    const captureSchema = async (clipCount: number, candidateCount: number, slotCount: number) => {
+      let schema: unknown;
+      const clips: Timeline["videoClips"] = Array.from({ length: clipCount }, (_, index) => ({ id: `clip-${index}`, source: { kind: "photo" as const, shotId: `used-${index}` }, startSec: index, durationSec: 1, transitionIn: { kind: "cut" as const, durationSec: 0 } }));
+      if (slotCount) clips[0] = { kind: "collage", clipId: "collage-large", startSec: 0, durationSec: 1, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
+        layoutId: "photo-table", motionId: "page-turn", effectId: null, seed: "seed", durationSec: 1,
+        slots: Array.from({ length: slotCount }, (_, index) => ({ slotId: `slot-${index}`, shotId: `slot-shot-${index}`, kind: "photo" as const })),
+      } };
+      const context = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, people: [], selected: null,
+        candidates: Array.from({ length: candidateCount }, (_, index) => ({ shotId: `candidate-${index}`, assetId: `asset-${index}`, kind: "photo" as const, caption: `Photo ${index}`, personIds: [], sourceStartSec: null, sourceEndSec: null })), soundtracks: [], conversation: [] };
+      await interpretEdit({ text: "replace this", timeline: { ...timeline, schemaVersion: 2, videoClips: clips }, groundedContext: context }, {
+        generate: async (options) => { schema = options.responseSchema; return { kind: "clarify", reply: "Which clip?", ops: [] }; },
+      });
+      return JSON.stringify(schema);
+    };
+    const small = await captureSchema(2, 2, 4);
+    const large = await captureSchema(80, 120, 40);
+    expect(large.length).toBeLessThan(20_000);
+    expect(large.length).toBe(small.length);
   });
 
   it("normalizes the known durationSec alias and logs the repair", async () => {
@@ -144,7 +168,7 @@ describe("interpretEdit", () => {
     const result = await interpretEdit({ text: "Add more collage", timeline: collageTimeline, groundedContext: {
       scope: { kind: "clip", clipId: "collage" }, storyIntent: null, constraints: {}, people: [], selected: null, candidates: [], soundtracks: [], conversation: [],
     } }, { generate: async () => ({ kind: "edit", ops: [{ op: "addCollageSlot", clipId: "collage", slotId: "invented", shotId: "invented-photo", kind: "photo" }] }) });
-    expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/unused photos/i), ops: [] });
+    expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/invented-photo|project/i), ops: [] });
   });
 
   it("asks before applying a whole-film request from selected-clip scope", async () => {
@@ -161,6 +185,13 @@ describe("interpretEdit", () => {
     expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/photo|which/i), ops: [] });
   });
 
+  it("clarifies specifically when an operation references an unknown clip", async () => {
+    const result = await interpretEdit({ text: "make it calmer", timeline }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "remove", clipId: "foreign-clip" }] }),
+    });
+    expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/clip.*foreign-clip|foreign-clip.*clip/i), ops: [] });
+  });
+
   it("returns the fallback reply when model operations are empty or invalid", async () => {
     const generate = vi.fn()
       .mockResolvedValueOnce({ reply: "Done", ops: [] })
@@ -168,7 +199,7 @@ describe("interpretEdit", () => {
     const empty = await interpretEdit({ text: "make it calmer", timeline }, { generate });
     const invalid = await interpretEdit({ text: "make it calmer", timeline }, { generate });
     expect(empty).toEqual({ kind: "unsupported", reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] });
-    expect(invalid).toMatchObject({ kind: "unsupported", reply: expect.stringContaining("unknown clipId"), ops: [] });
+    expect(invalid).toMatchObject({ kind: "clarify", reply: expect.stringContaining("clip"), ops: [] });
   });
 
   it("rejects source operations that are outside the owned candidate context", async () => {
@@ -181,7 +212,7 @@ describe("interpretEdit", () => {
         soundtracks: [], conversation: [],
       },
     }, { generate: async () => ({ reply: "Done", ops: [{ op: "swapShot", clipId: "monkeys", shotId: "foreign-shot" }] }) });
-    expect(result).toMatchObject({ kind: "unsupported", ops: [] });
+    expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/foreign-shot|project/i), ops: [] });
   });
 
   it("keeps clarification distinct from unsupported requests", async () => {
@@ -220,7 +251,7 @@ describe("interpretEdit", () => {
       { op: "setPhotoDuration", clipId: "monkeys", sec: 4 },
       { op: "swapShot", clipId: "temple", shotId: "foreign-shot" },
     ] }) });
-    expect(result).toMatchObject({ kind: "unsupported", ops: [] });
+    expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/foreign-shot|clip/i), ops: [] });
   });
 
   it("rejects operations that escape the selected clip or collage slot", async () => {
@@ -231,7 +262,7 @@ describe("interpretEdit", () => {
       generate: async () => ({ kind: "edit", ops: [{ op: "setCollageDuration", clipId: "collage", sec: 5 }] }),
     });
     expect(clipResult).toMatchObject({ kind: "unsupported", ops: [] });
-    expect(slotResult).toMatchObject({ kind: "unsupported", ops: [] });
+    expect(slotResult).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/collage|clip/i), ops: [] });
   });
 
   it("rejects swapping a video clip to a source whose bounds cannot contain the retained trim", async () => {

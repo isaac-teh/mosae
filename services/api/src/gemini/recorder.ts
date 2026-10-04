@@ -273,7 +273,11 @@ function replayEditFixtureForPrompt(fixture: Fixture, currentPrompt: string, idM
     const storedPrompt = storedRequest.contents?.map((part) => part.text ?? "").join("\n") ?? "";
     const clips = (prompt: string) => {
       const value = prompt.match(/(?:^|\n)Clips: (\[[^\n]*\])/)?.[1];
-      return value ? JSON.parse(value) as { clipId: string; chapter: string; caption: string; kind: string }[] : [];
+      if (!value) return [] as { clipId: string; chapter: string; caption: string; kind: string }[];
+      const parsed = JSON.parse(value) as { clipId?: string; chapter: string; caption: string; kind: string }[];
+      const idsValue = prompt.match(/(?:^|\n)Allowed IDs: (\{[^\n]*\})/)?.[1];
+      const ids = idsValue ? (JSON.parse(idsValue) as { clipIds?: string[] }).clipIds ?? [] : [];
+      return parsed.map((clip, index) => ({ ...clip, clipId: clip.clipId ?? ids[index] ?? "" }));
     };
     const oldClips = clips(storedPrompt);
     const currentClips = clips(currentPrompt);

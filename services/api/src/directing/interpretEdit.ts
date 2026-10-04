@@ -42,31 +42,12 @@ function zodObjectSchema(schema: any): ModelSchema {
 
 const editOpVariants = (EditOpSchema as any).options as any[];
 
-function responseSchemaFor(req: InterpretEditRequest) {
-  const clipIds = req.timeline.videoClips.map((clip) => "kind" in clip ? clip.clipId : clip.id);
-  const ownedCandidates = req.groundedContext?.candidates ?? [];
-  const usedShotIds = new Set(req.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId]));
-  const slotIds = req.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.slotId) : []);
-  const soundtrackIds = req.groundedContext?.soundtracks.map((track) => track.id) ?? [];
-  const audioIds = [...req.timeline.audioClips.map((clip) => clip.id), "editor-soundtrack"];
+function responseSchemaFor() {
   const items = editOpVariants.map((variant) => {
     const op = variant.shape.op.values.values().next().value as string;
     const schema = zodObjectSchema(variant);
     const properties = schema.properties as Record<string, ModelSchema>;
-    if (properties.clipId) properties.clipId.enum = clipIds;
-    if (properties.shotId) {
-      const allowed = op === "add" || op === "addCollageSlot"
-        ? ownedCandidates.filter((candidate) => !usedShotIds.has(candidate.shotId))
-        : ownedCandidates;
-      const ids = [...new Set(allowed.map((candidate) => candidate.shotId))];
-      if (ids.length) properties.shotId.enum = ids;
-    }
-    if (properties.slotId) {
-      if (op === "addCollageSlot") properties.slotId.enum = ["new-slot"];
-      else if (slotIds.length) properties.slotId.enum = slotIds;
-    }
-    if (properties.soundtrackId && soundtrackIds.length) properties.soundtrackId.enum = soundtrackIds;
-    if (properties.audioClipId && audioIds.length) properties.audioClipId.enum = audioIds;
+    if (properties.slotId && op === "addCollageSlot") properties.slotId.enum = ["new-slot"];
     if (properties.layoutId) properties.layoutId.enum = COLLAGE_LAYOUTS.map((layout) => layout.id);
     if (properties.motionId) properties.motionId.enum = COLLAGE_MOTIONS.map((motion) => motion.id);
     if (properties.effectId) properties.effectId.enum = COLLAGE_EFFECTS.map((effect) => effect.id);
@@ -81,6 +62,18 @@ function responseSchemaFor(req: InterpretEditRequest) {
   },
   required: ["kind", "ops"],
   };
+}
+
+function allowedIdsFor(req: InterpretEditRequest) {
+  const usedShotIds = new Set(usedShotIdsForTimeline(req.timeline));
+  const candidates = req.groundedContext?.candidates ?? [];
+  const clipIds = req.timeline.videoClips.map((clip) => "kind" in clip ? clip.clipId : clip.id);
+  const shotIds = [...new Set([...usedShotIds, ...candidates.map((candidate) => candidate.shotId)])];
+  const unusedShotIds = [...new Set(candidates.filter((candidate) => !usedShotIds.has(candidate.shotId)).map((candidate) => candidate.shotId))];
+  const slotIds = [...new Set(req.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.slotId) : []))];
+  const audioClipIds = [...new Set([...req.timeline.audioClips.map((clip) => clip.id), "editor-soundtrack"])];
+  const soundtrackIds = [...new Set((req.groundedContext?.soundtracks ?? []).map((track) => track.id))];
+  return { clipIds, shotIds, unusedShotIds, slotIds, audioClipIds, soundtrackIds };
 }
 
 class InvalidEditReply extends Error {
@@ -105,11 +98,47 @@ const formatTime = (sec: number) => {
 };
 function compactTimeline(timeline: Timeline) {
   return timeline.videoClips.map((clip) => {
-    const clipId = "kind" in clip ? clip.clipId : clip.id;
     const chapter = [...timeline.chapters].reverse().find((item) => item.startSec <= clip.startSec)?.title ?? "";
     const caption = timeline.captions.find((item) => item.startSec < clip.startSec + clip.durationSec && item.endSec > clip.startSec)?.text ?? "";
-    return { clipId, chapter, caption, kind: "kind" in clip ? "collage" : clip.source.kind, time: `${formatTime(clip.startSec)}–${formatTime(clip.startSec + clip.durationSec)}` };
+    return { chapter, caption, kind: "kind" in clip ? "collage" : clip.source.kind, time: `${formatTime(clip.startSec)}–${formatTime(clip.startSec + clip.durationSec)}` };
   });
+}
+
+function promptContext(req: InterpretEditRequest) {
+  const context = req.groundedContext;
+  if (!context) return undefined;
+  return {
+    storyIntent: context.storyIntent,
+    constraints: context.constraints,
+    people: context.people,
+    selected: context.selected ? { captions: context.selected.captions } : null,
+    candidates: context.candidates.map(({ shotId: _shotId, ...candidate }) => candidate),
+    soundtracks: context.soundtracks.map(({ id: _id, storagePath: _storagePath, ...track }) => track),
+    conversation: context.conversation,
+  };
+}
+
+function opsReferenceClarification(ops: EditOp[], allowed: ReturnType<typeof allowedIdsFor>): string | null {
+  for (const op of ops) {
+    if ("clipId" in op && !allowed.clipIds.includes(op.clipId)) return `I couldn't find clip “${op.clipId}” in this film. Which clip did you mean?`;
+    if (op.op === "add" && op.afterClipId !== null && !allowed.clipIds.includes(op.afterClipId)) return `I couldn't find clip “${op.afterClipId}” to add after. Which clip did you mean?`;
+    if ("slotId" in op && op.op !== "addCollageSlot" && !allowed.slotIds.includes(op.slotId)) return `I couldn't find collage slot “${op.slotId}”. Which photo in the collage did you mean?`;
+    const checkShot = (shotId: string | null | undefined) => shotId && !allowed.shotIds.includes(shotId) ? `I couldn't find photo or video “${shotId}” in this project. Which one should I use?` : null;
+    if ("shotId" in op) {
+      const invalidShot = checkShot(op.shotId);
+      if (invalidShot) return invalidShot;
+    }
+    if (op.op === "setCollageSpec") {
+      for (const slot of op.spec.slots) {
+        const invalidShot = checkShot(slot.shotId);
+        if (invalidShot) return invalidShot;
+        if (!allowed.slotIds.includes(slot.slotId)) return `I couldn't find collage slot “${slot.slotId}”. Which existing collage photo should I keep or change?`;
+      }
+    }
+    if (op.op === "setSoundtrack" && !allowed.soundtrackIds.includes(op.soundtrackId)) return `I couldn't find soundtrack “${op.soundtrackId}” in the available music. Which soundtrack did you mean?`;
+    if (op.op === "setMusicVolume" && !allowed.audioClipIds.includes(op.audioClipId)) return `I couldn't find audio clip “${op.audioClipId}” in this film. Which music or audio track did you mean?`;
+  }
+  return null;
 }
 
 function validate(value: unknown): InterpretEditModelResult {
@@ -161,17 +190,20 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
     const filmWide = isWholeFilmRequest(req.text) && req.scope?.kind !== "film";
     const scope = filmWide ? { kind: "film" as const } : req.scope;
     const request = { ...req, scope };
-    const responseSchema = responseSchemaFor(request);
+    const responseSchema = responseSchemaFor();
     const result = validate(await deps.generate({
       model: MODELS.analyze,
       stage: "editor.interpret",
       thinking: "MINIMAL",
       maxSchemaRepairs: 0,
-      contents: [{ text: `Translate the user's request into a small ordered list of allowed edit operations for this film. Return kind=edit with a complete supported batch, kind=clarify for an ambiguous reference, or kind=unsupported for unavailable capabilities. Never return partial operations. Do not invent clip, shot, slot, soundtrack or audio ids; use only the enumerated ids in the supplied context. For addCollageSlot, use the literal slotId "new-slot"; the editor assigns its internal slot id. Preserve current collage sources unless changing them is necessary. For "add more collage", use addCollageSlot with an unused owned photo candidate when one is available; otherwise ask which photos to include. Never invent a shotId. Prefer the smallest number of operations and return no more than 20. Respect selected scope when resolving "this". An explicit request for all clips or the whole film can affect clips outside the selected clip. For collage layouts and motions, keep the selected layout-motion pair in this allowed list: ${JSON.stringify(ALLOWED_COMBOS)}. Reply briefly and factually.\nAllowed operation schema: ${JSON.stringify(responseSchema)}\nClips: ${JSON.stringify(compactTimeline(req.timeline))}\nGrounded context (owned candidates, confirmed people, scope, story, soundtracks, prior conversation): ${JSON.stringify({ ...req.groundedContext, scope: request.scope ?? req.groundedContext?.scope })}\nScope: ${JSON.stringify(request.scope ?? { kind: "film" })}\nRequest: ${req.text}` }],
+      contents: [{ text: `Translate the user's request into a small ordered list of allowed edit operations for this film. Return kind=edit with a complete supported batch, kind=clarify for an ambiguous reference, or kind=unsupported for unavailable capabilities. Never return partial operations. Use only IDs from the allowed IDs block; never invent an ID. For addCollageSlot, use the literal slotId "new-slot"; the editor assigns its internal slot id. Preserve current collage sources unless changing them is necessary. For "add more collage", use addCollageSlot with an unused owned photo candidate when one is available; otherwise ask which photos to include. Prefer the smallest number of operations and return no more than 20. The clips summary and clipIds list use the same order. Respect selected scope when resolving "this". An explicit request for all clips or the whole film can affect clips outside the selected clip. For collage layouts and motions, keep the selected layout-motion pair in this allowed list: ${JSON.stringify(ALLOWED_COMBOS)}. Reply briefly and factually.\nAllowed operation schema: ${JSON.stringify(responseSchema)}\nAllowed IDs: ${JSON.stringify(allowedIdsFor(req))}\nClips: ${JSON.stringify(compactTimeline(req.timeline))}\nGrounded context (owned candidates, confirmed people, story, soundtracks, prior conversation): ${JSON.stringify(promptContext(req))}\nScope: ${JSON.stringify(request.scope?.kind === "clip" ? { kind: "clip", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId) } : request.scope?.kind === "slot" ? { kind: "slot", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId), slotIndex: allowedIdsFor(req).slotIds.indexOf(request.scope.slotId) } : { kind: "film" })}\nRequest: ${req.text}` }],
       responseSchema,
       validate,
     }));
     const context = req.groundedContext;
+    const allowedIds = allowedIdsFor(req);
+    const foreignReference = opsReferenceClarification(result.ops, allowedIds);
+    if (foreignReference) return { kind: "clarify", reply: foreignReference, ops: [] };
     const candidates = context ? new Map(context.candidates.map((candidate) => [candidate.shotId, candidate])) : null;
     const resolvedSlotIds = new Set<string>();
     const ops = result.ops.map((op) => {
