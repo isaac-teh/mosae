@@ -82,6 +82,13 @@ describe("recordFinalize (emulator)", () => {
     expect(tasks.size).toBe(1);
   });
 
+  it("deduplicates an upload notification followed by the Storage finalize event", async () => {
+    const { project, event } = await setup();
+    expect(await recordFinalize(adminDb, BUCKET, event)).toMatchObject({ kind: "accepted" });
+    expect(await recordFinalize(adminDb, BUCKET, event)).toEqual({ kind: "duplicate" });
+    expect((await adminDb.collection(`projects/${project.id}/taskOutbox`).get()).size).toBe(1);
+  });
+
   it("ignores proxies and renders, and rejects other buckets", async () => {
     const { event } = await setup();
     expect(await recordFinalize(adminDb, BUCKET, { ...event, objectName: event.objectName.replace("original", "thumb.jpg") })).toEqual({ kind: "ignored_path" });

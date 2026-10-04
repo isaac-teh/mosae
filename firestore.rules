@@ -28,6 +28,7 @@ service cloud.firestore {
       match /storyIntents/{intentId} { allow read: if ownsParent(); allow write: if false; }
       match /storyProposals/{proposalId} { allow read: if ownsParent(); allow write: if false; }
       match /jobs/{jobId} { allow read: if ownsParent(); allow write: if false; }
+      match /readiness/{document=**} { allow read: if ownsParent(); allow write: if false; }
 
       match /directionSettings/{settingsId} { allow read: if ownsParent(); allow write: if false; }
       match /generations/{generationId} { allow read: if ownsParent(); allow write: if false; }

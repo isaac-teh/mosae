@@ -76,6 +76,7 @@ export function projectsRouter(deps: {
   auth?: RequestHandler;
   listProjects?: (userId: string) => Promise<Record<string, unknown>[]>;
   settle?: (projectId: string) => Promise<void>;
+  notifyUploaded?: (input: { userId: string; projectId: string; sessionId: string; assetId: string; generation: string }) => Promise<unknown>;
   sleep?: (ms: number) => Promise<void>;
   embedQuery?: (text: string) => Promise<number[]>;
   demoBucket?: DemoBucket;
@@ -229,6 +230,23 @@ export function projectsRouter(deps: {
       } catch (error) {
         handleError(res, error);
       }
+    },
+  );
+
+  router.post(
+    "/:projectId/upload-sessions/:sessionId/entries/:assetId/uploaded",
+    async (req, res) => {
+      const generation = req.body?.generation;
+      if (typeof generation !== "string" || !/^\d{1,30}$/.test(generation)) {
+        res.status(400).json({ error: "invalid_generation" });
+        return;
+      }
+      if (!deps.notifyUploaded) { res.status(503).json({ error: "upload_notification_unavailable" }); return; }
+      try {
+        const result = await deps.notifyUploaded({ userId: res.locals.userId, ...req.params, generation });
+        res.status(202).json({ result });
+        settleAfter(req.params.projectId);
+      } catch (error) { handleError(res, error); }
     },
   );
 

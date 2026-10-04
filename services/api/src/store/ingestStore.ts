@@ -61,7 +61,7 @@ export async function loadAsset(db: Firestore, projectId: string, assetId: strin
  * an asset that already ingested is skipped, not rewritten. Shot ids are
  * deterministic, so even a lost race could only rewrite the same documents.
  */
-export async function commitIngested(db: Firestore, commit: IngestCommit): Promise<"ingested" | "skipped"> {
+export async function commitIngested(db: Firestore, commit: IngestCommit, enqueueUnderstand = true): Promise<"ingested" | "skipped"> {
   const ref = assetRef(db, commit.projectId, commit.assetId);
   const shotsCollection = db.collection("projects").doc(commit.projectId).collection("shots");
   const records = shotRecords({ assetId: commit.assetId, generation: commit.generation, media: commit.media, ranges: commit.ranges });
@@ -86,7 +86,7 @@ export async function commitIngested(db: Firestore, commit: IngestCommit): Promi
       failureReason: null,
     });
     for (const record of records) tx.set(shotsCollection.doc(record.id), record);
-    if (!taskSnap.exists) tx.create(taskRef, task);
+    if (enqueueUnderstand && !taskSnap.exists) tx.create(taskRef, task);
     return "ingested";
   });
 }

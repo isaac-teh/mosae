@@ -22,7 +22,7 @@ export type UploadPreparationProgress = { totalFiles: number; preparedFiles: num
 
 export type UploadDeps = {
   post: <T>(path: string, body?: unknown) => Promise<T>;
-  putFile: (storagePath: string, file: File, onBytes: (sent: number) => void) => Promise<void>;
+  putFile: (storagePath: string, file: File, onBytes: (sent: number) => void) => Promise<string | void>;
 };
 
 type RegisteredEntry = { assetId: string; storagePath: string };
@@ -48,13 +48,13 @@ async function defaultDeps(): Promise<UploadDeps> {
       const storageRef = ref(storage, storagePath);
       const metadata = { contentType: contentTypeFor(file) };
       if (!shouldUseResumableUpload(file.size)) {
-        await uploadBytes(storageRef, file, metadata);
+        const uploaded = await uploadBytes(storageRef, file, metadata);
         onBytes(file.size);
-        return;
+        return uploaded.metadata.generation;
       }
-      await new Promise<void>((resolve, reject) => {
+      return await new Promise<string>((resolve, reject) => {
         const task = uploadBytesResumable(storageRef, file, metadata);
-        task.on("state_changed", (snap) => onBytes(snap.bytesTransferred), reject, () => resolve());
+        task.on("state_changed", (snap) => onBytes(snap.bytesTransferred), reject, () => resolve(task.snapshot.metadata.generation));
       });
     },
   };
@@ -113,6 +113,8 @@ export async function uploadMedia(
   let flushing: Promise<void> | null = null;
   let fatalRegistrationError: unknown;
   let readySent = false;
+  let closePromise: Promise<void> | null = null;
+  let earlyCloseFailure: unknown;
   const uploadTasks: Promise<void>[] = [];
   let activeUploads = 0;
   const uploadWaiters: (() => void)[] = [];
@@ -148,6 +150,8 @@ export async function uploadMedia(
           });
           if (!readySent && entries.filter(Boolean).length === entries.length) {
             readySent = true;
+            closePromise = post(`${sessionPath}/close`).then(() => undefined).catch((error) => { closePromise = null; earlyCloseFailure = error; throw error; });
+            void closePromise.catch(() => undefined);
             options.onReady?.({ projectId, assetIds: entries.map((entry) => entry!.assetId) });
           }
         } catch (error) {
@@ -184,7 +188,9 @@ export async function uploadMedia(
       await post(`${sessionPath}/entries/${assetId}/outcome`, outcome);
       outcomes.delete(assetId);
     }));
-    await post(`${sessionPath}/close`);
+    if (earlyCloseFailure) { const error = earlyCloseFailure; earlyCloseFailure = undefined; throw error; }
+    if (!closePromise) closePromise = post(`${sessionPath}/close`).then(() => undefined).catch((error) => { closePromise = null; throw error; });
+    await closePromise;
   };
 
   try {
@@ -199,7 +205,10 @@ export async function uploadMedia(
       const task = withUploadSlot(async () => {
         const uploadStarted = performance.now();
         try {
-          await putFile(entry.storagePath, file, (bytes) => { sent[index] = bytes; report(); });
+          const generation = await putFile(entry.storagePath, file, (bytes) => { sent[index] = bytes; report(); });
+          if (generation) {
+            await post(`${sessionPath}/entries/${entry.assetId}/uploaded`, { generation }).catch(() => undefined);
+          }
           sent[index] = file.size;
           progress.finishedFiles++;
           statuses[index] = { assetId: entry.assetId, status: "uploaded" };

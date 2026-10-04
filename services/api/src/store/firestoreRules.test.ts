@@ -36,6 +36,7 @@ beforeAll(async () => {
     await setDoc(doc(db, "projects/p-alice/storyProposals/pr1"), { state: "draft" });
     await setDoc(doc(db, "projects/p-alice/generations/g1"), { status: "rendering" });
     await setDoc(doc(db, "projects/p-alice/jobs/j1"), { type: "plan", status: "running" });
+    await setDoc(doc(db, "projects/p-alice/readiness/summary"), { settled: false, assets: 1 });
     await setDoc(doc(db, "projects/p-alice/uploadSessions/u1"), { closed: false });
     await setDoc(doc(db, "projects/p-alice/taskOutbox/t1"), { state: "pending" });
   });
@@ -55,6 +56,7 @@ describe("firestore.rules (emulator)", () => {
     await assertSucceeds(getDoc(doc(db, "projects/p-alice/storyProposals/pr1")));
     await assertSucceeds(getDoc(doc(db, "projects/p-alice/generations/g1")));
     await assertSucceeds(getDoc(doc(db, "projects/p-alice/jobs/j1")));
+    await assertSucceeds(getDoc(doc(db, "projects/p-alice/readiness/summary")));
   });
 
   it("denies another signed-in user, at the project and at every subcollection", async () => {
@@ -66,6 +68,7 @@ describe("firestore.rules (emulator)", () => {
     await assertFails(getDoc(doc(db, "projects/p-alice/storyProposals/pr1")));
     await assertFails(getDoc(doc(db, "projects/p-alice/generations/g1")));
     await assertFails(getDoc(doc(db, "projects/p-alice/jobs/j1")));
+    await assertFails(getDoc(doc(db, "projects/p-alice/readiness/summary")));
   });
 
   it("denies an unauthenticated reader", async () => {

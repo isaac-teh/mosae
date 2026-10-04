@@ -40,6 +40,7 @@ export function createIngest(config: {
   bucketName: string;
   settle: (projectId: string) => Promise<void>;
   dispatchDue: () => Promise<void>;
+  understand?: (task: import("./ingestAsset.js").IngestTask) => Promise<unknown>;
 }): (task: IngestTask) => Promise<IngestResult> {
   // One resolver per API process shares the in-flight key map and Nominatim queue.
   let resolver: Promise<PlaceResolver> | null = null;
@@ -53,7 +54,8 @@ export function createIngest(config: {
       videoDerivatives: (input, outDir, durationSec, onTiming) => makeVideoDerivatives(input, outDir, durationSec, undefined, onTiming),
       analyze: analyzeImage,
       detectShots: (proxy, durationSec) => detectShots(proxy, durationSec),
-      commitIngested: (commit) => commitIngested(config.db, commit),
+      commitIngested: (commit, enqueueUnderstand) => commitIngested(config.db, commit, enqueueUnderstand),
+      understand: config.understand,
       commitFailed: (input) => commitFailed(config.db, input),
       settle: config.settle,
       dispatchDue: config.dispatchDue,

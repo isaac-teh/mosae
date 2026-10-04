@@ -16,6 +16,7 @@ export type FilmTimeline = { timeline: Timeline; sources: Record<string, string>
 export type EditInterpretation = { reply: string; ops: EditOp[] };
 
 export interface StoryRepository {
+  watchReadiness?(projectId: string, onChange: () => void, onError: (error: unknown) => void): () => void;
   listFilms(): Promise<FilmListItem[]>;
   getProjectResume(projectId: string): Promise<ProjectResumeState>;
   getSummary(projectId: string): Promise<ProjectSummary>;
