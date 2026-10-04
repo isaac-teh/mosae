@@ -25,6 +25,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   const player = useRef<PlayerRef>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(playheadSec);
+  const currentTimeRef = useRef(playheadSec);
   const lastToggleRequest = useRef(togglePlayRequest);
   const inputProps = useMemo(() => ({ timeline, sources, selectedClipId, onSelectClip, onCommitPhotoCrop, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }), [timeline, sources, selectedClipId, onSelectClip, onCommitPhotoCrop, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop]);
   useEffect(() => {
@@ -32,6 +33,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
     if (!current) return;
     const time = ({ detail }: { detail: { frame: number } }) => {
       const seconds = detail.frame / timeline.fps;
+      currentTimeRef.current = seconds;
       setCurrentTime(seconds);
       onTimeChange?.(seconds);
     };
@@ -53,7 +55,10 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
 
   useEffect(() => {
     if (!seekRequest || !player.current) return;
-    player.current.seekTo(Math.max(0, Math.min(Math.ceil(timeline.durationSec * timeline.fps) - 1, Math.round(seekRequest.seconds * timeline.fps))));
+    const seconds = Math.max(0, Math.min(timeline.durationSec, seekRequest.seconds));
+    currentTimeRef.current = seconds;
+    setCurrentTime(seconds);
+    player.current.seekTo(Math.max(0, Math.min(Math.ceil(timeline.durationSec * timeline.fps) - 1, Math.round(seconds * timeline.fps))));
   }, [seekRequest, timeline.durationSec, timeline.fps]);
 
   useEffect(() => {
@@ -61,7 +66,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   }, [pauseRequest]);
 
   const playFromPlayhead = () => {
-    player.current?.seekTo(Math.max(0, Math.min(Math.ceil(timeline.durationSec * timeline.fps) - 1, Math.round(currentTime * timeline.fps))));
+    player.current?.seekTo(Math.max(0, Math.min(Math.ceil(timeline.durationSec * timeline.fps) - 1, Math.round(currentTimeRef.current * timeline.fps))));
     player.current?.play();
   };
   useEffect(() => {

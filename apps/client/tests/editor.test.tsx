@@ -45,7 +45,9 @@ function repository() {
     getEdits: vi.fn(async () => ({ revision: 0, ops: [], updatedAt: null })),
     getPlan: vi.fn(async (planId: string) => ({ planId, moments: [], leftOut: [] })),
     getDirectionOptions: vi.fn(async () => ({ soundtracks: [{ id: "lyria-playful", name: "Sandcastle Days", description: "Upbeat" }] })),
-    interpretEdit: vi.fn(async () => ({ reply: "Move the last photo earlier?", ops: [{ op: "move" as const, clipId: "c", toIndex: 0 }] })),
+    getEditConversation: vi.fn(async () => []),
+    acknowledgeEditInterpretation: vi.fn(async () => {}),
+    interpretEdit: vi.fn(async (_p: string, _g: string, _text: string, revision: number, context?: { requestId: string }) => ({ kind: "edit" as const, baseRevision: revision, requestId: context?.requestId ?? "r1", reply: "Move the last photo earlier.", ops: [{ op: "move" as const, clipId: "c", toIndex: 0 }] })),
     saveEdits: vi.fn(async (_projectId: string, _generationId: string, revision: number, ops: unknown[]) => ({ revision, ops, updatedAt: 1 })),
     renderRevision: vi.fn(async () => ({ renderId: "render-1" })),
     getRender: vi.fn(async (_projectId: string, _generationId: string, revision: number) => ({ revision, status: "ready" as const, downloadUrl: `https://film.test/revision-${revision}.mp4` })),
@@ -222,16 +224,14 @@ describe("film editor", () => {
     expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "add", shotId: "shot-unused", kind: "photo", afterClipId: null, durationSec: 3 }]);
   });
 
-  it("prefills Ask from request= and applies its proposal in a single undo step", async () => {
+  it("prefills Ask and atomically applies a result that one Undo restores", async () => {
     boundary.params = { ...boundary.params, request: "move the last photo earlier" };
     await render(<EditorScreen />);
     expect((host.querySelector('[aria-label="Ask for an edit"]') as HTMLInputElement).value).toBe("move the last photo earlier");
-    const original = [...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"));
     await click("Suggest edit");
-    expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(original);
-    await click("Apply edits");
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip c", "Select clip a", "Select clip b"]);
-    await click("Undo");
+    expect(boundary.repository.acknowledgeEditInterpretation).toHaveBeenCalled();
+    await click("Undo AI edit");
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
   });
 

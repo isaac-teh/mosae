@@ -96,6 +96,17 @@ export function useEditor(projectId: string, generationId: string, repository: S
     return attempt;
   }, [projectId, generationId, repository]);
 
+  const savePendingNow = useCallback(async (): Promise<boolean> => {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const snapshot = opsRef.current;
+      const snapshotKey = keyOf(snapshot);
+      if (savedOpsKeyRef.current === snapshotKey) return true;
+      if (!await persist(snapshot)) return false;
+      if (keyOf(opsRef.current) === snapshotKey) return true;
+    }
+    return false;
+  }, [persist]);
+
   useEffect(() => {
     if (!loaded || !firstCut || save.state === "conflict" || save.state === "rendering") return;
     if (opsKey === savedOpsKey) {
@@ -232,6 +243,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
   return {
     timeline, firstCut, sources, thumbnails, unusedMedia, setSource, ops, selectedClipId, select: setSelectedClipId,
     apply, applyMany, undo, redo, reset, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
-    save, savedRevision, downloadUrl, renderProgress, renderEtaMinutes, savedFilm, reloadAfterConflict, render, loaded, error, editError,
+    save, savedRevision, getSavedRevision: () => revisionRef.current, getSnapshotKey: () => keyOf(opsRef.current), savePendingNow,
+    downloadUrl, renderProgress, renderEtaMinutes, savedFilm, reloadAfterConflict, render, loaded, error, editError,
   };
 }
