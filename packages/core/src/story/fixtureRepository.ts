@@ -335,6 +335,8 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
     },
 
     getEdits: async (projectId, generationId) => structuredClone(editDocuments.get(`${projectId}/${generationId}`) ?? readBrowserValue<FilmEdits>(browserEditKey(projectId, generationId)) ?? { revision: 0, ops: [], updatedAt: null }),
+    getEditConversation: async () => [],
+    acknowledgeEditInterpretation: async () => {},
     interpretEdit: async (_projectId, _generationId, _text, _revision, context) => ({ kind: "unsupported", requestId: context?.requestId ?? globalThis.crypto.randomUUID(), reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] }),
     saveEdits: async (projectId, generationId, revision, ops) => {
       const key = `${projectId}/${generationId}`;

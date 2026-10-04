@@ -4,7 +4,7 @@ import { MODELS } from "../gemini/pricing.js";
 import { DemoLimitReached } from "../gemini/errors.js";
 import type { EditContext } from "./editContext.js";
 
-export type InterpretEditRequest = { text: string; timeline: Timeline } & Partial<EditContext>;
+export type InterpretEditRequest = { text: string; timeline: Timeline; groundedContext?: import("./loadEditContext.js").EditContext } & Partial<EditContext>;
 export type InterpretEditModelResult = { reply?: string; ops: EditOp[] };
 export type InterpretEditResult = { reply: string; ops: EditOp[] };
 const fallbackReply = "I couldn't turn that into an edit. Try the tools below, or say it another way.";

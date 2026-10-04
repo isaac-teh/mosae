@@ -142,3 +142,5 @@ export type Film = {
   /** Why the director placed what it placed, for the Review Film explanation. */
   reasons: string[];
 };
+
+export type EditConversationTurn = { requestId: string; user: string; reply: string; kind: "edit" | "clarify" | "unsupported"; revision: number; status: "pending" | "applied" | "answered" | "failed"; appliedRevision?: number };

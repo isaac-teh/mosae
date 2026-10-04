@@ -5,6 +5,7 @@ import { listeningServer } from "../test/listeningServer.js";
 import { describe, expect, it } from "vitest";
 import type { Timeline } from "@mosae/contracts";
 import { adminDb } from "../firebase/admin.js";
+import { saveEditDocument } from "../directing/editStore.js";
 import { editInterpretRouter } from "./editInterpret.js";
 
 const owner = "editor-ask-emulator-owner";
@@ -36,5 +37,44 @@ describe("edit interpretation route (Firestore emulator)", () => {
     expect(response.body).toMatchObject({ kind: "edit", baseRevision: 0, requestId: expect.any(String), reply: "Move the monkeys earlier?", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] });
     const stale = await request(await listeningServer(app)).post(`/api/projects/${projectId}/generations/${generationId}/edits/interpret`).send({ text: "move the snow monkeys earlier", revision: 4 });
     expect(stale.status).toBe(409);
+  });
+  it("persists bounded generation history, deduplicates requests and acknowledges only saved proposed ops", async () => {
+    const projectId = `ask-history-${randomUUID()}`;
+    const project = adminDb.doc(`projects/${projectId}`);
+    await project.set({ userId: owner });
+    for (const generationId of ["g1", "g2"]) await project.collection("generations").doc(generationId).set({ timeline: { ...timeline, projectId } });
+    let calls = 0;
+    const app = express(); app.use(express.json());
+    app.use("/api/projects", editInterpretRouter({ db: adminDb, auth, generate: async () => { calls++; return { reply: "Move the photo.", ops: [{ op: "move", clipId: "monkeys", toIndex: 1 }] }; } }));
+    const server = await listeningServer(app);
+    const base = `/api/projects/${projectId}/generations/g1/edits`;
+    const payload = { text: "move this", revision: 0, context: { scope: { kind: "clip", clipId: "monkeys" }, requestId: "request-one" } };
+    const first = await request(server).post(`${base}/interpret`).send(payload);
+    expect(first.status).toBe(200);
+    expect((await request(server).get(`${base}/conversation`)).body.turns).toMatchObject([{ requestId: "request-one", status: "pending", revision: 0 }]);
+    expect((await request(server).post(`${base}/acknowledge`).send({ requestId: "request-one", revision: 1 })).status).toBe(409);
+    expect((await request(server).post(`${base}/interpret`).send(payload)).body).toEqual(first.body);
+    expect(calls).toBe(1);
+    expect((await request(server).post(`${base}/interpret`).send({ ...payload, text: "different request" })).status).toBe(409);
+    const edits = project.collection("generations").doc("g1").collection("edits").doc("current");
+    await edits.set({ revision: 1, ops: [{ op: "remove", clipId: "temple" }], updatedAt: 1 });
+    expect((await request(server).post(`${base}/acknowledge`).send({ requestId: "request-one", revision: 1 })).status).toBe(409);
+    await edits.delete();
+    const saved = await saveEditDocument(adminDb, owner, projectId, "g1", { revision: 1, ops: first.body.ops });
+    expect(saved.status).toBe("saved");
+    expect((await request(server).post(`${base}/acknowledge`).send({ requestId: "request-one", revision: 1 })).status).toBe(200);
+    expect((await request(server).get(`${base}/conversation`)).body.turns).toMatchObject([{ status: "applied", appliedRevision: 1 }]);
+    expect((await request(server).post(`${base}/interpret`).send(payload)).body).toEqual(first.body);
+    expect(calls).toBe(1);
+    expect((await request(server).get(`/api/projects/${projectId}/generations/g2/edits/conversation`)).body.turns).toEqual([]);
+    for (let i = 0; i < 10; i++) {
+      expect((await request(server).post(`${base}/interpret`).send({ text: `move photo ${i}`, revision: 1, context: { scope: { kind: "film" }, requestId: `request-${i}` } })).status).toBe(200);
+    }
+    const history = (await request(server).get(`${base}/conversation`)).body.turns;
+    expect(history).toHaveLength(8);
+    expect(history[0].requestId).toBe("request-2");
+    await project.update({ userId: "other" });
+    expect((await request(server).get(`${base}/conversation`)).status).toBe(404);
+    expect((await request(server).post(`${base}/acknowledge`).send({ requestId: "request-one", revision: 1 })).status).toBe(404);
   });
 });

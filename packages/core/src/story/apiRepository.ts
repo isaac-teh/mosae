@@ -594,6 +594,13 @@ export function createApiStoryRepository(
     getEdits: async (projectId, generationId) => record(await deps.request(
       "GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`,
     ), "edits") as FilmEdits,
+    getEditConversation: async (projectId, generationId) => {
+      const response = record(await deps.request("GET", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits/conversation`), "edit conversation");
+      return Array.isArray(response.turns) ? response.turns as import("./types").EditConversationTurn[] : [];
+    },
+    acknowledgeEditInterpretation: async (projectId, generationId, requestId, revision) => {
+      await deps.request("POST", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits/acknowledge`, { requestId, revision });
+    },
     interpretEdit: async (projectId, generationId, text, revision, context) => record(await deps.request(
       "POST", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits/interpret`, { text, revision, ...(context ? { context } : {}) },
     ), "edit interpretation") as EditInterpretation,

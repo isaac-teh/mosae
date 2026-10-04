@@ -104,6 +104,16 @@ describe("createApiStoryRepository", () => {
     expect(deps.request).toHaveBeenNthCalledWith(2, "PUT", "/api/projects/project-1/generations/gen-1/edits", { revision: 2, ops: document.ops });
   });
 
+  it("reopens generation conversation and acknowledges a saved AI revision", async () => {
+    const turns = [{ requestId: "r1", user: "move this", reply: "Move it", kind: "edit", revision: 0, status: "pending" }];
+    const deps = dependencies({ request: vi.fn(async () => ({ turns })) });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    await expect(repository.getEditConversation("project-1", "gen-1")).resolves.toEqual(turns);
+    await repository.acknowledgeEditInterpretation("project-1", "gen-1", "r1", 1);
+    expect(deps.request).toHaveBeenNthCalledWith(1, "GET", "/api/projects/project-1/generations/gen-1/edits/conversation");
+    expect(deps.request).toHaveBeenNthCalledWith(2, "POST", "/api/projects/project-1/generations/gen-1/edits/acknowledge", { requestId: "r1", revision: 1 });
+  });
+
   it("asks the generation edit interpreter at the requested revision", async () => {
     const response = { kind: "edit" as const, baseRevision: 3, requestId: "r1", reply: "Move the second photo earlier?", ops: [{ op: "move" as const, clipId: "clip-2", toIndex: 0 }] };
     const deps = dependencies({ request: vi.fn(async () => response) });
