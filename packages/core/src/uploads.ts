@@ -1,15 +1,22 @@
-import { ref, uploadBytesResumable } from "firebase/storage";
+import { ref, uploadBytes, uploadBytesResumable } from "firebase/storage";
 import { prepareUploadFiles } from "./prepareUploadFiles";
 
 export const ENTRY_BATCH = 500;
 export const DEFAULT_CONCURRENCY = 4;
+export const SINGLE_REQUEST_UPLOAD_LIMIT = 5_000_000;
 
+export function shouldUseResumableUpload(sizeBytes: number): boolean {
+  return sizeBytes >= SINGLE_REQUEST_UPLOAD_LIMIT;
+}
+
+export type UploadFileProgress = { assetId: string; status: "uploading" | "uploaded" | "failed" };
 export type UploadProgress = {
   totalFiles: number;
   finishedFiles: number;
   failedFiles: number;
   bytesSent: number;
   totalBytes: number;
+  assetStatuses?: UploadFileProgress[];
 };
 export type UploadPreparationProgress = { totalFiles: number; preparedFiles: number };
 
@@ -19,6 +26,7 @@ export type UploadDeps = {
 };
 
 type RegisteredEntry = { assetId: string; storagePath: string };
+type PendingRegistration = { index: number; file: File; resolve: (entry: RegisteredEntry) => void; reject: (error: unknown) => void };
 
 const TYPE_BY_EXTENSION: Record<string, string> = {
   jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", heic: "image/heic", heif: "image/heif", webp: "image/webp", gif: "image/gif",
@@ -35,101 +43,191 @@ async function defaultDeps(): Promise<UploadDeps> {
   const [{ apiPost }, { getStorageClient }] = await Promise.all([import("./apiClient"), import("./firebase")]);
   return {
     post: apiPost,
-    putFile: (storagePath, file, onBytes) =>
-      new Promise((resolve, reject) => {
-        const task = uploadBytesResumable(ref(getStorageClient(), storagePath), file, { contentType: contentTypeFor(file) });
+    putFile: async (storagePath, file, onBytes) => {
+      const storage = getStorageClient();
+      const storageRef = ref(storage, storagePath);
+      const metadata = { contentType: contentTypeFor(file) };
+      if (!shouldUseResumableUpload(file.size)) {
+        await uploadBytes(storageRef, file, metadata);
+        onBytes(file.size);
+        return;
+      }
+      await new Promise<void>((resolve, reject) => {
+        const task = uploadBytesResumable(storageRef, file, metadata);
         task.on("state_changed", (snap) => onBytes(snap.bytesTransferred), reject, () => resolve());
-      }),
+      });
+    },
   };
 }
 
 export async function uploadMedia(
   files: File[],
-  options: { mode: "memory" | "creator"; projectId?: string; onProgress?: (p: UploadProgress) => void; onFileFailed?: (file: File) => void; onCloseFailure?: (retry: () => Promise<void>) => void; onPreparationProgress?: (p: UploadPreparationProgress) => void; onProjectReady?: (projectId: string) => void; onReady?: (ready: { projectId: string; assetIds: string[] }) => void; concurrency?: number },
+  options: {
+    mode: "memory" | "creator";
+    projectId?: string;
+    onProgress?: (p: UploadProgress) => void;
+    onFileFailed?: (file: File) => void;
+    onCloseFailure?: (retry: () => Promise<void>) => void;
+    onPreparationProgress?: (p: UploadPreparationProgress) => void;
+    onProjectReady?: (projectId: string) => void;
+    onEntryRegistered?: (entry: { fileIndex: number; file: File; assetId: string }) => void;
+    onReady?: (ready: { projectId: string; assetIds: string[] }) => void;
+    concurrency?: number;
+  },
   deps?: UploadDeps,
 ): Promise<{ projectId: string; finished: number; failed: number; assetIds: string[] }> {
   const { post, putFile } = deps ?? (await defaultDeps());
   const concurrency = Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY);
-
   const acceptedOriginal = files.filter((file) => Boolean(contentTypeFor(file)));
   const rejected = files.length - acceptedOriginal.length;
   if (acceptedOriginal.length === 0) return { projectId: "", finished: 0, failed: rejected, assetIds: [] };
+
   const projectId = options.projectId ?? (await post<{ project: { id: string } }>("/api/projects", { mode: options.mode })).project.id;
   options.onProjectReady?.(projectId);
-  options.onPreparationProgress?.({ totalFiles: acceptedOriginal.length, preparedFiles: 0 });
-  const accepted = await prepareUploadFiles(acceptedOriginal, (preparedFiles, totalFiles) => options.onPreparationProgress?.({ preparedFiles, totalFiles }));
-  const base = `/api/projects/${projectId}/upload-sessions`;
-
-  const toInput = (f: File) => ({ fileName: f.name, contentType: contentTypeFor(f), sizeBytes: f.size });
-  const first = await post<{ session: { id: string }; entries: RegisteredEntry[] }>(base, {
-    entries: accepted.slice(0, ENTRY_BATCH).map(toInput),
-  });
-  const sessionPath = `${base}/${first.session.id}`;
-  const entries = [...first.entries];
+  const sessionBase = `/api/projects/${projectId}/upload-sessions`;
+  let sessionPath: string | null = null;
   let mainPathFailed = false;
-  const unsettledOutcomes = new Map<string, { kind: "cancelled" } | { kind: "failed"; reason: string }>();
+  const entries = new Array<RegisteredEntry | undefined>(acceptedOriginal.length);
+  const statuses = new Array<UploadFileProgress | undefined>(acceptedOriginal.length);
+  const sent = new Array<number>(acceptedOriginal.length).fill(0);
+  const outcomes = new Map<string, { kind: "cancelled" } | { kind: "failed"; reason: string }>();
+  const progress: UploadProgress = {
+    totalFiles: files.length,
+    finishedFiles: 0,
+    failedFiles: rejected,
+    bytesSent: 0,
+    totalBytes: acceptedOriginal.reduce((sum, file) => sum + file.size, 0),
+    assetStatuses: [],
+  };
+  const report = () => options.onProgress?.({
+    ...progress,
+    bytesSent: sent.reduce((total, bytes) => total + bytes, 0),
+    assetStatuses: statuses.filter((status): status is UploadFileProgress => Boolean(status)),
+  });
+  options.onPreparationProgress?.({ totalFiles: acceptedOriginal.length, preparedFiles: 0 });
+  report();
+
+  const pending: PendingRegistration[] = [];
+  let registrationTimer: ReturnType<typeof setTimeout> | undefined;
+  let flushing: Promise<void> | null = null;
+  let fatalRegistrationError: unknown;
+  let readySent = false;
+  const uploadTasks: Promise<void>[] = [];
+  let activeUploads = 0;
+  const uploadWaiters: (() => void)[] = [];
+  const withUploadSlot = async (run: () => Promise<void>) => {
+    if (activeUploads >= concurrency) await new Promise<void>((resolve) => uploadWaiters.push(resolve));
+    activeUploads++;
+    try { await run(); }
+    finally { activeUploads--; uploadWaiters.shift()?.(); }
+  };
+
+  const toInput = (file: File) => ({ fileName: file.name, contentType: contentTypeFor(file), sizeBytes: file.size });
+  const flushRegistrations = async () => {
+    if (flushing) return flushing;
+    flushing = (async () => {
+      while (pending.length > 0) {
+        const batch = pending.splice(0, ENTRY_BATCH);
+        const body = { entries: batch.map(({ file }) => toInput(file)) };
+        try {
+          let registered: RegisteredEntry[];
+          if (sessionPath) {
+            registered = (await post<{ entries: RegisteredEntry[] }>(`${sessionPath}/entries`, body)).entries;
+          } else {
+            const opened = await post<{ session: { id: string }; entries: RegisteredEntry[] }>(sessionBase, body);
+            sessionPath = `${sessionBase}/${opened.session.id}`;
+            registered = opened.entries;
+          }
+          if (registered.length !== batch.length) throw new Error("entry_registration_mismatch");
+          batch.forEach((item, i) => {
+            const entry = registered[i]!;
+            entries[item.index] = entry;
+            item.resolve(entry);
+            options.onEntryRegistered?.({ fileIndex: item.index, file: item.file, assetId: entry.assetId });
+          });
+          if (!readySent && entries.filter(Boolean).length === entries.length) {
+            readySent = true;
+            options.onReady?.({ projectId, assetIds: entries.map((entry) => entry!.assetId) });
+          }
+        } catch (error) {
+          batch.forEach((item) => item.reject(error));
+          throw error;
+        }
+      }
+    })().catch((error) => {
+      fatalRegistrationError = error;
+      pending.splice(0).forEach((item) => item.reject(error));
+      throw error;
+    }).finally(() => {
+      flushing = null;
+      if (pending.length > 0 && !fatalRegistrationError) void flushRegistrations().catch(() => undefined);
+    });
+    return flushing;
+  };
+  const registerPrepared = (index: number, file: File) => new Promise<RegisteredEntry>((resolve, reject) => {
+    if (fatalRegistrationError) { reject(fatalRegistrationError); return; }
+    pending.push({ index, file, resolve, reject });
+    if (pending.length >= Math.min(3, acceptedOriginal.length) || pending.length >= ENTRY_BATCH) {
+      void flushRegistrations().catch(() => undefined);
+    } else if (!registrationTimer) {
+      registrationTimer = setTimeout(() => {
+        registrationTimer = undefined;
+        void flushRegistrations().catch(() => undefined);
+      }, 20);
+    }
+  });
+
   const settleAndClose = async () => {
-    await Promise.all([...unsettledOutcomes].map(async ([assetId, outcome]) => {
+    if (!sessionPath) return;
+    await Promise.all([...outcomes].map(async ([assetId, outcome]) => {
       await post(`${sessionPath}/entries/${assetId}/outcome`, outcome);
-      unsettledOutcomes.delete(assetId);
+      outcomes.delete(assetId);
     }));
     await post(`${sessionPath}/close`);
   };
 
   try {
-    for (let start = ENTRY_BATCH; start < accepted.length; start += ENTRY_BATCH) {
-      const batch = await post<{ entries: RegisteredEntry[] }>(`${sessionPath}/entries`, {
-        entries: accepted.slice(start, start + ENTRY_BATCH).map(toInput),
-      });
-      entries.push(...batch.entries);
-    }
-
-    if (entries.length !== accepted.length) throw new Error("entry_registration_mismatch");
-
-    const sent = new Array<number>(accepted.length).fill(0);
-    const progress: UploadProgress = {
-      totalFiles: files.length,
-      finishedFiles: 0,
-      failedFiles: rejected,
-      bytesSent: 0,
-      totalBytes: accepted.reduce((sum, f) => sum + f.size, 0),
-    };
-    const report = () => options.onProgress?.({ ...progress, bytesSent: sent.reduce((a, b) => a + b, 0) });
-    report();
-    options.onReady?.({ projectId, assetIds: entries.map(({ assetId }) => assetId) });
-
-    let next = 0;
-    async function worker() {
-      while (next < accepted.length) {
-        const index = next++;
-        const entry = entries[index];
-        if (!entry) throw new Error("entry_registration_mismatch");
+    await prepareUploadFiles(acceptedOriginal, (preparedFiles, total) => {
+      options.onPreparationProgress?.({ preparedFiles, totalFiles: total });
+    }, async (index, file) => {
+      progress.totalBytes += file.size - acceptedOriginal[index]!.size;
+      report();
+      const entry = await registerPrepared(index, file);
+      statuses[index] = { assetId: entry.assetId, status: "uploading" };
+      report();
+      const task = withUploadSlot(async () => {
         try {
-          await putFile(entry.storagePath, accepted[index], (bytes) => {
-            sent[index] = bytes;
-            report();
-          });
-          sent[index] = accepted[index].size;
-          progress.finishedFiles += 1;
+          await putFile(entry.storagePath, file, (bytes) => { sent[index] = bytes; report(); });
+          sent[index] = file.size;
+          progress.finishedFiles++;
+          statuses[index] = { assetId: entry.assetId, status: "uploaded" };
         } catch (error) {
-          progress.totalBytes -= accepted[index].size;
+          progress.totalBytes -= file.size;
           sent[index] = 0;
-          progress.failedFiles += 1;
+          progress.failedFiles++;
+          statuses[index] = { assetId: entry.assetId, status: "failed" };
           options.onFileFailed?.(acceptedOriginal[index]!);
           const reason = (error as { code?: string }).code ?? "upload_error";
           const outcome = { kind: "failed" as const, reason };
-          unsettledOutcomes.set(entry.assetId, outcome);
-          await post(`${sessionPath}/entries/${entry.assetId}/outcome`, outcome).then(() => unsettledOutcomes.delete(entry.assetId)).catch(() => undefined);
+          outcomes.set(entry.assetId, outcome);
+          if (sessionPath) await post(`${sessionPath}/entries/${entry.assetId}/outcome`, outcome).then(() => outcomes.delete(entry.assetId)).catch(() => undefined);
         }
         report();
-      }
-    }
-
-    await Promise.all(Array.from({ length: Math.min(concurrency, accepted.length) }, worker));
-    return { projectId, finished: progress.finishedFiles, failed: progress.failedFiles, assetIds: entries.map(({ assetId }) => assetId) };
+      });
+      uploadTasks.push(task);
+    });
+    if (registrationTimer) { clearTimeout(registrationTimer); registrationTimer = undefined; }
+    if (pending.length) await flushRegistrations();
+    await Promise.all(uploadTasks);
+    if (!readySent || entries.filter(Boolean).length !== entries.length) throw new Error("entry_registration_mismatch");
+    return { projectId, finished: progress.finishedFiles, failed: progress.failedFiles, assetIds: entries.map((entry) => entry!.assetId) };
   } catch (error) {
     mainPathFailed = true;
-    entries.forEach(({ assetId }) => unsettledOutcomes.set(assetId, { kind: "cancelled" }));
+    fatalRegistrationError = error;
+    if (registrationTimer) clearTimeout(registrationTimer);
+    pending.splice(0).forEach((item) => item.reject(error));
+    await Promise.all(uploadTasks);
+    entries.forEach((entry) => { if (entry) outcomes.set(entry.assetId, { kind: "cancelled" }); });
     throw error;
   } finally {
     try {

@@ -38,6 +38,7 @@ beforeEach(() => {
   state.uploadMedia.mockImplementation(async (_files: File[], options: any) => {
     options.onProjectReady?.("uploaded-project");
     options.onPreparationProgress?.({ totalFiles: 1, preparedFiles: 0 });
+    options.onEntryRegistered?.({ fileIndex: 0, file: _files[0], assetId: "asset-1" });
     options.onReady?.({ projectId: "uploaded-project", assetIds: ["asset-1"] });
     options.onProgress?.({ totalFiles: 1, finishedFiles: 0, failedFiles: 0, bytesSent: 0, totalBytes: 5 });
     return { projectId: "uploaded-project", finished: 1, failed: 0, assetIds: ["asset-1"] };

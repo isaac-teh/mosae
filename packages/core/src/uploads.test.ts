@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { uploadMedia, type UploadDeps, type UploadProgress } from "./uploads";
+import { shouldUseResumableUpload, uploadMedia, type UploadDeps, type UploadProgress } from "./uploads";
 
 function file(name: string, size: number, type = "image/jpeg") {
   return new File([new Uint8Array(size)], name, { type });
@@ -39,6 +39,11 @@ function fakeDeps(options: { failPath?: string; rejectLaterEntries?: boolean; sh
 }
 
 describe("uploadMedia", () => {
+  it("uses one request below 5 MB and resumable transfer at or above 5 MB", () => {
+    expect(shouldUseResumableUpload(4_999_999)).toBe(false);
+    expect(shouldUseResumableUpload(5_000_000)).toBe(true);
+  });
+
   it("creates a project, registers entries, uploads, and closes the session", async () => {
     const { deps, calls } = fakeDeps();
     const progress: UploadProgress[] = [];
@@ -56,7 +61,31 @@ describe("uploadMedia", () => {
         { fileName: "b.mov", contentType: "video/quicktime", sizeBytes: 20 },
       ],
     });
-    expect(progress.at(-1)).toEqual({ totalFiles: 2, finishedFiles: 2, failedFiles: 0, bytesSent: 30, totalBytes: 30 });
+    expect(progress.at(-1)).toEqual({ totalFiles: 2, finishedFiles: 2, failedFiles: 0, bytesSent: 30, totalBytes: 30, assetStatuses: [{ assetId: "a1", status: "uploaded" }, { assetId: "a2", status: "uploaded" }] });
+    expect(progress.some((p) => p.assetStatuses?.some((asset) => asset.status === "uploading"))).toBe(true);
+  });
+
+  it("starts uploading each file before preparation has finished for the whole selection", async () => {
+    const preparedCounts: number[] = [];
+    const countsWhenUploadStarts: number[] = [];
+    let readyAssetIds: string[] = [];
+    const { deps } = fakeDeps();
+    const pipelineDeps: UploadDeps = {
+      ...deps,
+      putFile: async (_path, _file, onBytes) => {
+        countsWhenUploadStarts.push(preparedCounts.at(-1) ?? 0);
+        onBytes(1);
+      },
+    };
+    await uploadMedia(Array.from({ length: 8 }, (_, i) => file(`${i}.jpg`, 1)), {
+      mode: "memory",
+      onPreparationProgress: ({ preparedFiles }) => preparedCounts.push(preparedFiles),
+      onReady: ({ assetIds }) => { readyAssetIds = assetIds; },
+    }, pipelineDeps);
+
+    expect(countsWhenUploadStarts.length).toBe(8);
+    expect(countsWhenUploadStarts.some((count) => count < 8)).toBe(true);
+    expect(Array.from(readyAssetIds)).toEqual(Array.from({ length: 8 }, (_, i) => `a${i + 1}`));
   });
 
   it("announces chat readiness before storage transfers finish", async () => {
@@ -84,12 +113,11 @@ describe("uploadMedia", () => {
     const result = await uploadMedia(files, { mode: "memory", concurrency: 3 }, deps);
 
     expect(result.finished).toBe(501);
-    expect(calls.map((c) => c.path)).toEqual([
-      "/api/projects",
-      "/api/projects/p1/upload-sessions",
-      "/api/projects/p1/upload-sessions/s1/entries",
-      "/api/projects/p1/upload-sessions/s1/close",
-    ]);
+    expect(calls[0].path).toBe("/api/projects");
+    expect(calls[1].path).toBe("/api/projects/p1/upload-sessions");
+    expect(calls.slice(2, -1).every((call) => call.path === "/api/projects/p1/upload-sessions/s1/entries")).toBe(true);
+    expect(calls.slice(1, -1).every(({ body }) => (body as { entries: unknown[] }).entries.length <= 500)).toBe(true);
+    expect(calls.at(-1)?.path).toBe("/api/projects/p1/upload-sessions/s1/close");
     expect(maxInFlight()).toBeLessThanOrEqual(3);
   });
 
@@ -179,7 +207,7 @@ it("settles registered entries after registration aborts before closing", async 
   const { deps, calls } = fakeDeps({ rejectLaterEntries: true });
   await expect(uploadMedia(Array.from({ length: 501 }, (_, i) => file(`${i}.jpg`, 1)), { mode: "memory" }, deps)).rejects.toThrow("entry_registration_failed");
   const outcomes = calls.filter(call => call.path.endsWith("/outcome"));
-  expect(outcomes).toHaveLength(500);
+  expect(outcomes).toHaveLength(3);
   expect(outcomes.every(call => (call.body as any).kind === "cancelled")).toBe(true);
   expect(calls.at(-1)?.path).toMatch(/close$/);
 });

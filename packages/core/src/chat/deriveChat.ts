@@ -72,7 +72,8 @@ export function deriveChat(input: ChatInput): ChatState {
   const addPhotoProgress = () => {
     const processed = input.summary?.processed.ingested ?? 0;
     const total = input.summary?.total ?? 0;
-    add({ kind: "typing", id: "summary-wait", text: `Reading your photos, ${processed} of ${total}`, photoProgress: input.summary?.assetStatuses });
+    const text = total > 0 ? `Reading your photos, ${processed} of ${total}` : "Waiting for your photos to arrive…";
+    add({ kind: "typing", id: "summary-wait", text, photoProgress: input.summary?.assetStatuses });
   };
 
   if ((!input.intent && !canConfirmStory(input)) || !input.summary?.ready.summary) {

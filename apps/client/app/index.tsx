@@ -73,9 +73,13 @@ export default function Home() {
           },
           onCloseFailure: retry => { closeRetry = retry; },
           onFileFailed: (file) => failedFiles.push(file),
-          onReady: ({ assetIds }) => {
+          onEntryRegistered: ({ file, assetId }) => {
+            const index = media.indexOf(file);
+            if (index >= 0) assetIdsByFile[index] = assetId;
+            setPendingMedia(media, assetIdsByFile, ownerProjectId);
+          },
+          onReady: () => {
             retryRegistered = true;
-            retryFiles.forEach((file, index) => { assetIdsByFile[media.indexOf(file)] = assetIds[index]!; });
             setPendingMedia(media, assetIdsByFile, ownerProjectId);
             setUploadPreparationProgress(null);
           },
@@ -99,11 +103,15 @@ export default function Home() {
           setPendingMedia(media, [], projectId);
           router.push({ pathname: "/director", params: { projectId, live: "1" } } as unknown as Href);
         },
-        onReady: ({ projectId, assetIds }) => {
+        onEntryRegistered: ({ file, assetId }) => {
+          const index = media.indexOf(file);
+          if (index >= 0) assetIdsByFile[index] = assetId;
+          setPendingMedia(media, assetIdsByFile, ownerProjectId ?? null);
+        },
+        onReady: ({ projectId }) => {
           routed = true;
           registered = true;
-          assetIdsByFile = assetIds;
-          setPendingMedia(media, assetIds, projectId);
+          setPendingMedia(media, assetIdsByFile, projectId);
           setUploadPreparationProgress(null);
         },
       });

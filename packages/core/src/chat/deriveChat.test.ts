@@ -50,6 +50,11 @@ describe("deriveChat state table", () => {
     ] });
   });
 
+  it("waits for the first photos instead of claiming there are zero", () => {
+    const pending = deriveChat({ ...base(), summary: { ...summary, total: 0, photos: 0, clips: 0, ready: { ...summary.ready, summary: false } }, intent: null, people: null, peopleConfirmed: false, plan: null });
+    expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Waiting for your photos to arrive…" });
+  });
+
   it("keeps the photo reading grid through asset understanding after ingest completes", () => {
     const pending = deriveChat({ ...base(), summary: { ...summary, ready: { ...summary.ready, faces: false }, assetStatuses: [
       { assetId: "a1", kind: "photo", status: "understood" },

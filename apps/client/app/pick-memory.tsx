@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { type Href, useRouter } from "expo-router";
-import { formatDuration, getPendingMedia, mediaId, uploadMedia, type UploadProgress } from "@mosae/core";
+import { formatDuration, getPendingMedia, mediaId, uploadMedia, type UploadPreparationProgress, type UploadProgress } from "@mosae/core";
 import { JourneySteps, MomentTile } from "@/components/ds";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
 import { MediaThumb } from "@/components/MediaThumb";
@@ -19,6 +19,7 @@ export default function PickMemoryScreen() {
   const [items, setItems] = useState<Picked[]>(() => toPicked(getPendingMedia()));
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
+  const [preparation, setPreparation] = useState<UploadPreparationProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [demoBusy, setDemoBusy] = useState(false);
   const pickerRef = useRef<MediaPickerHandle>(null);
@@ -49,12 +50,14 @@ export default function PickMemoryScreen() {
     if (!anySelected) return;
     setUploading(true);
     setProgress(null);
+    setPreparation({ preparedFiles: 0, totalFiles: selected.length });
     setError(null);
     try {
       const result = await uploadMedia(
         selected.map((i) => i.file),
-        { mode: "memory", onProgress: setProgress },
+        { mode: "memory", onProgress: setProgress, onPreparationProgress: setPreparation },
       );
+      setPreparation(null);
       if (result.finished === 0) {
         setError("Upload failed. Please try again.");
         setUploading(false);
@@ -63,6 +66,7 @@ export default function PickMemoryScreen() {
       router.push({ pathname: "/director", params: { projectId: result.projectId, live: "1" } } as unknown as Href);
     } catch (e) {
       console.error("upload failed", e);
+      setPreparation(null);
       setError("Upload failed. Please try again.");
       setUploading(false);
     }
@@ -79,9 +83,11 @@ export default function PickMemoryScreen() {
   const status =
     error ??
     (uploading
-      ? progress
-        ? `Uploading ${progress.finishedFiles + progress.failedFiles} of ${progress.totalFiles}`
-        : "Uploading..."
+      ? preparation
+        ? `Preparing ${preparation.preparedFiles} of ${preparation.totalFiles}`
+        : progress
+          ? `Uploading ${progress.finishedFiles + progress.failedFiles} of ${progress.totalFiles}`
+          : "Uploading..."
       : `${selected.length} selected`);
 
   return (

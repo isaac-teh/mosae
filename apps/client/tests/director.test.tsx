@@ -80,11 +80,20 @@ describe("Director chat", () => {
     setPendingMedia([new File(["photo"], "trip.jpg", { type: "image/jpeg" })]);
     setUploadPreparationProgress({ preparedFiles: 0, totalFiles: 1 });
     await renderScreen();
-    expect(hasText("Preparing your photos")).toBe(true);
+    expect(hasText("Preparing 0 of 1")).toBe(true);
     expect(hasText("Is that the story?")).toBe(false);
     expect(host.querySelector('input[aria-label="Tell me anything about the story"]')).toBeTruthy();
     expect(hasText("0 of 1")).toBe(true);
     expect(host.querySelector('[alt="Selected photo 1"]')).toBeTruthy();
+  });
+
+  it("shows an uploading status for locally registered photo thumbnails", async () => {
+    setup();
+    const photo = new File(["photo"], "trip.jpg", { type: "image/jpeg" });
+    setPendingMedia([photo], ["asset-1"], "project-1");
+    setUploadProgress({ totalFiles: 1, finishedFiles: 0, failedFiles: 0, bytesSent: 0, totalBytes: 5, assetStatuses: [{ assetId: "asset-1", status: "uploading" }] });
+    await renderScreen();
+    expect(host.querySelector('[alt="Photo 1, uploading"]')).toBeTruthy();
   });
 
   it("keeps terminal all-failed upload status visible in the chat", async () => {
