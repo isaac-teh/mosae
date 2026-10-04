@@ -39,7 +39,7 @@ function trimEdit(current: Timeline["videoClips"][number], original: Timeline["v
     return { op: "setCollageDuration", clipId, sec: range.endSec - range.startSec };
   }
   if (current.source.kind === "video" && "source" in original && original.source.kind === "video") {
-    const bounds = videoTrimBounds(original.source);
+    const bounds = videoTrimBounds(current.source);
     const range = trimRange({ startSec: current.source.sourceInSec, endSec: current.source.sourceOutSec, edge,
       requestedSec: (edge === "start" ? current.source.sourceInSec : current.source.sourceOutSec) + deltaSec,
       minSec: bounds.minSec, maxSec: bounds.maxSec });
