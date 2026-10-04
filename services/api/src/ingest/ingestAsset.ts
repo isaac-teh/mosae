@@ -21,7 +21,8 @@ export type IngestDeps = {
   videoDerivatives(input: string, outDir: string, durationSec: number, onTiming?: DerivativeTiming): Promise<VideoDerivatives>;
   analyze(file: string): Promise<QualityFacts>;
   detectShots(proxy: string, durationSec: number): Promise<ShotRange[]>;
-  commitIngested(commit: IngestCommit): Promise<"ingested" | "skipped">;
+  commitIngested(commit: IngestCommit, enqueueUnderstand?: boolean): Promise<"ingested" | "skipped">;
+  understand?(task: IngestTask): Promise<unknown>;
   commitFailed(input: { projectId: string; assetId: string; generation: string; reason: string; now: number }): Promise<"failed" | "skipped">;
   settle(projectId: string): Promise<void>;
   dispatchDue(): Promise<void>;
@@ -84,10 +85,11 @@ async function ingestOriginal(deps: IngestDeps, asset: Asset, workDir: string, t
     for (const upload of uploads) await deps.objects.upload(upload);
   });
 
-  return await deps.commitIngested({
+  const commit = {
     projectId: asset.projectId, assetId: asset.id, generation: asset.generation,
     media, place, quality, derivatives, ranges, now: deps.now(),
-  });
+  };
+  return deps.understand ? deps.commitIngested(commit, false) : deps.commitIngested(commit);
 }
 
 export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<IngestResult> {
@@ -95,6 +97,7 @@ export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<I
   const asset = await deps.loadAsset(task.projectId, task.assetId);
   if (!asset || asset.generation !== task.generation) return "skipped";
   if (asset.status !== "uploaded") {
+    if (asset.status === "ingested" && deps.understand) await deps.understand(task);
     await deps.settle(task.projectId);
     await deps.dispatchDue();
     return "skipped";
@@ -132,6 +135,7 @@ export async function ingestAsset(deps: IngestDeps, task: IngestTask): Promise<I
       megapixels: timings.megapixels,
     });
   }
+  if (result === "ingested" && deps.understand) await deps.understand(task);
   if (result === "ingested" || result === "failed") await deps.settle(asset.projectId);
   if (result === "ingested") await deps.dispatchDue();
   return result;

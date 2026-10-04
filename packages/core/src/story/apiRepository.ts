@@ -17,6 +17,7 @@ import {
 type RecordData = Record<string, unknown>;
 
 export type ApiStoryRepositoryDeps = {
+  watchReadiness?(projectId: string, onChange: () => void, onError: (error: unknown) => void): () => void;
   listenDocument(path: string, waitForExists?: boolean): Promise<unknown | null>;
   /**
    * Resolves with the first existing snapshot the predicate accepts. A document
@@ -58,6 +59,15 @@ function favoriteMomentIds(projectId: string, proposalId: string) {
 }
 
 const firebaseDeps: ApiStoryRepositoryDeps = {
+  watchReadiness(projectId, onChange, onError) {
+    let unsubscribe: (() => void) | undefined;
+    let active = true;
+    void ensureSignedIn().then(() => {
+      if (!active) return;
+      unsubscribe = onSnapshot(doc(getFirestoreClient(), "projects", projectId, "readiness", "summary"), () => onChange(), onError);
+    }).catch(onError);
+    return () => { active = false; unsubscribe?.(); };
+  },
   async listenDocument(path, waitForExists = false) {
     await ensureSignedIn();
     return new Promise((resolve, reject) => {
@@ -294,6 +304,7 @@ export function createApiStoryRepository(
   };
 
   return {
+    watchReadiness: (id, onChange, onError) => deps.watchReadiness?.(id, onChange, onError) ?? (() => undefined),
     listFilms: async () => {
       const response = record(await deps.request("GET", "/api/projects"), "projects response");
       const projects = Array.isArray(response.projects) ? response.projects.map((value) => record(value, "project")) : [];

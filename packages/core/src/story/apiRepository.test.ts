@@ -67,6 +67,21 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
 }
 
 describe("createApiStoryRepository", () => {
+  it("subscribes to the owner readiness summary document and refreshes on changes", async () => {
+    const unsubscribe = vi.fn();
+    const changed = vi.fn();
+    firebaseMocks.onSnapshot.mockImplementation((_ref: unknown, next: (value: unknown) => void) => {
+      queueMicrotask(() => next({ data: () => ({ settled: false }) }));
+      return unsubscribe;
+    });
+    const stop = createApiStoryRepository({ projectId: "project-1" }).watchReadiness!("project-1", changed, vi.fn());
+    await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+    expect(firebaseMocks.onSnapshot).toHaveBeenCalledWith("projects/project-1/readiness/summary", expect.any(Function), expect.any(Function));
+    stop();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    firebaseMocks.onSnapshot.mockClear();
+  });
+
   it("lists the signed-in user's projects before a project is selected", async () => {
     const deps = dependencies({ request: vi.fn(async () => ({ projects: [] })) });
     const repository = createApiStoryRepository({}, deps);

@@ -51,6 +51,12 @@ describe("commitIngested (emulator)", () => {
     expect(all.docs[0].data()).toMatchObject({ mediaType: "photo", sourceStartSec: null, sourceEndSec: null });
   });
 
+  it("does not enqueue a second understand task when the ingest delivery chains it inline", async () => {
+    const { projectId, assetId } = await seedAsset();
+    await commitIngested(adminDb, { projectId, assetId, generation: "7", media: photo, place: null, quality, derivatives, ranges: [], now: 50 }, false);
+    expect((await adminDb.collection(`projects/${projectId}/taskOutbox`).where("stage", "==", "understand").get()).size).toBe(0);
+  });
+
   it("is idempotent: a second commit is skipped and does not duplicate shots", async () => {
     const { projectId, assetId } = await seedAsset();
     const commit = { projectId, assetId, generation: "7", media: video, place: null, quality, derivatives, ranges: [{ startSec: 0, endSec: 5 }], now: 50 };

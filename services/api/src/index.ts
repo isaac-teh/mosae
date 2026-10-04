@@ -43,6 +43,8 @@ import { createGenAI, embedContentVia } from "./gemini/wire.js";
 import { embedText } from "./understand/embed.js";
 import { getStorage } from "firebase-admin/storage";
 import { getAdminApp } from "./firebase/admin.js";
+import { buildOriginalPath } from "./domain/ids.js";
+import { recordFinalize } from "./store/finalizeStore.js";
 
 const config = loadConfig();
 
@@ -61,8 +63,8 @@ const settle = async (projectId: string): Promise<void> => {
   const result = await settleProject(adminDb, projectId, Date.now());
   if (result.enqueued) await dispatchDue(adminDb, queue, Date.now());
 };
-const ingest = createIngest({ db: adminDb, bucketName: config.storageBucket, settle, dispatchDue: () => dispatchDue(adminDb, queue, Date.now()).then(() => undefined) });
 const understand = createUnderstand({ db: adminDb, bucketName: config.storageBucket, geminiApiKey: config.geminiApiKey, settle });
+const ingest = createIngest({ db: adminDb, bucketName: config.storageBucket, settle, dispatchDue: () => dispatchDue(adminDb, queue, Date.now()).then(() => undefined), understand });
 const geminiClient = createGenAI(config.geminiApiKey);
 const embedQuery = (text: string) => embedText(embedContentVia(geminiClient), text);
 const cluster = async (projectId: string): Promise<unknown> => {
@@ -168,7 +170,20 @@ app.use("/api", express.json({ limit: "2mb" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(
   "/api/projects",
-  projectsRouter({ db: adminDb, settle, embedQuery, demoBucket: getStorage(getAdminApp()).bucket(config.storageBucket) }),
+  projectsRouter({
+    db: adminDb, settle, embedQuery, demoBucket: getStorage(getAdminApp()).bucket(config.storageBucket),
+    notifyUploaded: async ({ userId, projectId, sessionId, assetId, generation }) => {
+      const objectName = buildOriginalPath({ userId, projectId, sessionId, assetId });
+      const [metadata] = await getStorage(getAdminApp()).bucket(config.storageBucket).file(objectName).getMetadata();
+      if (String(metadata.generation) !== generation) return { kind: "stale" };
+      const result = await recordFinalize(adminDb, config.storageBucket, {
+        bucket: config.storageBucket, objectName, generation,
+        sizeBytes: Number(metadata.size), contentType: metadata.contentType ?? "application/octet-stream", now: Date.now(),
+      });
+      if (result.kind === "accepted") await dispatchDue(adminDb, queue, Date.now());
+      return result;
+    },
+  }),
 );
 app.use(
   "/api/projects",

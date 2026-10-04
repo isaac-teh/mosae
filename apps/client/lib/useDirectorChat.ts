@@ -231,8 +231,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       finally { polling = false; }
     };
     void poll();
+    const stopReadiness = repository.watchReadiness?.(projectId, () => { void poll(); }, () => undefined);
     const timer = setInterval(() => { void poll(); }, 3000);
-    return () => { mounted.current = false; clearInterval(timer); };
+    return () => { mounted.current = false; clearInterval(timer); stopReadiness?.(); };
   }, [refresh, localState.localMediaPending]);
 
   useEffect(() => () => { if (generationTimer.current) clearTimeout(generationTimer.current); }, []);

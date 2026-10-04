@@ -54,6 +54,12 @@ export async function settleProject(
 ): Promise<{ settled: boolean; enqueued: boolean; outcome: ProjectOutcome | null; facts: ProjectFacts }> {
   const facts = await gatherFacts(db, projectId);
   const readiness = readinessOf(facts);
+  await db.collection("projects").doc(projectId).collection("readiness").doc("summary").set({
+    ...facts,
+    settled: readiness.settled,
+    outcome: readiness.settled ? readiness.outcome : null,
+    updatedAt: now,
+  });
   if (!readiness.settled) return { settled: false, enqueued: false, outcome: null, facts };
 
   const task = newOutboxTask({

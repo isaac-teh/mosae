@@ -60,6 +60,14 @@ describe("ingestAsset", () => {
     expect(deps.removeWorkDir).toHaveBeenCalledWith("/w");
   });
 
+  it("runs understanding in the ingest delivery after committing derivatives", async () => {
+    const { deps, calls } = setup(baseAsset, { understand: vi.fn(async () => { calls.push("understand"); return "understood" as const; }) });
+    await expect(ingestAsset(deps, task)).resolves.toBe("ingested");
+    expect(calls.at(-1)).toBe("understand");
+    expect(deps.commitIngested).toHaveBeenCalledWith(expect.any(Object), false);
+    expect(deps.dispatchDue).toHaveBeenCalledOnce();
+  });
+
   it("logs the ingest stage timings and media size once the task completes", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
@@ -132,6 +140,13 @@ describe("ingestAsset", () => {
     expect(await ingestAsset(deps, task)).toBe("skipped");
     expect(deps.objects.download).not.toHaveBeenCalled();
     expect(deps.settle).toHaveBeenCalledWith("p1");
+  });
+
+  it("resumes same-delivery understanding after ingest committed before a retry", async () => {
+    const understand = vi.fn().mockResolvedValue("understood");
+    const { deps } = setup({ ...baseAsset, status: "ingested" }, { understand });
+    await expect(ingestAsset(deps, task)).resolves.toBe("skipped");
+    expect(understand).toHaveBeenCalledWith(task);
   });
 
   it("fails an oversized asset permanently without downloading it", async () => {

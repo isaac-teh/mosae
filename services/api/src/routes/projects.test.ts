@@ -31,7 +31,7 @@ const fakeAuth: express.RequestHandler = (_req, res, next) => {
   res.locals.userId = "user-1";
   next();
 };
-function buildApp(options: { settle?: (projectId: string) => Promise<void>; sleep?: (ms: number) => Promise<void>; closeFails?: boolean; embedQuery?: (text: string) => Promise<number[]>; listProjects?: (userId: string) => Promise<Record<string, unknown>[]> } = {}) {
+function buildApp(options: { notifyUploaded?: (input: { userId: string; projectId: string; sessionId: string; assetId: string; generation: string }) => Promise<unknown>; settle?: (projectId: string) => Promise<void>; sleep?: (ms: number) => Promise<void>; closeFails?: boolean; embedQuery?: (text: string) => Promise<number[]>; listProjects?: (userId: string) => Promise<Record<string, unknown>[]> } = {}) {
   if (options.closeFails) {
     vi.mocked(store.closeSession).mockRejectedValue(new store.StoreError("not_found"));
   }
@@ -39,7 +39,7 @@ function buildApp(options: { settle?: (projectId: string) => Promise<void>; slee
   app.use(express.json());
   app.use(
     "/api/projects",
-    projectsRouter({ db, now: () => 42, auth: fakeAuth, settle: options.settle, sleep: options.sleep, embedQuery: options.embedQuery, listProjects: options.listProjects }),
+    projectsRouter({ db, now: () => 42, auth: fakeAuth, notifyUploaded: options.notifyUploaded, settle: options.settle, sleep: options.sleep, embedQuery: options.embedQuery, listProjects: options.listProjects }),
   );
   return app;
 }
@@ -55,6 +55,13 @@ const entry = {
 
 describe("projects routes", () => {
   beforeEach(() => vi.resetAllMocks());
+  it("accepts a per-upload completion signal and starts server ingest through its notifier", async () => {
+    const notifyUploaded = vi.fn(async () => ({ kind: "accepted" }));
+    const res = await request(await listeningServer(buildApp({ notifyUploaded })))
+      .post("/api/projects/p1/upload-sessions/s1/entries/a1/uploaded").send({ generation: "1712345678901" });
+    expect(res.status).toBe(202);
+    expect(notifyUploaded).toHaveBeenCalledWith({ userId: "user-1", projectId: "p1", sessionId: "s1", assetId: "a1", generation: "1712345678901" });
+  });
   it("lists only the signed-in user's projects", async () => {
     const listProjects = vi.fn(async () => [{ id: "p1", title: "Japan trip" }]);
     const res = await request(await listeningServer(buildApp({ listProjects }))).get("/api/projects");

@@ -82,6 +82,15 @@ describe("uploadMedia", () => {
     expect(progress.at(-1)?.bytesSent).toBe(40);
   });
 
+  it("notifies the API when storage returns the finished object's generation", async () => {
+    const { deps, calls } = fakeDeps();
+    await uploadMedia([file("photo.jpg", 10)], { mode: "memory" }, {
+      ...deps,
+      putFile: async (_path, value, onBytes) => { onBytes(value.size); return "1712345678901"; },
+    });
+    expect(calls).toContainEqual({ path: "/api/projects/p1/upload-sessions/s1/entries/a1/uploaded", body: { generation: "1712345678901" } });
+  });
+
   it("starts uploading each file before preparation has finished for the whole selection", async () => {
     const preparedCounts: number[] = [];
     const countsWhenUploadStarts: number[] = [];
@@ -115,10 +124,17 @@ describe("uploadMedia", () => {
     };
     const onProjectReady = vi.fn();
     const onReady = vi.fn();
+    const closeCallsBeforeTransferFinishes: string[] = [];
+    const post = delayedDeps.post;
+    delayedDeps.post = async (path, body) => {
+      if (path.endsWith("/close") && !finished) closeCallsBeforeTransferFinishes.push(path);
+      return post(path, body);
+    };
     const transfer = uploadMedia([file("photo.jpg", 10)], { mode: "memory", onProjectReady, onReady }, delayedDeps);
     await vi.waitFor(() => expect(onReady).toHaveBeenCalledWith({ projectId: "p1", assetIds: ["a1"] }));
     expect(onProjectReady).toHaveBeenCalledWith("p1");
     expect(finished).toBe(false);
+    await vi.waitFor(() => expect(closeCallsBeforeTransferFinishes).toEqual(["/api/projects/p1/upload-sessions/s1/close"]));
     finishUpload();
     await transfer;
     expect(finished).toBe(true);
@@ -134,7 +150,7 @@ describe("uploadMedia", () => {
     expect(calls[1].path).toBe("/api/projects/p1/upload-sessions");
     expect(calls.slice(2, -1).every((call) => call.path === "/api/projects/p1/upload-sessions/s1/entries")).toBe(true);
     expect(calls.slice(1, -1).every(({ body }) => (body as { entries: unknown[] }).entries.length <= 500)).toBe(true);
-    expect(calls.at(-1)?.path).toBe("/api/projects/p1/upload-sessions/s1/close");
+    expect(calls.some((call) => call.path === "/api/projects/p1/upload-sessions/s1/close")).toBe(true);
     expect(maxInFlight()).toBeLessThanOrEqual(3);
   });
 
@@ -171,7 +187,7 @@ describe("uploadMedia", () => {
       path: "/api/projects/p1/upload-sessions/s1/entries/a1/outcome",
       body: { kind: "failed", reason: "storage/unauthorized" },
     });
-    expect(calls.at(-1)?.path).toBe("/api/projects/p1/upload-sessions/s1/close");
+    expect(calls.some((call) => call.path === "/api/projects/p1/upload-sessions/s1/close")).toBe(true);
   });
 
   it("derives an empty MIME type and excludes unknown files before registration", async () => {

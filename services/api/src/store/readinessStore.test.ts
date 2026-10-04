@@ -38,6 +38,13 @@ describe("gatherFacts (emulator)", () => {
 });
 
 describe("settleProject (emulator)", () => {
+  it("publishes owner-readable readiness facts whenever a settle check runs", async () => {
+    const s = await seed(1);
+    await settleProject(adminDb, s.projectId, 5);
+    const snapshot = await adminDb.doc(`projects/${s.projectId}/readiness/summary`).get();
+    expect(snapshot.data()).toMatchObject({ sessions: 1, openSessions: 1, pendingEntries: 1, assets: 0, ingested: 0, failed: 0, settled: false, updatedAt: 5 });
+  });
+
   it("does not settle while the session is open", async () => {
     const s = await seed(2);
     await finalizeAndIngest(s, s.assetIds[0], "understood");
