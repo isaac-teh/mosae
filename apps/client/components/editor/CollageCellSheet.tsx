@@ -5,8 +5,8 @@ import { COLLAGE_LAYOUTS, type EditOp, type Timeline } from "@mosae/contracts";
 import type { Moment } from "@mosae/core";
 
 type Collage = Extract<Timeline["videoClips"][number], { kind: "collage" }>;
-export function CollageCellSheet({ mode, clip, slotId, moments, sources = {}, uploading = false, uploadProgress, uploadError = null, onUploadFile, onSource, onApply, onClose }: {
-  mode: "add" | "replace"; clip: Collage; slotId?: string; moments: Moment[]; sources?: Record<string, string>;
+export function CollageCellSheet({ mode, clip, slotId, moments, inFilmShotIds = new Set(), sources = {}, uploading = false, uploadProgress, uploadError = null, onUploadFile, onSource, onApply, onClose }: {
+  mode: "add" | "replace"; clip: Collage; slotId?: string; moments: Moment[]; inFilmShotIds?: ReadonlySet<string>; sources?: Record<string, string>;
   uploading?: boolean; uploadProgress?: { totalFiles: number; finishedFiles: number; failedFiles: number } | null; uploadError?: string | null;
   onUploadFile?: (file: File, clipId: string, slotId: string) => void; onSource?: (shotId: string, source: string) => void;
   onApply: (op: EditOp) => void; onClose: () => void;
@@ -34,6 +34,6 @@ export function CollageCellSheet({ mode, clip, slotId, moments, sources = {}, up
     <View className="mb-3 flex-row items-center justify-between"><Text className="font-sans-semibold text-[18px] text-on-screen">{mode === "add" ? "Add cell" : "Replace cell"}</Text><Pressable accessibilityLabel="Close cell picker" onPress={onClose}><Text className="text-[24px] text-on-screen">×</Text></Pressable></View>
     {mode === "replace" && clip.spec.slots.find((slot) => slot.slotId === slotId)?.kind !== "video" && Platform.OS === "web" && onUploadFile && slotId ? <DeviceUploadControl uploading={uploading} uploadProgress={uploadProgress} uploadError={uploadError} onFiles={(files) => { if (files[0]) onUploadFile(files[0], clip.clipId, slotId); }} /> : null}
     {full ? <Text className="mb-3 font-sans text-caption text-on-screen-muted">This layout holds up to {layout.maxSlots} photos.</Text> : null}
-    {candidates.length ? <MediaGridPicker moments={candidates} labelFor={(moment) => `${mode === "add" ? "Add cell" : "Replace with"} ${moment.title}`} disabled={(moment) => full || (moment.kind === "video" && !canVideo)} onSelect={applyChoice} /> : <Text className="font-sans text-caption text-on-screen-muted">No photos or videos from this trip are available.</Text>}
+    {candidates.length ? <MediaGridPicker moments={candidates} inFilmShotIds={inFilmShotIds} labelFor={(moment) => `${mode === "add" ? "Add cell" : "Replace with"} ${moment.title}`} disabled={(moment) => full || (moment.kind === "video" && !canVideo)} onSelect={applyChoice} /> : <Text className="font-sans text-caption text-on-screen-muted">No photos or videos from this trip are available.</Text>}
   </View></View>;
 }
