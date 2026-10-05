@@ -164,6 +164,39 @@ function admissibleSet(workingSet: WorkingSet, tools: PlanningTools): WorkingSet
   return { shots: [...shots.values()], lines: workingSet.lines };
 }
 
+/** Ensure every eligible catalog asset is represented after Gemini has supplied the story structure. */
+function completeSubmission(submission: ProposalSubmission, shots: WorkingShot[]): ProposalSubmission {
+  const moments = [...submission.moments];
+  const known = new Set(moments.map((moment) => moment.shotId));
+  const shotById = new Map(shots.map((shot) => [shot.id, shot]));
+  const chapters = submission.chapters.map((chapter) => ({ ...chapter, momentIds: [...chapter.momentIds] }));
+  for (const shot of shots) {
+    if (known.has(shot.id) || !shot.analysis || shot.dupOf || shot.analysis.kind === "video" && !shot.analysis.usable) continue;
+    let chapter = chapters.find((candidate) => candidate.momentIds.some((id) => {
+      const peer = shotById.get(id);
+      return peer && ((shot.eventId && peer.eventId === shot.eventId) || (shot.day && peer.day === shot.day));
+    }));
+    if (!chapter && chapters.length) {
+      const timestamp = shot.localTime ? Date.parse(shot.localTime) : NaN;
+      const ranked = chapters.map((candidate, index) => {
+        const peerTimes = candidate.momentIds.map((id) => shotById.get(id)?.localTime).filter((value): value is string => Boolean(value)).map(Date.parse).filter(Number.isFinite);
+        const distance = Number.isFinite(timestamp) && peerTimes.length ? Math.min(...peerTimes.map((peerTime) => Math.abs(peerTime - timestamp))) : Infinity;
+        return { candidate, index, distance };
+      }).sort((a, b) => a.distance - b.distance || a.index - b.index);
+      chapter = ranked[0]?.candidate;
+    }
+    chapter ??= chapters[0];
+    if (!chapter) continue;
+    const isVideo = shot.analysis.kind === "video";
+    const start = shot.sourceStartSec ?? 0;
+    const end = shot.sourceEndSec ?? (shot.durationSec ?? 0);
+    moments.push({ shotId: shot.id, kind: shot.analysis.kind, title: isVideo ? "A moment" : "A photo", description: "", rationale: "Included to keep every usable memory in the film.", ...(isVideo && end > start ? { previewInSec: start, previewOutSec: end } : {}) });
+    chapter.momentIds.push(shot.id);
+    known.add(shot.id);
+  }
+  return { ...submission, moments, chapters };
+}
+
 function budgetReason(kind: PlanBudgetKind): string {
   const resource = kind === "model_turns" ? "model turns" : kind === "tool_calls" ? "tool calls" : "time";
   return `Planning used its available ${resource}. Please try again.`;
@@ -215,7 +248,7 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
   let workingSet: WorkingSet;
   try {
     workingSet = buildWorkingSet(job.shots, {
-      cap: job.workingSetCap,
+      cap: job.workingSetCap ?? job.shots.length,
       excludedShotIds,
       mustIncludeShotIds,
     });
@@ -318,7 +351,7 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
 
       let proposal: StoryProposal;
       try {
-        proposal = assembleProposal(output.submission, {
+        proposal = assembleProposal(completeSubmission(output.submission, workingSet.shots), {
           proposalId: job.proposalId,
           projectId: job.projectId,
           storyIntentId: job.storyIntentId,

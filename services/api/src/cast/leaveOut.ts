@@ -13,8 +13,8 @@ export function leaveOutShots(shots: LeaveOutShot[], cast: Cast, hiddenShotIds: 
   const out: LeftOut[] = [];
   for (const shot of shots) {
     if (hidden.has(shot.shotId)) { out.push({ shotId: shot.shotId, reason: "Hidden by you." }); continue; }
-    if (shot.blurry) { out.push({ shotId: shot.shotId, reason: "Blurry photo." }); continue; }
-    if (shot.dupOf) { out.push({ shotId: shot.shotId, reason: "Near-duplicate: kept the sharpest photo in this burst." }); continue; }
+    if (shot.blurry) { out.push({ shotId: shot.shotId, reason: "Blurry photo" }); continue; }
+    if (shot.dupOf) { out.push({ shotId: shot.shotId, reason: "Similar photo — best one kept" }); continue; }
     if (shot.faces.length === 0) continue;
     const roles = photoRoles(shot.faces.map((face) => face.bbox));
     const subjects = shot.faces.filter((_, index) => roles[index] === "subject");

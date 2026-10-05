@@ -145,6 +145,14 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 describe("runPlan", () => {
+  it("appends usable catalog moments Gemini omitted into a fitting chapter", async () => {
+    const subset: ProposalSubmission = { ...validSubmission, moments: validSubmission.moments.slice(0, 4), chapters: validSubmission.chapters.map((chapter) => ({ ...chapter, momentIds: chapter.momentIds.filter((id) => id !== "p5") })) };
+    const script = scripted([{ type: "submit", submission: subset }]);
+    const result = await runPlan({ ...job, daySummary: "Build one chapter per day.", constraints: { ...constraints, mustIncludeMomentIds: [] } }, { model: script.model, tools: tools() });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.proposal.moments.map((moment) => moment.shotId)).toContain("p5");
+  });
+
   it("includes the cast summary and day chapters in the first prompt when available", async () => {
     const script = scripted([{ type: "submit", submission: validSubmission }]);
     await runPlan({ ...job, castSummary: "2 parents, 1 child; focus: the child; all core together in 2 photos.", daySummary: "Build one chapter per day in this order.\nDay 1 · Park: p1" }, { model: script.model, tools: tools() });
