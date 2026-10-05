@@ -115,10 +115,22 @@ describe("editor tool operations", () => {
   });
 
   it("adds from the shared grid after the selected clip", async () => {
-    await render(<AddSheet visible moments={moments} selectedClipId="b" timeline={timeline} playheadSec={1} onApply={apply} onClose={() => {}} />);
+    const inFilm = { ...moments[0], id: "m-used", shotId: "shot-used", title: "Already in film", selected: true };
+    await render(<AddSheet visible moments={[inFilm, moments[0]]} selectedClipId="b" timeline={timeline} playheadSec={1} onApply={apply} onClose={() => {}} />);
     expect(host.textContent).not.toContain("Left out moment");
+    expect(host.querySelector('[aria-label="In film"]')).not.toBeNull();
+    expect([...host.querySelectorAll('button[aria-label^="Add "]')].map((button) => button.getAttribute("aria-label"))).toEqual(["Add Left out moment", "Add Already in film"]);
+    expect(host.querySelector('[aria-label="Add Already in film"]')?.getAttribute("disabled")).toBeNull();
     await click("Add Left out moment");
     expect(apply).toHaveBeenCalledWith(expect.objectContaining({ op: "add", afterClipId: "b" }));
+  });
+
+  it("shows the empty state only when project media is empty", async () => {
+    await render(<AddSheet visible moments={[]} selectedClipId={null} onApply={apply} onClose={() => {}} />);
+    expect(host.textContent).toContain("No photos or videos from this trip are available.");
+    await render(<AddSheet visible moments={[{ ...moments[0], selected: true }]} selectedClipId={null} onApply={apply} onClose={() => {}} />);
+    expect(host.textContent).not.toContain("No photos or videos");
+    expect(host.querySelectorAll('button[aria-label^="Add "]')).toHaveLength(1);
   });
 
   it("trims a video clip in source time", async () => {

@@ -9,6 +9,13 @@ test("editor mobile add, grid, seek, collage label and deep-link back flow", asy
   const add = page.getByRole("button", { name: "Add clip" });
   await expect(add).toBeVisible();
   const before = await add.boundingBox();
+  const selectedEndHandle = await page.getByLabel("Trim end of clip clip-1").boundingBox();
+  expect(before && selectedEndHandle).toBeTruthy();
+  expect(before!.x + before!.width <= selectedEndHandle!.x || selectedEndHandle!.x + selectedEndHandle!.width <= before!.x || before!.y + before!.height <= selectedEndHandle!.y || selectedEndHandle!.y + selectedEndHandle!.height <= before!.y).toBe(true);
+  const musicRow = page.getByLabel("Open soundtrack picker");
+  const musicBounds = await musicRow.boundingBox();
+  expect(before && musicBounds).toBeTruthy();
+  expect(before!.y).toBeGreaterThan(musicBounds!.y + musicBounds!.height);
   await page.getByLabel("Unified timeline").evaluate(node => { node.scrollLeft = node.scrollWidth; node.dispatchEvent(new Event("scroll", { bubbles: true })); });
   await expect(add).toBeVisible();
   expect(await add.boundingBox()).toMatchObject({ x: before?.x, y: before?.y });
@@ -17,6 +24,7 @@ test("editor mobile add, grid, seek, collage label and deep-link back flow", asy
   await expect(page.getByText("Add a moment")).toBeVisible();
   const tile = page.getByRole("button", { name: /^Add (?!clip$)/ }).first();
   await expect(tile).toBeVisible();
+  await expect(page.getByLabel("In film").first()).toBeVisible();
   expect(await tile.evaluate(node => getComputedStyle(node).aspectRatio)).toBe("1 / 1");
   const accessibleName = await tile.getAttribute("aria-label");
   expect(accessibleName).toMatch(/^Add /);

@@ -15,6 +15,7 @@ export function MediaGridPicker({ moments, selectedShotId, disabled = () => fals
     const selected = moment.shotId === selectedShotId;
     return <Pressable key={`${moment.shotId}-${moment.id}`} role="button" accessibilityLabel={labelFor(moment)} accessibilityState={{ selected, disabled: disabled(moment) }} disabled={disabled(moment)} onPress={() => onSelect(moment)} style={{ width: "31%", aspectRatio: 1 }} className={`overflow-hidden rounded-xl border-2 ${selected ? "border-[#d5eee5]" : "border-transparent"} ${disabled(moment) ? "opacity-40" : ""}`}>
       <Image source={source(moment.imageKey)} accessibilityLabel={`${moment.title} thumbnail`} className="h-full w-full" resizeMode="cover" />
+      {moment.selected ? <View pointerEvents="none" accessibilityLabel="In film" className="absolute right-1 top-1 rounded-full bg-black/75 px-1.5 py-0.5"><Text className="font-sans-medium text-[8px] text-white">in film</Text></View> : null}
       {selected ? <View pointerEvents="none" className="absolute inset-0 border-2 border-[#d5eee5] bg-white/10" /> : null}
     </Pressable>;
   })}</View></ScrollView>;
