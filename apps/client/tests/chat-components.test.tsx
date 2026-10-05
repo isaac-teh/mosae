@@ -28,6 +28,26 @@ describe("director chat components", () => {
     expect(host.querySelector('[data-from="you"]')).not.toBeNull();
   });
 
+  it("keeps a chat photo source when only its signed URL query changes", async () => {
+    const photo = (url: string) => <ChatMessage from="mosae" text="Here are the moments." photos={[url]} />;
+    await render(photo("https://storage.test/thumb.jpg?X-Goog-Signature=first"));
+    const image = host.querySelector("img")!;
+    await render(photo("https://storage.test/thumb.jpg?X-Goog-Signature=second"));
+    expect(host.querySelector("img")).toBe(image);
+    expect(image.getAttribute("src")).toBe("https://storage.test/thumb.jpg?X-Goog-Signature=first");
+  });
+
+  it("preloads a chat photo at a new storage path before replacing the displayed source", async () => {
+    const photo = (url: string) => <ChatMessage from="mosae" text="Here are the moments." photos={[url]} />;
+    await render(photo("https://storage.test/old.jpg?sig=old"));
+    await render(photo("https://storage.test/new.jpg?sig=new"));
+    expect(host.querySelector('img[src="https://storage.test/old.jpg?sig=old"]')).not.toBeNull();
+    const preload = host.querySelector('img[src="https://storage.test/new.jpg?sig=new"]')!;
+    await act(async () => preload.dispatchEvent(new Event("load")));
+    expect(host.querySelector('img[src="https://storage.test/new.jpg?sig=new"]')).not.toBeNull();
+    expect(host.querySelector('img[src="https://storage.test/old.jpg?sig=old"]')).toBeNull();
+  });
+
   it("shows three quiet typing tiles and the supplied status without a duration", async () => {
     await render(<ChatTyping text="Shaping your film…" />);
     expect(host.textContent).toContain("Shaping your film…");

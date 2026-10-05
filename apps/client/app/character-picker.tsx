@@ -10,6 +10,7 @@ import { useStoryFlow } from "@/lib/storyFlow";
 import { StepHeader } from "@/components/StepHeader";
 import { type Cast, type CastRole, type ProjectCharacters, confirmCast, getAssetThumbnailUrl, getCast, getProjectCharacters } from "@/lib/characters";
 import { faceCropGeometry, imageSizeFromLoadEvent, type FaceBbox } from "@/lib/faceCrop";
+import { StableUriImage } from "@/components/StableUriImage";
 
 /** Side of the square window a face crop is shown in. */
 const CROP_PX = 64;
@@ -41,8 +42,8 @@ function FaceCrop({ url, bbox, size = CROP_PX }: { url?: string; bbox?: FaceBbox
   const crop = sourceSize ? faceCropGeometry(bbox, sourceSize.width, sourceSize.height, CROP) : null;
   return (
     <View style={{ width: CROP, height: CROP, overflow: "hidden" }} className="rounded-[10px] bg-surface-sunken">
-      <Image
-        source={{ uri: url }}
+      <StableUriImage
+        uri={url}
         accessibilityIgnoresInvertColors
         resizeMode={crop ? "stretch" : "cover"}
         onLoad={(event: any) => {

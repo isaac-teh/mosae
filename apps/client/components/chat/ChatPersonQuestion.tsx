@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Image, Text, View } from "react-native";
 import { Button, FocusChip } from "../ds";
 import { faceCropGeometry, imageSizeFromLoadEvent, type FaceBbox } from "../../lib/faceCrop";
+import { StableUriImage } from "../StableUriImage";
 
 type FacePreview = { shotId: string; uri: string; bbox: FaceBbox };
 type ChatPersonQuestionProps = { momentCount: number; samples: FacePreview[]; days: number[]; chips: string[]; question?: string; onPick: (role: string) => void; onTypeName: () => void; onSkip: () => void };
@@ -11,7 +12,7 @@ function FacePreviewTile({ sample, index }: { sample: FacePreview; index: number
   const [sourceSize, setSourceSize] = useState<{ width: number; height: number } | null>(null);
   const crop = sourceSize ? faceCropGeometry(sample.bbox, sourceSize.width, sourceSize.height, size) : null;
   return <View data-face-preview="true" className="h-[72px] w-[72px] overflow-hidden rounded-md bg-surface-sunken">
-    <Image source={{ uri: sample.uri }} accessibilityLabel={`Person photo ${index + 1}`} resizeMode={crop ? "stretch" : "cover"} onLoad={(event: any) => {
+    <StableUriImage uri={sample.uri} accessibilityLabel={`Person photo ${index + 1}`} resizeMode={crop ? "stretch" : "cover"} onLoad={(event: any) => {
       // The crop restyles the image, which fires onLoad again on web; measure once.
       if (sourceSize) return;
       const dimensions = imageSizeFromLoadEvent(event);

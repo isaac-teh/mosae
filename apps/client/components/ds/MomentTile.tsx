@@ -1,5 +1,6 @@
-import { Image, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import type { ReactNode } from "react";
+import { StableUriImage } from "../StableUriImage";
 
 type MomentTileProps = {
   label: string;
@@ -38,7 +39,7 @@ export function MomentTile({ label, reason, source, state = "default", selected,
         onPress={onPress}
         className={`relative aspect-square min-h-11 overflow-hidden rounded-md bg-surface-sunken ${active ? "border-[3px] border-surface" : "border-0"} ${peak ? "ring-[3px] ring-accent" : ""} ${excluded ? "opacity-[0.55]" : ""}`}
       >
-        {source ? <Image source={source} accessibilityLabel={label} resizeMode="cover" className="absolute inset-0 h-full w-full" /> : <View className="absolute inset-0 bg-tile/30" />}
+        {source ? <StableUriImage uri={source.uri} accessibilityLabel={label} resizeMode="cover" className="absolute inset-0 h-full w-full" /> : <View className="absolute inset-0 bg-tile/30" />}
         {children}
         {excluded ? <View className="absolute inset-0 bg-ink/10" /> : null}
         {clip && duration ? <Text className="absolute bottom-2 left-2 rounded-pill bg-scrim/60 px-2 py-0.5 text-caption font-sans-medium text-on-screen">{duration}</Text> : null}

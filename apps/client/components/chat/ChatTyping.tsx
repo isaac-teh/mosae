@@ -1,4 +1,5 @@
-import { Image, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { StableUriImage } from "../StableUriImage";
 
 export function ChatTyping({ text, photos = [] }: { text: string; photos?: { id: string; uri: string; understood: boolean; label: string }[] }) {
   return <View className="w-full gap-3" accessibilityLiveRegion="polite">
@@ -10,7 +11,7 @@ export function ChatTyping({ text, photos = [] }: { text: string; photos?: { id:
     </View>
     {photos.length > 0 && <View className="flex-row flex-wrap gap-2" accessibilityLabel="Photos being read">
       {photos.map((photo) => <View key={photo.id} data-reading-photo="true" accessibilityLabel={photo.label} className="size-[68px] overflow-hidden rounded-md bg-surface-sunken">
-        <Image source={{ uri: photo.uri }} resizeMode="cover" className={`size-full object-cover transition-all duration-700 ${photo.understood ? "blur-0 opacity-100" : "blur-[6px] opacity-55"}`} />
+        <StableUriImage uri={photo.uri} resizeMode="cover" className={`size-full object-cover transition-all duration-700 ${photo.understood ? "blur-0 opacity-100" : "blur-[6px] opacity-55"}`} />
       </View>)}
     </View>}
   </View>;
