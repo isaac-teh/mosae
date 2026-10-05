@@ -266,3 +266,31 @@ test("existing collage library styles use rendered previews and preserve photos,
   await page.getByRole("button", { name: "Collage Styles", exact: true }).click();
   await expect(page.getByRole("button", { name: "Motion Print drop", exact: true })).toHaveAttribute("aria-pressed", "true");
 });
+
+test("collage Layout drawer expands and lets the last style scroll into view", async ({ page }) => {
+  await openEditor(page);
+  await page.getByRole("button", { name: "Select clip collage-1", exact: true }).click();
+  await page.getByRole("button", { name: "Layout", exact: true }).click();
+  const handle = page.getByRole("button", { name: "Toggle layout drawer" });
+  const panel = handle.locator("xpath=..");
+  const collapsedHeight = (await panel.boundingBox())?.height;
+  if (!collapsedHeight) throw new Error("Collage drawer has no measurable height");
+  const handlePoint = await handle.boundingBox();
+  if (!handlePoint) throw new Error("Collage drawer handle is missing");
+  await handle.evaluate((node) => {
+    const y = node.getBoundingClientRect().y + node.getBoundingClientRect().height / 2;
+    const start = new Event("touchstart", { bubbles: true });
+    Object.defineProperty(start, "pageY", { value: y });
+    node.dispatchEvent(start);
+    const end = new Event("touchend", { bubbles: true });
+    Object.defineProperty(end, "pageY", { value: y - 300 });
+    node.dispatchEvent(end);
+  });
+  await expect.poll(async () => (await panel.boundingBox())?.height ?? 0).toBeGreaterThan(collapsedHeight + 100);
+  await page.getByRole("button", { name: "Collage Styles", exact: true }).click();
+  const lastStyle = page.getByRole("button", { name: "Layout Travel story", exact: true });
+  await lastStyle.scrollIntoViewIfNeeded();
+  await expect(lastStyle).toBeInViewport();
+  await lastStyle.click();
+  await expect(lastStyle).toHaveAttribute("aria-pressed", "true");
+});
