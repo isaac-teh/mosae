@@ -354,7 +354,7 @@ export async function runCompose(
       ? { ...holdsFor(job.cadenceId), min: Math.min(holdsFor(job.cadenceId).min, DIRECTING_RULES.shortTierMinSec) }
       : holdsFor(job.cadenceId),
     job.proposal.constraints.mustIncludeMomentIds,
-    job.durationId === null ? { minimumFilmSec: 20, maximumStretchedPhotoSec: 4 } : {},
+    job.durationId === null ? { minimumFilmSec: 20, maximumStretchedPhotoMultiplier: DIRECTING_RULES.tierlessPhotoStretchMultiplier } : {},
   );
 
   if (fittedClips.length === 0) {
@@ -363,7 +363,7 @@ export async function runCompose(
   if (job.durationId === null) {
     // The no-tier stretch is a documented exception to cadence's normal
     // maximum and must be visible to reflow and the semantic validator.
-    for (const candidate of candidates) if (candidate.kind === "photo") candidate.maxHoldSec = 4;
+    for (const candidate of candidates) if (candidate.kind === "photo") candidate.maxHoldSec = holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier;
   }
   if (job.durationId === "short") {
     // Adaptive Short is an explicit tier choice and may compress cadence down
@@ -517,7 +517,7 @@ export async function runCompose(
   let withCollages: Timeline;
   try {
     const usableMediaCount = new Set(candidates.map((candidate) => candidate.itemId)).size;
-    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm" }, usableMediaCount);
+    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm", cadenceId: job.cadenceId, tierless: job.durationId === null }, usableMediaCount);
   } catch (error) {
     return { ok: false, reasons: [`collage placement failed: ${error instanceof Error ? error.message : String(error)}`] };
   }
@@ -530,7 +530,10 @@ export async function runCompose(
     soundtrackIds: deps.soundtrackIds,
     // The length the film is committed to after fitting — the requested target,
     // or the shortened one when the media could not reach it.
-    targetSec: fittedTargetSec,
+    // Collage placement replaces a run of stills with its own photo-count
+    // duration. Validate against the resulting committed film length, since
+    // the pre-collage fit target no longer describes that clip geometry.
+    targetSec: withCollages.durationSec,
     fps: 30,
   };
 

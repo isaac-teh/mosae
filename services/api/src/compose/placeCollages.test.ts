@@ -37,7 +37,7 @@ describe("placeCollages", () => {
     if (!collage || !("kind" in collage)) throw new Error("expected collage");
     expect(collage.spec.layoutId).toBe(layoutId);
     expect(collage.spec.slots).toHaveLength(count);
-    expect(result.durationSec).toBe(timeline.durationSec);
+    expect(result.durationSec).toBe(6.2);
     expect(safeParseTimeline(result).ok).toBe(true);
   });
   it("turns a four-photo burst into one four-slot collage", () => {
@@ -48,9 +48,19 @@ describe("placeCollages", () => {
     const collage = collages(result)[0];
     if (!("kind" in collage)) throw new Error("expected collage");
     expect(collage.spec.slots.map((slot) => slot.shotId)).toEqual(["shot-0", "shot-1", "shot-2", "shot-3"]);
-    expect(collage.durationSec).toBe(8);
-    expect(result.durationSec).toBe(timeline.durationSec);
+    expect(collage.durationSec).toBe(1.8);
+    expect(result.durationSec).toBeLessThan(timeline.durationSec);
     expect(safeParseTimeline(result).ok).toBe(true);
+  });
+  it("stretches a tierless four-photo collage under its own 6s cap", () => {
+    const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "e4", "e5", "e6"]);
+    const result = placeCollages(timeline, sources, "tierless-four-photo", review, { tierless: true }, 8);
+    const collage = collages(result)[0];
+    if (!collage || !("kind" in collage)) throw new Error("expected collage");
+    expect(collage.durationSec).toBeGreaterThan(1.8);
+    expect(collage.durationSec).toBeLessThanOrEqual(6);
+    expect(collage.spec.durationSec).toBe(collage.durationSec);
+    expect(result.durationSec).toBe(18);
   });
 
   it("keeps a collage at its story position when legal boundary moves would reorder the arc", () => {

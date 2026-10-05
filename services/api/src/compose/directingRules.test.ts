@@ -9,6 +9,12 @@ describe("deterministic directing rules", () => {
     expect(range.min).toBeCloseTo(range.base * 0.8);
     expect(range.max).toBeCloseTo(range.base * 1.2);
   });
+  it.each([["tender", 3.6], ["reflective", 3.24], ["playful", 1.8], ["energetic", 1.8], ["celebratory", 2.16]] as const)("sets a four-photo collage base from the photo-count table for %s", (cadence, expected) => {
+    expect(photoBaseDuration(4, cadence)).toBeCloseTo(expected);
+    const range = photoHoldRange(4, cadence);
+    expect(range.min).toBeCloseTo(expected * 0.8);
+    expect(range.max).toBeCloseTo(expected * 1.2);
+  });
   it.each([[7, 0], [8, 1], [19, 1], [20, 2], [49, 2], [50, 3]] as const)("caps collage count at media boundary N=%i", (n, max) => expect(collageCountRange(n).max).toBe(max));
   it("applies none/few/lots at the allowed edges", () => {
     expect(requestedCollageCount(30, "none")).toBe(0);
@@ -26,6 +32,8 @@ describe("deterministic directing rules", () => {
   it("limits collage photo capacity and minimum hold stretching", () => {
     expect(DIRECTING_RULES.collageMaxPhotos).toBe(6);
     expect(DIRECTING_RULES.singlePhotoMaxSec).toBe(4);
+    expect(photoBaseDuration(1, "playful") * DIRECTING_RULES.tierlessPhotoStretchMultiplier).toBeCloseTo(4);
+    expect(photoBaseDuration(4, "playful") * DIRECTING_RULES.tierlessPhotoStretchMultiplier).toBeCloseTo(6);
     expect(DIRECTING_RULES.minimumFilmSec).toBe(20);
     for (const n of [3, 6, 10]) expect(n * photoHoldRange(1, "playful").base).toBeLessThan(20);
     expect(10 * DIRECTING_RULES.singlePhotoMaxSec).toBeGreaterThanOrEqual(20);

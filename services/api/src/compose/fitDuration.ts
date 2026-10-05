@@ -59,7 +59,7 @@ export function fitDuration(
   targetSec: number,
   holds: Holds,
   mustIncludeMomentIds: string[] = [],
-  options: { minimumFilmSec?: number; maximumStretchedPhotoSec?: number } = {},
+  options: { minimumFilmSec?: number; maximumStretchedPhotoSec?: number; maximumStretchedPhotoMultiplier?: number } = {},
 ): FitResult {
   const notes: string[] = [];
   let effectiveTargetSec = targetSec;
@@ -122,8 +122,13 @@ export function fitDuration(
   // With no duration tier selected, a very short composition gets one
   // deliberate stretch pass toward 20 seconds. The cadence bounds still
   // govern normal fitting; this pass can extend stills to four seconds each.
-  if (options.minimumFilmSec !== undefined && options.maximumStretchedPhotoSec !== undefined) {
-    const stretchLimit = options.maximumStretchedPhotoSec;
+  if (options.minimumFilmSec !== undefined && (options.maximumStretchedPhotoSec !== undefined || options.maximumStretchedPhotoMultiplier !== undefined)) {
+    // Before collage placement each fitted photo is a one-photo clip, so its
+    // own cadence base is `holds.base`; collage placement applies the same
+    // multiplier to the collage's N-photo base duration.
+    const stretchLimit = options.maximumStretchedPhotoMultiplier !== undefined
+      ? holds.base * options.maximumStretchedPhotoMultiplier
+      : options.maximumStretchedPhotoSec!;
     for (let pass = 0; pass < 20; pass++) {
       const drift = options.minimumFilmSec - filmLength(workingClips);
       if (drift <= 0.01) break;

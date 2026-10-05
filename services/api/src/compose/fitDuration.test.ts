@@ -147,6 +147,16 @@ describe("fitDuration — edge cases", () => {
     }
   });
 
+  it("caps tierless still stretching at 3.33 times each one-photo cadence base", () => {
+    const base = 1.2;
+    const result = fitDuration(Array.from({ length: 10 }, (_, index) => makePhotoClip(`photo${index}`, base)), 60, { base, min: 0.96, max: 4 }, [], {
+      minimumFilmSec: 20,
+      maximumStretchedPhotoMultiplier: 10 / 3,
+    });
+    expect(Math.max(...result.clips.map((clip) => clip.holdSec ?? 0))).toBe(4);
+    expect(result.clips.every((clip) => (clip.holdSec ?? 0) <= base * (10 / 3))).toBe(true);
+  });
+
   it("empty clips returns empty with no notes", () => {
     const result = fitDuration([], 60, holds);
 

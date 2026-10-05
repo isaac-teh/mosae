@@ -5,7 +5,9 @@ import {
   applyEdits, type CollageClip, type Timeline,
 } from "@mosae/contracts";
 import { hamming64 } from "../cluster/duplicates.js";
-import { collagePlacementOptions, DIRECTING_RULES, requestedCollageCount } from "./directingRules.js";
+import { collagePlacementOptions, DIRECTING_RULES, photoBaseDuration, requestedCollageCount } from "./directingRules.js";
+import type { CadenceId } from "@mosae/contracts";
+import { reflow } from "@mosae/contracts";
 
 export type CollageSource = {
   assetId: string;
@@ -16,7 +18,7 @@ export type CollageSource = {
   dupOf?: string | null;
   hasSpeech?: boolean;
 };
-export type CollageStyle = { collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
+export type CollageStyle = { collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful"; cadenceId?: CadenceId; tierless?: boolean };
 
 export type CollageReview = { combos: Array<{ layoutId: string; motionId: string; verdict: string }> };
 const defaultReviewPath = fileURLToPath(new URL("../../../../docs/design/collage-review.json", import.meta.url));
@@ -67,10 +69,63 @@ function sameDayOrEvent(first: CollageSource, next: CollageSource): boolean {
   return Boolean((firstDay && firstDay === nextDay) || (first.eventId && first.eventId === next.eventId));
 }
 
+function stretchTierlessPhotos(timeline: Timeline, cadenceId: CadenceId): Timeline {
+  const plans = timeline.videoClips.map((clip) => {
+    const count = "kind" in clip ? clip.spec.slots.length : clip.source.kind === "photo" ? 1 : 0;
+    const cap = count ? photoBaseDuration(count, cadenceId) * DIRECTING_RULES.tierlessPhotoStretchMultiplier : clip.durationSec;
+    return {
+      ...clip,
+      id: idOf(clip),
+      source: "source" in clip ? clip.source : { kind: "collage" },
+      durationSec: clip.durationSec,
+      transitionIn: clip.transitionIn ?? { kind: "cut" as const, durationSec: 0 },
+      strength: 0,
+      minHoldSec: 0,
+      maxHoldSec: cap,
+    };
+  });
+  let fitted = plans.map((plan) => ({ ...plan }));
+  for (let pass = 0; pass < 20; pass++) {
+    const duration = fitted.reduce((sum, clip, index) => sum + clip.durationSec - (index > 0 && clip.transitionIn.kind === "crossfade" ? clip.transitionIn.durationSec : 0), 0);
+    const drift = DIRECTING_RULES.minimumFilmSec - duration;
+    const extendable = fitted.filter((clip) => clip.maxHoldSec > clip.durationSec);
+    if (drift <= 0.01 || !extendable.length) break;
+    const step = drift / extendable.length;
+    fitted = fitted.map((clip) => extendable.includes(clip)
+      ? { ...clip, durationSec: Math.min(clip.maxHoldSec, clip.durationSec + step) }
+      : clip);
+  }
+  const flowed = reflow({ fps: timeline.fps, plans: fitted, chapters: [] });
+  const videoClips = flowed.clips.map((clip, index) => {
+    const original = timeline.videoClips[index]!;
+    const { id: _id, source: _source, transitionIn: _transition, ...geometry } = clip;
+    if ("kind" in original) return {
+      ...original,
+      startSec: geometry.startSec,
+      durationSec: geometry.durationSec,
+      spec: { ...original.spec, durationSec: geometry.durationSec },
+    };
+    return { ...original, startSec: geometry.startSec, durationSec: geometry.durationSec };
+  });
+  return {
+    ...timeline,
+    durationSec: flowed.durationSec,
+    videoClips,
+    chapters: timeline.chapters.map((chapter) => {
+      const index = timeline.videoClips.findIndex((clip) => Math.abs(clip.startSec - chapter.startSec) < 1 / timeline.fps);
+      return index < 0 ? chapter : { ...chapter, startSec: videoClips[index]!.startSec };
+    }),
+    audioClips: timeline.audioClips.map((clip) => clip.role === "music" && clip.source.kind === "soundtrack"
+      ? { ...clip, source: { ...clip.source, sourceOutSec: flowed.durationSec }, fadeOutSec: Math.min(1, flowed.durationSec) }
+      : clip),
+  };
+}
+
 /** Replace eligible contiguous selected clips; never draws from unused moments. */
 export function placeCollages(timeline: Timeline, sources: Map<string, CollageSource>, seed: string, review: CollageReview, style: CollageStyle = {}, mediaCount = sources.size): Timeline {
   const collageAmount = style.collageAmount ?? "few";
   const motionFeel = style.motionFeel ?? "calm";
+  const cadenceId = style.cadenceId ?? "playful";
   const collageLimit = requestedCollageCount(mediaCount, collageAmount);
   if (collageLimit === 0) return { ...timeline, schemaVersion: 2 };
   const approved = review.combos.filter((combo) => combo.verdict === "keep" && ALLOWED_COMBOS.some((allowed) => allowed.layoutId === combo.layoutId && allowed.motionId === combo.motionId));
@@ -131,10 +186,10 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     const choices = varied.length ? varied : motionChoices;
     const chosen = choices[hash(`${seed}:${index}:combo`) % choices.length];
     const effect = COLLAGE_EFFECTS[hash(`${seed}:${index}:effect`) % COLLAGE_EFFECTS.length];
-    // A collage stands in for this whole run of clips. Keep the run's timeline
-    // span so substituting a collage does not silently shorten the film.
-    const groupEndSec = group.at(-1)!.startSec + group.at(-1)!.durationSec;
-    const durationSec = Math.max(0.1, groupEndSec - first.startSec);
+    // Collage duration belongs to its photo count and cadence. Member holds
+    // are independent shot choices and must not be summed into the collage.
+    const collageBaseSec = photoBaseDuration(group.length, cadenceId);
+    const durationSec = collageBaseSec;
     const spec = CollageSpecSchema.parse({
       layoutId: chosen.layoutId, motionId: chosen.motionId, effectId: effect.id,
       seed: `${seed}:${idOf(first)}`, durationSec,
@@ -203,5 +258,5 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
   // applyEdits performs reflow after each move and preserves clip identities.
   const finalMove = applyEdits(relaid, [{ op: "move", clipId: idOf(relaid.videoClips[0]!), toIndex: 0 }]);
   if (finalMove.ok) relaid = finalMove.timeline;
-  return relaid;
+  return style.tierless ? stretchTierlessPhotos(relaid, cadenceId) : relaid;
 }
