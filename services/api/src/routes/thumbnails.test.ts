@@ -5,6 +5,7 @@ import { listeningServer } from "../test/listeningServer.js";
 import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
 import { firebaseObjectStore, firebaseThumbnailUrlStore } from "../ingest/objectStore.js";
+import { stableReadExpiresAt } from "../ingest/objectStore.js";
 import { buildDerivativePath } from "../domain/ids.js";
 import { thumbnailsRouter } from "./thumbnails.js";
 
@@ -23,9 +24,10 @@ function setup(thumbPath: string | null = path) {
   const objects = new Map<string, unknown>();
   const signed = vi.fn(async (objectPath: string, options: unknown) => {
     if (!objects.has(objectPath)) throw new Error("missing uploaded object");
-    return [`https://storage.test/${objectPath}?X-Goog-Signature=test`];
+    return [`https://storage.test/${objectPath}?X-Goog-Signature=${signed.mock.calls.length}`];
   });
   const bucket = {
+    name: `test-${crypto.randomUUID()}`,
     upload: async (_source: string, options: { destination: string; metadata: unknown }) => { objects.set(options.destination, options.metadata); },
     file: (objectPath: string) => ({ getSignedUrl: (options: unknown) => signed(objectPath, options) }),
   } as unknown as Parameters<typeof firebaseObjectStore>[0];
@@ -43,10 +45,20 @@ describe("owner thumbnail URLs", () => {
     await upload();
     const res = await request(await listeningServer(app)).get("/api/projects/p1/assets/a1/thumbnail").set("Authorization", "Bearer owner");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ url: `https://storage.test/${path}?X-Goog-Signature=test`, expiresAt: 301000 });
+    expect(res.body).toEqual({ url: `https://storage.test/${path}?X-Goog-Signature=1`, expiresAt: stableReadExpiresAt(1000) });
     expect(res.headers["cache-control"]).toBe("private, no-store");
-    expect(signed).toHaveBeenCalledWith(path, { version: "v4", action: "read", expires: 301000 });
+    expect(signed).toHaveBeenCalledWith(path, { version: "v4", action: "read", expires: expect.any(Number) });
     expect(objects.get(path)).toEqual({ contentType: "image/jpeg", cacheControl: "private, max-age=31536000" });
+  });
+
+  it("returns byte-identical signed URLs for the same path within one signing bucket", async () => {
+    const { app, upload, signed } = setup();
+    await upload();
+    const server = await listeningServer(app);
+    const first = await request(server).get("/api/projects/p1/assets/a1/thumbnail").set("Authorization", "Bearer owner");
+    const second = await request(server).get("/api/projects/p1/assets/a1/thumbnail").set("Authorization", "Bearer owner");
+    expect(second.body.url).toBe(first.body.url);
+    expect(signed).toHaveBeenCalledTimes(1);
   });
 
   it.each([undefined, "invalid", "other-user"])("rejects unauthorized access for %s before signing", async (token) => {

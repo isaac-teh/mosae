@@ -3,6 +3,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
 import { buildDerivativePath, isValidId } from "../domain/ids.js";
 import type { ThumbnailUrlStore } from "../ingest/objectStore.js";
+import { stableReadExpiresAt } from "../ingest/objectStore.js";
 import { getOwnedProject } from "../store/projectStore.js";
 
 export function thumbnailsRouter(deps: {
@@ -34,7 +35,7 @@ export function thumbnailsRouter(deps: {
         res.status(404).json({ error: "not_found" });
         return;
       }
-      const expiresAt = (deps.now ?? Date.now)() + 5 * 60 * 1000;
+      const expiresAt = stableReadExpiresAt((deps.now ?? Date.now)());
       const url = await deps.thumbnails.signedReadUrl(path, expiresAt);
       res.json({ url, expiresAt });
     } catch (error) {
