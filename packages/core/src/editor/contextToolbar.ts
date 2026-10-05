@@ -4,7 +4,7 @@ export type ContextToolbarAction = "Deselect" | "Back" | "Music" | "Add" | "Ask"
 const actions: Record<EditorSelection, ContextToolbarAction[]> = {
   none: ["Ask"],
   slot: ["Remove", "Replace"],
-  collage: ["Remove", "AddCell", "Layout"],
+  collage: ["Remove", "Layout"],
   collageCell: ["Remove", "ReplaceCell"],
   audio: ["Volume", "Replace"],
 };

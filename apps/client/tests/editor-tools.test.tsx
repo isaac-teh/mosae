@@ -115,15 +115,9 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledWith({ op: "replaceCollageSlot", clipId: "collage-1", slotId: "s2", shotId: "shot-left", kind: "photo" });
   });
 
-  it("shows Add photo for a selected collage clip and a collage cell", async () => {
+  it("shows Add photo for an empty collage cell and opens its picker", async () => {
     const { ToolBar } = await import("../components/editor/ToolBar");
-    await render(<ToolBar selection="collage" onTool={() => {}} />);
-    expect(host.querySelector('[aria-label="Add photo"]')?.textContent).toContain("Add photo");
-    expect(host.querySelector('[aria-label="Add photo"]')?.firstElementChild?.textContent).toBe("+");
     await render(<ToolBar selection="collageCell" emptyCollageCell onTool={() => {}} />);
-    expect(host.querySelector('[aria-label="Add photo"]')?.textContent).toContain("Add photo");
-    expect(host.querySelector('[aria-label="Add photo"]')?.firstElementChild?.textContent).toBe("+");
-    await render(<ToolBar selection="collageCell" onTool={() => {}} />);
     expect(host.querySelector('[aria-label="Add photo"]')?.textContent).toContain("Add photo");
     expect(host.querySelector('[aria-label="Add photo"]')?.firstElementChild?.textContent).toBe("+");
   });

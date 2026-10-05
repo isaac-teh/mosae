@@ -141,18 +141,6 @@ describe("film editor", () => {
     expect(host.querySelector('[aria-label="Delete"]')).toBeNull();
   });
 
-  it("opens the shared collage media picker from Add photo on a selected collage", async () => {
-    boundary.repository.getFilmTimeline.mockResolvedValue({
-      timeline: { ...firstCut, schemaVersion: 2, videoClips: [collageClip], durationSec: 4 },
-      sources: {},
-    });
-    await render(<EditorScreen />);
-    await click("Select clip collage-test");
-    await click("Add photo");
-    expect(host.textContent).toContain("Add cell");
-    expect(host.querySelector('[aria-label="Choose files from phone"]')).not.toBeNull();
-  });
-
   it("clears the selected collage cell to an empty slot from the toolbar and saves one atomic edit", async () => {
     boundary.repository.getFilmTimeline.mockResolvedValue({
       timeline: { ...firstCut, schemaVersion: 2, videoClips: [collageClip], durationSec: 4 },

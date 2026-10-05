@@ -8,7 +8,7 @@ type Collage = Extract<Timeline["videoClips"][number], { kind: "collage" }>;
 export function CollageCellSheet({ mode, clip, slotId, moments, sources = {}, uploading = false, uploadProgress, uploadError = null, onUploadFile, onSource, onApply, onClose }: {
   mode: "add" | "replace"; clip: Collage; slotId?: string; moments: Moment[]; sources?: Record<string, string>;
   uploading?: boolean; uploadProgress?: { totalFiles: number; finishedFiles: number; failedFiles: number } | null; uploadError?: string | null;
-  onUploadFile?: (file: File, clipId: string, slotId?: string) => void; onSource?: (shotId: string, source: string) => void;
+  onUploadFile?: (file: File, clipId: string, slotId: string) => void; onSource?: (shotId: string, source: string) => void;
   onApply: (op: EditOp) => void; onClose: () => void;
 }) {
   const layout = COLLAGE_LAYOUTS.find((candidate) => candidate.id === clip.spec.layoutId)!;
@@ -32,7 +32,7 @@ export function CollageCellSheet({ mode, clip, slotId, moments, sources = {}, up
   };
   return <View className="absolute inset-0 z-30 justify-end bg-black/60"><View className="max-h-[72%] rounded-t-[24px] bg-[#111d26] px-5 pb-8 pt-4">
     <View className="mb-3 flex-row items-center justify-between"><Text className="font-sans-semibold text-[18px] text-on-screen">{mode === "add" ? "Add cell" : "Replace cell"}</Text><Pressable accessibilityLabel="Close cell picker" onPress={onClose}><Text className="text-[24px] text-on-screen">×</Text></Pressable></View>
-    {((mode === "add" && !full) || (mode === "replace" && clip.spec.slots.find((slot) => slot.slotId === slotId)?.kind !== "video" && Boolean(slotId))) && Platform.OS === "web" && onUploadFile ? <DeviceUploadControl uploading={uploading} uploadProgress={uploadProgress} uploadError={uploadError} onFiles={(files) => { if (files[0]) onUploadFile(files[0], clip.clipId, slotId); }} /> : null}
+    {mode === "replace" && clip.spec.slots.find((slot) => slot.slotId === slotId)?.kind !== "video" && Platform.OS === "web" && onUploadFile && slotId ? <DeviceUploadControl uploading={uploading} uploadProgress={uploadProgress} uploadError={uploadError} onFiles={(files) => { if (files[0]) onUploadFile(files[0], clip.clipId, slotId); }} /> : null}
     {full ? <Text className="mb-3 font-sans text-caption text-on-screen-muted">This layout holds up to {layout.maxSlots} photos.</Text> : null}
     {candidates.length ? <MediaGridPicker moments={candidates} labelFor={(moment) => `${mode === "add" ? "Add cell" : "Replace with"} ${moment.title}`} disabled={(moment) => full || (moment.kind === "video" && !canVideo)} onSelect={applyChoice} /> : <Text className="font-sans text-caption text-on-screen-muted">No photos or videos from this trip are available.</Text>}
   </View></View>;
