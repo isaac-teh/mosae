@@ -6,14 +6,14 @@ const icons: Record<ContextToolbarAction, string> = {
   Back: "‹", ReplaceCell: "⇄", AddCell: "+", Remove: "⌫", Volume: "◖",
 };
 
-export function ToolBar({ selection = "none", onTool, disabledActions = {}, emptyCollageCell = false }: { selection?: EditorSelection; onTool?: (tool: ContextToolbarAction) => void; disabledActions?: Partial<Record<ContextToolbarAction, string>>; emptyCollageCell?: boolean }) {
+export function ToolBar({ selection = "none", onTool, disabledActions = {}, emptyCollageCell = false, hasEmptyCollageSlot = false }: { selection?: EditorSelection; onTool?: (tool: ContextToolbarAction) => void; disabledActions?: Partial<Record<ContextToolbarAction, string>>; emptyCollageCell?: boolean; hasEmptyCollageSlot?: boolean }) {
   const disabledHint = [...new Set(Object.values(disabledActions).filter(Boolean))].join(" · ");
   return <View className="border-t border-on-screen-muted/25 bg-screen pb-2 pt-2">
     <View className="flex-row items-center px-2" accessibilityLabel="Editor tools">
       {selection === "none" ? <View className="min-h-[55px] flex-1 items-center justify-center px-2"><Text className="font-sans text-[12px] text-on-screen-muted">Tap on a clip to edit it</Text></View> : <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1" contentContainerClassName="flex-grow items-center justify-center">
-      {contextToolbar(selection).filter((name) => name !== "Ask").map((name) => <Pressable key={name} role="button" accessibilityLabel={emptyCollageCell && name === "ReplaceCell" ? "Add photo" : name === "AddCell" ? "Add cell" : name === "ReplaceCell" ? "Replace" : name === "Back" ? "Back" : name} accessibilityHint={disabledActions[name]} disabled={Boolean(disabledActions[name])} onPress={() => onTool?.(name)} className="min-h-[55px] min-w-[64px] items-center justify-center px-1">
-        <Text className="font-sans text-[27px] leading-[30px] text-on-screen">{emptyCollageCell && name === "ReplaceCell" ? "+" : icons[name]}</Text>
-        <Text className="mt-0.5 font-sans text-[11px] text-on-screen">{name === "Deselect" ? "Done" : name === "AddCell" ? "Add cell" : name === "ReplaceCell" && emptyCollageCell ? "Add photo" : name === "ReplaceCell" ? "Replace" : name}</Text>
+      {contextToolbar(selection, { hasEmptyCollageSlot }).filter((name) => name !== "Ask").map((name) => <Pressable key={name} role="button" accessibilityLabel={(name === "ReplaceCell" && emptyCollageCell) || (name === "AddCell" && hasEmptyCollageSlot) ? "Add photo" : name === "ReplaceCell" ? "Replace" : name} accessibilityHint={disabledActions[name]} disabled={Boolean(disabledActions[name])} onPress={() => onTool?.(name)} className="min-h-[55px] min-w-[64px] items-center justify-center px-1">
+        <Text className="font-sans text-[27px] leading-[30px] text-on-screen">{(emptyCollageCell && name === "ReplaceCell") || (hasEmptyCollageSlot && name === "AddCell") ? "+" : icons[name]}</Text>
+        <Text className="mt-0.5 font-sans text-[11px] text-on-screen">{name === "Deselect" ? "Done" : (emptyCollageCell && name === "ReplaceCell") || (hasEmptyCollageSlot && name === "AddCell") ? "Add photo" : name === "AddCell" ? "Add cell" : name === "ReplaceCell" ? "Replace" : name}</Text>
       </Pressable>)}
     </ScrollView>}
     </View>

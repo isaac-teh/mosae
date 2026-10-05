@@ -115,11 +115,37 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledWith({ op: "replaceCollageSlot", clipId: "collage-1", slotId: "s2", shotId: "shot-left", kind: "photo" });
   });
 
-  it("shows Add photo for an empty collage cell and opens its picker", async () => {
+  it("labels an empty selected collage cell Add photo and a filled cell Replace", async () => {
     const { ToolBar } = await import("../components/editor/ToolBar");
     await render(<ToolBar selection="collageCell" emptyCollageCell onTool={() => {}} />);
     expect(host.querySelector('[aria-label="Add photo"]')?.textContent).toContain("Add photo");
     expect(host.querySelector('[aria-label="Add photo"]')?.firstElementChild?.textContent).toBe("+");
+    await render(<ToolBar selection="collageCell" onTool={() => {}} />);
+    expect(host.querySelector('[aria-label="Replace"]')?.textContent).toContain("Replace");
+  });
+
+  it("keeps Replace for selected photo and video clips", async () => {
+    const { ToolBar } = await import("../components/editor/ToolBar");
+    for (const kind of ["photo", "video"] as const) {
+      await render(<ToolBar selection="slot" onTool={() => {}} />);
+      expect(host.querySelector(`[aria-label="Replace"]`)?.textContent).toContain("Replace");
+    }
+  });
+
+  it("shows Add photo for a selected collage with an empty slot, and Replace when full", async () => {
+    const { ToolBar } = await import("../components/editor/ToolBar");
+    await render(<ToolBar selection="collage" hasEmptyCollageSlot onTool={() => {}} />);
+    expect(host.querySelector('[aria-label="Add photo"]')?.textContent).toContain("Add photo");
+    expect(host.querySelector('[aria-label="Add photo"]')?.firstElementChild?.textContent).toBe("+");
+    await render(<ToolBar selection="collage" onTool={() => {}} />);
+    expect(host.querySelector('[aria-label="Replace"]')?.textContent).toContain("Replace");
+  });
+
+  it("fills the designated empty collage slot from the shared picker", async () => {
+    const emptyCollage = { ...collage, spec: { ...collage.spec, slots: [{ slotId: "s1", empty: true as const }, ...collage.spec.slots.slice(1)] } };
+    await render(<CollageCellSheet mode="add" clip={emptyCollage} slotId="s1" moments={moments} onApply={apply} onClose={() => {}} />);
+    await click("Add cell Left out moment");
+    expect(apply).toHaveBeenCalledWith({ op: "replaceCollageSlot", clipId: "collage-1", slotId: "s1", shotId: "shot-left", kind: "photo" });
   });
 
   it("adds from the shared grid after the selected clip", async () => {
