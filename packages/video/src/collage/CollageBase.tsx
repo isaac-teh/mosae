@@ -35,9 +35,16 @@ const placement = (id: LayoutId, index: number, count: number, seed: string, wid
 };
 const Cell: React.FC<{spec:CollageSpec;slot:CollageSlot;index:number;sources?:Record<string,string>;clipId?:string;selectedCollageCellId?:string|null;onSelectCollageCell?:CollageProps["onSelectCollageCell"];onCommitCollageCrop?:CollageProps["onCommitCollageCrop"]}> = ({spec,slot,index,sources,clipId="",selectedCollageCellId,onSelectCollageCell,onCommitCollageCrop}) => {
   const frame=useCurrentFrame(); const {fps,width,height}=useVideoConfig();
-  const begin=Math.round(index*fps*(spec.motionId==="stack-deal"?.34:.13)); const span=Math.max(1,Math.round(spec.durationSec*fps)-begin);
+  // Every entrance must finish before the clip ends. Keep a 12-frame minimum
+  // entrance window (documented motion floor) and compress the stagger to fit.
+  const clipFrames=Math.max(1,Math.round(spec.durationSec*fps));
+  const entranceFrames=Math.min(30,Math.max(12,Math.floor(clipFrames/Math.max(1,spec.slots.length))));
+  const desiredStagger=Math.round(fps*(spec.motionId==="stack-deal"?.34:.13));
+  const latestBegin=Math.max(0,clipFrames-entranceFrames);
+  const begin=Math.min(latestBegin,Math.round(index*Math.min(desiredStagger,latestBegin/Math.max(1,index))));
+  const span=Math.max(1,clipFrames-begin);
   const progress=interpolate(frame-begin,[0,span],[0,1],{extrapolateLeft:"clamp",extrapolateRight:"clamp"});
-  const eased=spring({frame:frame-begin,fps,config:{damping:15,mass:.75,stiffness:105},durationInFrames:30});
+  const eased=spring({frame:frame-begin,fps,config:{damping:15,mass:.75,stiffness:105},durationInFrames:Math.min(30,span)});
   const seed=spec.seed; const rotate=(random(`${seed}:${index}:r`)-.5)*15;
   let transform=`rotate(${rotate}deg) scale(1)`; let opacity=1;
   switch(spec.motionId){
