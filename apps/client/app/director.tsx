@@ -5,7 +5,7 @@ import { Asset } from "expo-asset";
 import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatPersonQuestion, ChatProposal, ChatSetAsideCard, ChatShaping, ChatTyping } from "@/components/chat";
 import { FilmPlayer } from "@/components/FilmPlayer";
 import { Button } from "@/components/ds";
-import { useDirectorChat } from "@/lib/useDirectorChat";
+import { durationsForCadence, useDirectorChat } from "@/lib/useDirectorChat";
 import { shouldAutoScrollAfterAction } from "@/lib/chatScroll";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { EditorPreview } from "@/components/editor/EditorPreview";
@@ -157,9 +157,7 @@ export default function DirectorScreen() {
         if (item.kind === "direction") {
           const { options: focusOptions, label: focusLabel } = directionFocus(people, item.focus, true);
           const maximumDurationSec = directionOptions?.maximumDurationSecByCadence?.[directionSelection.cadenceId] ?? directionOptions?.maximumDurationSec ?? Infinity;
-          const availableDurations = directionOptions?.durations.filter(({ seconds }) => seconds <= maximumDurationSec) ?? [];
-          const shortSeconds = Number.isFinite(maximumDurationSec) ? Math.floor(maximumDurationSec) : 0;
-          const durationChoices = availableDurations.length === 0 && shortSeconds >= 3 ? [{ id: "short", label: "Short", caption: `About ${shortSeconds} seconds`, seconds: shortSeconds }] : availableDurations;
+          const durationChoices = directionOptions ? durationsForCadence(directionOptions, directionSelection.cadenceId) : [];
           const durationLabel = durationChoices.find(({ seconds }) => seconds === item.lengthSec)?.label ?? `${item.lengthSec} sec`;
           const explanation = `For ${durationLabel}, I'll focus on ${focusLabel === "The moments" ? "the moments" : focusLabel} and the strongest scenery, and tell you what I left out.`;
           return <View key={item.id} className="gap-4"><ChatDirectionCard pace={item.pace as "gentle" | "lively"} lengthSec={item.lengthSec} durations={durationChoices} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={(change) => scrollAfterAction(() => actions.setDirection(change))} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good" disabled={saving || !directionOptions || durationChoices.length === 0} onPress={() => scrollAfterAction(actions.shapeIt)} /></View>;

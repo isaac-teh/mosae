@@ -16,11 +16,14 @@ function reportFailure(cause: unknown): string {
   return REQUEST_FAILURE;
 }
 
-function durationsForCadence(options: DirectionOptions, cadenceId: string): DurationChoice[] {
+export function durationsForCadence(options: DirectionOptions, cadenceId: string): DurationChoice[] {
   const maximum = options.maximumDurationSecByCadence?.[cadenceId] ?? options.maximumDurationSec ?? Infinity;
-  const standard = options.durations.filter(({ seconds }) => seconds <= maximum);
-  const shortSeconds = Number.isFinite(maximum) ? Math.floor(maximum) : 0;
-  return standard.length || shortSeconds < 3 ? standard : [{ id: "short", label: "Short", caption: `About ${shortSeconds} seconds`, seconds: shortSeconds }];
+  const standard = options.durations.filter(({ id, seconds }) => id !== "short" && seconds <= maximum);
+  if (standard.length) return standard;
+  const shortSeconds = Number.isFinite(maximum) ? Math.min(20, Math.round(maximum)) : 0;
+  if (shortSeconds < 3) return [];
+  const serverShort = options.durations.find(({ id }) => id === "short");
+  return [{ id: "short", label: serverShort?.label ?? "Short", caption: `About ${shortSeconds} seconds`, seconds: shortSeconds }];
 }
 
 function useProjectState<T>(epochRef: MutableRefObject<number>, epoch: number, initial: T): [T, Dispatch<SetStateAction<T>>] {

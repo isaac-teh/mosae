@@ -100,10 +100,10 @@ describe("direction-options route", () => {
       .get(`/api/projects/${projectId}/proposals/${proposalId}/direction-options`);
 
     expect(res.status).toBe(200);
-    // 12 photos × 3s = 36s → snapped down to "30s"
+    // Twelve photos include one four-photo collage, with 3⅓× stretch capacity.
     expect(res.body.recommendedDuration).toBe("30s");
-    expect(res.body.maximumDurationSec).toBe(60);
-    expect(res.body.maximumDurationSecByCadence).toMatchObject({ reflective: 60, playful: 42 });
+    expect(res.body.maximumDurationSec).toBe(76);
+    expect(res.body.maximumDurationSecByCadence).toMatchObject({ reflective: 68, playful: 38 });
     expect(res.body.recommendedCadence).toBe("playful");
     expect(res.body).toMatchObject({ collageAmount: "few", motionFeel: "calm" });
     expect(res.body.cadenceReason).toBe("The kids were laughing all day");
@@ -111,8 +111,8 @@ describe("direction-options route", () => {
     // The library, with the track for the suggested cadence first.
     expect(res.body.soundtracks.length).toBeGreaterThanOrEqual(5);
     expect(res.body.soundtracks[0]).toMatchObject({ id: "lyria-playful", name: "Sandcastle Days" });
-    expect(res.body.durations).toHaveLength(6);
-    expect(res.body.durations).toContainEqual({ id: "4m", label: "4 min", caption: "A little more room", seconds: 240 });
+    expect(res.body.durations).toHaveLength(2);
+    expect(res.body.durations).toContainEqual({ id: "30s", label: "30 sec", caption: "A quick share", seconds: 30 });
     // note comes from the story intent text
     expect(res.body.note).toBe("A summer trip with the family");
     expect(res.body.rewrites).toEqual([]);
@@ -124,7 +124,7 @@ describe("direction-options route", () => {
     const app = await buildApp("u1");
     const res = await request(await listeningServer(app)).get(`/api/projects/${projectId}/proposals/${proposalId}/direction-options`);
     expect(res.status).toBe(200);
-    expect(res.body.maximumDurationSecByCadence.reflective).toBe(10);
+    expect(res.body.maximumDurationSecByCadence.reflective).toBe(14);
   });
 
   it("returns 403 for a project the requesting user does not own", async () => {

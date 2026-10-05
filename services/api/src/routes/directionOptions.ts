@@ -3,9 +3,9 @@ import { loadLibrary, soundtrackCatalog } from "../music/library.js";
 import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
-import { normalizeDirectionRecommendation, CADENCES, DURATION_SECONDS, recommendDuration, type CadenceId, type DurationId } from "@mosae/contracts";
+import { normalizeDirectionRecommendation, CADENCES, DURATION_SECONDS, type CadenceId, type DurationId } from "@mosae/contracts";
 import { stripProposalEnvelope } from "../store/directingStore.js";
-import { holdsFor } from "../compose/brief.js";
+import { DIRECTING_RULES, photoBaseDuration } from "../compose/directingRules.js";
 
 const DURATION_LABELS: Record<DurationId, { label: string; caption: string }> = {
   "30s": { label: "30 sec", caption: "A quick share" },
@@ -75,15 +75,27 @@ export function directionOptionsRouter(deps: {
         const end = typeof moment.previewOutSec === "number" ? moment.previewOutSec : start;
         return sum + Math.max(0, end - start);
       }, 0);
-      const recommendedDuration: DurationId = recommendDuration(photoCount);
-      // Estimate capacity for each selectable pace. These values use the same
-      // maximum holds that composition uses, so a long option is only offered
-      // when the proposal has enough selected material for that cadence.
+      // The `few` collage rule groups four photos for 8–49 selections and
+      // eight photos across two collages from 50 onward.
+      const collagePhotos = photoCount >= 50 ? 8 : photoCount >= 8 ? 4 : 0;
       const maximumDurationSecByCadence = Object.fromEntries(CADENCES.map(({ id }) => {
-        const maximumHold = holdsFor(id).max;
-        return [id, photoCount * maximumHold + Math.min(videoSeconds, videos.length * maximumHold * 2)];
-      }));
+        const basePhotoSeconds = photoCount > 0
+          ? (photoCount - collagePhotos) * photoBaseDuration(1, id) + (collagePhotos ? photoBaseDuration(collagePhotos, id) : 0)
+          : 0;
+        const capacity = basePhotoSeconds * DIRECTING_RULES.tierlessPhotoStretchMultiplier + videoSeconds;
+        return [id, Math.round(capacity)];
+      })) as Record<CadenceId, number>;
       const maximumDurationSec = Math.max(...Object.values(maximumDurationSecByCadence));
+      const recommendedCadence: CadenceId =
+        typeof proposalData.recommendedCadence === "string"
+          ? proposalData.recommendedCadence as CadenceId
+          : "reflective";
+      const recommendedCapacity = maximumDurationSecByCadence[recommendedCadence];
+      const shortSeconds = Math.min(DIRECTING_RULES.minimumFilmSec, recommendedCapacity);
+      const recommendedDuration: DurationId | "short" =
+        (Object.entries(DURATION_SECONDS) as [DurationId, number][])
+          .sort((a, b) => a[1] - b[1])
+          .find(([, seconds]) => seconds <= recommendedCapacity)?.[0] ?? "short";
 
       // Read the story intent for the note text
       const storyIntentId = typeof proposalData.storyIntentId === "string" ? proposalData.storyIntentId : null;
@@ -101,21 +113,14 @@ export function directionOptionsRouter(deps: {
         }
       }
 
-      const recommendedCadence: CadenceId =
-        typeof proposalData.recommendedCadence === "string"
-          ? proposalData.recommendedCadence as CadenceId
-          : "reflective";
-
       const cadenceReason: string | null =
         typeof proposalData.cadenceReason === "string" ? proposalData.cadenceReason : null;
 
       // Build duration list from DURATION_SECONDS
-      const durations = (Object.entries(DURATION_SECONDS) as [DurationId, number][]).map(([id, seconds]) => ({
-        id,
-        label: DURATION_LABELS[id].label,
-        caption: DURATION_LABELS[id].caption,
-        seconds,
-      }));
+      const durations: { id: DurationId | "short"; label: string; caption: string; seconds: number }[] = (Object.entries(DURATION_SECONDS) as [DurationId, number][])
+        .filter(([, seconds]) => seconds <= maximumDurationSec)
+        .map(([id, seconds]) => ({ id, label: DURATION_LABELS[id].label, caption: DURATION_LABELS[id].caption, seconds }));
+      durations.push({ id: "short", label: "Short", caption: `About ${shortSeconds} seconds`, seconds: shortSeconds });
 
       const recommendation = normalizeDirectionRecommendation(proposalData.directionRecommendation);
       return res.json({

@@ -190,22 +190,32 @@ export async function runCompose(
     return { ok: false, reasons: ["no legal candidates — proposal has no media"] };
   }
 
+  let tierlessShort = false;
   if (job.durationId === "short") {
     const hidden = new Set(job.proposal.constraints.hiddenShotIds ?? []);
     const excluded = new Set(job.proposal.constraints.excludedShotIds ?? []);
     const deselected = new Set(job.proposal.constraints.deselectedMomentIds ?? []);
     const capacityByMoment = new Map<string, number>();
+    const standardCapacityByMoment = new Map<string, number>();
     for (const candidate of candidates) {
       const shotId = shotIdByMoment.get(candidate.itemId);
       if (!shotId || hidden.has(shotId) || excluded.has(shotId) || deselected.has(candidate.itemId)) continue;
-      const capacity = candidate.kind === "photo" ? holdsFor(job.cadenceId).max : candidate.lengthSec ?? 0;
+      const capacity = candidate.kind === "photo"
+        ? holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier
+        : candidate.lengthSec ?? 0;
       capacityByMoment.set(candidate.itemId, Math.max(capacityByMoment.get(candidate.itemId) ?? 0, capacity));
+      const standardCapacity = candidate.kind === "photo" ? holdsFor(job.cadenceId).max : candidate.lengthSec ?? 0;
+      standardCapacityByMoment.set(candidate.itemId, Math.max(standardCapacityByMoment.get(candidate.itemId) ?? 0, standardCapacity));
     }
     const materialCapacitySec = [...capacityByMoment.values()].reduce((total, seconds) => total + seconds, 0);
-    // The cadence on the composition job is authoritative. Client estimates
-    // can become stale when pace changes, so shorten the target to the capacity
-    // calculated from the actual candidates and cadence used for this run.
-    targetSec = Math.min(targetSec, materialCapacitySec);
+    const tierlessTargetSec = Math.min(DIRECTING_RULES.minimumFilmSec, Math.round(materialCapacitySec));
+    tierlessShort = targetSec >= tierlessTargetSec;
+    if (!tierlessShort) {
+      // The cadence on the composition job is authoritative. Client estimates
+      // can become stale when pace changes, so shorten the target to the capacity
+      // calculated from the actual candidates and cadence used for this run.
+      targetSec = Math.min(targetSec, [...standardCapacityByMoment.values()].reduce((total, seconds) => total + seconds, 0));
+    }
     if (targetSec < 3) return { ok: false, reasons: ["short duration has less than three seconds of available material"] };
   }
 
@@ -350,22 +360,22 @@ export async function runCompose(
   const { clips: fittedClips, notes: fitNotes, targetSec: fittedTargetSec } = fitDuration(
     selectedClips,
     targetSec,
-    job.durationId === "short"
+    job.durationId === "short" && !tierlessShort
       ? { ...holdsFor(job.cadenceId), min: Math.min(holdsFor(job.cadenceId).min, DIRECTING_RULES.shortTierMinSec) }
       : holdsFor(job.cadenceId),
     job.proposal.constraints.mustIncludeMomentIds,
-    job.durationId === null ? { minimumFilmSec: 20, maximumStretchedPhotoMultiplier: DIRECTING_RULES.tierlessPhotoStretchMultiplier } : {},
+    job.durationId === null || tierlessShort ? { minimumFilmSec: DIRECTING_RULES.minimumFilmSec, maximumStretchedPhotoMultiplier: DIRECTING_RULES.tierlessPhotoStretchMultiplier } : {},
   );
 
   if (fittedClips.length === 0) {
     return { ok: false, reasons: ["no clips after duration fitting"] };
   }
-  if (job.durationId === null) {
+  if (job.durationId === null || tierlessShort) {
     // The no-tier stretch is a documented exception to cadence's normal
     // maximum and must be visible to reflow and the semantic validator.
     for (const candidate of candidates) if (candidate.kind === "photo") candidate.maxHoldSec = holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier;
   }
-  if (job.durationId === "short") {
+  if (job.durationId === "short" && !tierlessShort) {
     // Adaptive Short is an explicit tier choice and may compress cadence down
     // to the 1.2-second base when the requested target needs it.
     for (const candidate of candidates) {
@@ -517,7 +527,7 @@ export async function runCompose(
   let withCollages: Timeline;
   try {
     const usableMediaCount = new Set(candidates.map((candidate) => candidate.itemId)).size;
-    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm", cadenceId: job.cadenceId, tierless: job.durationId === null }, usableMediaCount);
+    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm", cadenceId: job.cadenceId, tierless: job.durationId === null || tierlessShort }, usableMediaCount);
   } catch (error) {
     return { ok: false, reasons: [`collage placement failed: ${error instanceof Error ? error.message : String(error)}`] };
   }

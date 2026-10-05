@@ -608,18 +608,30 @@ describe("Director chat", () => {
   });
 
   it("offers one preselected short length when three photos cannot reach a standard tier", async () => {
-    setup({ people: [], readyPlan: true, maximumDurationSec: 15 }); await renderScreen();
+    setup({ people: [], readyPlan: true, maximumDurationSec: 12 }); await renderScreen();
     await click("Yes, our Japan trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
     await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
     expect(host.querySelectorAll('button[aria-label="Short"]')).toHaveLength(1);
     expect(host.querySelector('button[aria-label="Short"]')?.getAttribute("aria-pressed")).toBe("true");
-    expect(hasText("About 15 seconds")).toBe(true);
+    expect(hasText("About 12 seconds")).toBe(true);
     expect(host.querySelectorAll('button[aria-label="Sounds good"]')).toHaveLength(1);
     expect((host.querySelector('button[aria-label="Sounds good"]') as HTMLButtonElement).disabled).toBe(false);
     await click("Sounds good");
-    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ durationId: "short", durationSec: 15 })));
+    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ durationId: "short", durationSec: 12 })));
+  });
+
+  it("caps the adaptive Short recommendation at twenty seconds", async () => {
+    setup({ people: [], readyPlan: true, maximumDurationSec: 24 }); await renderScreen();
+    await click("Yes, our Japan trip");
+    await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
+    await click("Looks fine");
+    await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
+
+    await waitFor(() => expect(hasText("About 20 seconds")).toBe(true));
+    await click("Sounds good");
+    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ durationId: "short", durationSec: 20 })));
   });
 
   it("updates a selected short length when the user changes pace", async () => {
