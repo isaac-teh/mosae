@@ -52,10 +52,10 @@ describe("direction options v2 capacity", () => {
   });
 
   it.each([
-    [3, { tender: 24, reflective: 22, playful: 12, energetic: 12, celebratory: 14 }, "short", 12],
-    [6, { tender: 48, reflective: 43, playful: 24, energetic: 24, celebratory: 29 }, "short", 20],
-    [10, { tender: 60, reflective: 54, playful: 30, energetic: 30, celebratory: 36 }, "30s", 20],
-    [12, { tender: 76, reflective: 68, playful: 38, energetic: 38, celebratory: 46 }, "30s", 20],
+    [3, { tender: 12, reflective: 12, playful: 12, energetic: 12, celebratory: 12 }, "short", 12],
+    [6, { tender: 24, reflective: 24, playful: 24, energetic: 24, celebratory: 24 }, "short", 20],
+    [10, { tender: 36, reflective: 34, playful: 30, energetic: 30, celebratory: 31 }, "30s", 20],
+    [12, { tender: 44, reflective: 42, playful: 38, energetic: 38, celebratory: 39 }, "30s", 20],
   ] as const)("uses v2 clip capacity for %i photos", async (photoCount, capacities, recommendation, shortSeconds) => {
     const moments = Array.from({ length: photoCount }, (_, i) => ({ id: `m${i}`, shotId: `s${i}`, kind: "photo", title: `Photo ${i}`, description: "", rationale: "" }));
     const projectRef = {

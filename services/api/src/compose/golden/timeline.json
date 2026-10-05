@@ -4,7 +4,7 @@
   "mode": "memory",
   "aspect": "9:16",
   "fps": 30,
-  "durationSec": 15.5,
+  "durationSec": 27.4,
   "chapters": [
     {
       "title": "Getting there",
@@ -12,7 +12,7 @@
     },
     {
       "title": "The water",
-      "startSec": 7.366666666666666
+      "startSec": 8.5
     }
   ],
   "videoClips": [
@@ -23,7 +23,7 @@
         "shotId": "shot-arrival"
       },
       "startSec": 0,
-      "durationSec": 2.8666666666666667,
+      "durationSec": 4,
       "transitionIn": {
         "kind": "cut",
         "durationSec": 0
@@ -37,7 +37,7 @@
         "sourceInSec": 4,
         "sourceOutSec": 9
       },
-      "startSec": 2.3666666666666667,
+      "startSec": 3.5,
       "durationSec": 5,
       "transitionIn": {
         "kind": "crossfade",
@@ -52,7 +52,7 @@
         "sourceInSec": 0.15,
         "sourceOutSec": 5.91
       },
-      "startSec": 7.366666666666666,
+      "startSec": 8.5,
       "durationSec": 5.766666666666667,
       "transitionIn": {
         "kind": "cut",
@@ -65,11 +65,41 @@
         "kind": "photo",
         "shotId": "shot-dusk"
       },
-      "startSec": 12.633333333333333,
-      "durationSec": 2.8666666666666667,
+      "startSec": 13.766666666666666,
+      "durationSec": 4,
       "transitionIn": {
         "kind": "crossfade",
         "durationSec": 0.5
+      }
+    },
+    {
+      "id": "m-talking#s0@0.15c0",
+      "source": {
+        "kind": "video",
+        "shotId": "shot-talking",
+        "sourceInSec": 0.15,
+        "sourceOutSec": 4
+      },
+      "startSec": 17.766666666666666,
+      "durationSec": 3.8666666666666667,
+      "transitionIn": {
+        "kind": "cut",
+        "durationSec": 0
+      }
+    },
+    {
+      "id": "m-talking#s0@9c0",
+      "source": {
+        "kind": "video",
+        "shotId": "shot-talking",
+        "sourceInSec": 9,
+        "sourceOutSec": 14.76
+      },
+      "startSec": 21.633333333333333,
+      "durationSec": 5.766666666666667,
+      "transitionIn": {
+        "kind": "cut",
+        "durationSec": 0
       }
     }
   ],
@@ -83,7 +113,7 @@
         "sourceOutSec": 9
       },
       "role": "speech",
-      "startSec": 2.3666666666666667,
+      "startSec": 3.5,
       "gainDb": 0,
       "fadeInSec": 0,
       "fadeOutSec": 0
@@ -97,7 +127,7 @@
         "sourceOutSec": 5.916666666666667
       },
       "role": "ambient",
-      "startSec": 7.366666666666666,
+      "startSec": 8.5,
       "gainDb": -10.46,
       "fadeInSec": 0,
       "fadeOutSec": 0
@@ -108,20 +138,20 @@
         "kind": "soundtrack",
         "soundtrackId": "soundtrack-dusk",
         "sourceInSec": 0,
-        "sourceOutSec": 15.5
+        "sourceOutSec": 27.4
       },
       "role": "music",
       "startSec": 0,
       "gainDb": -10.46,
-      "fadeInSec": 0.775,
+      "fadeInSec": 1,
       "fadeOutSec": 1
     }
   ],
   "captions": [
     {
       "text": "Into the water",
-      "startSec": 7.366666666666666,
-      "endSec": 13.133333333333333
+      "startSec": 8.5,
+      "endSec": 14.266666666666666
     }
   ]
 }

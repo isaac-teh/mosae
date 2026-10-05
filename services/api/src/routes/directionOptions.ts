@@ -5,7 +5,7 @@ import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
 import { normalizeDirectionRecommendation, CADENCES, DURATION_SECONDS, type CadenceId, type DurationId } from "@mosae/contracts";
 import { stripProposalEnvelope } from "../store/directingStore.js";
-import { DIRECTING_RULES, photoBaseDuration } from "../compose/directingRules.js";
+import { DIRECTING_RULES, photoBaseDuration, requestedCollageCount } from "../compose/directingRules.js";
 
 const DURATION_LABELS: Record<DurationId, { label: string; caption: string }> = {
   "30s": { label: "30 sec", caption: "A quick share" },
@@ -75,15 +75,19 @@ export function directionOptionsRouter(deps: {
         const end = typeof moment.previewOutSec === "number" ? moment.previewOutSec : start;
         return sum + Math.max(0, end - start);
       }, 0);
-      // The `few` collage rule groups four photos for 8–49 selections and
-      // eight photos across two collages from 50 onward.
-      const collagePhotos = photoCount >= 50 ? 8 : photoCount >= 8 ? 4 : 0;
+      // Capacity uses the same v2 collage bands and per-clip limits as compose.
+      // A single photo caps at four seconds; collage holds use their photo-count base.
+      const collageCount = requestedCollageCount(keptMoments.length, "few");
+      const photosPerCollage = keptMoments.length < 20 ? 4 : keptMoments.length < 50 ? 4 : DIRECTING_RULES.collageMaxPhotos;
+      const collagePhotos = Math.min(photoCount, collageCount * photosPerCollage);
       const maximumDurationSecByCadence = Object.fromEntries(CADENCES.map(({ id }) => {
-        const basePhotoSeconds = photoCount > 0
-          ? (photoCount - collagePhotos) * photoBaseDuration(1, id) + (collagePhotos ? photoBaseDuration(collagePhotos, id) : 0)
+        const singleMax = Math.min(DIRECTING_RULES.singlePhotoMaxSec, photoBaseDuration(1, id) * DIRECTING_RULES.tierlessPhotoStretchMultiplier);
+        const collageGroups = collagePhotos > 0 ? Math.min(collageCount, Math.ceil(photoCount / photosPerCollage)) : 0;
+        const collageMax = collageGroups > 0
+          ? collageGroups * photoBaseDuration(Math.min(photosPerCollage, Math.ceil(collagePhotos / collageGroups)), id) * DIRECTING_RULES.tierlessPhotoStretchMultiplier
           : 0;
-        const capacity = basePhotoSeconds * DIRECTING_RULES.tierlessPhotoStretchMultiplier + videoSeconds;
-        return [id, Math.round(capacity)];
+        const capacity = Math.max(0, photoCount - collagePhotos) * singleMax + collageMax + videoSeconds;
+        return [id, Math.floor(capacity)];
       })) as Record<CadenceId, number>;
       const maximumDurationSec = Math.max(...Object.values(maximumDurationSecByCadence));
       const recommendedCadence: CadenceId =
