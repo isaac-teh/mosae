@@ -76,7 +76,7 @@ describe("editor tool operations", () => {
   it("hands a device-selected photo to the project replacement uploader", async () => {
     const onUploadFile = vi.fn();
     await render(<SwapSheet visible clipId="a" kind="photo" planId={null} momentId={null} repository={repo} onUploadFile={onUploadFile} onApply={apply} onSource={onSource} onClose={() => {}} />);
-    const input = host.querySelector('[aria-label="Choose replacement photo"]') as HTMLInputElement;
+    const input = host.querySelector('[aria-label="Choose files from phone"]') as HTMLInputElement;
     const file = new File(["photo"], "replacement.jpg", { type: "image/jpeg" });
     Object.defineProperty(input, "files", { configurable: true, value: [file] });
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
@@ -86,7 +86,7 @@ describe("editor tool operations", () => {
   it("hands a device-selected photo to the captured collage cell uploader", async () => {
     const onUploadFile = vi.fn();
     await render(<CollageCellSheet mode="replace" clip={collage} slotId="s2" moments={moments} onUploadFile={onUploadFile} onApply={apply} onClose={() => {}} />);
-    const input = host.querySelector('[aria-label="Choose replacement cell photo"]') as HTMLInputElement;
+    const input = host.querySelector('[aria-label="Choose files from phone"]') as HTMLInputElement;
     const file = new File(["photo"], "cell.jpg", { type: "image/jpeg" });
     Object.defineProperty(input, "files", { configurable: true, value: [file] });
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
@@ -169,6 +169,22 @@ describe("editor tool operations", () => {
     await render(<AddSheet visible moments={moments} selectedClipId="b" onApply={apply} onClose={() => {}} />);
     await click("Add Left out moment");
     expect(apply).toHaveBeenCalledWith({ op: "add", shotId: "shot-left", kind: "photo", afterClipId: "b", durationSec: 3 });
+  });
+
+  it("inserts uploaded media in selection order after the selected clip", async () => {
+    const first = { ...moments[0]!, id: "uploaded-a", shotId: "uploaded-a", title: "Phone photo A" };
+    const second = { ...moments[0]!, id: "uploaded-b", shotId: "uploaded-b", title: "Phone photo B" };
+    const onUploadFiles = vi.fn(async () => [first, second]);
+    await render(<AddSheet visible moments={[]} selectedClipId="b" onUploadFiles={onUploadFiles} onApply={apply} onClose={() => {}} />);
+    const input = host.querySelector('[aria-label="Choose files from phone"]') as HTMLInputElement;
+    const files = [new File(["a"], "a.jpg", { type: "image/jpeg" }), new File(["b"], "b.jpg", { type: "image/jpeg" })];
+    Object.defineProperty(input, "files", { configurable: true, value: files });
+    await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); await Promise.resolve(); await Promise.resolve(); });
+    expect(onUploadFiles).toHaveBeenCalledWith(files);
+    expect(apply).toHaveBeenCalledWith([
+      { op: "add", shotId: "uploaded-a", kind: "photo", afterClipId: "b", durationSec: 3 },
+      { op: "add", shotId: "uploaded-b", kind: "photo", afterClipId: "add:uploaded-a:1", durationSec: 3 },
+    ]);
   });
 
   it("shows uploaded-media thumbnails in newest-day order", async () => {
