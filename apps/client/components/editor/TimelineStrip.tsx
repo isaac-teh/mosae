@@ -100,9 +100,6 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
         </View>;
       });
       })()}
-      <Pressable role="button" accessibilityLabel="Add clip" onPress={onAddClip} style={{ position: "absolute", left: timeToX(timeline.durationSec, pixelsPerSecond, leadingPadding) + 8, top: 9, zIndex: 21, width: 40, height: 40, borderRadius: 12, backgroundColor: "#F7F6F2", alignItems: "center", justifyContent: "center" }}>
-        <Text className="font-sans text-[25px] leading-[28px] text-[#172027]">+</Text>
-      </Pressable>
     </View>
   </View>;
 });
@@ -438,6 +435,7 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
         <TimelineRows timeline={timeline} sources={sources} thumbnails={thumbnails} selectedClipId={selectedClipId} selectedAudioClipId={selectedAudioClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => { if (suppressNextPress.current) return; if (id === selectedClipId) onDeselect(); else onSelect(id, start); }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} onSelectAudio={onSelectAudio} onAddClip={onAddClip} />
       </ScrollView>
 
+      <Pressable role="button" accessibilityLabel="Add clip" onPress={onAddClip} style={{ position: "absolute", zIndex: 21, right: 8, top: 47, width: 44, height: 44, borderRadius: 22, backgroundColor: "#F7F6F2", alignItems: "center", justifyContent: "center", boxShadow: "0px 4px 12px rgba(0,0,0,0.45)", elevation: 8 }}><Text className="font-sans text-[25px] leading-[28px] text-[#172027]">+</Text></Pressable>
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />
     </View>
   </View>;

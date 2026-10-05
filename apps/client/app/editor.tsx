@@ -198,7 +198,6 @@ export default function EditorScreen() {
   }, [editor.select]);
   const onAddTimelineClip = useCallback(() => {
     replacementUploadNonce.current.invalidate();
-    editor.select(null);
     setSelectedAudioClipId(null);
     setSelectedCollageCellId(null);
     setTool("Add");
@@ -275,7 +274,7 @@ export default function EditorScreen() {
       if (editor.timeline && editor.timeline.videoClips.length > 1) setTool("Remove"); return;
     }
     if (action === "Duplicate") { if (selectedClip) editor.apply(duplicateClip(clipId(selectedClip))); setTool(null); return; }
-    if (action === "Replace") { if (toolbarSelection === "audio") openSoundtrackPicker(); else setTool("Replace"); return; }
+    if (action === "Replace") { if (toolbarSelection === "audio") openSoundtrackPicker(); else if (toolbarSelection === "collageCell" && selectedClip && "kind" in selectedClip && selectedCellSlotId && selectedClip.spec.slots.find((slot) => slot.slotId === selectedCellSlotId)?.empty) setTool("CollageCellReplace"); else setTool("Replace"); return; }
     if (action === "Volume") { setTool("Volume"); return; }
     if (action === "Layout") { setTool("CollageLayout"); return; }
     if (action === "Motion") { setTool("CollageMotion"); return; }
@@ -293,7 +292,7 @@ export default function EditorScreen() {
 
   return <View className="flex-1 bg-screen">
     <View className="h-[60px] flex-row items-center justify-between px-5">
-      <Pressable role="button" accessibilityLabel="Back" onPress={() => router.back()} className="min-h-11 min-w-11 justify-center"><Text className="font-sans text-[26px] text-on-screen">×</Text></Pressable>
+      <Pressable role="button" accessibilityLabel="Back" onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} className="min-h-11 min-w-11 justify-center"><Text className="font-sans text-[26px] text-on-screen">×</Text></Pressable>
       <Text className="font-sans-semibold text-[18px] text-on-screen">Edit film</Text>
       <View className="flex-row items-center gap-2"><EditorMenu onReset={(ops) => editor.reset(ops)} /><Pressable role="button" accessibilityLabel="Save" onPress={() => void editor.render()} className="min-h-11 min-w-11 items-end justify-center"><Text className="font-sans-medium text-[16px] text-on-screen">Save</Text></Pressable></View>
     </View>
@@ -323,9 +322,9 @@ export default function EditorScreen() {
             if (clip && original && editor.firstCut) editor.apply(trimEdit(clip, original, edge, delta, editor.firstCut.durationSec));
           }} onReorder={(id, toIndex) => editor.apply({ op: "move", clipId: id, toIndex })} onDeselect={() => { editor.select(null); setSelectedAudioClipId(null); setSelectedCollageCellId(null); }} onSoundtrack={openSoundtrackPicker} />
       </ScrollView>}
-    <ToolBar selection={toolbarSelection} onTool={openTool} disabledActions={disabledToolbarActions} />
+    <ToolBar selection={toolbarSelection} onTool={openTool} disabledActions={disabledToolbarActions} emptyCollageCell={Boolean(selectedClip && "kind" in selectedClip && selectedCellSlotId && selectedClip.spec.slots.find((slot) => slot.slotId === selectedCellSlotId)?.empty)} />
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
-    {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} onApply={onApply} onClose={() => setTool(null)} /> : null}
+    {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} playheadSec={playhead} timeline={editor.timeline ?? undefined} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {(tool === "CollageLayout" || tool === "CollageMotion") && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} aspect={editor.timeline?.aspect} section={tool === "CollageLayout" ? "Layout" : "Motion"} onApply={onApplyCollage} onClose={closePicker} /> : null}
     {(tool === "CollageCellAdd" || (tool === "CollageCellReplace" && selectedCellSlotId)) && selectedClip && "kind" in selectedClip ? <CollageCellSheet mode={tool === "CollageCellAdd" ? "add" : "replace"} clip={selectedClip} slotId={tool === "CollageCellReplace" ? selectedCellSlotId ?? undefined : undefined} moments={collageMoments} sources={editor.sources} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && tool === "CollageCellReplace" ? uploadDeviceReplacement : undefined} onSource={editor.setSource} onApply={onApply} onClose={closePicker} /> : null}
     {tool === "Replace" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={clipId(selectedClip)} kind={selectedClip.source.kind} moments={collageMoments} sources={editor.sources} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && selectedClip.source.kind === "photo" ? (file) => uploadDeviceReplacement(file, clipId(selectedClip)) : undefined} onApply={onApply} onSource={editor.setSource} onClose={closePicker} /> : null}
