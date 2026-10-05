@@ -6,7 +6,8 @@ const DEFAULT_PLACEHOLDER = "Tell me anything about the story";
 
 function occasionText(input: ChatInput): string {
   const summary = input.summary;
-  if (!summary) return "I've looked through your photos. Is this the story?";
+  if (!summary) return "What were these moments about?";
+  if (!summary.country && !summary.season && summary.places.length === 0) return `What were these ${summary.total} moments about?`;
   const total = summary.total;
   const subject = summary.country ? `a trip to ${summary.country}` : "a story";
   const when = summary.season ? ` in ${summary.season}` : "";
@@ -17,6 +18,44 @@ function occasionText(input: ChatInput): string {
 function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string {
   if (person.skipped) return "Skip";
   return person.name ?? "";
+}
+
+function storyAcknowledgement(text: string, storySummary?: string, mentionedPeople?: string[]): string {
+  let cleaned = (storySummary?.trim() || text.trim()).replace(/\s+/g, " ").replace(/children\s+day/gi, "Children's Day");
+  const relation = mentionedPerson(text, [], mentionedPeople);
+  if (relation && storySummary && !cleaned.toLocaleLowerCase().includes(relation.phrase.replace(/^your\s+/, ""))) {
+    cleaned = `A ${cleaned[0]!.toLocaleLowerCase()}${cleaned.slice(1)} for ${relation.phrase}`;
+  } else if (relation && !storySummary) {
+    const withoutPerson = cleaned.replace(/\b(?:my\s+)?(?:son(?:'s)?|daughter(?:'s)?|wife|husband|mum|mom|mother|dad|father|partner)\b/i, "").trim();
+    if (withoutPerson) cleaned = `A ${withoutPerson[0]!.toLocaleLowerCase()}${withoutPerson.slice(1)} for ${relation.phrase}`;
+  }
+  cleaned = cleaned.replace(/children's day/gi, "Children's Day").replace(/\b([a-z])/i, (letter) => letter.toLocaleUpperCase());
+  return `${cleaned.replace(/[.!?]+$/, "")} — lovely!`;
+}
+
+function mentionedPerson(text: string, people: NonNullable<ChatInput["people"]>, mentionedPeople: string[] = []): { label: string; phrase: string } | null {
+  const normalized = text.toLocaleLowerCase();
+  const relations: [RegExp, string, string][] = [
+    [/\b(?:my\s+)?son(?:'s)?\b/, "My son", "your son"], [/\b(?:my\s+)?daughter(?:'s)?\b/, "My daughter", "your daughter"],
+    [/\b(?:my\s+)?wife\b/, "My wife", "your wife"], [/\b(?:my\s+)?husband\b/, "My husband", "your husband"],
+    [/\b(?:my\s+)?(?:mum|mom|mother)\b/, "My mum", "your mum"], [/\b(?:my\s+)?(?:dad|father)\b/, "My dad", "your dad"],
+    [/\b(?:my\s+)?partner\b/, "My partner", "your partner"],
+  ];
+  const relation = relations.find(([pattern]) => pattern.test(normalized));
+  if (relation) return { label: relation[1], phrase: relation[2] };
+  for (const candidate of mentionedPeople) {
+    const name = candidate.trim();
+    const escaped = name.replace(/[.*+?^$(){}|[\]\\]/g, "\\$&");
+    if (name && new RegExp(`\\b${escaped}\\b`, "i").test(text)) return { label: name, phrase: name };
+  }
+  for (const person of people) {
+    const name = person.name?.trim();
+    if (!name || /^(?:me|family|friend|my son|my daughter|my mum|my dad)$/i.test(name)) continue;
+    const bare = name.replace(/^my\s+/i, "");
+    const escaped = bare.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(text)) return { label: name, phrase: bare };
+  }
+  return null;
 }
 
 function directionAnswer(input: ChatInput): string {
@@ -92,6 +131,7 @@ export function deriveChat(input: ChatInput): ChatState {
 
   add({ kind: "mosae", id: "occasion-message", text: occasionText(input) });
   add({ kind: "you", id: "occasion-answer", text: input.intent.text });
+  add({ kind: "mosae", id: "story-acknowledgement", text: storyAcknowledgement(input.intent.text, input.storySummary, input.mentionedPeople) });
   input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
   confirmed = 1;
 
@@ -109,17 +149,20 @@ export function deriveChat(input: ChatInput): ChatState {
     const firstUnanswered = people.findIndex((person) => !answered(person));
     const unanswered = firstUnanswered >= 0 ? people[firstUnanswered] : null;
     people.slice(0, firstUnanswered >= 0 ? firstUnanswered : people.length).forEach((person) => {
-      add({ kind: "mosae", id: `person-question-${person.personId}`, text: `One person appears in ${person.momentCount} moments. Who is this?`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri) });
+      add({ kind: "mosae", id: `person-question-${person.personId}`, text: `Who's this? They're in ${person.momentCount} of your moments.`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri) });
       add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
       for (const event of input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? []) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), response: event.response });
     });
     for (const event of (input.mergeEvents ?? []).filter(({ personId }) => !people.some((person) => person.personId === personId))) {
-      add({ kind: "mosae", id: `person-question-${event.personId}`, text: `One person appears in ${event.momentCount} moments. Who is this?`, photos: (event.questionFaces ?? event.sampleFaces).slice(0, 2) });
+      add({ kind: "mosae", id: `person-question-${event.personId}`, text: `Who's this? They're in ${event.momentCount} of your moments.`, photos: (event.questionFaces ?? event.sampleFaces).slice(0, 2) });
       add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
       if (!event.automatic) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), response: event.response });
     }
     if (unanswered) {
-      add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days });
+      const mention = people[0]?.personId === unanswered.personId ? mentionedPerson(input.intent.text, people, input.mentionedPeople) : null;
+      if (mention && !(input.dismissedPersonSuggestionIds ?? []).includes(unanswered.personId)) {
+        add({ kind: "person-confirm", id: `person-confirm-${unanswered.personId}`, personId: unanswered.personId, label: mention.label, text: `Is this ${mention.phrase}?`, momentCount: unanswered.momentCount, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 2).map((face) => face.uri) });
+      } else add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days, questionText: `Who's this? They're in ${unanswered.momentCount} of your moments.` });
     } else {
       add({ kind: "anyone-else", id: "anyone-else" });
     }
@@ -128,14 +171,14 @@ export function deriveChat(input: ChatInput): ChatState {
 
   const mergeEvents = input.mergeEvents ?? [];
   for (const event of mergeEvents.filter(({ personId }) => !input.people?.some((person) => person.personId === personId))) {
-    add({ kind: "mosae", id: `person-question-${event.personId}`, text: `One person appears in ${event.momentCount} moments. Who is this?`, photos: (event.questionFaces ?? event.sampleFaces).slice(0, 2) });
+    add({ kind: "mosae", id: `person-question-${event.personId}`, text: `Who's this? They're in ${event.momentCount} of your moments.`, photos: (event.questionFaces ?? event.sampleFaces).slice(0, 2) });
     add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
     if (!event.automatic) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), response: event.response });
   }
   if (input.people?.length) {
     orderPeopleByMergeSimilarity(input.people).slice(0, 3).forEach((person) => {
       if (person.skipped || person.name) {
-        add({ kind: "mosae", id: `person-question-${person.personId}`, text: `One person appears in ${person.momentCount} moments. Who is this?`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri) });
+        add({ kind: "mosae", id: `person-question-${person.personId}`, text: `Who's this? They're in ${person.momentCount} of your moments.`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri) });
         add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
         for (const event of input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? []) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), response: event.response });
       }

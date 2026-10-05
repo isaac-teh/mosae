@@ -10,7 +10,7 @@ export type InterpretRequest = {
   context: { summary?: ProjectSummary; people?: { personId: string; name: string | null; role: string | null }[] };
 };
 export type ChatChange =
-  | { kind: "occasion"; storyText: string }
+  | { kind: "occasion"; storyText: string; mentionedPeople?: string[] }
   | { kind: "person"; personId: string | null; name: string; role: "parent" | "child" | "other" }
   | { kind: "moments"; mustIncludeShotIds: string[] }
   | { kind: "direction"; pace?: "gentle" | "lively"; lengthSec?: 60 | 120 | 240; focus?: "family" | string }
@@ -29,6 +29,7 @@ const responseSchema = {
     change: { type: "OBJECT", properties: {
       kind: { type: "STRING", enum: ["occasion", "person", "moments", "direction", "note", "unclear"] },
       storyText: { type: "STRING" }, personId: { type: "STRING", nullable: true }, name: { type: "STRING" },
+      mentionedPeople: { type: "ARRAY", items: { type: "STRING" } },
       role: { type: "STRING", enum: ["parent", "child", "other"] }, query: { type: "STRING" },
       pace: { type: "STRING", enum: ["gentle", "lively"] }, lengthSec: { type: "INTEGER", enum: [60, 120, 240] },
       focus: { type: "STRING" }, note: { type: "STRING" },
@@ -44,6 +45,7 @@ function validate(value: unknown): ModelResult {
   if (result.confidence !== undefined && (typeof result.confidence !== "number" || result.confidence < 0 || result.confidence > 1)) throw new Error("invalid confidence");
   if (change.kind === "moments" && typeof change.query !== "string") throw new Error("moments query is required");
   if (change.kind === "occasion" && typeof change.storyText !== "string") throw new Error("storyText is required");
+  if (change.kind === "occasion" && change.mentionedPeople !== undefined && (!Array.isArray(change.mentionedPeople) || change.mentionedPeople.some((person) => typeof person !== "string"))) throw new Error("mentionedPeople must be strings");
   if (change.kind === "person" && (typeof change.name !== "string" || !["parent", "child", "other"].includes(String(change.role)))) throw new Error("invalid person change");
   if (change.kind === "direction" && (change.pace !== undefined && !["gentle", "lively"].includes(String(change.pace)) || change.lengthSec !== undefined && ![60, 120, 240].includes(Number(change.lengthSec)))) throw new Error("invalid direction change");
   if (change.kind === "note" && typeof change.note !== "string") throw new Error("note is required");
@@ -57,7 +59,7 @@ export async function interpret(req: InterpretRequest, deps: {
   try {
     const modelResult = validate(await deps.generate({
       model: MODELS.analyze, stage: "chat.interpret", thinking: "MINIMAL",
-      contents: [{ text: `Interpret the user's typed message only for the current director chat step. Nothing has been applied yet. Restate the proposed change as a concise confirmation question for the user, such as "Make it lively and about a minute?" If unrelated to this step, return kind note. If unsure, return unclear. For moments, return a concise semantic search query.\nStep: ${req.step}\nContext: ${JSON.stringify(req.context)}\nText: ${req.text}` }],
+      contents: [{ text: `Interpret the user's typed message only for the current director chat step. Nothing has been applied yet. Restate the proposed change as a concise confirmation question for the user, such as "Make it lively and about a minute?" For occasion, return normalized storyText and mentionedPeople containing only people explicitly named by the user (relationships such as their son or a person's name); omit it when none are mentioned. If unrelated to this step, return kind note. If unsure, return unclear. For moments, return a concise semantic search query.\nStep: ${req.step}\nContext: ${JSON.stringify(req.context)}\nText: ${req.text}` }],
       responseSchema, validate,
     }));
     const allowedKind: Record<ChatStep, ChatChange["kind"]> = {

@@ -12,6 +12,12 @@ describe("interpret", () => {
     expect(result.change).toEqual({ kind: "direction", pace: "lively", lengthSec: 60 });
     expect(result.reply).toBeTruthy();
   });
+  it("passes explicitly mentioned people through an occasion interpretation", async () => {
+    const result = await interpret(request("occasion", "My son children day celebration"), {
+      generate: generate({ change: { kind: "occasion", storyText: "Children's Day celebration", mentionedPeople: ["son"] } }), searchShots: vi.fn(),
+    });
+    expect(result.change).toEqual({ kind: "occasion", storyText: "Children's Day celebration", mentionedPeople: ["son"] });
+  });
   it("asks for confirmation because interpretation does not apply changes", async () => {
     const generate = vi.fn().mockResolvedValue({ change: { kind: "direction", pace: "lively", lengthSec: 60 } });
     await interpret(request("direction", "more upbeat, and shorter"), { generate, searchShots: vi.fn() });

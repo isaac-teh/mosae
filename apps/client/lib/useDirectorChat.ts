@@ -45,7 +45,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const [input, setInput] = useProjectState<ChatInput>(projectEpoch, currentProjectEpoch, EMPTY_INPUT);
   const [summary, setSummary] = useProjectState<ProjectSummary | null>(projectEpoch, currentProjectEpoch, null);
   const [error, setError] = useProjectState<string | null>(projectEpoch, currentProjectEpoch, null);
-  const [pendingInterpret, setPendingInterpret] = useProjectState<{ reply: string; text: string } | null>(projectEpoch, currentProjectEpoch, null);
+  const [pendingInterpret, setPendingInterpret] = useProjectState<{ reply: string; text: string; mentionedPeople?: string[]; storySummary?: string } | null>(projectEpoch, currentProjectEpoch, null);
   const [saving, setSaving] = useProjectState(projectEpoch, currentProjectEpoch, false);
   const [momentState, setMomentState] = useProjectState<Record<string, "keep" | "leave">>(projectEpoch, currentProjectEpoch, {});
   const [directionOptions, setDirectionOptions] = useProjectState<DirectionOptions | null>(projectEpoch, currentProjectEpoch, null);
@@ -306,7 +306,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   pollFilmRef.current = (filmId) => { void pollFilm(filmId); };
 
   const actions = {
-    async confirmOccasion(answer?: string, storyTextOverride?: string) {
+    async confirmOccasion(answer?: string, storyTextOverride?: string, mentionedPeople?: string[], storySummary?: string) {
       if (occasionSaving.current || !canConfirmStory({ ...input, ...confirmationState })) return;
       occasionSaving.current = true;
       planFailed.current = false;
@@ -316,7 +316,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const result = await repository.createPlan([storyText, ...input.notes].join("\n"), []);
         if (!isCurrentProject()) return;
         proposalId.current = result.planId;
-        setInput((current) => ({ ...current, intent: { text: answer ?? storyText } }));
+        setInput((current) => ({ ...current, intent: { text: answer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
         setPendingInterpret(null);
         await refresh();
       } catch (cause) { if (!isCurrentProject()) return; planFailed.current = true; reportFailure(cause); setError("I couldn't shape this one. Try again."); }
@@ -375,6 +375,14 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         }
       } catch (cause) { setError(reportFailure(cause)); }
       finally { if (isCurrentProject()) personSaving.current = false; }
+    },
+    async resolveMentionedPerson(personId: string, label: string, confirm: boolean) {
+      if (!confirm) {
+        setInput((current) => ({ ...current, dismissedPersonSuggestionIds: [...new Set([...(current.dismissedPersonSuggestionIds ?? []), personId])] }));
+        return;
+      }
+      const relation = /^My\s+(?:son|daughter|wife|husband|mum|mom|mother|dad|father|partner)$/i.test(label);
+      return relation ? this.setPerson(personId, label) : this.setPerson(personId, "Type a name", label);
     },
     async skipPeople() {
       if (personSaving.current) return;
@@ -481,10 +489,13 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const step = state.step === "people" || state.step === "moments" || state.step === "direction" ? state.step : "occasion";
         const result = await repository.interpret(projectId, { step, text, context: { summary, people: (input.people ?? []).map(({ personId, name, role }) => ({ personId, name, role })) } });
         if (result.change.kind === "unclear") { setPendingInterpret({ reply: result.reply || UNCLEAR, text }); return; }
-        setPendingInterpret({ reply: result.reply, text });
+        const interpretedPeople = result.change.kind === "occasion" && Array.isArray(result.change.mentionedPeople)
+          ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
+        const storySummary = result.change.kind === "occasion" && typeof result.change.storyText === "string" ? result.change.storyText : undefined;
+        setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
       } catch (cause) { setError(reportFailure(cause)); }
     },
-    confirmInterpret() { if (pendingInterpret) void actions.confirmOccasion(pendingInterpret.text); },
+    confirmInterpret() { if (pendingInterpret) void actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary); },
     discardInterpret() { setPendingInterpret(null); },
   };
   return { state, actions, error, retry: () => { setError(null); if (compositionRetryAvailable.current) { compositionRetryAvailable.current = false; void actions.shapeIt(); } else if (activeFilmId.current) void pollFilm(activeFilmId.current); else if (pendingDirectionOptions.current) void recoverDirectionOptions(pendingDirectionOptions.current); else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); }); }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection, people: input.people ?? [] };

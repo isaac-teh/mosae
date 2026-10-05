@@ -4,7 +4,7 @@ import { Button, FocusChip } from "../ds";
 import { faceCropGeometry, imageSizeFromLoadEvent, type FaceBbox } from "../../lib/faceCrop";
 
 type FacePreview = { shotId: string; uri: string; bbox: FaceBbox };
-type ChatPersonQuestionProps = { momentCount: number; samples: FacePreview[]; days: number[]; chips: string[]; onPick: (role: string) => void; onTypeName: () => void; onSkip: () => void };
+type ChatPersonQuestionProps = { momentCount: number; samples: FacePreview[]; days: number[]; chips: string[]; question?: string; onPick: (role: string) => void; onTypeName: () => void; onSkip: () => void };
 
 function FacePreviewTile({ sample, index }: { sample: FacePreview; index: number }) {
   const size = 72;
@@ -28,10 +28,10 @@ function daysLabel(days: number[]): string {
   return ` · Day ${list}`;
 }
 
-export function ChatPersonQuestion({ momentCount, samples, days, chips, onPick, onTypeName, onSkip }: ChatPersonQuestionProps) {
+export function ChatPersonQuestion({ momentCount, samples, days, chips, question, onPick, onTypeName, onSkip }: ChatPersonQuestionProps) {
   const roleChips = chips.includes("Type a name") ? chips.slice(0, 4) : [...chips.slice(0, 3), "Type a name"];
   return <View className="w-full flex-col gap-3">
-    <Text className="text-body font-sans text-ink">One person appears in {momentCount} moments. Who is this?</Text>
+    <Text className="text-body font-sans text-ink">{question ?? `One person appears in ${momentCount} moments. Who is this?`}</Text>
     <View className="flex-row gap-2">{samples.slice(0, 4).map((sample, index) => <FacePreviewTile key={`${sample.shotId}-${index}`} sample={sample} index={index} />)}</View>
     <Text className="text-caption font-sans text-ink-muted">{Math.min(samples.length, 4)} of {momentCount} shown{daysLabel(days)}</Text>
     <View className="flex-row flex-wrap gap-2">{roleChips.map((chip) => <FocusChip key={chip} label={chip} onPress={() => chip === "Type a name" ? onTypeName() : onPick(chip)} />)}
