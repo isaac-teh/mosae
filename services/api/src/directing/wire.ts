@@ -155,11 +155,11 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
           constraints.focusCharacterIds = ensured.cast.focus;
         }
         const leftOut = leaveOutShots(
-          shots.filter((shot) => shot.analysis?.kind === "photo").map((shot) => ({
+          shots.map((shot) => ({
             shotId: shot.id,
             blurry: assets.get(shot.assetId)?.quality?.blurry ?? false,
             dupOf: shot.dupOf,
-            faces: ((shot.analysis as PhotoAnalysis).faces ?? []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null, stranger: face.stranger ?? false })),
+            faces: (shot.analysis?.kind === "photo" ? (shot.analysis as PhotoAnalysis).faces ?? [] : []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null, stranger: face.stranger ?? false })),
           })),
           ensured.cast,
           (constraints as typeof constraints & { hiddenShotIds?: string[] }).hiddenShotIds ?? [],

@@ -72,7 +72,8 @@ describe("golden composition", () => {
     // A golden built from a film that quietly lost half its picks would still
     // be stable, and would still be worthless.
     expect(result.droppedPicks).toEqual([]);
-    expect(result.timeline.videoClips).toHaveLength(4);
+    const included = new Set(result.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.shotId) : [clip.source.shotId]));
+    expect(included).toEqual(new Set(input.proposal.moments.map((moment) => moment.shotId)));
   });
 
   it("produces a structurally valid timeline", async () => {
@@ -198,15 +199,15 @@ describe("golden composition", () => {
 
   it("lands within 10% of the length it was fitted to", async () => {
     const timeline = await composeOrThrow();
-    // Photo cadence holds are now based on one-photo pace (1.2s × reflective
-    // stretch); with the two fixed video selections this fixture reaches 15.5s.
-    expect(timeline.durationSec).toBeCloseTo(15.5);
-    expect(Math.abs(timeline.durationSec - 15.5)).toBeLessThanOrEqual(1.55);
+    // All four proposal moments remain in the cut; selected tiers fit only to
+    // the maximum reachable duration when the requested tier exceeds capacity.
+    expect(timeline.durationSec).toBeCloseTo(27.4);
+    expect(Math.abs(timeline.durationSec - 27.4)).toBeLessThanOrEqual(2.74);
   });
 
   it("burns in the model's text overlay and ducks the music under speech", async () => {
     const timeline = await composeOrThrow();
-    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 7.366666666666666, endSec: 13.133333333333333 }]);
+    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 8.5, endSec: 14.266666666666666 }]);
 
     const music = timeline.audioClips.find((clip) => clip.role === "music");
     const speech = timeline.audioClips.find((clip) => clip.role === "speech");

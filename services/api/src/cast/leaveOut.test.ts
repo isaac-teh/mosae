@@ -17,9 +17,9 @@ describe("leaveOutShots", () => {
       { shotId: "duplicate", faces: [], dupOf: "primary" },
       { shotId: "both", faces: [], blurry: true, dupOf: "primary" },
     ], cast(), [])).toEqual([
-      { shotId: "blur", reason: "Blurry photo." },
-      { shotId: "duplicate", reason: "Near-duplicate: kept the sharpest photo in this burst." },
-      { shotId: "both", reason: "Blurry photo." },
+      { shotId: "blur", reason: "Blurry photo" },
+      { shotId: "duplicate", reason: "Similar photo — best one kept" },
+      { shotId: "both", reason: "Blurry photo" },
     ]);
   });
   it("keeps a family photo with a background stranger", () => {

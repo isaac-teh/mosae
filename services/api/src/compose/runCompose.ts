@@ -259,6 +259,26 @@ export async function runCompose(
   // Stage 3: assemble — apply drop rules, build AssembledClip[]
   const candidateMap = new Map(candidates.map(c => [c.candidateId, c]));
   const { clips: assembledClips, dropped } = assemble(parsed.picks, candidateMap, holdsFor(job.cadenceId));
+  // The model may choose the story order and emphasis, but it cannot omit usable media.
+  // Append every remaining legal candidate in its deterministic catalog order.
+  const pickedCandidates = new Set(assembledClips.map((clip) => clip.candidateId));
+  const excludedShotIds = new Set(job.proposal.constraints.excludedShotIds ?? []);
+  const deselectedMomentIds = new Set(job.proposal.constraints.deselectedMomentIds ?? []);
+  for (const candidate of candidates) {
+    const shotId = shotIdByMoment.get(candidate.itemId);
+    if (pickedCandidates.has(candidate.candidateId) || deselectedMomentIds.has(candidate.itemId)
+      || hiddenShotIds.has(shotId ?? "") || excludedShotIds.has(shotId ?? "")) continue;
+    assembledClips.push({
+      ...candidate,
+      order: assembledClips.length + 1,
+      transition: "cut",
+      audio: candidate.kind === "photo" || !candidate.hasSpeech ? "mute" : "keep",
+      ...(candidate.kind === "photo"
+        ? { holdSec: holdsFor(job.cadenceId).base }
+        : { sourceInSec: candidate.inSec, sourceOutSec: candidate.outSec, hasSpeech: candidate.hasSpeech }),
+    });
+    pickedCandidates.add(candidate.candidateId);
+  }
 
   if (isEmptyResult(dropped, parsed.picks.clips.length)) {
     return { ok: false, reasons: ["every pick was dropped — no film possible"] };
@@ -365,14 +385,22 @@ export async function runCompose(
     selectedClips,
     targetSec,
     job.durationId === "short" && !tierlessShort
-      ? { ...holdsFor(job.cadenceId), min: Math.min(holdsFor(job.cadenceId).min, DIRECTING_RULES.shortTierMinSec) }
-      : holdsFor(job.cadenceId),
+      ? { ...holdsFor(job.cadenceId), min: Math.min(holdsFor(job.cadenceId).min, DIRECTING_RULES.shortTierMinSec), max: Math.min(DIRECTING_RULES.singlePhotoMaxSec, holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier) }
+      : job.durationId !== null
+        ? { ...holdsFor(job.cadenceId), min: DIRECTING_RULES.shortTierMinSec, max: Math.min(DIRECTING_RULES.singlePhotoMaxSec, holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier) }
+        : holdsFor(job.cadenceId),
     job.proposal.constraints.mustIncludeMomentIds,
     job.durationId === null || tierlessShort ? { minimumFilmSec: DIRECTING_RULES.minimumFilmSec, maximumStretchedPhotoMultiplier: DIRECTING_RULES.tierlessPhotoStretchMultiplier } : {},
   );
 
   if (fittedClips.length === 0) {
     return { ok: false, reasons: ["no clips after duration fitting"] };
+  }
+  if (job.durationId !== null && !tierlessShort) {
+    for (const candidate of candidates) if (candidate.kind === "photo") {
+      candidate.minHoldSec = DIRECTING_RULES.shortTierMinSec;
+      candidate.maxHoldSec = Math.min(DIRECTING_RULES.singlePhotoMaxSec, holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier);
+    }
   }
   if (job.durationId === null || tierlessShort) {
     // The no-tier stretch is a documented exception to cadence's normal
@@ -531,7 +559,7 @@ export async function runCompose(
   let withCollages: Timeline;
   try {
     const usableMediaCount = new Set(candidates.map((candidate) => candidate.itemId)).size;
-    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm", cadenceId: job.cadenceId, tierless: job.durationId === null || tierlessShort }, usableMediaCount);
+    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm", cadenceId: job.cadenceId, tierless: job.durationId === null || tierlessShort, ...(job.durationId !== null ? { stretchTargetSec: targetSec } : {}) }, usableMediaCount);
   } catch (error) {
     return { ok: false, reasons: [`collage placement failed: ${error instanceof Error ? error.message : String(error)}`] };
   }

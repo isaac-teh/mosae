@@ -18,7 +18,7 @@ export type CollageSource = {
   dupOf?: string | null;
   hasSpeech?: boolean;
 };
-export type CollageStyle = { collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful"; cadenceId?: CadenceId; tierless?: boolean };
+export type CollageStyle = { collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful"; cadenceId?: CadenceId; tierless?: boolean; stretchTargetSec?: number };
 
 export type CollageReview = { combos: Array<{ layoutId: string; motionId: string; verdict: string }> };
 const defaultReviewPath = fileURLToPath(new URL("../../../../docs/design/collage-review.json", import.meta.url));
@@ -69,10 +69,10 @@ function sameDayOrEvent(first: CollageSource, next: CollageSource): boolean {
   return Boolean((firstDay && firstDay === nextDay) || (first.eventId && first.eventId === next.eventId));
 }
 
-function stretchTierlessPhotos(timeline: Timeline, cadenceId: CadenceId): Timeline {
+function stretchTierlessPhotos(timeline: Timeline, cadenceId: CadenceId, targetSec: number = DIRECTING_RULES.minimumFilmSec): Timeline {
   const plans = timeline.videoClips.map((clip) => {
     const count = "kind" in clip ? clip.spec.slots.length : clip.source.kind === "photo" ? 1 : 0;
-    const cap = count ? photoBaseDuration(count, cadenceId) * DIRECTING_RULES.tierlessPhotoStretchMultiplier : clip.durationSec;
+    const cap = count ? Math.min(count === 1 ? DIRECTING_RULES.singlePhotoMaxSec : Infinity, photoBaseDuration(count, cadenceId) * DIRECTING_RULES.tierlessPhotoStretchMultiplier) : clip.durationSec;
     return {
       ...clip,
       id: idOf(clip),
@@ -87,7 +87,7 @@ function stretchTierlessPhotos(timeline: Timeline, cadenceId: CadenceId): Timeli
   let fitted = plans.map((plan) => ({ ...plan }));
   for (let pass = 0; pass < 20; pass++) {
     const duration = fitted.reduce((sum, clip, index) => sum + clip.durationSec - (index > 0 && clip.transitionIn.kind === "crossfade" ? clip.transitionIn.durationSec : 0), 0);
-    const drift = DIRECTING_RULES.minimumFilmSec - duration;
+    const drift = targetSec - duration;
     const extendable = fitted.filter((clip) => clip.maxHoldSec > clip.durationSec);
     if (drift <= 0.01 || !extendable.length) break;
     const step = drift / extendable.length;
@@ -127,7 +127,10 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
   const motionFeel = style.motionFeel ?? "calm";
   const cadenceId = style.cadenceId ?? "playful";
   const collageLimit = requestedCollageCount(mediaCount, collageAmount);
-  if (collageLimit === 0) return { ...timeline, schemaVersion: 2 };
+  if (collageLimit === 0) {
+    const upgraded = { ...timeline, schemaVersion: 2 as const };
+    return style.stretchTargetSec !== undefined ? stretchTierlessPhotos(upgraded, cadenceId, style.stretchTargetSec) : upgraded;
+  }
   const approved = review.combos.filter((combo) => combo.verdict === "keep" && ALLOWED_COMBOS.some((allowed) => allowed.layoutId === combo.layoutId && allowed.motionId === combo.motionId));
   const countRules = mediaCount < 20 ? 4 : mediaCount < 50 && collageLimit > 1 ? 4 : DIRECTING_RULES.collageMaxPhotos;
   const maxCandidateSlots = Math.min(countRules, DIRECTING_RULES.collageMaxPhotos, Math.max(2, ...COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((aspect) => aspect === timeline.aspect) && approved.some((combo) => combo.layoutId === layout.id)).map((layout) => layout.maxSlots)));
@@ -254,5 +257,5 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
   // applyEdits performs reflow after each move and preserves clip identities.
   const finalMove = applyEdits(relaid, [{ op: "move", clipId: idOf(relaid.videoClips[0]!), toIndex: 0 }]);
   if (finalMove.ok) relaid = finalMove.timeline;
-  return style.tierless ? stretchTierlessPhotos(relaid, cadenceId) : relaid;
+  return style.stretchTargetSec !== undefined || style.tierless ? stretchTierlessPhotos(relaid, cadenceId, style.stretchTargetSec ?? DIRECTING_RULES.minimumFilmSec) : relaid;
 }
