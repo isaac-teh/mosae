@@ -375,7 +375,7 @@ describe("editor tool operations", () => {
     await render(<SoundtrackSheet visible soundtracks={many} onApply={() => {}} onClose={() => {}} />);
     expect(host.textContent).toContain("Track 2");
     expect(host.querySelectorAll('[aria-label^="Preview Track "]')).toHaveLength(8);
-    expect(host.querySelector('[aria-label="Soundtrack mood tender"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Soundtrack mood Tender"]')).not.toBeNull();
   });
 
   it("does not mutate the timeline when soundtrack selection is cancelled", async () => {
