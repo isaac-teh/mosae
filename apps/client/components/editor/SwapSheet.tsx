@@ -1,9 +1,10 @@
-import { createElement, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import type { AlternativeShot, Moment, StoryRepository, UploadProgress } from "@mosae/core";
 import type { EditOp } from "@mosae/contracts";
 import { Asset } from "expo-asset";
 import { demoImage } from "@/lib/demoAssets";
+import { DeviceUploadControl } from "./DeviceUploadControl";
 
 function uri(value: string) { return value.startsWith("demo:") ? Asset.fromModule(demoImage(value.slice(5))).uri : value; }
 
@@ -29,12 +30,7 @@ export function SwapSheet({ visible, clipId, planId, momentId, kind = "photo", m
   return <View className="absolute inset-0 z-20 justify-end bg-black/55">
     <View className="max-h-[72%] rounded-t-[24px] bg-[#111d26] px-5 pb-8 pt-4">
       <View className="mb-4 flex-row items-center justify-between"><Text className="font-sans-semibold text-[18px] text-on-screen">Replace moment</Text><Pressable accessibilityLabel="Close swap" onPress={onClose}><Text className="text-[24px] text-on-screen">×</Text></Pressable></View>
-      {Platform.OS === "web" && onUploadFile ? <View className="mb-3 rounded-xl bg-[#1a2c38] p-3">
-        <Text className="mb-2 font-sans-medium text-caption text-on-screen">Add a photo from this device</Text>
-        {createElement("input", { type: "file", accept: "image/*", disabled: uploading, "aria-label": "Choose replacement photo", onChange: (event: { currentTarget: HTMLInputElement }) => { const file = event.currentTarget.files?.[0]; if (file) onUploadFile(file); }, style: { maxWidth: "100%", color: "#e7edf0" } })}
-        {uploading ? <Text accessibilityRole="progressbar" className="mt-2 font-sans text-caption text-on-screen-muted">{uploadProgress ? `Uploading ${uploadProgress.finishedFiles + uploadProgress.failedFiles} of ${uploadProgress.totalFiles}` : "Uploading and preparing photo…"}</Text> : null}
-        {uploadError ? <Text accessibilityRole="alert" className="mt-2 font-sans text-caption text-critical">{uploadError}</Text> : null}
-      </View> : null}
+      {Platform.OS === "web" && onUploadFile ? <DeviceUploadControl uploading={uploading} uploadProgress={uploadProgress} uploadError={uploadError} onFiles={(files) => { if (files[0]) onUploadFile(files[0]); }} /> : null}
       {error ? <Text className="font-sans text-caption text-on-screen">{error}</Text> : null}
       {libraryMoments.length > 0 ? <><Text className="mb-2 mt-2 font-sans-medium text-caption text-on-screen-muted">Other project photos</Text><ScrollView className="max-h-[210px]">
         {libraryMoments.map((moment) => { const source = sources[moment.shotId!] ?? moment.imageKey; return <Pressable key={moment.id} role="button" accessibilityLabel={`Replace with ${moment.title}`} onPress={() => { onSource(moment.shotId!, source); onApply({ op: "swapShot", clipId, shotId: moment.shotId! }); onClose(); }} className="mb-2 h-[68px] flex-row items-center gap-3 rounded-xl bg-[#1a2c38] p-2">

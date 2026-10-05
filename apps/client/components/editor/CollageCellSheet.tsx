@@ -1,6 +1,6 @@
-import { createElement } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { MediaGridPicker } from "./MediaGridPicker";
+import { DeviceUploadControl } from "./DeviceUploadControl";
 import { COLLAGE_LAYOUTS, type EditOp, type Timeline } from "@mosae/contracts";
 import type { Moment } from "@mosae/core";
 
@@ -32,12 +32,7 @@ export function CollageCellSheet({ mode, clip, slotId, moments, sources = {}, up
   };
   return <View className="absolute inset-0 z-30 justify-end bg-black/60"><View className="max-h-[72%] rounded-t-[24px] bg-[#111d26] px-5 pb-8 pt-4">
     <View className="mb-3 flex-row items-center justify-between"><Text className="font-sans-semibold text-[18px] text-on-screen">{mode === "add" ? "Add cell" : "Replace cell"}</Text><Pressable accessibilityLabel="Close cell picker" onPress={onClose}><Text className="text-[24px] text-on-screen">×</Text></Pressable></View>
-    {mode === "replace" && clip.spec.slots.find((slot) => slot.slotId === slotId)?.kind !== "video" && Platform.OS === "web" && onUploadFile && slotId ? <View className="mb-3 rounded-xl bg-[#1a2c38] p-3">
-      <Text className="mb-2 font-sans-medium text-caption text-on-screen">Add a photo from this device</Text>
-      {createElement("input", { type: "file", accept: "image/*", disabled: uploading, "aria-label": "Choose replacement cell photo", onChange: (event: { currentTarget: HTMLInputElement }) => { const file = event.currentTarget.files?.[0]; if (file) onUploadFile(file, clip.clipId, slotId); }, style: { maxWidth: "100%", color: "#e7edf0" } })}
-      {uploading ? <Text accessibilityRole="progressbar" className="mt-2 font-sans text-caption text-on-screen-muted">{uploadProgress ? `Uploading ${uploadProgress.finishedFiles + uploadProgress.failedFiles} of ${uploadProgress.totalFiles}` : "Uploading and preparing photo…"}</Text> : null}
-      {uploadError ? <Text accessibilityRole="alert" className="mt-2 font-sans text-caption text-critical">{uploadError}</Text> : null}
-    </View> : null}
+    {mode === "replace" && clip.spec.slots.find((slot) => slot.slotId === slotId)?.kind !== "video" && Platform.OS === "web" && onUploadFile && slotId ? <DeviceUploadControl uploading={uploading} uploadProgress={uploadProgress} uploadError={uploadError} onFiles={(files) => { if (files[0]) onUploadFile(files[0], clip.clipId, slotId); }} /> : null}
     {full ? <Text className="mb-3 font-sans text-caption text-on-screen-muted">This layout holds up to {layout.maxSlots} photos.</Text> : null}
     {candidates.length ? <MediaGridPicker moments={candidates} labelFor={(moment) => `${mode === "add" ? "Add cell" : "Replace with"} ${moment.title}`} disabled={(moment) => full || (moment.kind === "video" && !canVideo)} onSelect={applyChoice} /> : <Text className="font-sans text-caption text-on-screen-muted">No photos or videos from this trip are available.</Text>}
   </View></View>;

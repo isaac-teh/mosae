@@ -125,8 +125,8 @@ export default function EditorScreen() {
     const used = editor.timeline ? shotIdsIn(editor.timeline) : new Set<string>();
     return collageMoments.map((moment) => ({ ...moment, selected: Boolean(moment.shotId && used.has(moment.shotId)) }));
   }, [collageMoments, editor.timeline]);
-  const onApply = (op: EditOp) => {
-    const applied = editor.apply(op);
+  const onApply = (op: EditOp | EditOp[]) => {
+    const applied = Array.isArray(op) ? editor.applyMany(op) : editor.apply(op);
     if (applied) { replacementUploadNonce.current.invalidate(); setTool(null); }
     return applied;
   };
@@ -227,6 +227,42 @@ export default function EditorScreen() {
       if (replacementUploadNonce.current.isCurrent(nonce)) setReplacementUploading(false);
     }
   };
+  const uploadDeviceAdditions = async (files: File[]): Promise<Moment[]> => {
+    const nonce = replacementUploadNonce.current.begin();
+    setReplacementUploadError(null);
+    setReplacementUploadProgress({ totalFiles: files.length, finishedFiles: 0, failedFiles: 0, bytesSent: 0, totalBytes: files.reduce((sum, file) => sum + file.size, 0) });
+    setReplacementUploading(true);
+    try {
+      const added: Moment[] = [];
+      for (const [index, file] of files.entries()) {
+        const media = await uploadReplacement(file, {
+          projectId: params.projectId || "fixture",
+          generationId: params.generationId || "demo-film",
+          repository,
+          onProgress: (progress) => setReplacementUploadProgress({ ...progress, finishedFiles: index + progress.finishedFiles, failedFiles: index + progress.failedFiles, totalFiles: files.length }),
+        });
+        if (!replacementUploadNonce.current.isCurrent(nonce)) throw new Error("Upload cancelled");
+        editor.setSource(media.shotId, media.previewUrl);
+        added.push({
+          id: `device-${media.shotId}`, title: `${media.kind === "video" ? "Video clip" : "Photo"} · ${media.eventLabel}`, meta: media.date,
+          tag: { emoji: media.kind === "video" ? "🎬" : "📷", label: media.kind === "video" ? "Video" : "Photo" },
+          imageKey: media.thumbnailUrl, kind: media.kind, selected: false, favorite: false, shotId: media.shotId,
+          ...(media.sourceInSec !== undefined ? { sourceInSec: media.sourceInSec } : {}),
+          ...(media.sourceOutSec !== undefined ? { sourceOutSec: media.sourceOutSec } : {}),
+          ...(media.sourceDurationSec !== undefined ? { sourceDurationSec: media.sourceDurationSec } : {}),
+        });
+        setReplacementUploadProgress((progress) => progress ? { ...progress, finishedFiles: index + 1, totalFiles: files.length } : progress);
+      }
+      return added;
+    } catch (error) {
+      if (replacementUploadNonce.current.isCurrent(nonce)) setReplacementUploadError(error instanceof Error && error.message === "replacement_media_not_ready"
+        ? "The upload is still processing. Try again shortly."
+        : "Could not upload your media. Check your connection and try again.");
+      throw error;
+    } finally {
+      if (replacementUploadNonce.current.isCurrent(nonce)) setReplacementUploading(false);
+    }
+  };
   const closePicker = () => { replacementUploadNonce.current.invalidate(); setReplacementUploading(false); setReplacementUploadProgress(null); setTool(null); };
   const toolbarSelection = selectedAudioClipId ? "audio" : selectedCollageCellId ? "collageCell" : !selectedClip ? "none" : "kind" in selectedClip ? "collage" : "slot";
   const selectedCellSlotId = selectedClip && "kind" in selectedClip && selectedCollageCellId ? selectedCollageCellId.slice(selectedClip.clipId.length + 1) : null;
@@ -310,7 +346,7 @@ export default function EditorScreen() {
       </ScrollView>}
     <ToolBar selection={toolbarSelection} onTool={openTool} disabledActions={disabledToolbarActions} emptyCollageCell={Boolean(selectedClip && "kind" in selectedClip && selectedCellSlotId && selectedClip.spec.slots.find((slot) => slot.slotId === selectedCellSlotId)?.empty)} />
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
-    {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} playheadSec={playhead} timeline={editor.timeline ?? undefined} onApply={onApply} onClose={() => setTool(null)} /> : null}
+    {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} playheadSec={playhead} timeline={editor.timeline ?? undefined} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFiles={story.flow.repository === "api" && Boolean(params.projectId) ? uploadDeviceAdditions : undefined} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {(tool === "CollageLayout" || tool === "CollageMotion") && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} aspect={editor.timeline?.aspect} section={tool === "CollageLayout" ? "Layout" : "Motion"} onApply={onApplyCollage} onClose={closePicker} /> : null}
     {(tool === "CollageCellAdd" || (tool === "CollageCellReplace" && selectedCellSlotId)) && selectedClip && "kind" in selectedClip ? <CollageCellSheet mode={tool === "CollageCellAdd" ? "add" : "replace"} clip={selectedClip} slotId={tool === "CollageCellReplace" ? selectedCellSlotId ?? undefined : undefined} moments={collageMoments} sources={editor.sources} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && tool === "CollageCellReplace" ? uploadDeviceReplacement : undefined} onSource={editor.setSource} onApply={onApply} onClose={closePicker} /> : null}
     {tool === "Replace" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={clipId(selectedClip)} kind={selectedClip.source.kind} moments={collageMoments} sources={editor.sources} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && selectedClip.source.kind === "photo" ? (file) => uploadDeviceReplacement(file, clipId(selectedClip)) : undefined} onApply={onApply} onSource={editor.setSource} onClose={closePicker} /> : null}
