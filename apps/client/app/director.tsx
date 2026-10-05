@@ -11,6 +11,7 @@ import { shouldAutoScrollAfterAction } from "@/lib/chatScroll";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { EditorPreview } from "@/components/editor/EditorPreview";
 import { demoImage } from "@/lib/demoAssets";
+import { PendingPreviewUrls } from "@/lib/pendingPreviewUrls";
 import type { Timeline } from "@mosae/contracts";
 import { directionFocus, contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, personAnswerChips, subscribeUploadProgress, retryPendingMedia } from "@mosae/core";
 
@@ -43,8 +44,9 @@ export default function DirectorScreen() {
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
   const actionPendingScroll = useRef(false);
   const userScrolledUp = useRef(false);
-  const [readingAssets, setReadingAssets] = useState<{ assetId: string; uri: string }[]>([]);
-  const [selectedPhotos, setSelectedPhotos] = useState<{ uri: string; index: number }[]>([]);
+  const previewUrls = useRef<PendingPreviewUrls | null>(null);
+  if (!previewUrls.current) previewUrls.current = new PendingPreviewUrls();
+  const previewUnmountVersion = useRef(0);
   const pendingProjectId = useSyncExternalStore(subscribeUploadProgress, getPendingMediaProjectId, getPendingMediaProjectId);
   const ownsPendingMedia = pendingProjectId === null || pendingProjectId === projectId;
   const sharedUploadProgress = useSyncExternalStore(subscribeUploadProgress, getUploadProgress, getUploadProgress);
@@ -54,22 +56,21 @@ export default function DirectorScreen() {
   const sharedUploadFailure = useSyncExternalStore(subscribeUploadProgress, getUploadFailure, getUploadFailure);
   const uploadFailure = ownsPendingMedia ? sharedUploadFailure : null;
   const pendingMedia = useSyncExternalStore(subscribeUploadProgress, getPendingMediaAssets, getPendingMediaAssets);
+  const pendingPhotos = (ownsPendingMedia ? pendingMedia : []).filter(({ file }) => !contentTypeFor(file).startsWith("video/"));
+  const readingAssets = pendingPhotos.filter(({ assetId }) => Boolean(assetId)).map(({ file, assetId }) => ({ assetId: assetId!, key: previewUrls.current!.key(file), uri: previewUrls.current!.get(file) }));
+  const selectedPhotos = pendingPhotos.map(({ file }, index) => ({ key: previewUrls.current!.key(file), uri: previewUrls.current!.get(file), index }));
   const [uploadFailuresAcknowledged, setUploadFailuresAcknowledged] = useState(false);
   const localMediaPending = Boolean(preparationProgress) || Boolean(uploadProgress && (uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles || uploadProgress.finishedFiles === 0)) || Boolean((uploadFailure || uploadProgress?.failedFiles) && !uploadFailuresAcknowledged);
   const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged });
   useEffect(() => { setUploadFailuresAcknowledged(false); }, [uploadProgress?.failedFiles, preparationProgress?.totalFiles]);
+  useEffect(() => { previewUrls.current!.retain(pendingPhotos.map(({ file }) => file)); });
   useEffect(() => {
-    const created = (ownsPendingMedia ? pendingMedia : [])
-      .filter(({ file, assetId }) => Boolean(assetId) && !contentTypeFor(file).startsWith("video/"))
-      .map(({ file, assetId }) => ({ assetId: assetId!, uri: URL.createObjectURL(file) }));
-    setReadingAssets(created);
-    return () => created.forEach(({ uri }) => URL.revokeObjectURL(uri));
-  }, [pendingMedia, ownsPendingMedia]);
-  useEffect(() => {
-    const created = (ownsPendingMedia ? pendingMedia : []).flatMap(({ file }, index) => contentTypeFor(file).startsWith("video/") ? [] : [{ uri: URL.createObjectURL(file), index }]);
-    setSelectedPhotos(created);
-    return () => created.forEach(({ uri }) => URL.revokeObjectURL(uri));
-  }, [pendingMedia, ownsPendingMedia]);
+    previewUnmountVersion.current += 1;
+    return () => {
+      const unmountVersion = ++previewUnmountVersion.current;
+      queueMicrotask(() => { if (previewUnmountVersion.current === unmountVersion) previewUrls.current!.dispose(); });
+    };
+  }, []);
   const filmItem = state.items.find((item) => item.kind === "film");
   const film = filmItem?.kind === "film" ? filmItem.film : null;
   const onFilmPlayerError = useCallback(() => setFilmPlayerFailed(true), []);
@@ -117,12 +118,12 @@ export default function DirectorScreen() {
         {preparationProgress && <Text className="font-sans text-caption text-ink-muted">Getting your photos ready while you start your story.</Text>}
         {uploadProgress && <><View className="h-1.5 overflow-hidden rounded-pill bg-line"><View className="h-full rounded-pill bg-action" style={{ width: `${uploadProgress.totalBytes ? Math.min(100, Math.round(uploadProgress.bytesSent / uploadProgress.totalBytes * 100)) : 100}%` }} /></View>
         <Text className="font-sans text-caption text-ink-muted">{(uploadProgress.bytesSent / 1_000_000).toFixed(1)} of {(uploadProgress.totalBytes / 1_000_000).toFixed(1)} MB transferred</Text></>}
-        <View className="flex-row flex-wrap gap-2">{preparationProgress ? selectedPhotos.map(({ uri, index }) => <Image key={`${index}-${uri}`} source={{ uri }} accessibilityLabel={`Selected photo ${index + 1}`} className="size-12 rounded-sm" />) : readingAssets.map(({ assetId, uri }, index) => {
+        <View className="flex-row flex-wrap gap-2">{preparationProgress ? selectedPhotos.map(({ key, uri, index }) => <Image key={key} source={{ uri }} accessibilityLabel={`Selected photo ${index + 1}`} className="size-12 rounded-sm" />) : readingAssets.map(({ key, assetId, uri }, index) => {
           const local = uploadProgress?.assetStatuses?.find((asset) => asset.assetId === assetId)?.status;
           const server = projectSummary?.assetStatuses?.find((asset) => asset.assetId === assetId)?.status;
           const status = server === "understood" ? "understood" : server === "ingested" || server === "uploaded" ? "uploaded" : local;
           const label = status === "understood" ? "understood" : status === "uploaded" ? "uploaded" : status === "failed" ? "failed" : "uploading";
-          return <Image key={assetId} source={{ uri }} accessibilityLabel={`Photo ${index + 1}, ${label}`} className="size-12 rounded-sm" />;
+          return <Image key={key} source={{ uri }} accessibilityLabel={`Photo ${index + 1}, ${label}`} className="size-12 rounded-sm" />;
         })}</View>
       </View>}
       {(uploadFailure || (projectSummary?.upload?.failed ?? 0) + (projectSummary?.upload?.cancelled ?? 0) > 0) && <View accessibilityRole="alert" className="gap-2 rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure ?? `${(projectSummary?.upload?.failed ?? 0) + (projectSummary?.upload?.cancelled ?? 0)} files could not upload.`}</Text>
@@ -136,11 +137,11 @@ export default function DirectorScreen() {
         if (item.kind === "typing") {
           const statuses = new Map((item.photoProgress ?? projectSummary?.assetStatuses ?? []).map((asset) => [asset.assetId, asset.status]));
           const localStatuses = new Map((uploadProgress?.assetStatuses ?? []).map((asset) => [asset.assetId, asset.status]));
-          const photos = readingAssets.flatMap(({ assetId, uri }, index) => {
+          const photos = readingAssets.flatMap(({ assetId, key, uri }, index) => {
             const server = statuses.get(assetId);
             const status = server === "understood" ? "understood" : server === "ingested" || server === "uploaded" ? "uploaded" : localStatuses.get(assetId);
             const label = status === "understood" ? "understood" : status === "uploaded" ? "uploaded" : status === "failed" ? "couldn't read" : status === "uploading" ? "uploading" : "still reading";
-            return status || (readingAssets.length > 0 && localMediaPending) ? [{ uri, understood: status === "understood", label: `Photo ${index + 1} of ${readingAssets.length}, ${label}` }] : [];
+            return status || (readingAssets.length > 0 && localMediaPending) ? [{ id: key, uri, understood: status === "understood", label: `Photo ${index + 1} of ${readingAssets.length}, ${label}` }] : [];
           });
           return <ChatTyping key={item.id} text={item.text} photos={photos} />;
         }

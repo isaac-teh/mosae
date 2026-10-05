@@ -103,6 +103,28 @@ describe("Director chat", () => {
     expect(hasText("0.0 of 0.0 MB transferred")).toBe(true);
   });
 
+  it("keeps previews and thumbnail nodes stable when pending media arrays are replaced", async () => {
+    setup();
+    const photo = new File(["photo"], "trip.jpg", { type: "image/jpeg" });
+    setPendingMedia([photo], ["asset-1"], "project-1");
+    setUploadPreparationProgress({ preparedFiles: 0, totalFiles: 1 });
+    await renderScreen();
+    const initialImage = host.querySelector('[alt="Selected photo 1"]');
+    const initialSource = initialImage?.getAttribute("src");
+    expect(initialImage).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+
+    await act(async () => setPendingMedia([photo], ["asset-1"], "project-1"));
+    const updatedImage = host.querySelector('[alt="Selected photo 1"]');
+    expect(updatedImage).toBe(initialImage);
+    expect(updatedImage?.getAttribute("src")).toBe(initialSource);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+
+    await act(async () => setPendingMedia([], [], "project-1"));
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+  });
+
   it("shows an uploading status for locally registered photo thumbnails", async () => {
     setup();
     const photo = new File(["photo"], "trip.jpg", { type: "image/jpeg" });

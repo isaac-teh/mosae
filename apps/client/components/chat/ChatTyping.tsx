@@ -1,6 +1,6 @@
 import { Image, Text, View } from "react-native";
 
-export function ChatTyping({ text, photos = [] }: { text: string; photos?: { uri: string; understood: boolean; label: string }[] }) {
+export function ChatTyping({ text, photos = [] }: { text: string; photos?: { id: string; uri: string; understood: boolean; label: string }[] }) {
   return <View className="w-full gap-3" accessibilityLiveRegion="polite">
     <View className="flex-row items-center gap-2">
       <View className="flex-row gap-[3px]" accessibilityLabel="Working" accessibilityRole="text">
@@ -9,7 +9,7 @@ export function ChatTyping({ text, photos = [] }: { text: string; photos?: { uri
       <Text className="text-label font-sans text-ink-muted">{text}</Text>
     </View>
     {photos.length > 0 && <View className="flex-row flex-wrap gap-2" accessibilityLabel="Photos being read">
-      {photos.map((photo, index) => <View key={`${photo.label}-${index}`} data-reading-photo="true" accessibilityLabel={photo.label} className="size-[68px] overflow-hidden rounded-md bg-surface-sunken">
+      {photos.map((photo) => <View key={photo.id} data-reading-photo="true" accessibilityLabel={photo.label} className="size-[68px] overflow-hidden rounded-md bg-surface-sunken">
         <Image source={{ uri: photo.uri }} resizeMode="cover" className={`size-full object-cover transition-all duration-700 ${photo.understood ? "blur-0 opacity-100" : "blur-[6px] opacity-55"}`} />
       </View>)}
     </View>}

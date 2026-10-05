@@ -37,8 +37,8 @@ describe("director chat components", () => {
 
   it("shows local photos blurred until their own asset status is understood", async () => {
     await render(<ChatTyping text="Reading your photos, 1 of 2" photos={[
-      { uri: "/ready.jpg", understood: true, label: "Photo 1 of 2, understood" },
-      { uri: "/waiting.jpg", understood: false, label: "Photo 2 of 2, still reading" },
+      { id: "asset-ready", uri: "/ready.jpg", understood: true, label: "Photo 1 of 2, understood" },
+      { id: "asset-waiting", uri: "/waiting.jpg", understood: false, label: "Photo 2 of 2, still reading" },
     ]} />);
     expect(host.textContent).toContain("Reading your photos, 1 of 2");
     expect(host.querySelector('img[src="/ready.jpg"]')?.className).toContain("blur-0");
