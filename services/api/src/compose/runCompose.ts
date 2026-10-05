@@ -251,10 +251,41 @@ export async function runCompose(
     return { ok: false, reasons: ["composition selected no media — no film possible"] };
   }
 
+  // Ingest's duplicate pass points every sibling at its sharpest-photo asset.
+  // If the model still picks multiple siblings, retain that canonical photo
+  // when present (otherwise one deterministic best available pick) and report
+  // the overflow on the Generation instead of rewriting proposal leftOut.
+  const duplicateGroups = new Map<string, AssembledClip[]>();
+  for (const clip of assembledClips) {
+    if (clip.kind !== "photo") continue;
+    const asset = deps.assets.get(clip.itemId);
+    const groupId = asset?.dupOf ?? asset?.assetId;
+    if (!groupId) continue;
+    const group = duplicateGroups.get(groupId) ?? [];
+    group.push(clip);
+    duplicateGroups.set(groupId, group);
+  }
+  const duplicateDropReasons: string[] = [];
+  const duplicateClipIds = new Set<string>();
+  for (const [primaryAssetId, siblings] of duplicateGroups) {
+    if (siblings.length < 2) continue;
+    const ranked = [...siblings].sort((a, b) => {
+      const aPrimary = deps.assets.get(a.itemId)?.assetId === primaryAssetId ? 1 : 0;
+      const bPrimary = deps.assets.get(b.itemId)?.assetId === primaryAssetId ? 1 : 0;
+      return bPrimary - aPrimary || (deps.assets.get(b.itemId)?.keyMomentScore ?? 0) - (deps.assets.get(a.itemId)?.keyMomentScore ?? 0) || a.itemId.localeCompare(b.itemId);
+    });
+    for (const duplicate of ranked.slice(1)) {
+      duplicateClipIds.add(duplicate.candidateId);
+      duplicateDropReasons.push("Similar photo — best one kept");
+    }
+  }
+  const uniqueAssembledClips = assembledClips.filter((clip) => !duplicateClipIds.has(clip.candidateId));
+  const eligibleCandidates = candidates.filter((candidate) => !duplicateClipIds.has(candidate.candidateId));
+
   const holds = holdsFor(job.cadenceId);
   const durationCompleteClips = completeDurationMaterial(
-    assembledClips,
-    candidates,
+    uniqueAssembledClips,
+    eligibleCandidates,
     shotIdByMoment,
     hiddenShotIds,
     new Set(job.proposal.constraints.deselectedMomentIds ?? []),
@@ -278,7 +309,7 @@ export async function runCompose(
   const guardPinned = new Set<string>();
   if (job.cast) {
     const pickedItems = new Set(durationCompleteClips.map((clip) => clip.itemId));
-    const unused: AssembledClip[] = candidates.filter((candidate) => candidate.kind === "photo" && !pickedItems.has(candidate.itemId)).map((candidate) => ({
+    const unused: AssembledClip[] = eligibleCandidates.filter((candidate) => candidate.kind === "photo" && !pickedItems.has(candidate.itemId)).map((candidate) => ({
       ...candidate, order: -1, transition: "crossfade", audio: "mute", holdSec: holds.base,
     }));
     const guarded = applyCastGuards({
@@ -487,7 +518,7 @@ export async function runCompose(
     fps: 30,
   };
 
-  const droppedPicks = dropped.map((drop) => drop.reason);
+  const droppedPicks = [...dropped.map((drop) => drop.reason), ...duplicateDropReasons];
   const issues = validateTimeline(withCollages, validationCtx);
 
   let final = withCollages;

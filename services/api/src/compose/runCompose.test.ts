@@ -88,6 +88,29 @@ function makeJob(overrides?: Partial<ComposeJob>): ComposeJob {
 }
 
 describe("runCompose — collages", () => {
+  it("records duplicate photo overflow on droppedPicks and keeps the canonical photo", async () => {
+    const moments = ["primary", "duplicate", "other"].map((id) => ({
+      id, shotId: `shot-${id}`, kind: "photo" as const, title: id, description: "", rationale: "",
+    }));
+    const proposal = makeProposal({
+      moments,
+      chapters: [{ id: "chapter-1", title: "Day", summary: "", momentIds: moments.map((moment) => moment.id) }],
+      constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+    });
+    const assets = new Map([
+      ["primary", { kind: "photo" as const, assetId: "asset-primary", analysis: { caption: "primary" } }],
+      ["duplicate", { kind: "photo" as const, assetId: "asset-duplicate", dupOf: "asset-primary", analysis: { caption: "duplicate" } }],
+      ["other", { kind: "photo" as const, assetId: "asset-other", analysis: { caption: "other" } }],
+    ]);
+    const result = await runCompose(makeJob({ proposal }), makeDeps({
+      assets,
+      generateStructured: async () => ({ clips: moments.map((moment) => ({ candidateId: `${moment.id}#still@c0`, holdSec: 2, transition: "cut", audio: "mute" })), musicCues: [] }),
+    }));
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    expect(result.droppedPicks).toContain("Similar photo — best one kept");
+    expect(result.timeline.videoClips.filter((clip) => "source" in clip).map((clip) => clip.source.shotId)).not.toContain("shot-duplicate");
+  });
+
   it("composes photos without capture times and omits the collage caption date", async () => {
     const moments = Array.from({ length: 7 }, (_, index) => ({
       id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const,
