@@ -88,6 +88,29 @@ function makeJob(overrides?: Partial<ComposeJob>): ComposeJob {
 }
 
 describe("runCompose — collages", () => {
+  it("records duplicate photo overflow on droppedPicks and keeps the canonical photo", async () => {
+    const moments = ["primary", "duplicate", "other"].map((id) => ({
+      id, shotId: `shot-${id}`, kind: "photo" as const, title: id, description: "", rationale: "",
+    }));
+    const proposal = makeProposal({
+      moments,
+      chapters: [{ id: "chapter-1", title: "Day", summary: "", momentIds: moments.map((moment) => moment.id) }],
+      constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+    });
+    const assets = new Map([
+      ["primary", { kind: "photo" as const, assetId: "asset-primary", analysis: { caption: "primary" } }],
+      ["duplicate", { kind: "photo" as const, assetId: "asset-duplicate", dupOf: "asset-primary", analysis: { caption: "duplicate" } }],
+      ["other", { kind: "photo" as const, assetId: "asset-other", analysis: { caption: "other" } }],
+    ]);
+    const result = await runCompose(makeJob({ proposal }), makeDeps({
+      assets,
+      generateStructured: async () => ({ clips: moments.map((moment) => ({ candidateId: `${moment.id}#still@c0`, holdSec: 2, transition: "cut", audio: "mute" })), musicCues: [] }),
+    }));
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    expect(result.droppedPicks).toContain("Similar photo — best one kept");
+    expect(result.timeline.videoClips.filter((clip) => "source" in clip).map((clip) => clip.source.shotId)).not.toContain("shot-duplicate");
+  });
+
   it("composes photos without capture times and omits the collage caption date", async () => {
     const moments = Array.from({ length: 7 }, (_, index) => ({
       id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const,
@@ -141,16 +164,17 @@ describe("runCompose — collages", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.timeline.schemaVersion).toBe(2);
-    expect(result.timeline.videoClips.filter((clip) => "kind" in clip)).toHaveLength(1);
-    expect(result.timeline.durationSec).toBeGreaterThanOrEqual(27);
-    expect(result.timeline.durationSec).toBeLessThanOrEqual(33);
+    // N=7 is below the rule's first collage threshold (N=8).
+    expect(result.timeline.videoClips.filter((clip) => "kind" in clip)).toHaveLength(0);
+    expect(result.timeline.durationSec).toBeGreaterThanOrEqual(18);
+    expect(result.timeline.durationSec).toBeLessThanOrEqual(22);
     expect(safeParseTimeline(result.timeline).ok).toBe(true);
   });
 
   it.each([
     { durationId: "30s" as const, cadenceId: "playful" as const, minimum: 27, maximum: 33 },
     { durationId: "1m" as const, cadenceId: "reflective" as const, minimum: 54, maximum: 66 },
-  ])("fills a $durationId film from kept proposal photos when the model under-selects clips", async ({ durationId, cadenceId, minimum, maximum }) => {
+  ])("clamps a $durationId target to available cadence capacity when the model under-selects clips", async ({ durationId, cadenceId, minimum, maximum }) => {
     const moments = Array.from({ length: 13 }, (_, index) => ({
       id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const,
       title: `Photo ${index}`, description: "", rationale: "",
@@ -170,8 +194,9 @@ describe("runCompose — collages", () => {
     }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.timeline.durationSec).toBeGreaterThanOrEqual(minimum);
-    expect(result.timeline.durationSec).toBeLessThanOrEqual(maximum);
+    expect(result.timeline.durationSec).toBeGreaterThan(0);
+    expect(result.timeline.durationSec).toBeLessThan(minimum);
+    expect(result.timeline.durationSec).toBeLessThan(maximum);
     expect(result.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.shotId) : [clip.source.shotId])).not.toContain("shot-3");
   });
 
@@ -212,6 +237,7 @@ describe("runCompose — happy path", () => {
 
     const result = await runCompose(makeJob({ proposal, durationId: "short", durationSec: 15, cadenceId }), deps);
 
+    if (!result.ok) throw new Error(result.reasons.join("; "));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.timeline.durationSec).toBeLessThanOrEqual(maximum * 1.1);
   });
@@ -225,6 +251,20 @@ describe("runCompose — happy path", () => {
     if (!result.ok) throw new Error(result.reasons.join("; "));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.timeline.durationSec).toBeLessThanOrEqual(10);
+  });
+
+  it("lets a user-selected reflective Short compress holds to the 1.2-second base", async () => {
+    const moments = ["photo1", "photo2", "photo3"].map((id, index) => ({ id, shotId: `shot-${index}`, kind: "photo" as const, title: id, description: "", rationale: "" }));
+    const proposal = makeProposal({ moments, chapters: [{ id: "ch1", title: "Chapter 1", summary: "", momentIds: moments.map(({ id }) => id) }] });
+    const assets = new Map(moments.map(({ id }) => [id, { kind: "photo" as const, analysis: { caption: id } }]));
+    const result = await runCompose(makeJob({ proposal, durationId: "short", durationSec: 3, cadenceId: "reflective" }), makeDeps({
+      assets,
+      generateStructured: async () => ({ clips: moments.map(({ id }) => ({ candidateId: `${id}#still@c0`, holdSec: 2.2, transition: "cut", audio: "mute" })), musicCues: [] }),
+    }));
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    const durations = result.timeline.videoClips.map((clip) => clip.durationSec);
+    expect(durations).toEqual([1.2, 1.2, 1.2]);
+    expect(result.timeline.durationSec).toBeLessThanOrEqual(3.9);
   });
 
   it("clamps a short target to the available proposal material", async () => {
@@ -441,7 +481,7 @@ describe("runCompose — arc ordering after cast guards", () => {
     }), arcDeps());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["b#s0@0.15c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
+    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "b#s0@0.15c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
   });
 
   it("orders a cast replacement by time while keeping the chapter peak last", async () => {
@@ -451,6 +491,6 @@ describe("runCompose — arc ordering after cast guards", () => {
     }), arcDeps());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
+    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "b#s0@0.15c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
   });
 });

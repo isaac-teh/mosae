@@ -14,6 +14,7 @@ import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
 import { applyArc, orderByChronology, type ClipTime } from "./chronology.js";
 import { loadCollageReview, placeCollages, type CollageReview, type CollageSource } from "./placeCollages.js";
+import { DIRECTING_RULES, fadeOutSec } from "./directingRules.js";
 
 export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
   if (!momentOrder?.length) return clips;
@@ -37,6 +38,8 @@ export type ComposeResult = {
   /** What duration fitting had to do. Empty when the film landed on target. */
   notes: string[];
   reasons: string[];
+  /** Automatically selected Short tier when a tierless film cannot reach 20s. */
+  durationSelection?: { id: "short"; durationSec: number };
 } | {
   ok: false;
   reasons: string[];
@@ -64,7 +67,7 @@ export interface ComposeJob {
   generationId: string;
   mode: "creator" | "memory";
   aspect: "16:9" | "9:16";
-  durationId: keyof typeof DURATION_SECONDS | "short";
+  durationId: keyof typeof DURATION_SECONDS | "short" | null;
   durationSec?: number;
   cadenceId: CadenceId;
   seed: string;
@@ -158,7 +161,7 @@ export async function runCompose(
   job: ComposeJob,
   deps: ComposeDeps,
 ): Promise<ComposeResult> {
-  let targetSec = job.durationId === "short" ? job.durationSec ?? 0 : DURATION_SECONDS[job.durationId] ?? 60;
+  let targetSec = job.durationId === "short" ? job.durationSec ?? 0 : job.durationId === null ? 60 : DURATION_SECONDS[job.durationId] ?? 60;
   if (targetSec < 3 || targetSec > 30 && job.durationId === "short") return { ok: false, reasons: ["invalid short duration"] };
 
   // `buildCandidates` keys its catalog by moment id, because that is what the
@@ -250,10 +253,41 @@ export async function runCompose(
     return { ok: false, reasons: ["composition selected no media — no film possible"] };
   }
 
+  // Ingest's duplicate pass points every sibling at its sharpest-photo asset.
+  // If the model still picks multiple siblings, retain that canonical photo
+  // when present (otherwise one deterministic best available pick) and report
+  // the overflow on the Generation instead of rewriting proposal leftOut.
+  const duplicateGroups = new Map<string, AssembledClip[]>();
+  for (const clip of assembledClips) {
+    if (clip.kind !== "photo") continue;
+    const asset = deps.assets.get(clip.itemId);
+    const groupId = asset?.dupOf ?? asset?.assetId;
+    if (!groupId) continue;
+    const group = duplicateGroups.get(groupId) ?? [];
+    group.push(clip);
+    duplicateGroups.set(groupId, group);
+  }
+  const duplicateDropReasons: string[] = [];
+  const duplicateClipIds = new Set<string>();
+  for (const [primaryAssetId, siblings] of duplicateGroups) {
+    if (siblings.length < 2) continue;
+    const ranked = [...siblings].sort((a, b) => {
+      const aPrimary = deps.assets.get(a.itemId)?.assetId === primaryAssetId ? 1 : 0;
+      const bPrimary = deps.assets.get(b.itemId)?.assetId === primaryAssetId ? 1 : 0;
+      return bPrimary - aPrimary || (deps.assets.get(b.itemId)?.keyMomentScore ?? 0) - (deps.assets.get(a.itemId)?.keyMomentScore ?? 0) || a.itemId.localeCompare(b.itemId);
+    });
+    for (const duplicate of ranked.slice(1)) {
+      duplicateClipIds.add(duplicate.candidateId);
+      duplicateDropReasons.push("Similar photo — best one kept");
+    }
+  }
+  const uniqueAssembledClips = assembledClips.filter((clip) => !duplicateClipIds.has(clip.candidateId));
+  const eligibleCandidates = candidates.filter((candidate) => !duplicateClipIds.has(candidate.candidateId));
+
   const holds = holdsFor(job.cadenceId);
   const durationCompleteClips = completeDurationMaterial(
-    assembledClips,
-    candidates,
+    uniqueAssembledClips,
+    eligibleCandidates,
     shotIdByMoment,
     hiddenShotIds,
     new Set(job.proposal.constraints.deselectedMomentIds ?? []),
@@ -277,7 +311,7 @@ export async function runCompose(
   const guardPinned = new Set<string>();
   if (job.cast) {
     const pickedItems = new Set(durationCompleteClips.map((clip) => clip.itemId));
-    const unused: AssembledClip[] = candidates.filter((candidate) => candidate.kind === "photo" && !pickedItems.has(candidate.itemId)).map((candidate) => ({
+    const unused: AssembledClip[] = eligibleCandidates.filter((candidate) => candidate.kind === "photo" && !pickedItems.has(candidate.itemId)).map((candidate) => ({
       ...candidate, order: -1, transition: "crossfade", audio: "mute", holdSec: holds.base,
     }));
     const guarded = applyCastGuards({
@@ -316,12 +350,27 @@ export async function runCompose(
   const { clips: fittedClips, notes: fitNotes, targetSec: fittedTargetSec } = fitDuration(
     selectedClips,
     targetSec,
-    holdsFor(job.cadenceId),
+    job.durationId === "short"
+      ? { ...holdsFor(job.cadenceId), min: Math.min(holdsFor(job.cadenceId).min, DIRECTING_RULES.shortTierMinSec) }
+      : holdsFor(job.cadenceId),
     job.proposal.constraints.mustIncludeMomentIds,
+    job.durationId === null ? { minimumFilmSec: 20, maximumStretchedPhotoMultiplier: DIRECTING_RULES.tierlessPhotoStretchMultiplier } : {},
   );
 
   if (fittedClips.length === 0) {
     return { ok: false, reasons: ["no clips after duration fitting"] };
+  }
+  if (job.durationId === null) {
+    // The no-tier stretch is a documented exception to cadence's normal
+    // maximum and must be visible to reflow and the semantic validator.
+    for (const candidate of candidates) if (candidate.kind === "photo") candidate.maxHoldSec = holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier;
+  }
+  if (job.durationId === "short") {
+    // Adaptive Short is an explicit tier choice and may compress cadence down
+    // to the 1.2-second base when the requested target needs it.
+    for (const candidate of candidates) {
+      if (candidate.kind === "photo") candidate.minHoldSec = Math.min(candidate.minHoldSec ?? DIRECTING_RULES.shortTierMinSec, DIRECTING_RULES.shortTierMinSec);
+    }
   }
 
   // Every clip must name a shot the renderer can resolve to a file. A moment id
@@ -432,7 +481,7 @@ export async function runCompose(
         // music sitting on top of every line of dialogue.
         gainDb: gainToDb(ac.gain),
         fadeInSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
-        fadeOutSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
+        fadeOutSec: ac.kind === "music" ? fadeOutSec(result.durationSec) : 0,
       };
     }),
     // Text overlays the model chose, burned in when the user asked for captions.
@@ -467,7 +516,8 @@ export async function runCompose(
   }
   let withCollages: Timeline;
   try {
-    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm" });
+    const usableMediaCount = new Set(candidates.map((candidate) => candidate.itemId)).size;
+    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm", cadenceId: job.cadenceId, tierless: job.durationId === null }, usableMediaCount);
   } catch (error) {
     return { ok: false, reasons: [`collage placement failed: ${error instanceof Error ? error.message : String(error)}`] };
   }
@@ -480,11 +530,14 @@ export async function runCompose(
     soundtrackIds: deps.soundtrackIds,
     // The length the film is committed to after fitting — the requested target,
     // or the shortened one when the media could not reach it.
-    targetSec: fittedTargetSec,
+    // Collage placement replaces a run of stills with its own photo-count
+    // duration. Validate against the resulting committed film length, since
+    // the pre-collage fit target no longer describes that clip geometry.
+    targetSec: withCollages.durationSec,
     fps: 30,
   };
 
-  const droppedPicks = dropped.map((drop) => drop.reason);
+  const droppedPicks = [...dropped.map((drop) => drop.reason), ...duplicateDropReasons];
   const issues = validateTimeline(withCollages, validationCtx);
 
   let final = withCollages;
@@ -510,5 +563,14 @@ export async function runCompose(
     return { ok: false, reasons: [`structural validation failed: ${parsedResult.errors.join("; ")}`] };
   }
 
-  return { ok: true, timeline: parsedResult.timeline, droppedPicks, notes: fitNotes, reasons: castReasons };
+  return {
+    ok: true,
+    timeline: parsedResult.timeline,
+    droppedPicks,
+    notes: fitNotes,
+    reasons: castReasons,
+    ...(job.durationId === null && parsedResult.timeline.durationSec < 20
+      ? { durationSelection: { id: "short" as const, durationSec: parsedResult.timeline.durationSec } }
+      : {}),
+  };
 }

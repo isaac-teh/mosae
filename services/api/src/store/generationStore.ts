@@ -90,6 +90,7 @@ export async function publishGeneration(
     timeline: Generation["timeline"];
     droppedPicks: string[];
     reasons?: string[];
+    settings?: Generation["settings"];
     now: number;
   },
 ): Promise<Generation> {
@@ -114,7 +115,7 @@ export async function publishGeneration(
     }
 
     // Validate timeline against schema
-    const parsed = GenerationSchema.safeParse({ ...existing, timeline: input.timeline, droppedPicks: input.droppedPicks, reasons: input.reasons, status: "playable" });
+    const parsed = GenerationSchema.safeParse({ ...existing, settings: input.settings ?? existing.settings, timeline: input.timeline, droppedPicks: input.droppedPicks, reasons: input.reasons, status: "playable" });
     if (!parsed.success) {
       throw new Error(`generation validation failed: ${parsed.error.issues.map(i => i.message).join("; ")}`);
     }
@@ -122,6 +123,7 @@ export async function publishGeneration(
     // Update generation
     const updated: Generation = {
       ...existing,
+      settings: input.settings ?? existing.settings,
       // Admin Firestore rejects undefined nested values; omit them after
       // schema validation so optional generated fields stay optional.
       timeline: stripUndefined(input.timeline),

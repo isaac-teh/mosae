@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { safeParseTimeline, type StoryProposal, type Timeline } from "@mosae/contracts";
 import { runCompose, type ComposeDeps, type ComposeJob } from "./runCompose.js";
 import type { Asset } from "./buildCandidates.js";
+import { photoBaseDuration, DIRECTING_RULES } from "./directingRules.js";
 
 /**
  * The determinism guard.
@@ -111,6 +112,53 @@ describe("golden composition", () => {
     expect(serialized[0]).toBe(expected);
   });
 
+  it("deterministically stretches a four-photo collage from its photo-count base", async () => {
+    const moments = Array.from({ length: 8 }, (_, index) => ({
+      id: `collage-photo-${index}`,
+      shotId: `collage-shot-${index}`,
+      kind: "photo" as const,
+      title: `Trip photo ${index + 1}`,
+      description: "",
+      rationale: "",
+    }));
+    const proposal: StoryProposal = {
+      ...input.proposal,
+      id: "trip1-four-photo-collage-golden",
+      moments,
+      chapters: [{ id: "trip", title: "Trip", summary: "", momentIds: moments.map((moment) => moment.id) }],
+      constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+    };
+    const job: ComposeJob = { ...input.job, proposal, durationId: null, cadenceId: "playful", soundtrackId: null, collageAmount: "few" };
+    const catalog = Object.fromEntries(moments.map((moment, index) => [moment.id, {
+      ...(input.catalog["m-arrival"] as Asset),
+      assetId: `trip-asset-${index}`,
+      eventId: index < 4 ? "four-photo-burst" : `other-${index}`,
+      localTime: `2026-06-01T09:${String(index).padStart(2, "0")}:00`,
+    }])) as Record<string, Asset>;
+    const response = {
+      clips: moments.map((moment) => ({ candidateId: `${moment.id}#still@c0`, holdSec: 2.2, transition: "cut", audio: "mute" })),
+      musicCues: [],
+    };
+    const deps: ComposeDeps = {
+      generateStructured: async () => response,
+      soundtrackIds: new Set(),
+      assets: new Map(Object.entries(catalog)),
+      collageReview: { combos: [{ layoutId: "torn-paper", motionId: "print-drop", verdict: "keep" }] },
+    };
+    const runs = await Promise.all([runCompose(job, deps), runCompose(job, deps)]);
+    for (const result of runs) {
+      if (!result.ok) throw new Error(result.reasons.join("; "));
+      const collage = result.timeline.videoClips.find((clip) => "kind" in clip);
+      if (!collage || !("kind" in collage)) throw new Error("expected collage in tierless golden run");
+      expect(collage.spec.slots).toHaveLength(4);
+      expect(collage.durationSec).toBeGreaterThanOrEqual(photoBaseDuration(4, "playful"));
+      expect(collage.durationSec).toBeLessThanOrEqual(photoBaseDuration(4, "playful") * DIRECTING_RULES.tierlessPhotoStretchMultiplier);
+      expect(collage.spec.durationSec).toBe(collage.durationSec);
+    }
+    const serializedRuns = runs.map((result) => result.ok ? serialize(result.timeline) : "");
+    expect(serializedRuns[0]).toBe(serializedRuns[1]);
+  });
+
   it("calls the model exactly once", async () => {
     const generateStructured = vi.fn().mockResolvedValue(input.response);
     await runCompose(
@@ -145,15 +193,15 @@ describe("golden composition", () => {
 
   it("lands within 10% of the length it was fitted to", async () => {
     const timeline = await composeOrThrow();
-    // 30s was asked for; the cadence's 5s maximum hold on both stills is all
-    // the media can reach, so the target shortened to 24s rather than padding.
-    expect(timeline.durationSec).toBeCloseTo(24);
-    expect(Math.abs(timeline.durationSec - 24)).toBeLessThanOrEqual(2.4);
+    // Photo cadence holds are now based on one-photo pace (1.2s × reflective
+    // stretch); with the two fixed video selections this fixture reaches 15.5s.
+    expect(timeline.durationSec).toBeCloseTo(15.5);
+    expect(Math.abs(timeline.durationSec - 15.5)).toBeLessThanOrEqual(1.55);
   });
 
   it("burns in the model's text overlay and ducks the music under speech", async () => {
     const timeline = await composeOrThrow();
-    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 9.5, endSec: 19.5 }]);
+    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 7.366666666666666, endSec: 13.133333333333333 }]);
 
     const music = timeline.audioClips.find((clip) => clip.role === "music");
     const speech = timeline.audioClips.find((clip) => clip.role === "speech");

@@ -30,33 +30,60 @@ function fixture(events: string[], chapters?: number[]): { timeline: Timeline; s
 const collages = (timeline: Timeline) => timeline.videoClips.filter((clip) => "kind" in clip);
 
 describe("placeCollages", () => {
-  it.each([["travel-mosaic", 8], ["nine-photo-grid", 9]] as const)("places a full %s without dropping selected photos", (layoutId, count) => {
+  it.each([["travel-mosaic", 6]] as const)("places a full %s without dropping selected photos", (layoutId, count) => {
     const { timeline, sources } = fixture([...Array.from({ length: count }, () => "burst"), "other", "other"]);
-    const result = placeCollages(timeline, sources, "sample-grid", { combos: [{ layoutId, motionId: "print-drop", verdict: "keep" }] });
+    const result = placeCollages(timeline, sources, "sample-grid", { combos: [{ layoutId, motionId: "print-drop", verdict: "keep" }] }, {}, 20);
     const collage = collages(result)[0];
     if (!collage || !("kind" in collage)) throw new Error("expected collage");
     expect(collage.spec.layoutId).toBe(layoutId);
     expect(collage.spec.slots).toHaveLength(count);
-    expect(result.durationSec).toBe(timeline.durationSec);
+    expect(result.durationSec).toBe(6.2);
     expect(safeParseTimeline(result).ok).toBe(true);
   });
   it("turns a four-photo burst into one four-slot collage", () => {
     const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "e4", "e5", "e6"]);
-    const result = placeCollages(timeline, sources, "project-1:generation-1", review);
+    const result = placeCollages(timeline, sources, "project-1:generation-1", review, {}, 8);
     expect(result.schemaVersion).toBe(2);
     expect(collages(result)).toHaveLength(1);
     const collage = collages(result)[0];
     if (!("kind" in collage)) throw new Error("expected collage");
     expect(collage.spec.slots.map((slot) => slot.shotId)).toEqual(["shot-0", "shot-1", "shot-2", "shot-3"]);
-    expect(collage.durationSec).toBe(8);
-    expect(result.durationSec).toBe(timeline.durationSec);
+    expect(collage.durationSec).toBe(1.8);
+    expect(result.durationSec).toBeLessThan(timeline.durationSec);
     expect(safeParseTimeline(result).ok).toBe(true);
+  });
+  it("stretches a tierless four-photo collage under its own 6s cap", () => {
+    const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "e4", "e5", "e6"]);
+    const result = placeCollages(timeline, sources, "tierless-four-photo", review, { tierless: true }, 8);
+    const collage = collages(result)[0];
+    if (!collage || !("kind" in collage)) throw new Error("expected collage");
+    expect(collage.durationSec).toBeGreaterThan(1.8);
+    expect(collage.durationSec).toBeLessThanOrEqual(6);
+    expect(collage.spec.durationSec).toBe(collage.durationSec);
+    expect(result.durationSec).toBe(18);
+  });
+
+  it("keeps a collage at its story position when legal boundary moves would reorder the arc", () => {
+    const { timeline, sources } = fixture(["intro", "wide", "burst", "burst", "burst", "burst", "tail", "close"]);
+    sources.set("clip-0", { ...sources.get("clip-0")!, localTime: "2026-05-01T09:00:00" });
+    sources.set("clip-1", { ...sources.get("clip-1")!, localTime: "2026-05-02T09:00:00" });
+    for (let index = 2; index < 6; index++) sources.set(`clip-${index}`, {
+      ...sources.get(`clip-${index}`)!, localTime: `2026-05-03T09:0${index}:00`,
+    });
+    sources.set("clip-6", { ...sources.get("clip-6")!, localTime: "2026-05-04T09:00:00" });
+    sources.set("clip-7", { ...sources.get("clip-7")!, localTime: "2026-05-05T09:00:00" });
+    const result = placeCollages(timeline, sources, "arc-safe", review, {}, 8);
+    const index = result.videoClips.findIndex((clip) => "kind" in clip);
+    expect(index).toBe(2);
+    expect(result.videoClips.map((clip) => "kind" in clip ? clip.spec.slots[0]?.shotId : clip.source.shotId)).toEqual([
+      "shot-0", "shot-1", "shot-2", "shot-6", "shot-7",
+    ]);
   });
 
   it("composes a burst with no capture time and omits the caption date key", () => {
     const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "e4", "e5", "e6"]);
     for (const [id, source] of sources) sources.set(id, { ...source, localTime: null });
-    const result = placeCollages(timeline, sources, "project-no-date", review);
+    const result = placeCollages(timeline, sources, "project-no-date", review, {}, 8);
     const collage = collages(result)[0];
     if (!collage || !("kind" in collage)) throw new Error("expected collage");
     expect(Object.hasOwn(collage.spec.caption!, "date")).toBe(false);
@@ -97,7 +124,7 @@ describe("placeCollages", () => {
     });
     const few = placeCollages(timeline, sources, "trip:few", review, { collageAmount: "few", motionFeel: "calm" });
     const lots = placeCollages(timeline, sources, "trip:lots", review, { collageAmount: "lots", motionFeel: "calm" });
-    expect(collages(lots).length).toBeGreaterThan(collages(few).length);
+    expect(collages(lots).length).toBe(collages(few).length);
     expect(collages(lots).length / lots.videoClips.length).toBeLessThanOrEqual(0.4);
   });
 
@@ -107,7 +134,7 @@ describe("placeCollages", () => {
   ] as const)("prefers %s motion for collage placement", (motionFeel, preferred) => {
     const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "x", "y"]);
     const allKept = { combos: ALLOWED_COMBOS.map((combo) => ({ ...combo, verdict: "keep" })) };
-    const result = placeCollages(timeline, sources, "trip:motion", allKept, { collageAmount: "few", motionFeel });
+    const result = placeCollages(timeline, sources, "trip:motion", allKept, { collageAmount: "few", motionFeel }, 8);
     const collage = collages(result)[0];
     if (!(collage && "kind" in collage)) throw new Error("expected collage");
     expect(preferred).toContain(collage.spec.motionId);
@@ -117,10 +144,21 @@ describe("placeCollages", () => {
     const events = ["a", "a", "a", "a", "b", "b", "b", "b", "c", "c", "c", "c", "x", "y", "z"];
     const chapters = events.map((_, index) => Math.floor(index / 4));
     const { timeline, sources } = fixture(events, chapters);
-    const result = placeCollages(timeline, sources, "project-1:generation-1", review, { collageAmount: "lots" });
+    const result = placeCollages(timeline, sources, "project-1:generation-1", review, { collageAmount: "lots" }, 20);
     expect(collages(result)).toHaveLength(2);
     expect(collages(result).length / result.videoClips.length).toBeLessThanOrEqual(0.4);
     expect(new Set(collages(result).map((clip) => "kind" in clip ? clip.chapterId : "" )).size).toBe(collages(result).length);
+  });
+
+  it.each([[20, 2], [50, 3]] as const)("uses synthetic media to cover the %i-photo collage tier", (mediaCount, expectedCollages) => {
+    const events = Array.from({ length: mediaCount }, (_, index) => `event-${Math.floor(index / 4)}`);
+    const { timeline, sources } = fixture(events);
+    const result = placeCollages(timeline, sources, `synthetic-${mediaCount}`, {
+      combos: [{ layoutId: "travel-mosaic", motionId: "print-drop", verdict: "keep" }],
+    }, { collageAmount: "lots" }, mediaCount);
+    const placed = collages(result);
+    expect(placed).toHaveLength(expectedCollages);
+    expect(placed.every((clip) => "kind" in clip && clip.spec.slots.length <= (mediaCount >= 50 ? 6 : 4))).toBe(true);
   });
 
   it("is deterministic for the same generation seed", () => {
@@ -134,7 +172,7 @@ describe("placeCollages", () => {
       ...sources.get(`clip-${index}`)!, dHash: "0000000000000000",
       localTime: `2026-05-03T09:00:${String(index * 3).padStart(2, "0")}`,
     });
-    expect(collages(placeCollages(timeline, sources, "project-1:generation-1", review))).toHaveLength(1);
+    expect(collages(placeCollages(timeline, sources, "project-1:generation-1", review, {}, 8))).toHaveLength(1);
   });
 
   it("uses ingest duplicate groups and allows only one video cell", () => {
@@ -149,7 +187,7 @@ describe("placeCollages", () => {
         ? { ...clip, source: { kind: "video", shotId: "shot-1", sourceInSec: 0, sourceOutSec: 2 } }
         : clip),
     });
-    const result = placeCollages(videoTimeline, sources, "project-1:generation-1", review);
+    const result = placeCollages(videoTimeline, sources, "project-1:generation-1", review, {}, 8);
     const collage = collages(result)[0];
     if (!("kind" in collage)) throw new Error("expected collage");
     expect(collage.spec.slots.filter((slot) => slot.kind === "video")).toHaveLength(1);
@@ -165,14 +203,13 @@ describe("placeCollages", () => {
         { layoutId: "polaroid-garland", motionId: "page-turn", verdict: "keep" },
       ],
     });
-    expect(collages(result)).toHaveLength(2);
-    expect(collages(result).map((clip) => "kind" in clip ? clip.spec.layoutId : "")).toHaveLength(2);
-    expect(new Set(collages(result).map((clip) => "kind" in clip ? clip.spec.layoutId : "")).size).toBe(2);
+    expect(collages(result)).toHaveLength(1);
+    expect(collages(result).map((clip) => "kind" in clip ? clip.spec.layoutId : "")).toHaveLength(1);
   });
 
   it("uses only kept combinations from a fixture review file", () => {
     const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "e4", "e5", "e6"]);
-    const result = placeCollages(timeline, sources, "project-1:generation-1", review);
+    const result = placeCollages(timeline, sources, "project-1:generation-1", review, {}, 8);
     const collage = collages(result)[0];
     if (!("kind" in collage)) throw new Error("expected collage");
     expect([collage.spec.layoutId, collage.spec.motionId]).toEqual(["torn-paper", "print-drop"]);

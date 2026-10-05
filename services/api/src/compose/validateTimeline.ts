@@ -96,7 +96,10 @@ export function validateTimeline(
     // Rule 3: Photo hold within cadence bounds
     if (clip.source.kind === "photo") {
       const duration = clip.durationSec;
-      if (duration < (candidate.minHoldSec ?? 0) - 0.01 || duration > (candidate.maxHoldSec ?? Infinity) + 0.01) {
+      // Holds are rounded to the timeline frame rate during reflow. Allow one
+      // frame of quantization beyond the source cadence bounds.
+      const frameTolerance = 1 / (ctx.fps ?? timeline.fps);
+      if (duration < (candidate.minHoldSec ?? 0) - frameTolerance || duration > (candidate.maxHoldSec ?? Infinity) + frameTolerance) {
         issues.push({ path: `videoClips[${clip.id}].durationSec`, message: `hold ${duration}s outside bounds [${candidate.minHoldSec ?? "?"},${candidate.maxHoldSec ?? "?"}]s`, severity: "fixable" });
       }
     }

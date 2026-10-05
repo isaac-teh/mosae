@@ -5,6 +5,9 @@ import {
   applyEdits, type CollageClip, type Timeline,
 } from "@mosae/contracts";
 import { hamming64 } from "../cluster/duplicates.js";
+import { collagePlacementOptions, DIRECTING_RULES, photoBaseDuration, requestedCollageCount } from "./directingRules.js";
+import type { CadenceId } from "@mosae/contracts";
+import { reflow } from "@mosae/contracts";
 
 export type CollageSource = {
   assetId: string;
@@ -15,7 +18,7 @@ export type CollageSource = {
   dupOf?: string | null;
   hasSpeech?: boolean;
 };
-export type CollageStyle = { collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
+export type CollageStyle = { collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful"; cadenceId?: CadenceId; tierless?: boolean };
 
 export type CollageReview = { combos: Array<{ layoutId: string; motionId: string; verdict: string }> };
 const defaultReviewPath = fileURLToPath(new URL("../../../../docs/design/collage-review.json", import.meta.url));
@@ -66,25 +69,80 @@ function sameDayOrEvent(first: CollageSource, next: CollageSource): boolean {
   return Boolean((firstDay && firstDay === nextDay) || (first.eventId && first.eventId === next.eventId));
 }
 
+function stretchTierlessPhotos(timeline: Timeline, cadenceId: CadenceId): Timeline {
+  const plans = timeline.videoClips.map((clip) => {
+    const count = "kind" in clip ? clip.spec.slots.length : clip.source.kind === "photo" ? 1 : 0;
+    const cap = count ? photoBaseDuration(count, cadenceId) * DIRECTING_RULES.tierlessPhotoStretchMultiplier : clip.durationSec;
+    return {
+      ...clip,
+      id: idOf(clip),
+      source: "source" in clip ? clip.source : { kind: "collage" },
+      durationSec: clip.durationSec,
+      transitionIn: clip.transitionIn ?? { kind: "cut" as const, durationSec: 0 },
+      strength: 0,
+      minHoldSec: 0,
+      maxHoldSec: cap,
+    };
+  });
+  let fitted = plans.map((plan) => ({ ...plan }));
+  for (let pass = 0; pass < 20; pass++) {
+    const duration = fitted.reduce((sum, clip, index) => sum + clip.durationSec - (index > 0 && clip.transitionIn.kind === "crossfade" ? clip.transitionIn.durationSec : 0), 0);
+    const drift = DIRECTING_RULES.minimumFilmSec - duration;
+    const extendable = fitted.filter((clip) => clip.maxHoldSec > clip.durationSec);
+    if (drift <= 0.01 || !extendable.length) break;
+    const step = drift / extendable.length;
+    fitted = fitted.map((clip) => extendable.includes(clip)
+      ? { ...clip, durationSec: Math.min(clip.maxHoldSec, clip.durationSec + step) }
+      : clip);
+  }
+  const flowed = reflow({ fps: timeline.fps, plans: fitted, chapters: [] });
+  const videoClips = flowed.clips.map((clip, index) => {
+    const original = timeline.videoClips[index]!;
+    const { id: _id, source: _source, transitionIn: _transition, ...geometry } = clip;
+    if ("kind" in original) return {
+      ...original,
+      startSec: geometry.startSec,
+      durationSec: geometry.durationSec,
+      spec: { ...original.spec, durationSec: geometry.durationSec },
+    };
+    return { ...original, startSec: geometry.startSec, durationSec: geometry.durationSec };
+  });
+  return {
+    ...timeline,
+    durationSec: flowed.durationSec,
+    videoClips,
+    chapters: timeline.chapters.map((chapter) => {
+      const index = timeline.videoClips.findIndex((clip) => Math.abs(clip.startSec - chapter.startSec) < 1 / timeline.fps);
+      return index < 0 ? chapter : { ...chapter, startSec: videoClips[index]!.startSec };
+    }),
+    audioClips: timeline.audioClips.map((clip) => clip.role === "music" && clip.source.kind === "soundtrack"
+      ? { ...clip, source: { ...clip.source, sourceOutSec: flowed.durationSec }, fadeOutSec: Math.min(1, flowed.durationSec) }
+      : clip),
+  };
+}
+
 /** Replace eligible contiguous selected clips; never draws from unused moments. */
-export function placeCollages(timeline: Timeline, sources: Map<string, CollageSource>, seed: string, review: CollageReview, style: CollageStyle = {}): Timeline {
+export function placeCollages(timeline: Timeline, sources: Map<string, CollageSource>, seed: string, review: CollageReview, style: CollageStyle = {}, mediaCount = sources.size): Timeline {
   const collageAmount = style.collageAmount ?? "few";
   const motionFeel = style.motionFeel ?? "calm";
-  if (collageAmount === "none") return { ...timeline, schemaVersion: 2 };
+  const cadenceId = style.cadenceId ?? "playful";
+  const collageLimit = requestedCollageCount(mediaCount, collageAmount);
+  if (collageLimit === 0) return { ...timeline, schemaVersion: 2 };
   const approved = review.combos.filter((combo) => combo.verdict === "keep" && ALLOWED_COMBOS.some((allowed) => allowed.layoutId === combo.layoutId && allowed.motionId === combo.motionId));
-  const maxCandidateSlots = Math.max(6, ...COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((aspect) => aspect === timeline.aspect) && approved.some((combo) => combo.layoutId === layout.id)).map((layout) => layout.maxSlots));
+  const countRules = mediaCount < 20 ? 4 : mediaCount < 50 && collageLimit > 1 ? 4 : DIRECTING_RULES.collageMaxPhotos;
+  const maxCandidateSlots = Math.min(countRules, DIRECTING_RULES.collageMaxPhotos, Math.max(2, ...COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((aspect) => aspect === timeline.aspect) && approved.some((combo) => combo.layoutId === layout.id)).map((layout) => layout.maxSlots)));
   const clips = timeline.videoClips;
   const replacements = new Map<number, { end: number; collage: CollageClip }>();
   const chapterCounts = new Map<string, number>();
   const usedShots = new Set<string>();
   let removedCount = 0;
   let lastLayout: string | undefined;
-  const maxPerChapter = collageAmount === "few" ? 1 : 2;
+  const maxPerChapter = collageLimit;
   const preferredMotions = motionFeel === "calm"
     ? new Set(["page-turn", "print-drop", "focus-relay"])
     : new Set(["stack-deal", "tape-slap", "crash-zoom"]);
 
-  for (let index = 0; index < clips.length;) {
+  for (let index = 0; index < clips.length && replacements.size < collageLimit;) {
     const first = clips[index];
     const origin = sources.get(idOf(first));
     if (!origin || "kind" in first || (chapterCounts.get(origin.chapterId) ?? 0) >= maxPerChapter) { index++; continue; }
@@ -101,7 +159,8 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     // Ordinary trips rarely have sub-minute duplicate bursts. If the tight
     // candidate set is too small for a reviewed layout, use a coherent run
     // from one day or one event to reach its minimum slot count.
-    if (group.length < 3) {
+    const requiredMin = mediaCount < 20 ? 3 : mediaCount < 50 && collageLimit === 1 ? 4 : 2;
+    if (group.length < requiredMin) {
       group.length = 1;
       for (let nextIndex = index + 1; nextIndex < clips.length && group.length < maxCandidateSlots; nextIndex++) {
         const next = clips[nextIndex];
@@ -110,7 +169,8 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
         group.push(next);
       }
     }
-    if (group.length < 3) { index++; continue; }
+    const minGroup = requiredMin;
+    if (group.length < minGroup) { index++; continue; }
     const shotIds = group.map((clip) => clip.source.shotId);
     if (new Set(shotIds).size !== shotIds.length || shotIds.some((shotId) => usedShots.has(shotId))) { index++; continue; }
     const finalCount = clips.length - removedCount - (group.length - 1);
@@ -119,17 +179,17 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
       return layout && group.length >= layout.minSlots && group.length <= layout.maxSlots && layout.aspect.some((aspect) => aspect === timeline.aspect);
     });
     if (!combinations.length) { index += group.length; continue; }
-    if (collageAmount === "lots" && (replacements.size + 1) / finalCount > 0.4) { index += group.length; continue; }
+    if ((replacements.size + 1) / finalCount > 0.4) { index += group.length; continue; }
     const preferred = combinations.filter((combo) => preferredMotions.has(combo.motionId));
     const motionChoices = preferred.length ? preferred : combinations;
     const varied = motionChoices.filter((combo) => combo.layoutId !== lastLayout);
     const choices = varied.length ? varied : motionChoices;
     const chosen = choices[hash(`${seed}:${index}:combo`) % choices.length];
     const effect = COLLAGE_EFFECTS[hash(`${seed}:${index}:effect`) % COLLAGE_EFFECTS.length];
-    // A collage stands in for this whole run of clips. Keep the run's timeline
-    // span so substituting a collage does not silently shorten the film.
-    const groupEndSec = group.at(-1)!.startSec + group.at(-1)!.durationSec;
-    const durationSec = Math.max(0.1, groupEndSec - first.startSec);
+    // Collage duration belongs to its photo count and cadence. Member holds
+    // are independent shot choices and must not be summed into the collage.
+    const collageBaseSec = photoBaseDuration(group.length, cadenceId);
+    const durationSec = collageBaseSec;
     const spec = CollageSpecSchema.parse({
       layoutId: chosen.layoutId, motionId: chosen.motionId, effectId: effect.id,
       seed: `${seed}:${idOf(first)}`, durationSec,
@@ -159,8 +219,44 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     if (replacement) return [replacement.collage];
     return skipped.has(index) ? [] : [clip];
   });
+  // A stable seed selects a permitted boundary arrangement. Prefer a choice
+  // based on story metadata, but only if it preserves the already-directed
+  // order of every story beat around each collage.
+  const collageCount = replacements.size;
+  const collageClips = [...replacements.values()].map(({ collage }) => collage);
+  const placementSeed = `${seed}:${collageClips.map((collage) => `${collage.chapterId}:${collage.spec.slots.map((slot) => slot.shotId).join(",")}`).join("|")}`;
+  const positionOptions = collagePlacementOptions(visual.length, collageCount);
+  const preservesArc = (positions: number[]) => {
+    const moved = [...visual];
+    for (let index = 0; index < positions.length; index++) {
+      const collage = collageClips[index]!;
+      const from = moved.findIndex((clip) => idOf(clip) === collage.clipId);
+      const [clip] = moved.splice(from, 1);
+      moved.splice(positions[index]!, 0, clip!);
+    }
+    return collageClips.every((collage) => {
+      const beforeOriginal = visual.slice(0, visual.findIndex((clip) => idOf(clip) === collage.clipId)).map(idOf);
+      const beforeMoved = moved.slice(0, moved.findIndex((clip) => idOf(clip) === collage.clipId)).map(idOf);
+      return beforeOriginal.length === beforeMoved.length && beforeOriginal.every((clipId, index) => clipId === beforeMoved[index]);
+    });
+  };
+  const safeOptions = positionOptions.filter(preservesArc);
+  let placement: number[] = [];
+  if (safeOptions.length) {
+    let value = 2166136261;
+    for (const char of placementSeed) value = Math.imul(value ^ char.charCodeAt(0), 16777619);
+    placement = safeOptions[(value >>> 0) % safeOptions.length]!;
+  }
+  const targets = placement.map((position, index) => ({ clipId: collageClips[index]!.clipId, position }));
   const provisional: Timeline = { ...timeline, schemaVersion: 2, videoClips: visual };
-  const relaid = applyEdits(provisional, [{ op: "move", clipId: idOf(visual[0]), toIndex: 0 }]);
-  if (!relaid.ok) throw new Error(`collage placement failed: ${relaid.error}`);
-  return relaid.timeline;
+  let relaid = provisional;
+  for (const target of targets) {
+    const moved = applyEdits(relaid, [{ op: "move", clipId: target.clipId, toIndex: target.position }]);
+    if (!moved.ok) throw new Error(`collage placement failed: ${moved.error}`);
+    relaid = moved.timeline;
+  }
+  // applyEdits performs reflow after each move and preserves clip identities.
+  const finalMove = applyEdits(relaid, [{ op: "move", clipId: idOf(relaid.videoClips[0]!), toIndex: 0 }]);
+  if (finalMove.ok) relaid = finalMove.timeline;
+  return style.tierless ? stretchTierlessPhotos(relaid, cadenceId) : relaid;
 }

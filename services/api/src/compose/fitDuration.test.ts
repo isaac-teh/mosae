@@ -128,6 +128,35 @@ describe("fitDuration — silent video trimming", () => {
 });
 
 describe("fitDuration — edge cases", () => {
+  it.each([3, 6, 10])("stretches %i stills toward the 20-second minimum without a duration tier", (count) => {
+    const clips = Array.from({ length: count }, (_, index) => makePhotoClip(`photo${index}`, 1.2));
+    const result = fitDuration(clips, 60, { base: 1.2, min: 0.96, max: 1.44 }, [], {
+      minimumFilmSec: 20,
+      maximumStretchedPhotoSec: 4,
+    });
+    const total = result.clips.reduce((sum, clip) => sum + (clip.holdSec ?? 0), 0);
+    expect(result.clips).toHaveLength(count);
+    expect(Math.max(...result.clips.map((clip) => clip.holdSec ?? 0))).toBeLessThanOrEqual(4);
+    if (count === 3) {
+      expect(total).toBe(12);
+      expect(result.targetSec).toBe(12);
+      expect(result.notes.join(" ")).toContain("Short tier applies");
+    } else {
+      expect(total).toBeGreaterThanOrEqual(20);
+      expect(result.targetSec).toBeGreaterThanOrEqual(20);
+    }
+  });
+
+  it("caps tierless still stretching at 3.33 times each one-photo cadence base", () => {
+    const base = 1.2;
+    const result = fitDuration(Array.from({ length: 10 }, (_, index) => makePhotoClip(`photo${index}`, base)), 60, { base, min: 0.96, max: 4 }, [], {
+      minimumFilmSec: 20,
+      maximumStretchedPhotoMultiplier: 10 / 3,
+    });
+    expect(Math.max(...result.clips.map((clip) => clip.holdSec ?? 0))).toBe(4);
+    expect(result.clips.every((clip) => (clip.holdSec ?? 0) <= base * (10 / 3))).toBe(true);
+  });
+
   it("empty clips returns empty with no notes", () => {
     const result = fitDuration([], 60, holds);
 

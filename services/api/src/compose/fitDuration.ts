@@ -59,6 +59,7 @@ export function fitDuration(
   targetSec: number,
   holds: Holds,
   mustIncludeMomentIds: string[] = [],
+  options: { minimumFilmSec?: number; maximumStretchedPhotoSec?: number; maximumStretchedPhotoMultiplier?: number } = {},
 ): FitResult {
   const notes: string[] = [];
   let effectiveTargetSec = targetSec;
@@ -96,6 +97,10 @@ export function fitDuration(
           excess -= cut;
         }
         notes.push(`trimmed silent video by ${(drift - excess).toFixed(1)}s`);
+        if (excess > 0.01) {
+          effectiveTargetSec = filmLength(workingClips);
+          notes.push(`photo holds exhausted at ${effectiveTargetSec.toFixed(1)}s (target was ${targetSec}s)`);
+        }
       } else {
         // Too short: photo holds exhausted at min, can't pad
         const currentTotal = filmLength(workingClips);
@@ -111,6 +116,43 @@ export function fitDuration(
     for (const photo of photos) {
       if (mustIncludeMomentIds.includes(photo.itemId)) continue; // Protect must-include clips
       photo.holdSec = Number(Math.min(holds.max, Math.max(holds.min, photo.holdSec! - step)).toFixed(2));
+    }
+  }
+
+  // With no duration tier selected, a very short composition gets one
+  // deliberate stretch pass toward 20 seconds. The cadence bounds still
+  // govern normal fitting; this pass can extend stills to four seconds each.
+  if (options.minimumFilmSec !== undefined && (options.maximumStretchedPhotoSec !== undefined || options.maximumStretchedPhotoMultiplier !== undefined)) {
+    // Before collage placement each fitted photo is a one-photo clip, so its
+    // own cadence base is `holds.base`; collage placement applies the same
+    // multiplier to the collage's N-photo base duration.
+    const stretchLimit = options.maximumStretchedPhotoMultiplier !== undefined
+      ? holds.base * options.maximumStretchedPhotoMultiplier
+      : options.maximumStretchedPhotoSec!;
+    for (let pass = 0; pass < 20; pass++) {
+      const drift = options.minimumFilmSec - filmLength(workingClips);
+      if (drift <= 0.01) break;
+      const photos = workingClips.filter((clip) => clip.holdSec != null && clip.holdSec < stretchLimit);
+      if (!photos.length) break;
+      const step = drift / photos.length;
+      for (const photo of photos) {
+        photo.holdSec = Number(Math.min(stretchLimit, photo.holdSec! + step).toFixed(2));
+      }
+    }
+    const residual = options.minimumFilmSec - filmLength(workingClips);
+    if (residual > 0.01) {
+      const lastStretchable = [...workingClips].reverse().find((clip) => clip.holdSec != null && clip.holdSec < stretchLimit);
+      if (lastStretchable) {
+        lastStretchable.holdSec = Number(Math.min(stretchLimit, lastStretchable.holdSec! + residual).toFixed(2));
+      }
+    }
+    const stretchedLength = filmLength(workingClips);
+    if (stretchedLength < options.minimumFilmSec - 0.01) {
+      effectiveTargetSec = stretchedLength;
+      notes.push(`maximum-stretched film is ${stretchedLength.toFixed(1)}s; Short tier applies`);
+    } else {
+      effectiveTargetSec = stretchedLength;
+      notes.push(`tierless film reaches ${stretchedLength.toFixed(1)}s (20s minimum)`);
     }
   }
 
