@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { safeParseTimeline, type StoryProposal, type Timeline } from "@mosae/contracts";
 import { runCompose, type ComposeDeps, type ComposeJob } from "./runCompose.js";
 import type { Asset } from "./buildCandidates.js";
+import { photoBaseDuration, DIRECTING_RULES } from "./directingRules.js";
 
 /**
  * The determinism guard.
@@ -109,6 +110,53 @@ describe("golden composition", () => {
     const serialized = runs.map(serialize);
     expect(new Set(serialized).size).toBe(1);
     expect(serialized[0]).toBe(expected);
+  });
+
+  it("deterministically stretches a four-photo collage from its photo-count base", async () => {
+    const moments = Array.from({ length: 8 }, (_, index) => ({
+      id: `collage-photo-${index}`,
+      shotId: `collage-shot-${index}`,
+      kind: "photo" as const,
+      title: `Trip photo ${index + 1}`,
+      description: "",
+      rationale: "",
+    }));
+    const proposal: StoryProposal = {
+      ...input.proposal,
+      id: "trip1-four-photo-collage-golden",
+      moments,
+      chapters: [{ id: "trip", title: "Trip", summary: "", momentIds: moments.map((moment) => moment.id) }],
+      constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+    };
+    const job: ComposeJob = { ...input.job, proposal, durationId: null, cadenceId: "playful", soundtrackId: null, collageAmount: "few" };
+    const catalog = Object.fromEntries(moments.map((moment, index) => [moment.id, {
+      ...(input.catalog["m-arrival"] as Asset),
+      assetId: `trip-asset-${index}`,
+      eventId: index < 4 ? "four-photo-burst" : `other-${index}`,
+      localTime: `2026-06-01T09:${String(index).padStart(2, "0")}:00`,
+    }])) as Record<string, Asset>;
+    const response = {
+      clips: moments.map((moment) => ({ candidateId: `${moment.id}#still@c0`, holdSec: 2.2, transition: "cut", audio: "mute" })),
+      musicCues: [],
+    };
+    const deps: ComposeDeps = {
+      generateStructured: async () => response,
+      soundtrackIds: new Set(),
+      assets: new Map(Object.entries(catalog)),
+      collageReview: { combos: [{ layoutId: "torn-paper", motionId: "print-drop", verdict: "keep" }] },
+    };
+    const runs = await Promise.all([runCompose(job, deps), runCompose(job, deps)]);
+    for (const result of runs) {
+      if (!result.ok) throw new Error(result.reasons.join("; "));
+      const collage = result.timeline.videoClips.find((clip) => "kind" in clip);
+      if (!collage || !("kind" in collage)) throw new Error("expected collage in tierless golden run");
+      expect(collage.spec.slots).toHaveLength(4);
+      expect(collage.durationSec).toBeGreaterThanOrEqual(photoBaseDuration(4, "playful"));
+      expect(collage.durationSec).toBeLessThanOrEqual(photoBaseDuration(4, "playful") * DIRECTING_RULES.tierlessPhotoStretchMultiplier);
+      expect(collage.spec.durationSec).toBe(collage.durationSec);
+    }
+    const serializedRuns = runs.map((result) => result.ok ? serialize(result.timeline) : "");
+    expect(serializedRuns[0]).toBe(serializedRuns[1]);
   });
 
   it("calls the model exactly once", async () => {
