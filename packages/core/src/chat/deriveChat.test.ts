@@ -129,12 +129,13 @@ describe("deriveChat state table", () => {
   });
 
   it("acknowledges the story answer and confirms a mentioned relationship against the top face cluster", () => {
+    const sampleFaces = [{ shotId: "face-a", uri: "https://faces.test/a", bbox: [0.1, 0.2, 0.4, 0.5] as [number, number, number, number] }];
     const state = deriveChat({ ...base(), intent: { text: "My son children day celebration" }, people: [
-      { personId: "son", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
+      { personId: "son", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], sampleFaces, days: [] },
       { personId: "other", name: null, role: null, skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
     ], peopleConfirmed: false, plan: null });
     expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ kind: "mosae", text: "A Children's Day celebration for your son — lovely!" });
-    expect(state.items.find((item) => item.kind === "person-confirm")).toMatchObject({ personId: "son", label: "My son", text: "Is this your son?" });
+    expect(state.items.find((item) => item.kind === "person-confirm")).toMatchObject({ personId: "son", label: "My son", text: "Is this your son?", sampleFaces });
   });
 
   it("uses a warm question when the story answer does not mention a person", () => {

@@ -331,6 +331,12 @@ describe("Director chat", () => {
     await click("→"); await click("Yes, that's right");
     await waitFor(() => expect(hasText("A Children's Day celebration for your son — lovely!")).toBe(true));
     await waitFor(() => expect(hasText("Is this your son?")).toBe(true));
+    expect(host.querySelectorAll('[data-face-preview="true"]')).toHaveLength(2);
+    expect([...host.querySelectorAll('img[alt^="Person photo "]')].map((image) => image.getAttribute("src"))).toEqual(["https://thumb.test/a", "https://thumb.test/b"]);
+    expect(host.querySelector('img[alt="Photo 1"]')).toBeNull();
+    expect(host.querySelectorAll('button[aria-label="Skip this person"]')).toHaveLength(1);
+    expect(host.querySelectorAll('button[aria-label="Skip for now"]')).toHaveLength(1);
+    expect(host.querySelector('button[aria-label="Skip"]')).toBeNull();
     await click("Yes");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "My son", role: "child" })]) })));
   });

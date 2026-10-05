@@ -42,7 +42,7 @@ export type ChatItem =
   | { kind: "typing"; id: string; text: string; photoProgress?: NonNullable<ProjectSummary["assetStatuses"]> }
   | { kind: "occasion"; id: string }
   | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; questionText?: string }
-  | { kind: "person-confirm"; id: string; personId: string; label: string; text: string; momentCount: number; sampleFaces: string[] }
+  | { kind: "person-confirm"; id: string; personId: string; label: string; text: string; momentCount: number; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[] }
   | { kind: "merge-followup"; id: string; text: string; answer: string; photos: string[]; response?: "Yes, same person" | "No, another person" }
   | { kind: "anyone-else"; id: string }
   | { kind: "set-aside"; id: string; blurry: number; duplicates: number; blurryPhotos: { shotId: string; uri: string }[]; blurryMore: number; duplicatePhotos: { shotId: string; uri: string }[]; duplicateMore: number }

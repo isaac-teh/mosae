@@ -21,6 +21,10 @@ function FacePreviewTile({ sample, index }: { sample: FacePreview; index: number
   </View>;
 }
 
+export function FacePreviewStrip({ samples, limit = 4 }: { samples: FacePreview[]; limit?: number }) {
+  return <View className="flex-row gap-2">{samples.slice(0, limit).map((sample, index) => <FacePreviewTile key={`${sample.shotId}-${index}`} sample={sample} index={index} />)}</View>;
+}
+
 function daysLabel(days: number[]): string {
   if (!days.length) return "";
   const values = days.map(String);
@@ -32,7 +36,7 @@ export function ChatPersonQuestion({ momentCount, samples, days, chips, question
   const roleChips = chips.includes("Type a name") ? chips.slice(0, 4) : [...chips.slice(0, 3), "Type a name"];
   return <View className="w-full flex-col gap-3">
     <Text className="text-body font-sans text-ink">{question ?? `One person appears in ${momentCount} moments. Who is this?`}</Text>
-    <View className="flex-row gap-2">{samples.slice(0, 4).map((sample, index) => <FacePreviewTile key={`${sample.shotId}-${index}`} sample={sample} index={index} />)}</View>
+    <FacePreviewStrip samples={samples} />
     <Text className="text-caption font-sans text-ink-muted">{Math.min(samples.length, 4)} of {momentCount} shown{daysLabel(days)}</Text>
     <View className="flex-row flex-wrap gap-2">{roleChips.map((chip) => <FocusChip key={chip} label={chip} onPress={() => chip === "Type a name" ? onTypeName() : onPick(chip)} />)}
       <Button label="Skip" variant="quiet" size="sm" onPress={onSkip} />
