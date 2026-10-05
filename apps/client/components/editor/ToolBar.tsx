@@ -11,9 +11,9 @@ export function ToolBar({ selection = "none", onTool, disabledActions = {}, empt
   return <View className="border-t border-on-screen-muted/25 bg-screen pb-2 pt-2">
     <View className="flex-row items-center px-2" accessibilityLabel="Editor tools">
       {selection === "none" ? <View className="min-h-[55px] flex-1 items-center justify-center px-2"><Text className="font-sans text-[12px] text-on-screen-muted">Tap on a clip to edit it</Text></View> : <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1" contentContainerClassName="flex-grow items-center justify-center">
-      {contextToolbar(selection).filter((name) => name !== "Ask").map((name) => <Pressable key={name} role="button" accessibilityLabel={emptyCollageCell && name === "ReplaceCell" ? "Add photo" : name === "AddCell" ? "Add cell" : name === "ReplaceCell" ? "Replace" : name === "Back" ? "Back" : name} accessibilityHint={disabledActions[name]} disabled={Boolean(disabledActions[name])} onPress={() => onTool?.(name)} className="min-h-[55px] min-w-[64px] items-center justify-center px-1">
-        <Text className="font-sans text-[27px] leading-[30px] text-on-screen">{emptyCollageCell && name === "ReplaceCell" ? "+" : icons[name]}</Text>
-        <Text className="mt-0.5 font-sans text-[11px] text-on-screen">{name === "Deselect" ? "Done" : name === "AddCell" ? "Add cell" : name === "ReplaceCell" && emptyCollageCell ? "Add photo" : name === "ReplaceCell" ? "Replace" : name}</Text>
+      {contextToolbar(selection).filter((name) => name !== "Ask").map((name) => <Pressable key={name} role="button" accessibilityLabel={name === "AddCell" || name === "ReplaceCell" ? "Add photo" : name === "Back" ? "Back" : name} accessibilityHint={disabledActions[name]} disabled={Boolean(disabledActions[name])} onPress={() => onTool?.(name)} className="min-h-[55px] min-w-[64px] items-center justify-center px-1">
+        <Text className="font-sans text-[27px] leading-[30px] text-on-screen">{name === "AddCell" || name === "ReplaceCell" ? "+" : icons[name]}</Text>
+        <Text className="mt-0.5 font-sans text-[11px] text-on-screen">{name === "Deselect" ? "Done" : name === "AddCell" || name === "ReplaceCell" ? "Add photo" : name}</Text>
       </Pressable>)}
     </ScrollView>}
     </View>

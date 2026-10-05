@@ -10,8 +10,8 @@ describe("contextToolbar", () => {
     expect(contextToolbar("slot")).toEqual(["Remove", "Replace"]);
   });
 
-  it("shows remove and layout for a selected collage", () => {
-    expect(contextToolbar("collage")).toEqual(["Remove", "Layout"]);
+  it("shows add photo and layout for a selected collage", () => {
+    expect(contextToolbar("collage")).toEqual(["Remove", "AddCell", "Layout"]);
   });
 
   it("shows cell-specific actions while one collage cell is selected", () => {

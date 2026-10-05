@@ -199,7 +199,7 @@ export default function EditorScreen() {
     const target = editor.timeline?.videoClips.find((candidate) => clipId(candidate) === targetClipId);
     if (!target) return;
     if (targetSlotId && (!("kind" in target) || !target.spec.slots.some((slot) => slot.slotId === targetSlotId))) return;
-    if (!targetSlotId && (!("source" in target) || target.source.kind !== "photo")) return;
+    if (!targetSlotId && "source" in target && target.source.kind !== "photo") return;
     const nonce = replacementUploadNonce.current.begin();
     setReplacementUploadError(null);
     setReplacementUploadProgress(null);
@@ -216,7 +216,9 @@ export default function EditorScreen() {
       editor.setSource(media.shotId, media.previewUrl);
       const op: EditOp = targetSlotId
         ? { op: "replaceCollageSlot", clipId: targetClipId, slotId: targetSlotId, shotId: media.shotId, kind: "photo" }
-        : { op: "swapShot", clipId: targetClipId, shotId: media.shotId };
+        : "kind" in target
+          ? { op: "addCollageSlot", clipId: targetClipId, slotId: `cell:${media.shotId}:${crypto.randomUUID()}`, shotId: media.shotId, kind: "photo" }
+          : { op: "swapShot", clipId: targetClipId, shotId: media.shotId };
       if (!onApply(op)) setReplacementUploadError("The uploaded photo could not be applied.");
     } catch (error) {
       if (!replacementUploadNonce.current.isCurrent(nonce)) return;
@@ -348,7 +350,7 @@ export default function EditorScreen() {
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
     {tool === "Add" ? <AddSheet visible moments={addMoments} selectedClipId={editor.selectedClipId} playheadSec={playhead} timeline={editor.timeline ?? undefined} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFiles={story.flow.repository === "api" && Boolean(params.projectId) ? uploadDeviceAdditions : undefined} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {(tool === "CollageLayout" || tool === "CollageMotion") && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} aspect={editor.timeline?.aspect} section={tool === "CollageLayout" ? "Layout" : "Motion"} onApply={onApplyCollage} onClose={closePicker} /> : null}
-    {(tool === "CollageCellAdd" || (tool === "CollageCellReplace" && selectedCellSlotId)) && selectedClip && "kind" in selectedClip ? <CollageCellSheet mode={tool === "CollageCellAdd" ? "add" : "replace"} clip={selectedClip} slotId={tool === "CollageCellReplace" ? selectedCellSlotId ?? undefined : undefined} moments={collageMoments} sources={editor.sources} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && tool === "CollageCellReplace" ? uploadDeviceReplacement : undefined} onSource={editor.setSource} onApply={onApply} onClose={closePicker} /> : null}
+    {(tool === "CollageCellAdd" || (tool === "CollageCellReplace" && selectedCellSlotId)) && selectedClip && "kind" in selectedClip ? <CollageCellSheet mode={tool === "CollageCellAdd" ? "add" : "replace"} clip={selectedClip} slotId={tool === "CollageCellReplace" ? selectedCellSlotId ?? undefined : undefined} moments={collageMoments} sources={editor.sources} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) ? uploadDeviceReplacement : undefined} onSource={editor.setSource} onApply={onApply} onClose={closePicker} /> : null}
     {tool === "Replace" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={clipId(selectedClip)} kind={selectedClip.source.kind} moments={collageMoments} sources={editor.sources} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && selectedClip.source.kind === "photo" ? (file) => uploadDeviceReplacement(file, clipId(selectedClip)) : undefined} onApply={onApply} onSource={editor.setSource} onClose={closePicker} /> : null}
     {tool === "Ask" && editor.timeline ? <AskSheet visible projectId={params.projectId || "fixture"} generationId={params.generationId || "demo-film"} repository={repository} scope={selectedClip && selectedCellSlotId ? { kind: "slot", clipId: clipId(selectedClip), slotId: selectedCellSlotId } : selectedClip ? { kind: "clip", clipId: clipId(selectedClip) } : { kind: "film" }} initialRequest={typeof params.request === "string" ? params.request : ""} savePending={editor.savePendingNow} getSnapshotKey={editor.getSnapshotKey} getSavedRevision={editor.getSavedRevision} applyMany={editor.applyMany} undo={editor.undo} onPlayAt={playAiAt} onClose={() => setTool(null)} /> : null}
     {tool === "Soundtrack" ? <SoundtrackSheet visible soundtracks={directions?.soundtracks ?? []} currentSoundtrackId={soundtrackId} previewSourceForTrack={(track) => editor.sources[track.id] ?? null} onApply={onApply} onClose={() => setTool(null)} /> : null}
