@@ -1,4 +1,5 @@
 import type { AssembledClip } from "./assemble.js";
+import { fadeOutSec } from "./directingRules.js";
 
 /** Audio clip emitted by the audio layer. */
 export interface AudioClip {
@@ -105,7 +106,7 @@ export function buildAudioClips(
 
   // Music track: one clip spanning the film with fades at both ends
   if (soundtrackId) {
-    const fadeDuration = Math.min(1.0, timelineDurationSec * 0.05); // 1s or 5% of total
+    const fadeDuration = fadeOutSec(timelineDurationSec);
     const musicGain = 0.6; // base music gain
 
     audioClips.push({

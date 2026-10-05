@@ -1,4 +1,5 @@
 import { CADENCES, type CadenceId } from "@mosae/contracts";
+import { photoHoldRange } from "./directingRules.js";
 
 /** Hold lengths in seconds for a still or a quiet shot, chosen by the story's mood. */
 export interface Holds {
@@ -8,13 +9,10 @@ export interface Holds {
 }
 
 // Hold table keyed directly by CadenceId — no mapping, no substring matching.
-const HOLDS: Record<CadenceId, Holds> = {
-  tender: { base: 4, min: 2.5, max: 5 },
-  reflective: { base: 4.5, min: 3, max: 5 },
-  playful: { base: 2, min: 1, max: 3.5 },
-  energetic: { base: 1.5, min: 1, max: 2.5 },
-  celebratory: { base: 2.5, min: 1.5, max: 4 },
-};
+const HOLDS: Record<CadenceId, Holds> = Object.fromEntries(
+  (Object.keys({ tender: 1, reflective: 1, playful: 1, energetic: 1, celebratory: 1 }) as CadenceId[])
+    .map((cadence) => [cadence, photoHoldRange(1, cadence)]),
+) as Record<CadenceId, Holds>;
 
 const DEFAULT_HOLDS: Holds = { base: 3, min: 1, max: 5 };
 
@@ -39,7 +37,7 @@ export function craftBrief(cadenceId: CadenceId, targetSec: number): string {
     `You are cutting a short film from someone's own photos and videos. Judge it as film, not as a gallery.`,
     "",
     "Rhythm",
-    `- Mood "${moodName}": hold a still about ${h.base}s, never under ${h.min}s, never over ${h.max}s.`,
+    `- Mood "${moodName}": photo clips use ${h.base.toFixed(2)}s base pace for one photo, with ±20% variance (${h.min.toFixed(2)}–${h.max.toFixed(2)}s). Multi-photo collages scale as 1.0 + 0.2 × photos, then apply the cadence stretch.`,
     "- The strongest moment in each chapter gets the longest hold. Ordinary connective shots get the shortest.",
     "- Vary the holds. Three shots of identical length in a row reads as a slideshow, which is a failed edit.",
     `- Total length must land within 10% of ${targetSec}s. Shorten ordinary shots first, never the strongest ones.`,

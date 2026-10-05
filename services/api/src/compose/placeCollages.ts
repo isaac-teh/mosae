@@ -5,6 +5,7 @@ import {
   applyEdits, type CollageClip, type Timeline,
 } from "@mosae/contracts";
 import { hamming64 } from "../cluster/duplicates.js";
+import { DIRECTING_RULES, requestedCollageCount } from "./directingRules.js";
 
 export type CollageSource = {
   assetId: string;
@@ -67,24 +68,25 @@ function sameDayOrEvent(first: CollageSource, next: CollageSource): boolean {
 }
 
 /** Replace eligible contiguous selected clips; never draws from unused moments. */
-export function placeCollages(timeline: Timeline, sources: Map<string, CollageSource>, seed: string, review: CollageReview, style: CollageStyle = {}): Timeline {
+export function placeCollages(timeline: Timeline, sources: Map<string, CollageSource>, seed: string, review: CollageReview, style: CollageStyle = {}, mediaCount = sources.size): Timeline {
   const collageAmount = style.collageAmount ?? "few";
   const motionFeel = style.motionFeel ?? "calm";
-  if (collageAmount === "none") return { ...timeline, schemaVersion: 2 };
+  const collageLimit = requestedCollageCount(mediaCount, collageAmount);
+  if (collageLimit === 0) return { ...timeline, schemaVersion: 2 };
   const approved = review.combos.filter((combo) => combo.verdict === "keep" && ALLOWED_COMBOS.some((allowed) => allowed.layoutId === combo.layoutId && allowed.motionId === combo.motionId));
-  const maxCandidateSlots = Math.max(6, ...COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((aspect) => aspect === timeline.aspect) && approved.some((combo) => combo.layoutId === layout.id)).map((layout) => layout.maxSlots));
+  const maxCandidateSlots = Math.min(DIRECTING_RULES.collageMaxPhotos, Math.max(2, ...COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((aspect) => aspect === timeline.aspect) && approved.some((combo) => combo.layoutId === layout.id)).map((layout) => layout.maxSlots)));
   const clips = timeline.videoClips;
   const replacements = new Map<number, { end: number; collage: CollageClip }>();
   const chapterCounts = new Map<string, number>();
   const usedShots = new Set<string>();
   let removedCount = 0;
   let lastLayout: string | undefined;
-  const maxPerChapter = collageAmount === "few" ? 1 : 2;
+  const maxPerChapter = collageLimit;
   const preferredMotions = motionFeel === "calm"
     ? new Set(["page-turn", "print-drop", "focus-relay"])
     : new Set(["stack-deal", "tape-slap", "crash-zoom"]);
 
-  for (let index = 0; index < clips.length;) {
+  for (let index = 0; index < clips.length && replacements.size < collageLimit;) {
     const first = clips[index];
     const origin = sources.get(idOf(first));
     if (!origin || "kind" in first || (chapterCounts.get(origin.chapterId) ?? 0) >= maxPerChapter) { index++; continue; }
@@ -110,7 +112,8 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
         group.push(next);
       }
     }
-    if (group.length < 3) { index++; continue; }
+    const minGroup = mediaCount < 20 ? 3 : 2;
+    if (group.length < minGroup) { index++; continue; }
     const shotIds = group.map((clip) => clip.source.shotId);
     if (new Set(shotIds).size !== shotIds.length || shotIds.some((shotId) => usedShots.has(shotId))) { index++; continue; }
     const finalCount = clips.length - removedCount - (group.length - 1);
@@ -119,7 +122,7 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
       return layout && group.length >= layout.minSlots && group.length <= layout.maxSlots && layout.aspect.some((aspect) => aspect === timeline.aspect);
     });
     if (!combinations.length) { index += group.length; continue; }
-    if (collageAmount === "lots" && (replacements.size + 1) / finalCount > 0.4) { index += group.length; continue; }
+    if ((replacements.size + 1) / finalCount > 0.4) { index += group.length; continue; }
     const preferred = combinations.filter((combo) => preferredMotions.has(combo.motionId));
     const motionChoices = preferred.length ? preferred : combinations;
     const varied = motionChoices.filter((combo) => combo.layoutId !== lastLayout);

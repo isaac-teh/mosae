@@ -14,6 +14,7 @@ import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
 import { applyArc, orderByChronology, type ClipTime } from "./chronology.js";
 import { loadCollageReview, placeCollages, type CollageReview, type CollageSource } from "./placeCollages.js";
+import { fadeOutSec } from "./directingRules.js";
 
 export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
   if (!momentOrder?.length) return clips;
@@ -432,7 +433,7 @@ export async function runCompose(
         // music sitting on top of every line of dialogue.
         gainDb: gainToDb(ac.gain),
         fadeInSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
-        fadeOutSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
+        fadeOutSec: ac.kind === "music" ? fadeOutSec(result.durationSec) : 0,
       };
     }),
     // Text overlays the model chose, burned in when the user asked for captions.
@@ -467,7 +468,8 @@ export async function runCompose(
   }
   let withCollages: Timeline;
   try {
-    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm" });
+    const usableMediaCount = new Set(candidates.map((candidate) => candidate.itemId)).size;
+    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm" }, usableMediaCount);
   } catch (error) {
     return { ok: false, reasons: [`collage placement failed: ${error instanceof Error ? error.message : String(error)}`] };
   }

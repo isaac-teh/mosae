@@ -1,0 +1,37 @@
+import { describe, expect, it } from "vitest";
+import { collageCountRange, collagePlacementOptions, deterministicPlacement, DIRECTING_RULES, fadeOutSec, photoBaseDuration, photoHoldRange, requestedCollageCount } from "./directingRules.js";
+
+describe("deterministic directing rules", () => {
+  it.each([1, 2, 3, 4, 5, 6])("uses photo-count base pace for %i photos", (n) => expect(photoBaseDuration(n, "playful")).toBeCloseTo(1 + 0.2 * n));
+  it.each([["tender", 2], ["reflective", 1.8], ["playful", 1], ["energetic", 1], ["celebratory", 1.2]] as const)("applies %s multiplier and variance", (cadence, multiplier) => {
+    const range = photoHoldRange(1, cadence);
+    expect(range.base).toBeCloseTo(1.2 * multiplier);
+    expect(range.min).toBeCloseTo(range.base * 0.8);
+    expect(range.max).toBeCloseTo(range.base * 1.2);
+  });
+  it.each([[7, 0], [8, 1], [19, 1], [20, 2], [49, 2], [50, 3]] as const)("caps collage count at media boundary N=%i", (n, max) => expect(collageCountRange(n).max).toBe(max));
+  it("applies none/few/lots at the allowed edges", () => {
+    expect(requestedCollageCount(30, "none")).toBe(0);
+    expect(requestedCollageCount(30, "few")).toBe(1);
+    expect(requestedCollageCount(30, "lots")).toBe(2);
+    expect(requestedCollageCount(60, "few")).toBe(2);
+    expect(requestedCollageCount(60, "lots")).toBe(3);
+  });
+  it("lists all permitted one, two and three-collage positions", () => {
+    expect(collagePlacementOptions(8, 1)).toEqual([[0], [7]]);
+    expect(collagePlacementOptions(8, 2)).toEqual([[0, 1], [0, 7], [6, 7]]);
+    expect(collagePlacementOptions(8, 3)).toEqual([[0, 1, 7], [0, 1, 4], [0, 6, 7], [4, 6, 7]]);
+    expect(deterministicPlacement(8, 2, "same")).toEqual(deterministicPlacement(8, 2, "same"));
+  });
+  it("limits collage photo capacity and minimum hold stretching", () => {
+    expect(DIRECTING_RULES.collageMaxPhotos).toBe(6);
+    expect(DIRECTING_RULES.singlePhotoMaxSec).toBe(4);
+    expect(DIRECTING_RULES.minimumFilmSec).toBe(20);
+    for (const n of [3, 6, 10]) expect(n * photoHoldRange(1, "playful").base).toBeLessThan(20);
+    expect(10 * DIRECTING_RULES.singlePhotoMaxSec).toBeGreaterThanOrEqual(20);
+  });
+  it("fades out over exactly the final second or the full sub-second film", () => {
+    expect(fadeOutSec(60)).toBe(1);
+    expect(fadeOutSec(0.5)).toBe(0.5);
+  });
+});
