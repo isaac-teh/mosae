@@ -110,24 +110,6 @@ export default function EditorScreen() {
     return () => { active = false; };
   }, [params.planId, repository]);
   const selectedClip = editor.timeline?.videoClips.find((clip) => clipId(clip) === editor.selectedClipId) ?? null;
-  const addMoments = useMemo(() => {
-    if (!editor.timeline) return [];
-    const used = shotIdsIn(editor.timeline);
-    const projectMedia: Moment[] = editor.unusedMedia.filter((media) => !used.has(media.shotId)).map((media) => ({
-      id: `unused-${media.shotId}`, title: `${media.kind === "video" ? "Video clip" : "Photo"} · ${media.eventLabel}`, meta: media.date,
-      tag: { emoji: media.kind === "video" ? "🎬" : "📷", label: media.kind === "video" ? "Video" : "Photo" },
-      imageKey: media.thumbnailUrl, kind: media.kind, selected: false, favorite: false, shotId: media.shotId,
-      ...(media.sourceInSec !== undefined ? { sourceInSec: media.sourceInSec } : {}),
-      ...(media.sourceOutSec !== undefined ? { sourceOutSec: media.sourceOutSec } : {}),
-      ...(media.sourceDurationSec !== undefined ? { sourceDurationSec: media.sourceDurationSec } : {}),
-    }));
-    const usedOrListed = new Set([...used, ...projectMedia.map((moment) => moment.shotId!)]);
-    const unselected = (plan?.moments ?? []).filter((moment) => !moment.selected && moment.shotId && !usedOrListed.has(moment.shotId));
-    const leftOut: Moment[] = (plan?.leftOut ?? []).filter((photo) => !usedOrListed.has(photo.shotId) && !unselected.some((moment) => moment.shotId === photo.shotId)).map((photo, index) => ({
-      id: `left-out-${index}`, title: "Left out photo", meta: photo.reason, tag: { emoji: "📷", label: "Left out" }, imageKey: photo.thumbnailUrl, kind: "photo", selected: false, favorite: false, shotId: photo.shotId,
-    }));
-    return [...projectMedia, ...unselected, ...leftOut];
-  }, [plan, editor.timeline, editor.unusedMedia]);
   const collageMoments = useMemo(() => {
     const listed = [...(plan?.moments ?? []), ...editor.unusedMedia.map((media) => ({
       id: `unused-${media.shotId}`, title: `${media.kind === "video" ? "Video clip" : "Photo"} · ${media.eventLabel}`, meta: media.date,
@@ -139,6 +121,10 @@ export default function EditorScreen() {
     } as Moment))];
     return [...new Map(listed.filter((moment) => moment.shotId).map((moment) => [moment.shotId!, moment])).values()];
   }, [plan, editor.unusedMedia]);
+  const addMoments = useMemo(() => {
+    const used = editor.timeline ? shotIdsIn(editor.timeline) : new Set<string>();
+    return collageMoments.map((moment) => ({ ...moment, selected: Boolean(moment.shotId && used.has(moment.shotId)) }));
+  }, [collageMoments, editor.timeline]);
   const onApply = (op: EditOp) => {
     const applied = editor.apply(op);
     if (applied) { replacementUploadNonce.current.invalidate(); setTool(null); }
