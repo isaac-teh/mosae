@@ -224,11 +224,11 @@ describe("runCompose — collages", () => {
 
 describe("runCompose — happy path", () => {
   it.each([
-    ["tender", 15],
-    ["reflective", 15],
-    ["playful", 10.5],
-    ["energetic", 7.5],
-    ["celebratory", 12],
+    ["tender", 24],
+    ["reflective", 21.6],
+    ["playful", 12],
+    ["energetic", 12],
+    ["celebratory", 14.4],
   ] as const)("composes a 15-second short from three photos at %s pace by clamping to available material", async (cadenceId, maximum) => {
     const moments = ["photo1", "photo2", "photo3"].map((id) => ({ id, shotId: `shot-${id}`, kind: "photo" as const, title: id, description: "", rationale: "" }));
     const proposal = makeProposal({ moments, chapters: [{ id: "ch1", title: "Chapter 1", summary: "", momentIds: moments.map(({ id }) => id) }] });
@@ -240,6 +240,18 @@ describe("runCompose — happy path", () => {
     if (!result.ok) throw new Error(result.reasons.join("; "));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.timeline.durationSec).toBeLessThanOrEqual(maximum * 1.1);
+  });
+
+  it.each([[6, 20], [3, 12]] as const)("matches a client-recommended Short target for %i photos", async (photoCount, recommendedSeconds) => {
+    const moments = Array.from({ length: photoCount }, (_, index) => ({ id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const, title: `Photo ${index}`, description: "", rationale: "" }));
+    const proposal = makeProposal({ moments, chapters: [{ id: "ch1", title: "Trip", summary: "", momentIds: moments.map(({ id }) => id) }], constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] } });
+    const assets = new Map(moments.map(({ id }, index) => [id, { kind: "photo" as const, analysis: { caption: `Photo ${index}` } }]));
+    const result = await runCompose(makeJob({ proposal, durationId: "short", durationSec: recommendedSeconds, cadenceId: "playful", collageAmount: "none" }), makeDeps({
+      assets,
+      generateStructured: async () => ({ clips: moments.map(({ id }, index) => ({ candidateId: `${id}#still@c0`, holdSec: 1.2, transition: "cut", audio: "mute" })), musicCues: [] }),
+    }));
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    expect(result.timeline.durationSec).toBeCloseTo(recommendedSeconds, 0);
   });
 
   it("composes an adaptive short duration within its requested limit", async () => {
