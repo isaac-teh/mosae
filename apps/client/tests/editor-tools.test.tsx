@@ -124,7 +124,7 @@ describe("editor tool operations", () => {
 
   it("adds from the shared grid after the selected clip", async () => {
     const inFilm = { ...moments[0], id: "m-used", shotId: "shot-used", title: "Already in film", selected: true };
-    await render(<AddSheet visible moments={[inFilm, moments[0]]} selectedClipId="b" timeline={timeline} playheadSec={1} onApply={apply} onClose={() => {}} />);
+    await render(<AddSheet visible moments={[inFilm, moments[0]]} inFilmShotIds={new Set(["shot-used"])} selectedClipId="b" timeline={timeline} playheadSec={1} onApply={apply} onClose={() => {}} />);
     expect(host.textContent).not.toContain("Left out moment");
     expect(host.querySelector('[aria-label="In film"]')).not.toBeNull();
     expect([...host.querySelectorAll('button[aria-label^="Add "]')].map((button) => button.getAttribute("aria-label"))).toEqual(["Add Left out moment", "Add Already in film"]);

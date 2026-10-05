@@ -53,3 +53,22 @@ test("editor mobile add, grid, seek, collage label and deep-link back flow", asy
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page).toHaveURL(/\/$/);
 });
+
+test("removed collage photo loses its in-film badge in the Add photo picker", async ({ page }) => {
+  await page.goto(editorUrl);
+  await expect(page.getByLabel("Unified timeline")).toBeVisible();
+  await page.getByRole("button", { name: "Select clip collage-1" }).click();
+  const photo = page.locator('[data-collage-cell="collage-1:slot-1"]').locator("xpath=..").locator("[data-collage-media]");
+  await expect(photo).toBeVisible();
+  const photoSource = await photo.getAttribute("src");
+  await page.locator('[data-collage-cell="collage-1:slot-1"]').click({ force: true });
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  const emptyCell = page.getByRole("button", { name: "Select collage cell slot-1" });
+  await expect(emptyCell).toBeVisible();
+  await emptyCell.click({ force: true });
+  await page.getByRole("button", { name: "Add photo" }).click();
+  await expect(page.getByText("Replace cell", { exact: true })).toBeVisible();
+  const removedPhotoChoice = page.getByRole("button", { name: /^Replace with / }).filter({ has: page.locator(`img[src="${photoSource}"]`) });
+  await expect(removedPhotoChoice).toBeVisible();
+  await expect(removedPhotoChoice.getByLabel("In film")).toHaveCount(0);
+});
