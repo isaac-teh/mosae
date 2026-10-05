@@ -19,6 +19,10 @@ vi.mock("react-native", () => {
 });
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
 vi.mock("@/lib/demoAssets", () => ({ demoImage: () => 1 }));
+vi.mock("react-native-svg", () => ({
+  default: ({ children, ...props }: any) => React.createElement("svg", props, children),
+  Path: (props: any) => React.createElement("path", props),
+}));
 
 import { SwapSheet } from "../components/editor/SwapSheet";
 import { TrimControl } from "../components/editor/TrimControl";
@@ -122,6 +126,16 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Add photo"]')?.firstElementChild?.textContent).toBe("+");
     await render(<ToolBar selection="collageCell" onTool={() => {}} />);
     expect(host.querySelector('[aria-label="Replace"]')?.textContent).toContain("Replace");
+  });
+
+  it("shows an outlined speaker icon for the accessible Volume action", async () => {
+    const { ToolBar } = await import("../components/editor/ToolBar");
+    await render(<ToolBar selection="audio" onTool={() => {}} />);
+    const volume = host.querySelector('[aria-label="Volume"]');
+    expect(volume).not.toBeNull();
+    expect(volume?.querySelector("svg")?.getAttribute("viewBox")).toBe("0 0 24 24");
+    expect(volume?.querySelectorAll("path")).toHaveLength(3);
+    expect(volume?.textContent).toContain("Volume");
   });
 
   it("keeps Replace for selected photo and video clips", async () => {
