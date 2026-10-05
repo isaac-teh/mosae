@@ -1,4 +1,5 @@
-import { Image, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { StableUriImage } from "../StableUriImage";
 
 type Photo = { shotId: string; uri: string };
 type ChatSetAsideCardProps = {
@@ -15,7 +16,7 @@ function PhotoRow({ label, count, photos, more, onPress }: { label: string; coun
   return <Pressable role="button" accessibilityLabel={`${label} ${count}`} onPress={onPress} className="gap-2 border-b border-line py-3 last:border-0">
     <Text className="font-sans-semibold text-label text-ink">{label} {count}</Text>
     <View className="flex-row gap-2">
-      {photos.slice(0, 4).map((photo) => <Image key={photo.shotId} source={{ uri: photo.uri }} accessibilityLabel={`${label} photo`} resizeMode="cover" className="h-16 w-16 rounded-sm" />)}
+      {photos.slice(0, 4).map((photo) => <StableUriImage key={photo.shotId} uri={photo.uri} accessibilityLabel={`${label} photo`} resizeMode="cover" className="h-16 w-16 rounded-sm" />)}
       {more > 0 ? <View accessibilityLabel={`${more} more ${label.toLowerCase()} photos`} className="h-16 w-16 items-center justify-center rounded-sm bg-surface-sunken"><Text className="font-sans-medium text-caption text-ink-muted">+{more}</Text></View> : null}
     </View>
   </Pressable>;

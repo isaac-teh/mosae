@@ -1,3 +1,5 @@
+import { StableUriImage } from "./StableUriImage";
+
 const previewUrls = new WeakMap<File, string>();
 
 function previewUrl(file: File) {
@@ -22,7 +24,7 @@ export function MediaThumb({ file, isVideo, onDuration }: Props) {
     width: "100%",
     height: "100%",
     objectFit: "cover" as const,
-    display: "block",
+    display: "flex",
   };
   return isVideo ? (
     <video
@@ -34,6 +36,6 @@ export function MediaThumb({ file, isVideo, onDuration }: Props) {
       style={style}
     />
   ) : (
-    <img src={url} alt={file.name} style={style} />
+    <StableUriImage uri={url} accessibilityLabel={file.name} style={style} />
   );
 }

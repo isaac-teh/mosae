@@ -12,6 +12,7 @@ import { useStoryFlow } from "@/lib/storyFlow";
 import { EditorPreview } from "@/components/editor/EditorPreview";
 import { demoImage } from "@/lib/demoAssets";
 import { PendingPreviewUrls } from "@/lib/pendingPreviewUrls";
+import { StableUriImage } from "@/components/StableUriImage";
 import type { Timeline } from "@mosae/contracts";
 import { directionFocus, contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, personAnswerChips, subscribeUploadProgress, retryPendingMedia } from "@mosae/core";
 
@@ -206,7 +207,7 @@ export default function DirectorScreen() {
         </View>;
         if (item.kind === "merge-followup") return <View key={item.id} className="gap-3">
           <ChatMessage from="mosae" text={item.text} />
-          <View className="flex-row gap-2">{item.photos.slice(0, 2).map((uri, index) => <Image key={`${item.id}-${index}`} source={{ uri }} accessibilityLabel={`Previously identified person ${index + 1}`} className="size-[72px] rounded-md" />)}</View>
+          <View className="flex-row gap-2">{item.photos.slice(0, 2).map((uri, index) => <StableUriImage key={`${item.id}-${index}`} uri={uri} accessibilityLabel={`Previously identified person ${index + 1}`} className="size-[72px] rounded-md" />)}</View>
           {item.response
             ? <ChatMessage from="you" text={item.response === "No, another person" ? `No, another ${item.text.replace(/^Same | as before\?$/g, "")}` : item.response} />
             : <ChatProposal question={item.answer} replies={[{ id: "same", label: "Yes, same person" }, { id: "different", label: `No, another ${item.text.replace(/^Same | as before\?$/g, "")}` }]} onReply={(choice) => scrollAfterAction(() => actions.resolvePersonMerge(item.id, choice === "same"))} />}

@@ -1,4 +1,5 @@
-import { Image, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { StableUriImage } from "../StableUriImage";
 import { Button } from "../ds";
 
 type Person = { personId: string; uri: string; name: string };
@@ -10,7 +11,7 @@ export function ChatPeoplePick({ people, selected, onToggle, onAddName, onDone }
     <View className="flex-row flex-wrap gap-x-3 gap-y-4">{people.map((person) => {
       const active = selected.includes(person.personId);
       return <View key={person.personId} className="w-[72px] items-center gap-1">
-        <Image source={{ uri: person.uri }} accessibilityLabel={person.name} resizeMode="cover" className={`h-[72px] w-[72px] rounded-md ${active ? "border-2 border-action" : ""}`} />
+        <StableUriImage uri={person.uri} accessibilityLabel={person.name} resizeMode="cover" className={`h-[72px] w-[72px] rounded-md ${active ? "border-2 border-action" : ""}`} />
         <Pressable accessibilityRole="checkbox" accessibilityLabel={person.name} accessibilityState={{ selected: active }} role="checkbox" aria-label={person.name} aria-checked={active} onPress={() => onToggle(person.personId)} className={`min-h-11 max-w-full justify-center ${active ? "text-ink" : "text-ink-muted"}`}><Text className="truncate text-caption font-sans-medium underline">{person.name}</Text></Pressable>
       </View>;
     })}

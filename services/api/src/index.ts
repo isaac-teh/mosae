@@ -6,7 +6,7 @@ import { loadConfig } from "./config.js";
 import { requireServiceCaller } from "./auth/requireServiceCaller.js";
 import { projectsRouter } from "./routes/projects.js";
 import { thumbnailsRouter } from "./routes/thumbnails.js";
-import { firebaseDownloadUrlStore, firebaseThumbnailUrlStore } from "./ingest/objectStore.js";
+import { firebaseDownloadUrlStore, firebaseThumbnailUrlStore, stableSignedReadUrl } from "./ingest/objectStore.js";
 import { createPlanJob, createQueuePlan, directingRouter, type QueuePlan } from "./routes/directing.js";
 import { storageEventsRouter } from "./routes/storageEvents.js";
 import { internalRouter } from "./routes/internal.js";
@@ -125,8 +125,7 @@ const render = createRender({
   signRead: process.env.FIREBASE_STORAGE_EMULATOR_HOST
     ? (path) => firebaseDownloadUrlStore(renderBucket()).signedDownloadUrl(path)
     : async (path) => {
-        const [url] = await renderBucket().file(path).getSignedUrl({ version: "v4", action: "read", expires: Date.now() + 24 * 60 * 60 * 1000 });
-        return url;
+        return stableSignedReadUrl(renderBucket(), path);
       },
   ...(process.env.FIREBASE_STORAGE_EMULATOR_HOST
     ? {}

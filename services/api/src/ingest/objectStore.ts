@@ -3,6 +3,34 @@ import { PermanentIngestError } from "./errors.js";
 
 type Bucket = ReturnType<ReturnType<typeof getStorage>["bucket"]>;
 
+const READ_URL_BUCKET_MS = 12 * 60 * 60 * 1000;
+const READ_URL_TTL_MS = 24 * 60 * 60 * 1000;
+const signedReadUrls = new Map<string, Map<string, Promise<string>>>();
+
+/** Expiry shared by all reads issued during the same fixed twelve-hour window. */
+export function stableReadExpiresAt(now = Date.now()): number {
+  return Math.floor(now / READ_URL_BUCKET_MS) * READ_URL_BUCKET_MS + READ_URL_TTL_MS;
+}
+
+/** Cache V4 signatures because the signing library timestamps each invocation. */
+export function stableSignedReadUrl(bucket: Bucket, path: string, now = Date.now()): Promise<string> {
+  let urls = signedReadUrls.get(bucket.name);
+  if (!urls) { urls = new Map(); signedReadUrls.set(bucket.name, urls); }
+  const window = Math.floor(now / READ_URL_BUCKET_MS);
+  for (const cachedKey of urls.keys()) {
+    const separator = cachedKey.indexOf(":");
+    if (Number(cachedKey.slice(0, separator)) < window) urls.delete(cachedKey);
+  }
+  const key = `${window}:${path}`;
+  let url = urls.get(key);
+  if (!url) {
+    url = bucket.file(path).getSignedUrl({ version: "v4", action: "read", expires: stableReadExpiresAt(now) }).then(([signed]) => signed);
+    urls.set(key, url);
+    void url.catch(() => { if (urls?.get(key) === url) urls.delete(key); });
+  }
+  return url;
+}
+
 export interface ThumbnailUrlStore {
   signedReadUrl(path: string, expiresAt: number): Promise<string>;
 }
@@ -10,7 +38,7 @@ export interface ThumbnailUrlStore {
 /** GCS uploads have no Firebase download token; sign reads on the server. */
 export function firebaseThumbnailUrlStore(bucket: Bucket): ThumbnailUrlStore {
   return {
-    async signedReadUrl(path, expiresAt) {
+    async signedReadUrl(path, _expiresAt) {
       // v4 signing needs real service-account credentials, which a local
       // emulator run does not have, so every image on every screen fails with
       // "Could not load the default credentials". The emulator serves its
@@ -23,8 +51,7 @@ export function firebaseThumbnailUrlStore(bucket: Bucket): ThumbnailUrlStore {
         const host = emulator.startsWith("http") ? emulator : `http://${emulator}`;
         return `${host}/download/storage/v1/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media`;
       }
-      const [url] = await bucket.file(path).getSignedUrl({ version: "v4", action: "read", expires: expiresAt });
-      return url;
+      return stableSignedReadUrl(bucket, path);
     },
   };
 }
@@ -45,13 +72,11 @@ export function firebaseDownloadUrlStore(bucket: Bucket): { signedDownloadUrl(pa
         return `${host}/download/storage/v1/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media`;
       }
       const filename = (path.split("/").at(-1) || "film.mp4").replace(/["\\\r\n]/g, "_");
-      const [url] = await bucket.file(path).getSignedUrl({
-        version: "v4",
-        action: "read",
-        expires: Date.now() + 24 * 60 * 60 * 1000,
+      const [downloadUrl] = await bucket.file(path).getSignedUrl({
+        version: "v4", action: "read", expires: stableReadExpiresAt(),
         responseDisposition: `attachment; filename="${filename}"`,
       });
-      return url;
+      return downloadUrl;
     },
   };
 }

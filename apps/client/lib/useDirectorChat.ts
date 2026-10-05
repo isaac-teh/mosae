@@ -236,7 +236,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     };
     void poll();
     const stopReadiness = repository.watchReadiness?.(projectId, () => { void poll(); }, () => undefined);
-    const timer = setInterval(() => { void poll(); }, 3000);
+    // Readiness snapshots refresh promptly; this slower poll preserves old API
+    // compatibility and recovers when the listener is unavailable.
+    const timer = setInterval(() => { void poll(); }, 10_000);
     return () => { mounted.current = false; clearInterval(timer); stopReadiness?.(); };
   }, [refresh, localState.localMediaPending]);
 
