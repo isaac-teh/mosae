@@ -1,16 +1,10 @@
 import { createElement } from "react";
-import { Image, Platform, Pressable, ScrollView, Text, View } from "react-native";
-import { Asset } from "expo-asset";
-import { demoImage } from "@/lib/demoAssets";
+import { Platform, Pressable, Text, View } from "react-native";
+import { MediaGridPicker } from "./MediaGridPicker";
 import { COLLAGE_LAYOUTS, type EditOp, type Timeline } from "@mosae/contracts";
 import type { Moment } from "@mosae/core";
 
 type Collage = Extract<Timeline["videoClips"][number], { kind: "collage" }>;
-function thumbnailSource(value: string) {
-  const key = value.startsWith("demo:") ? value.slice(5) : value;
-  if (/^(https?:|data:)/.test(value)) return { uri: value };
-  try { return { uri: Asset.fromModule(demoImage(key)).uri }; } catch { return { uri: value }; }
-}
 export function CollageCellSheet({ mode, clip, slotId, moments, sources = {}, uploading = false, uploadProgress, uploadError = null, onUploadFile, onSource, onApply, onClose }: {
   mode: "add" | "replace"; clip: Collage; slotId?: string; moments: Moment[]; sources?: Record<string, string>;
   uploading?: boolean; uploadProgress?: { totalFiles: number; finishedFiles: number; failedFiles: number } | null; uploadError?: string | null;
@@ -45,14 +39,6 @@ export function CollageCellSheet({ mode, clip, slotId, moments, sources = {}, up
       {uploadError ? <Text accessibilityRole="alert" className="mt-2 font-sans text-caption text-critical">{uploadError}</Text> : null}
     </View> : null}
     {full ? <Text className="mb-3 font-sans text-caption text-on-screen-muted">This layout holds up to {layout.maxSlots} photos.</Text> : null}
-    {candidates.length ? <ScrollView>{candidates.map((moment) => {
-      const isVideo = moment.kind === "video";
-      const disabled = full || (isVideo && !canVideo);
-      const label = `${mode === "add" ? "Add cell" : "Replace with"} ${moment.title}`;
-      return <Pressable key={`${moment.shotId}-${moment.id}`} role="button" accessibilityLabel={label} accessibilityHint={disabled && isVideo ? "This layout allows one video cell" : undefined} disabled={disabled} onPress={() => applyChoice(moment)} className={`mb-2 min-h-[68px] flex-row items-center gap-3 rounded-xl bg-[#1a2c38] px-3 ${disabled ? "opacity-40" : ""}`}>
-        <Image source={thumbnailSource(moment.imageKey)} accessibilityLabel={`${moment.title} thumbnail`} className="h-12 w-12 rounded-lg" resizeMode="cover" />
-        <View className="min-w-0 flex-1"><Text numberOfLines={1} className="font-sans-semibold text-button text-on-screen">{moment.title}</Text><Text className="font-sans text-caption text-on-screen-muted">{isVideo ? "Video" : "Photo"} · {moment.meta}</Text></View>
-      </Pressable>;
-    })}</ScrollView> : <Text className="font-sans text-caption text-on-screen-muted">No photos or videos from this trip are available.</Text>}
+    {candidates.length ? <MediaGridPicker moments={candidates} labelFor={(moment) => `${mode === "add" ? "Add cell" : "Replace with"} ${moment.title}`} disabled={(moment) => full || (moment.kind === "video" && !canVideo)} onSelect={applyChoice} /> : <Text className="font-sans text-caption text-on-screen-muted">No photos or videos from this trip are available.</Text>}
   </View></View>;
 }

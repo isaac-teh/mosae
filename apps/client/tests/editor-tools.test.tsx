@@ -93,11 +93,32 @@ describe("editor tool operations", () => {
     expect(onUploadFile).toHaveBeenCalledWith(file, "collage-1", "s2");
   });
 
+  it("uses a shared text-free square grid for collage media choices", async () => {
+    await render(<CollageCellSheet mode="replace" clip={collage} slotId="s2" moments={moments} onApply={apply} onClose={() => {}} />);
+    expect(host.querySelector('[aria-label="Replace with Left out moment"]')).not.toBeNull();
+    expect(host.textContent).not.toContain("Left out moment");
+    expect(host.querySelector('[aria-label="Replace with Left out moment"]')?.getAttribute("style")).toContain("aspect-ratio: 1");
+  });
+
   it("replaces a collage cell from project gallery and installs its preview source", async () => {
     await render(<CollageCellSheet mode="replace" clip={collage} slotId="s2" moments={moments} sources={{ "shot-left": "https://media.test/photo.jpg" }} onSource={onSource} onApply={apply} onClose={() => {}} />);
     await click("Replace with Left out moment");
     expect(onSource).toHaveBeenCalledWith("shot-left", "https://media.test/photo.jpg");
     expect(apply).toHaveBeenCalledWith({ op: "replaceCollageSlot", clipId: "collage-1", slotId: "s2", shotId: "shot-left", kind: "photo" });
+  });
+
+  it("shows Add photo for an empty collage cell and opens its picker", async () => {
+    const { ToolBar } = await import("../components/editor/ToolBar");
+    await render(<ToolBar selection="collageCell" emptyCollageCell onTool={() => {}} />);
+    expect(host.querySelector('[aria-label="Add photo"]')?.textContent).toContain("Add photo");
+    expect(host.querySelector('[aria-label="Add photo"]')?.firstElementChild?.textContent).toBe("+");
+  });
+
+  it("adds from the shared grid after the selected clip", async () => {
+    await render(<AddSheet visible moments={moments} selectedClipId="b" timeline={timeline} playheadSec={1} onApply={apply} onClose={() => {}} />);
+    expect(host.textContent).not.toContain("Left out moment");
+    await click("Add Left out moment");
+    expect(apply).toHaveBeenCalledWith(expect.objectContaining({ op: "add", afterClipId: "b" }));
   });
 
   it("trims a video clip in source time", async () => {
@@ -143,7 +164,14 @@ describe("editor tool operations", () => {
     const older = { ...moments[0], id: "older", title: "Photo · Day 2, morning", meta: "2026-06-02", imageKey: "older.jpg" };
     await render(<AddSheet visible moments={[next, older]} selectedClipId="b" onApply={apply} onClose={() => {}} />);
     expect([...host.querySelectorAll('button[aria-label^="Add Photo"]')].map((button) => button.getAttribute("aria-label"))).toEqual(["Add Photo · Day 3, evening", "Add Photo · Day 2, morning"]);
+    expect(host.textContent).not.toContain("Day 3, evening");
     expect([...host.querySelectorAll("img")].map((image) => image.getAttribute("src"))).toEqual(["newer.jpg", "older.jpg"]);
+  });
+
+  it("uses the clip under the playhead when nothing is selected", async () => {
+    await render(<AddSheet visible moments={moments} selectedClipId={null} timeline={timeline} playheadSec={4} onApply={apply} onClose={() => {}} />);
+    await click("Add Left out moment");
+    expect(apply).toHaveBeenCalledWith(expect.objectContaining({ afterClipId: "b" }));
   });
 
   it("adds a video moment with its source bounds", async () => {
@@ -352,6 +380,18 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledWith([{ op: "move", clipId: "b", toIndex: 0 }]);
     expect(host.querySelector('[aria-label="Undo AI edit"]')).not.toBeNull();
+  });
+
+  it("seeks soundtrack preview from its touch-sized range and updates the time", async () => {
+    await render(<SoundtrackSheet visible soundtracks={soundtracks.map(track => ({ ...track, durationSec: 20 }))} previewSourceForTrack={() => "real-track.mp3"} onApply={apply} onClose={() => {}} />);
+    await click("Preview Soft piano");
+    const range = host.querySelector('[aria-label="Seek soundtrack preview"]') as HTMLInputElement;
+    expect(range.style.height).toBe("44px");
+    const audio = host.querySelector("audio")!;
+    Object.defineProperty(audio, "duration", { configurable: true, value: 20 });
+    await act(async () => audio.dispatchEvent(new Event("loadedmetadata")));
+    await act(async () => { range.value = "7"; range.dispatchEvent(new Event("input", { bubbles: true })); });
+    expect(host.textContent).toContain("0:07 / 0:20");
   });
 
   it("previews a selected soundtrack and only applies it after confirmation", async () => {

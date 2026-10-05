@@ -221,7 +221,7 @@ describe("film editor", () => {
     await click("Add Photo · Day 3, evening");
     expect(host.querySelector('[aria-label="Select clip add:shot-unused:1"]')).not.toBeNull();
     await advance(1500);
-    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "add", shotId: "shot-unused", kind: "photo", afterClipId: null, durationSec: 3 }]);
+    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "add", shotId: "shot-unused", kind: "photo", afterClipId: "a", durationSec: 3 }]);
   });
 
   it("prefills Ask and atomically applies a result that one Undo restores", async () => {
