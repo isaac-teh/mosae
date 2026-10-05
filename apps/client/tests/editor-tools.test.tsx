@@ -366,6 +366,18 @@ describe("editor tool operations", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it("renders a large soundtrack catalog with mood filters", async () => {
+    const many: Soundtrack[] = Array.from({ length: 38 }, (_, index) => ({
+      id: `track-${index}`, name: `Track ${index}`, description: "Instrumental",
+      mood: ["tender", "reflective", "playful", "energetic", "celebratory"][index % 5],
+      suggested: index % 5 === 2,
+    }));
+    await render(<SoundtrackSheet visible soundtracks={many} onApply={() => {}} onClose={() => {}} />);
+    expect(host.textContent).toContain("Track 2");
+    expect(host.querySelectorAll('[aria-label^="Preview Track "]')).toHaveLength(8);
+    expect(host.querySelector('[aria-label="Soundtrack mood tender"]')).not.toBeNull();
+  });
+
   it("does not mutate the timeline when soundtrack selection is cancelled", async () => {
     const close = vi.fn();
     await render(<SoundtrackSheet visible soundtracks={soundtracks} onApply={apply} onClose={close} />);
