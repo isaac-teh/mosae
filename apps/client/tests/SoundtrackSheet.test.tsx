@@ -37,6 +37,19 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("SoundtrackSheet", () => {
+  it("keeps the mood tabs from shrinking and displays capitalized mood names", async () => {
+    await render(<SoundtrackSheet visible soundtracks={tracks} onApply={apply} onClose={close} />);
+    const tabRow = host.querySelector('[data-horizontal="true"]') as HTMLElement;
+    expect(tabRow.style.flexShrink).toBe("0");
+    expect(tabRow.style.flexGrow).toBe("0");
+    expect(tabRow.className).toContain("h-11");
+    expect(tabRow.className).toContain("shrink-0");
+    expect(tabRow.className).toContain("grow-0");
+    expect(tabRow.textContent).toContain("Suggested");
+    expect(tabRow.textContent).toContain("Tender");
+    expect(tabRow.querySelector('[aria-label="Soundtrack mood Tender"]')).not.toBeNull();
+  });
+
   it("opens with the current track ready for bottom-button playback and confirmation", async () => {
     await render(<SoundtrackSheet visible soundtracks={tracks} currentSoundtrackId="two" previewSourceForTrack={(track) => `/${track.id}.mp3`} onApply={apply} onClose={close} />);
     expect(host.querySelector("audio")?.getAttribute("src")).toBe("/two.mp3");
@@ -58,7 +71,7 @@ describe("SoundtrackSheet", () => {
     await render(<SoundtrackSheet visible soundtracks={tracks} currentSoundtrackId="one" previewSourceForTrack={(track) => `https://media.test/${track.id}.mp3`} onApply={apply} onClose={close} />);
     expect(host.textContent).toContain("CURRENT");
     expect(host.textContent).toContain("1:00");
-    await click("Soundtrack mood energetic");
+    await click("Soundtrack mood Energetic");
     expect(host.textContent).toContain("Sunny Run");
     expect(host.querySelector('[aria-label="Preview Gentle Shores"]')).toBeNull();
     const search = host.querySelector('[aria-label="Search soundtracks"]') as HTMLInputElement;
@@ -75,7 +88,7 @@ describe("SoundtrackSheet", () => {
 
   it("cancels without applying and stops preview playback", async () => {
     await render(<SoundtrackSheet visible soundtracks={tracks} previewSourceForTrack={(track) => `/${track.id}.mp3`} onApply={apply} onClose={close} />);
-    await click("Soundtrack mood energetic");
+    await click("Soundtrack mood Energetic");
     await click("Preview Sunny Run");
     await click("Close soundtrack");
     expect(apply).not.toHaveBeenCalled();

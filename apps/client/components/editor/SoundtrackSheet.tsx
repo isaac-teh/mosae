@@ -4,6 +4,7 @@ import type { EditOp } from "@mosae/contracts";
 import type { Soundtrack } from "@mosae/core";
 
 function mood(track: Soundtrack) { return track.mood?.trim() ?? ""; }
+function moodLabel(value: string) { return value ? value[0]!.toLocaleUpperCase() + value.slice(1) : value; }
 function durationLabel(track: Soundtrack) {
   if (track.durationSec !== undefined && Number.isFinite(track.durationSec) && track.durationSec > 0) {
     const seconds = Math.round(track.durationSec);
@@ -105,10 +106,10 @@ export function SoundtrackSheet({ visible, soundtracks, loading = false, current
       <View className="mb-4 h-1 w-9 self-center rounded-full bg-[#60717c]" />
       <View className="mb-4 flex-row items-center justify-between"><Text className="font-sans-semibold text-[18px] text-on-screen">Replace music</Text><Pressable accessibilityRole="button" accessibilityLabel="Close soundtrack" onPress={dismiss}><Text className="text-[24px] text-on-screen">×</Text></Pressable></View>
       <TextInput accessibilityLabel="Search soundtracks" placeholder="Search music" placeholderTextColor="#91a2ad" value={query} onChangeText={setQuery} className="mb-3 rounded-xl bg-[#1a2c38] px-4 py-3 font-sans text-body text-on-screen" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3 max-h-10 border-b border-[#344651]">
-        {categories.map((name) => <Pressable accessibilityRole="button" key={name} accessibilityLabel={`Soundtrack mood ${name}`} onPress={() => setCategory(name)} className={`mr-6 h-10 justify-center border-b-2 px-1 ${category === name ? "border-[#d5eee5]" : "border-transparent"}`}><Text className={`font-sans-medium text-caption ${category === name ? "text-[#d5eee5]" : "text-on-screen-muted"}`}>{name}</Text></Pressable>)}
-      </ScrollView>
-      <ScrollView className="min-h-[110px]">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3 h-11 shrink-0 grow-0 items-center border-b border-[#344651]" style={{ flexShrink: 0, flexGrow: 0 }}>
+          {categories.map((name) => <Pressable accessibilityRole="button" key={name} accessibilityLabel={`Soundtrack mood ${moodLabel(name)}`} onPress={() => setCategory(name)} className={`mr-6 h-11 justify-center border-b-2 px-1 ${category === name ? "border-[#d5eee5]" : "border-transparent"}`}><Text className={`font-sans-medium text-caption ${category === name ? "text-[#d5eee5]" : "text-on-screen-muted"}`}>{moodLabel(name)}</Text></Pressable>)}
+        </ScrollView>
+        <ScrollView className="min-h-[110px] flex-1">
         {loading ? <View className="items-center py-8"><Text className="font-sans text-body text-on-screen-muted">Loading soundtracks…</Text></View> : filtered.length ? filtered.map((track) => {
           const selected = track.id === previewId;
           const seconds = durationLabel(track);
