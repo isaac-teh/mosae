@@ -288,7 +288,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       aspect: settings.settings.aspect,
       // null means the director chooses; phase 4 has no such choice yet, so it
       // takes the middle length rather than inventing one.
-      durationId: (settings.settings.durationId ?? "1m") as DurationId | "short",
+      durationId: settings.settings.durationId as DurationId | "short" | null,
       ...(settings.settings.durationId === "short" && settings.settings.durationSec !== undefined ? { durationSec: settings.settings.durationSec } : {}),
       cadenceId: settings.settings.cadenceId as ComposeJob["cadenceId"],
       seed: generation.seed,

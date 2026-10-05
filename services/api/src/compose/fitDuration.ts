@@ -59,6 +59,7 @@ export function fitDuration(
   targetSec: number,
   holds: Holds,
   mustIncludeMomentIds: string[] = [],
+  options: { minimumFilmSec?: number; maximumStretchedPhotoSec?: number } = {},
 ): FitResult {
   const notes: string[] = [];
   let effectiveTargetSec = targetSec;
@@ -111,6 +112,38 @@ export function fitDuration(
     for (const photo of photos) {
       if (mustIncludeMomentIds.includes(photo.itemId)) continue; // Protect must-include clips
       photo.holdSec = Number(Math.min(holds.max, Math.max(holds.min, photo.holdSec! - step)).toFixed(2));
+    }
+  }
+
+  // With no duration tier selected, a very short composition gets one
+  // deliberate stretch pass toward 20 seconds. The cadence bounds still
+  // govern normal fitting; this pass can extend stills to four seconds each.
+  if (options.minimumFilmSec !== undefined && options.maximumStretchedPhotoSec !== undefined) {
+    const stretchLimit = options.maximumStretchedPhotoSec;
+    for (let pass = 0; pass < 20; pass++) {
+      const drift = options.minimumFilmSec - filmLength(workingClips);
+      if (drift <= 0.01) break;
+      const photos = workingClips.filter((clip) => clip.holdSec != null && clip.holdSec < stretchLimit);
+      if (!photos.length) break;
+      const step = drift / photos.length;
+      for (const photo of photos) {
+        photo.holdSec = Number(Math.min(stretchLimit, photo.holdSec! + step).toFixed(2));
+      }
+    }
+    const residual = options.minimumFilmSec - filmLength(workingClips);
+    if (residual > 0.01) {
+      const lastStretchable = [...workingClips].reverse().find((clip) => clip.holdSec != null && clip.holdSec < stretchLimit);
+      if (lastStretchable) {
+        lastStretchable.holdSec = Number(Math.min(stretchLimit, lastStretchable.holdSec! + residual).toFixed(2));
+      }
+    }
+    const stretchedLength = filmLength(workingClips);
+    if (stretchedLength < options.minimumFilmSec - 0.01) {
+      effectiveTargetSec = stretchedLength;
+      notes.push(`maximum-stretched film is ${stretchedLength.toFixed(1)}s; Short tier applies`);
+    } else {
+      effectiveTargetSec = options.minimumFilmSec;
+      notes.push(`stretched photo holds to ${stretchedLength.toFixed(1)}s minimum`);
     }
   }
 

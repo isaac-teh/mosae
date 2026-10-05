@@ -65,7 +65,7 @@ export interface ComposeJob {
   generationId: string;
   mode: "creator" | "memory";
   aspect: "16:9" | "9:16";
-  durationId: keyof typeof DURATION_SECONDS | "short";
+  durationId: keyof typeof DURATION_SECONDS | "short" | null;
   durationSec?: number;
   cadenceId: CadenceId;
   seed: string;
@@ -159,7 +159,7 @@ export async function runCompose(
   job: ComposeJob,
   deps: ComposeDeps,
 ): Promise<ComposeResult> {
-  let targetSec = job.durationId === "short" ? job.durationSec ?? 0 : DURATION_SECONDS[job.durationId] ?? 60;
+  let targetSec = job.durationId === "short" ? job.durationSec ?? 0 : job.durationId === null ? 60 : DURATION_SECONDS[job.durationId] ?? 60;
   if (targetSec < 3 || targetSec > 30 && job.durationId === "short") return { ok: false, reasons: ["invalid short duration"] };
 
   // `buildCandidates` keys its catalog by moment id, because that is what the
@@ -319,6 +319,7 @@ export async function runCompose(
     targetSec,
     holdsFor(job.cadenceId),
     job.proposal.constraints.mustIncludeMomentIds,
+    job.durationId === null ? { minimumFilmSec: 20, maximumStretchedPhotoSec: 4 } : {},
   );
 
   if (fittedClips.length === 0) {
