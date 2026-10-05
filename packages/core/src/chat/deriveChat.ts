@@ -161,7 +161,7 @@ export function deriveChat(input: ChatInput): ChatState {
     if (unanswered) {
       const mention = people[0]?.personId === unanswered.personId ? mentionedPerson(input.intent.text, people, input.mentionedPeople) : null;
       if (mention && !(input.dismissedPersonSuggestionIds ?? []).includes(unanswered.personId)) {
-        add({ kind: "person-confirm", id: `person-confirm-${unanswered.personId}`, personId: unanswered.personId, label: mention.label, text: `Is this ${mention.phrase}?`, momentCount: unanswered.momentCount, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 2).map((face) => face.uri) });
+        add({ kind: "person-confirm", id: `person-confirm-${unanswered.personId}`, personId: unanswered.personId, label: mention.label, text: `Is this ${mention.phrase}?`, momentCount: unanswered.momentCount, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 2) });
       } else add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days, questionText: `Who's this? They're in ${unanswered.momentCount} of your moments.` });
     } else {
       add({ kind: "anyone-else", id: "anyone-else" });

@@ -3,6 +3,7 @@ import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-nativ
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Asset } from "expo-asset";
 import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatPersonQuestion, ChatProposal, ChatSetAsideCard, ChatShaping, ChatTyping } from "@/components/chat";
+import { FacePreviewStrip } from "@/components/chat/ChatPersonQuestion";
 import { FilmPlayer } from "@/components/FilmPlayer";
 import { Button } from "@/components/ds";
 import { durationsForCadence, useDirectorChat } from "@/lib/useDirectorChat";
@@ -197,9 +198,10 @@ export default function DirectorScreen() {
           {namingPerson === item.personId && <View className="flex-row gap-2"><TextInput accessibilityLabel="Person name" value={name} onChangeText={setName} className="min-h-11 flex-1 rounded-md border border-line-strong px-3 font-sans text-ink" /><Pressable role="button" onPress={() => scrollAfterAction(() => { if (name.trim()) return actions.setPerson(item.personId, "Type a name", name.trim()); setName(""); setNamingPerson(null); })} className="min-h-11 justify-center px-3"><Text className="font-sans-semibold text-action">Save name</Text></Pressable></View>}
         </View>;
         if (item.kind === "person-confirm") return <View key={item.id} className="gap-3">
-          <ChatMessage from="mosae" text={item.text} photos={item.sampleFaces} />
+          <ChatMessage from="mosae" text={item.text} />
+          <FacePreviewStrip samples={item.sampleFaces} limit={2} />
           <ChatProposal replies={[{ id: "yes", label: "Yes" }, { id: "someone-else", label: "Someone else" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveMentionedPerson(item.personId, item.label, choice === "yes"))} />
-          <Button label="Skip" variant="quiet" onPress={() => scrollAfterAction(() => actions.setPerson(item.personId, "Skip"))} />
+          <Button label="Skip this person" variant="quiet" onPress={() => scrollAfterAction(() => actions.setPerson(item.personId, "Skip"))} />
         </View>;
         if (item.kind === "merge-followup") return <View key={item.id} className="gap-3">
           <ChatMessage from="mosae" text={item.text} />
