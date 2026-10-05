@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { runCompose, applyUserOrder, type ComposeJob, type ComposeDeps } from "./runCompose.js";
+import { runCompose, applyUserOrder, isAutomaticDayLabel, type ComposeJob, type ComposeDeps } from "./runCompose.js";
 import { castSummary } from "../cast/castSummary.js";
 import { safeParseTimeline } from "@mosae/contracts";
 
@@ -11,6 +11,15 @@ describe("applyUserOrder", () => {
     expect(applyUserOrder(clips, ["m3", "m1", "m2"], chapterOf).map((c) => c.itemId)).toEqual(["m1", "m2", "m3"]);
   });
   it("no order leaves clips unchanged", () => expect(applyUserOrder(clips, undefined, chapterOf)).toEqual(clips));
+});
+
+describe("isAutomaticDayLabel", () => {
+  it.each(["DAY 1", "Day 2 · Siloso Beach", "Chapter 3 - Arrival"])('filters generated label "%s"', (text) => {
+    expect(isAutomaticDayLabel(text)).toBe(true);
+  });
+  it.each(["Into the water", "A day to remember", "Chapter of our lives"])('keeps story text "%s"', (text) => {
+    expect(isAutomaticDayLabel(text)).toBe(false);
+  });
 });
 
 // --- Helpers to build minimal test fixtures ---
@@ -136,6 +145,9 @@ describe("runCompose — collages", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.timeline.videoClips.length).toBeGreaterThan(0);
+    for (const clip of result.timeline.videoClips) {
+      if ("kind" in clip) expect(clip.spec.caption).toBeUndefined();
+    }
   });
 
   it("places a four-photo event burst in the composed v2 film", async () => {

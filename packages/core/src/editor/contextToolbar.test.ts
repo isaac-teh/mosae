@@ -10,8 +10,12 @@ describe("contextToolbar", () => {
     expect(contextToolbar("slot")).toEqual(["Remove", "Replace"]);
   });
 
-  it("shows remove and layout for a selected collage", () => {
-    expect(contextToolbar("collage")).toEqual(["Remove", "Layout"]);
+  it("shows Add photo for a selected collage with an empty slot", () => {
+    expect(contextToolbar("collage", { hasEmptyCollageSlot: true })).toEqual(["Remove", "AddCell", "Layout"]);
+  });
+
+  it("shows Replace for a selected collage with no empty slots", () => {
+    expect(contextToolbar("collage", { hasEmptyCollageSlot: false })).toEqual(["Remove", "Replace", "Layout"]);
   });
 
   it("shows cell-specific actions while one collage cell is selected", () => {

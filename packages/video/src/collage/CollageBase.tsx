@@ -69,6 +69,7 @@ const Cell: React.FC<{spec:CollageSpec;slot:CollageSlot;index:number;sources?:Re
 const Caption: React.FC<{spec:CollageSpec}> = ({spec}) => {
   const place=spec.caption?.place;
   const date=spec.caption?.date;
+  if (!place && !date) return null;
   const footerColor="#203b48";
   const footerSurface="rgba(250,250,247,.94)";
   return <div style={{position:"absolute",zIndex:80,bottom:"2.5%",left:"11%",width:"78%",boxSizing:"border-box",padding:"1.4% 3% 1.1%",borderRadius:3,background:footerSurface,color:footerColor,textAlign:"center",boxShadow:"0 2px 9px rgba(18,26,30,.18)",fontFamily:"Figtree,sans-serif",fontSize:12,fontWeight:600,lineHeight:1.25,letterSpacing:".13em",textTransform:"uppercase"}}>

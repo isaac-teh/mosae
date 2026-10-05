@@ -84,6 +84,11 @@ describe("golden composition", () => {
     expect((await composeOrThrow()).schemaVersion).toBe(2);
   });
 
+  it("drops day labels while preserving story text overlays", async () => {
+    const timeline = await composeOrThrow();
+    expect(timeline.captions.map((caption) => caption.text)).toEqual(["Into the water"]);
+  });
+
   it("is unchanged by the wall clock", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2021-03-04T05:06:07.008Z"));

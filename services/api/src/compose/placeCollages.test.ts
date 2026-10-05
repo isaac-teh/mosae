@@ -80,13 +80,13 @@ describe("placeCollages", () => {
     ]);
   });
 
-  it("composes a burst with no capture time and omits the caption date key", () => {
+  it("composes a burst with no generated day or date caption", () => {
     const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "e4", "e5", "e6"]);
     for (const [id, source] of sources) sources.set(id, { ...source, localTime: null });
     const result = placeCollages(timeline, sources, "project-no-date", review, {}, 8);
     const collage = collages(result)[0];
     if (!collage || !("kind" in collage)) throw new Error("expected collage");
-    expect(Object.hasOwn(collage.spec.caption!, "date")).toBe(false);
+    expect(collage.spec.caption).toBeUndefined();
     expect(safeParseTimeline(result).ok).toBe(true);
   });
 

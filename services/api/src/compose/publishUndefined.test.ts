@@ -40,7 +40,6 @@ describe("publishGeneration", () => {
           seed: "seed",
           durationSec: 6,
           slots: ["one", "two", "three"].map((slotId) => ({ slotId, shotId: `shot-${slotId}`, kind: "photo" as const })),
-          caption: { place: "Day 1 · Siloso Beach", date: undefined },
         },
       }],
       audioClips: [],
@@ -82,7 +81,7 @@ describe("publishGeneration", () => {
       userId: "owner", projectId, generationId, timeline, droppedPicks: [], now: 1,
     })).resolves.toMatchObject({ status: "playable" });
     expect(tx.set).toHaveBeenCalledOnce();
-    expect(tx.set.mock.calls[0][1]).toMatchObject({ timeline: { videoClips: [{ spec: { caption: { place: "Day 1 · Siloso Beach" } } }] } });
+    expect((tx.set.mock.calls[0][1] as any).timeline.videoClips[0].spec).not.toHaveProperty("caption");
     expect(JSON.stringify(tx.set.mock.calls[0][1])).not.toContain("date");
   });
 });

@@ -9,6 +9,7 @@ const actions: Record<EditorSelection, ContextToolbarAction[]> = {
   audio: ["Volume", "Replace"],
 };
 
-export function contextToolbar(selection: EditorSelection): ContextToolbarAction[] {
+export function contextToolbar(selection: EditorSelection, options: { hasEmptyCollageSlot?: boolean } = {}): ContextToolbarAction[] {
+  if (selection === "collage") return ["Remove", options.hasEmptyCollageSlot ? "AddCell" : "Replace", "Layout"];
   return [...actions[selection]];
 }

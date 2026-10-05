@@ -61,7 +61,7 @@ export function craftBrief(cadenceId: CadenceId, targetSec: number): string {
     "- Nothing else. No wipes, slides, or spins.",
     "",
     "Text",
-    "- At most one short overlay per chapter, naming a place or a moment. Never caption what the viewer can see.",
+    "- Text overlays are optional. Never generate day, chapter, or date labels. Use an overlay only when a short line adds a real story beat; never caption what the viewer can see.",
     "",
     "Audio",
     '- Keep audio on speech and on sound that belongs to the moment; mute or duck it elsewhere.',

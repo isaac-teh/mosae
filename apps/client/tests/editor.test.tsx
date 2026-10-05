@@ -141,6 +141,31 @@ describe("film editor", () => {
     expect(host.querySelector('[aria-label="Delete"]')).toBeNull();
   });
 
+  it("keeps Replace for a selected video clip", async () => {
+    const videoTimeline: Timeline = { ...firstCut, videoClips: firstCut.videoClips.map((clip, index) => index === 0 ? { ...clip, source: { kind: "video", shotId: "video-a", sourceInSec: 0, sourceOutSec: 3 } } : clip) };
+    boundary.repository.getFilmTimeline.mockResolvedValue({ timeline: videoTimeline, sources: {} });
+    await render(<EditorScreen />);
+    await click("Select clip a");
+    expect(host.querySelector('[aria-label="Replace"]')).not.toBeNull();
+  });
+
+  it("shows Add photo and fills the first empty slot when a two-slot collage clip is selected", async () => {
+    const twoSlotCollage = { ...collageClip, spec: { ...collageClip.spec, layoutId: "two-photo-diptych" as const, motionId: "print-drop" as const, slots: [{ slotId: "s1", shotId: "shot-s1", kind: "photo" as const }, { slotId: "s2", empty: true as const }] } };
+    boundary.repository.getFilmTimeline.mockResolvedValue({
+      timeline: { ...firstCut, schemaVersion: 2, videoClips: [twoSlotCollage], durationSec: 4 },
+      sources: {},
+    });
+    boundary.params.planId = "plan";
+    boundary.repository.getPlan.mockResolvedValue({ planId: "plan", moments: [{ id: "m-photo", title: "Trip photo", meta: "Day 1", tag: { emoji: "📷", label: "Photo" }, imageKey: "photo.jpg", kind: "photo", selected: false, favorite: false, shotId: "shot-photo" }], leftOut: [] });
+    await render(<EditorScreen />);
+    await click("Select clip collage-test");
+    expect(host.querySelector('[aria-label="Add photo"]')?.textContent).toContain("Add photo");
+    await click("Add photo");
+    await click("Add cell Trip photo");
+    await advance(1500);
+    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "replaceCollageSlot", clipId: "collage-test", slotId: "s2", shotId: "shot-photo", kind: "photo" }]);
+  });
+
   it("clears the selected collage cell to an empty slot from the toolbar and saves one atomic edit", async () => {
     boundary.repository.getFilmTimeline.mockResolvedValue({
       timeline: { ...firstCut, schemaVersion: 2, videoClips: [collageClip], durationSec: 4 },

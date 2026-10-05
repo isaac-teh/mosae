@@ -63,7 +63,7 @@
   },
   "response": {
     "clips": [
-      { "candidateId": "m-arrival#still@c0", "holdSec": 3.5, "transition": "cut", "audio": "mute" },
+      { "candidateId": "m-arrival#still@c0", "holdSec": 3.5, "transition": "cut", "audio": "mute", "textOverlay": "Day 1 · Siloso Beach" },
       { "candidateId": "m-talking#s0@4c0", "transition": "crossfade", "audio": "keep" },
       { "candidateId": "m-water#s0@0.15c1", "transition": "cut", "audio": "duck", "textOverlay": "Into the water" },
       { "candidateId": "m-dusk#still@c1", "holdSec": 5, "transition": "crossfade", "audio": "mute" }
