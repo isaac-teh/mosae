@@ -164,6 +164,12 @@ describe("Collage", () => {
     expect(markup).not.toMatch(/·\s*<\/div>/);
   });
 
+  it("omits the caption footer entirely when no user caption is supplied", () => {
+    const markup = renderToStaticMarkup(<Collage spec={createCollageSpec("torn-paper", { caption: undefined })} />);
+    expect(markup).not.toContain("background:rgba(250,250,247,.94)");
+    expect(markup).not.toContain("box-shadow:0 2px 9px rgba(18,26,30,.18)");
+  });
+
   it("keeps focus-relay input ranges strictly increasing through the final slot", () => {
     const finalSixSlotRange = focusRelayInputRange(5, 6);
     expect(finalSixSlotRange).toEqual([expect.any(Number), expect.any(Number), 1]);

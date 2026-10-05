@@ -29,6 +29,10 @@ export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentO
   return out;
 }
 
+export function isAutomaticDayLabel(text: string): boolean {
+  return /^(?:day|chapter)\s+\d+\b/i.test(text.trim());
+}
+
 /** Result of a compose run. */
 export type ComposeResult = {
   ok: true;
@@ -500,7 +504,7 @@ export async function runCompose(
     captions: job.captions
       ? result.clips.flatMap((reflowClip, index) => {
           const text = fittedClips[index].textOverlay?.trim();
-          if (!text) return [];
+          if (!text || isAutomaticDayLabel(text)) return [];
           return [{ text, startSec: reflowClip.startSec, endSec: reflowClip.startSec + reflowClip.durationSec }];
         })
       : [],
