@@ -8,6 +8,14 @@ const LIBRARY_IDS = new Set(["photo-table", "torn-paper", "polaroid-garland", "p
 
 type Collage = Extract<Timeline["videoClips"][number], { kind: "collage" }>;
 type CollageOp = EditOp | EditOp[];
+export type CollageSheetState = "collapsed" | "expanded";
+
+export function transitionCollageSheet(state: CollageSheetState, dragDeltaY?: number): CollageSheetState {
+  if (dragDeltaY === undefined) return state === "collapsed" ? "expanded" : "collapsed";
+  if (Math.abs(dragDeltaY) < 40) return state;
+  return dragDeltaY < 0 ? "expanded" : "collapsed";
+}
+
 function thumbnailRects(layoutId: string, count: number): { x: number; y: number; w: number; h: number }[] {
   const gridVariant = COLLAGE_GRID_VARIANTS.find((variant) => variant.id === layoutId)?.id;
   if (gridVariant) return collageGridRects(gridVariant, count);
@@ -41,7 +49,9 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
 }) {
   const [selection, setSelection] = useState({ clipId: clip.clipId, baseLayoutId: clip.spec.layoutId, baseMotionId: clip.spec.motionId, layoutId: clip.spec.layoutId, motionId: clip.spec.motionId });
   const [category, setCategory] = useState<"Layouts" | "Styles">("Layouts");
+  const [sheetState, setSheetState] = useState<CollageSheetState>("collapsed");
   const touchY = useRef<number | null>(null);
+  const suppressHandleClick = useRef(false);
   const isCurrentSelection = selection.clipId === clip.clipId && selection.baseLayoutId === clip.spec.layoutId && selection.baseMotionId === clip.spec.motionId;
   const layoutId = isCurrentSelection ? selection.layoutId : clip.spec.layoutId;
   const motionId = isCurrentSelection ? selection.motionId : clip.spec.motionId;
@@ -80,19 +90,35 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
     }
     onApply({ op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, layoutId: layout.id, motionId, slots } });
   };
-  const handleTouchStart = (event: any) => { touchY.current = event.nativeEvent?.pageY ?? event.touches?.[0]?.clientY ?? null; };
+  const handleTouchStart = (event: any) => {
+    suppressHandleClick.current = false;
+    touchY.current = event.nativeEvent?.pageY ?? event.touches?.[0]?.clientY ?? null;
+  };
   const handleTouchEnd = (event: any) => {
     const y = event.nativeEvent?.pageY ?? event.changedTouches?.[0]?.clientY;
-    if (touchY.current !== null && typeof y === "number" && y - touchY.current > 55) onClose();
+    if (touchY.current !== null && typeof y === "number") {
+      const deltaY = y - touchY.current;
+      if (section === "Layout" && Math.abs(deltaY) >= 40) {
+        suppressHandleClick.current = true;
+        setTimeout(() => { suppressHandleClick.current = false; }, 0);
+        setSheetState((state) => transitionCollageSheet(state, deltaY));
+      } else if (section === "Motion" && deltaY > 55) {
+        onClose();
+      }
+    }
     touchY.current = null;
+  };
+  const toggleFromHandle = () => {
+    if (suppressHandleClick.current) { suppressHandleClick.current = false; return; }
+    setSheetState((state) => transitionCollageSheet(state));
   };
 
   return <View className="absolute inset-0 z-20 justify-end bg-black/10">
-    <View className="max-h-[50%] rounded-t-[24px] bg-[#111d26] px-4 pb-5 pt-2">
-      <View accessibilityRole="adjustable" accessibilityLabel="Drag down to close layout drawer" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className="mb-2 h-5 items-center justify-center">
+    <View className={`${section === "Layout" ? `flex flex-col ${sheetState === "expanded" ? "h-[90dvh] max-h-[calc(90dvh-env(safe-area-inset-top))]" : "h-[50dvh]"}` : "max-h-[50%]"} rounded-t-[24px] bg-[#111d26] px-4 pb-5 pt-2`}>
+      <Pressable accessibilityRole="button" accessibilityLabel={section === "Layout" ? "Toggle layout drawer" : "Drag down to close layout drawer"} onPress={section === "Layout" ? toggleFromHandle : undefined} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className={`${section === "Layout" ? "[touch-action:none]" : ""} mb-2 h-5 ${section === "Layout" ? "shrink-0" : ""} items-center justify-center`}>
         <View className="h-1 w-9 rounded-full bg-[#526574]" />
-      </View>
-      <View className="mb-2 flex-row items-center justify-between border-b border-[#293a45] pb-3">
+      </Pressable>
+      <View onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className={`${section === "Layout" ? "[touch-action:none] shrink-0" : ""} mb-2 flex-row items-center justify-between border-b border-[#293a45] pb-3`}>
         <Text className="font-sans-semibold text-[16px] tracking-[2px] text-on-screen">{section}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Close collage" onPress={onClose} className="size-9 items-center justify-center">
           <Text className="font-sans-semibold text-[24px] text-on-screen">✓</Text>
@@ -112,7 +138,7 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
         </View>
         {category === "Styles" && LIBRARY_IDS.has(layoutId) ? <View className="mb-3"><Text className="mb-1 font-sans text-[11px] text-on-screen-muted">Animation</Text><ScrollView horizontal contentContainerClassName="gap-2">{motionOptions.map((motion) => <Pressable key={motion.id} accessibilityRole="button" accessibilityLabel={`Motion ${motion.label}`} aria-pressed={motionId === motion.id} onPress={() => onApply({ op: "setCollageMotion", clipId: clip.clipId, motionId: motion.id })} className={`min-h-8 rounded-full border px-3 justify-center ${motionId === motion.id ? "border-white bg-[#263744]" : "border-[#526574]"}`}><Text className="font-sans text-[11px] text-on-screen">{motion.label}</Text></Pressable>)}</ScrollView></View> : null}
         {category === "Styles" && !layoutOptions.some((layout) => LIBRARY_IDS.has(layout.id)) ? <Text className="py-4 font-sans text-caption text-on-screen-muted">These styles need at least 3 photos. Tap + above to add a photo slot.</Text> : null}
-        <ScrollView className="min-h-0" contentContainerClassName="flex-row flex-wrap gap-2 pb-1">
+        <ScrollView className="min-h-0 flex-1" contentContainerClassName="flex-row flex-wrap gap-2 pb-1">
           {visibleLayouts.map((layout) => <Pressable key={layout.id} accessibilityRole="button" accessibilityLabel={`Layout ${layout.label}`} aria-pressed={layoutId === layout.id} disabled={count < layout.minSlots || count > layout.maxSlots} accessibilityHint={count < layout.minSlots || count > layout.maxSlots ? `Requires ${layout.minSlots} to ${layout.maxSlots} photos. Adjust number of photos above.` : undefined} onPress={() => chooseLayout(layout.id)} className={`h-[118px] w-[31%] rounded-[14px] bg-[#050a0e] p-2 ${layoutId === layout.id ? "border-2 border-white" : "border-2 border-transparent"}`}>
             <View className="relative flex-1 overflow-hidden rounded-md bg-[#101920]">
               {LIBRARY_IDS.has(layout.id) ? <Image accessibilityLabel={`${layout.label} style preview`} source={demoImage(`collage-${layout.id}${aspect === "16:9" && ["botanical-scrapbook", "nine-photo-grid", "travel-mosaic", "travel-story"].includes(layout.id) ? "-wide" : ""}`)} resizeMode="cover" className="h-full w-full" /> : thumbnailRects(layout.id, count).map(({ x, y, w, h }, i) => <View key={i} className="absolute rounded-[3px] bg-[#71879a]" style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%` }} />)}

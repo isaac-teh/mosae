@@ -24,7 +24,7 @@ import { SwapSheet } from "../components/editor/SwapSheet";
 import { TrimControl } from "../components/editor/TrimControl";
 import { MoveMode } from "../components/editor/MoveMode";
 import { AddSheet } from "../components/editor/AddSheet";
-import { CollagePanel } from "../components/editor/CollagePanel";
+import { CollagePanel, transitionCollageSheet } from "../components/editor/CollagePanel";
 import { CollageCellSheet } from "../components/editor/CollageCellSheet";
 import { SoundtrackSheet } from "../components/editor/SoundtrackSheet";
 import { AudioVolumeSheet } from "../components/editor/AudioVolumeSheet";
@@ -57,6 +57,14 @@ async function render(element: React.ReactNode) { await act(async () => root.ren
 async function click(label: string) { const target = host.querySelector(`[aria-label="${label}"]`) as HTMLElement | null; expect(target, `missing control: ${label}`).not.toBeNull(); await act(async () => target!.click()); }
 
 describe("editor tool operations", () => {
+  it("expands and collapses the collage sheet from taps and vertical drags", () => {
+    expect(transitionCollageSheet("collapsed")).toBe("expanded");
+    expect(transitionCollageSheet("expanded")).toBe("collapsed");
+    expect(transitionCollageSheet("collapsed", -80)).toBe("expanded");
+    expect(transitionCollageSheet("expanded", 80)).toBe("collapsed");
+    expect(transitionCollageSheet("expanded", -10)).toBe("expanded");
+  });
+
   it("swaps a clip using same event alternatives", async () => {
     await render(<SwapSheet visible clipId="a" planId="proposal-1" momentId="m1" repository={repo} onApply={apply} onSource={onSource} onClose={() => {}} />);
     await act(async () => { await Promise.resolve(); });
@@ -369,7 +377,7 @@ describe("editor tool operations", () => {
     apply.mockClear();
     const threeSlotCollage = { ...collage, spec: { ...collage.spec, slots: collage.spec.slots.slice(0, 3) } };
     await render(<CollagePanel clip={threeSlotCollage} section="Layout" onApply={apply} onClose={() => {}} />);
-    expect(host.querySelector('[aria-label="Drag down to close layout drawer"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Toggle layout drawer"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="3 photos"]')?.textContent).toBe("3");
     await click("Increase number of photos");
     expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, slots: [...threeSlotCollage.spec.slots, { slotId: "empty:collage-1:4", kind: "photo", empty: true }] } });

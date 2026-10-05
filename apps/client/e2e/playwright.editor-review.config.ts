@@ -16,8 +16,8 @@ export default defineConfig({
   projects: [
     { name: "chromium-390x844", use: { ...devices["Desktop Chrome"], viewport: phone } },
     { name: "chromium-mobile", use: { ...devices["Pixel 7"], viewport: phone } },
-    { name: "chromium-412x915", use: { ...devices["Desktop Chrome"], viewport: tallPhone } },
+    { name: "chromium-412x915", use: { ...devices["Pixel 7"], viewport: tallPhone } },
     { name: "webkit-390x844", use: { ...devices["iPhone 13"], viewport: phone } },
-    { name: "webkit-412x870", use: { ...devices["iPhone 13"], viewport: tallPhone } },
+    { name: "webkit-412x915", use: { ...devices["iPhone 13"], viewport: tallPhone } },
   ],
 });
