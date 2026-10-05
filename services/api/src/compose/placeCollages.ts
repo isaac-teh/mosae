@@ -5,7 +5,7 @@ import {
   applyEdits, type CollageClip, type Timeline,
 } from "@mosae/contracts";
 import { hamming64 } from "../cluster/duplicates.js";
-import { DIRECTING_RULES, requestedCollageCount } from "./directingRules.js";
+import { DIRECTING_RULES, deterministicPlacement, requestedCollageCount } from "./directingRules.js";
 
 export type CollageSource = {
   assetId: string;
@@ -74,7 +74,8 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
   const collageLimit = requestedCollageCount(mediaCount, collageAmount);
   if (collageLimit === 0) return { ...timeline, schemaVersion: 2 };
   const approved = review.combos.filter((combo) => combo.verdict === "keep" && ALLOWED_COMBOS.some((allowed) => allowed.layoutId === combo.layoutId && allowed.motionId === combo.motionId));
-  const maxCandidateSlots = Math.min(DIRECTING_RULES.collageMaxPhotos, Math.max(2, ...COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((aspect) => aspect === timeline.aspect) && approved.some((combo) => combo.layoutId === layout.id)).map((layout) => layout.maxSlots)));
+  const countRules = mediaCount < 20 ? 4 : mediaCount < 50 && collageLimit > 1 ? 4 : DIRECTING_RULES.collageMaxPhotos;
+  const maxCandidateSlots = Math.min(countRules, DIRECTING_RULES.collageMaxPhotos, Math.max(2, ...COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((aspect) => aspect === timeline.aspect) && approved.some((combo) => combo.layoutId === layout.id)).map((layout) => layout.maxSlots)));
   const clips = timeline.videoClips;
   const replacements = new Map<number, { end: number; collage: CollageClip }>();
   const chapterCounts = new Map<string, number>();
@@ -103,7 +104,8 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     // Ordinary trips rarely have sub-minute duplicate bursts. If the tight
     // candidate set is too small for a reviewed layout, use a coherent run
     // from one day or one event to reach its minimum slot count.
-    if (group.length < 3) {
+    const requiredMin = mediaCount < 20 ? 3 : mediaCount < 50 && collageLimit === 1 ? 4 : 2;
+    if (group.length < requiredMin) {
       group.length = 1;
       for (let nextIndex = index + 1; nextIndex < clips.length && group.length < maxCandidateSlots; nextIndex++) {
         const next = clips[nextIndex];
@@ -112,7 +114,7 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
         group.push(next);
       }
     }
-    const minGroup = mediaCount < 20 ? 3 : 2;
+    const minGroup = requiredMin;
     if (group.length < minGroup) { index++; continue; }
     const shotIds = group.map((clip) => clip.source.shotId);
     if (new Set(shotIds).size !== shotIds.length || shotIds.some((shotId) => usedShots.has(shotId))) { index++; continue; }
@@ -162,8 +164,22 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     if (replacement) return [replacement.collage];
     return skipped.has(index) ? [] : [clip];
   });
+  // A stable seed selects a permitted boundary arrangement. Prefer a choice
+  // based on story metadata by seeding with event/chapter identities as well
+  // as the generation, so distinct stories can open or close on their strongest run.
+  const collageCount = replacements.size;
+  const placement = deterministicPlacement(visual.length, collageCount, `${seed}:${[...replacements.values()].map(({ collage }) => `${collage.chapterId}:${collage.spec.slots.map((slot) => slot.shotId).join(",")}`).join("|")}`);
+  const collageClips = [...replacements.values()].map(({ collage }) => collage);
+  const targets = placement.map((position, index) => ({ clipId: collageClips[index]!.clipId, position }));
   const provisional: Timeline = { ...timeline, schemaVersion: 2, videoClips: visual };
-  const relaid = applyEdits(provisional, [{ op: "move", clipId: idOf(visual[0]), toIndex: 0 }]);
-  if (!relaid.ok) throw new Error(`collage placement failed: ${relaid.error}`);
-  return relaid.timeline;
+  let relaid = provisional;
+  for (const target of targets) {
+    const moved = applyEdits(relaid, [{ op: "move", clipId: target.clipId, toIndex: target.position }]);
+    if (!moved.ok) throw new Error(`collage placement failed: ${moved.error}`);
+    relaid = moved.timeline;
+  }
+  // applyEdits performs reflow after each move and preserves clip identities.
+  const finalMove = applyEdits(relaid, [{ op: "move", clipId: idOf(relaid.videoClips[0]!), toIndex: 0 }]);
+  if (finalMove.ok) relaid = finalMove.timeline;
+  return relaid;
 }
