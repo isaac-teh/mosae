@@ -253,6 +253,20 @@ describe("runCompose — happy path", () => {
     if (result.ok) expect(result.timeline.durationSec).toBeLessThanOrEqual(10);
   });
 
+  it("lets a user-selected reflective Short compress holds to the 1.2-second base", async () => {
+    const moments = ["photo1", "photo2", "photo3"].map((id, index) => ({ id, shotId: `shot-${index}`, kind: "photo" as const, title: id, description: "", rationale: "" }));
+    const proposal = makeProposal({ moments, chapters: [{ id: "ch1", title: "Chapter 1", summary: "", momentIds: moments.map(({ id }) => id) }] });
+    const assets = new Map(moments.map(({ id }) => [id, { kind: "photo" as const, analysis: { caption: id } }]));
+    const result = await runCompose(makeJob({ proposal, durationId: "short", durationSec: 3, cadenceId: "reflective" }), makeDeps({
+      assets,
+      generateStructured: async () => ({ clips: moments.map(({ id }) => ({ candidateId: `${id}#still@c0`, holdSec: 2.2, transition: "cut", audio: "mute" })), musicCues: [] }),
+    }));
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    const durations = result.timeline.videoClips.map((clip) => clip.durationSec);
+    expect(durations).toEqual([1.2, 1.2, 1.2]);
+    expect(result.timeline.durationSec).toBeLessThanOrEqual(3.9);
+  });
+
   it("clamps a short target to the available proposal material", async () => {
     const result = await runCompose(makeJob({ durationId: "short", durationSec: 29 }), makeDeps());
     expect(result.ok).toBe(true);

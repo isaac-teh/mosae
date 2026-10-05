@@ -53,6 +53,23 @@ describe("placeCollages", () => {
     expect(safeParseTimeline(result).ok).toBe(true);
   });
 
+  it("keeps a collage at its story position when legal boundary moves would reorder the arc", () => {
+    const { timeline, sources } = fixture(["intro", "wide", "burst", "burst", "burst", "burst", "tail", "close"]);
+    sources.set("clip-0", { ...sources.get("clip-0")!, localTime: "2026-05-01T09:00:00" });
+    sources.set("clip-1", { ...sources.get("clip-1")!, localTime: "2026-05-02T09:00:00" });
+    for (let index = 2; index < 6; index++) sources.set(`clip-${index}`, {
+      ...sources.get(`clip-${index}`)!, localTime: `2026-05-03T09:0${index}:00`,
+    });
+    sources.set("clip-6", { ...sources.get("clip-6")!, localTime: "2026-05-04T09:00:00" });
+    sources.set("clip-7", { ...sources.get("clip-7")!, localTime: "2026-05-05T09:00:00" });
+    const result = placeCollages(timeline, sources, "arc-safe", review, {}, 8);
+    const index = result.videoClips.findIndex((clip) => "kind" in clip);
+    expect(index).toBe(2);
+    expect(result.videoClips.map((clip) => "kind" in clip ? clip.spec.slots[0]?.shotId : clip.source.shotId)).toEqual([
+      "shot-0", "shot-1", "shot-2", "shot-6", "shot-7",
+    ]);
+  });
+
   it("composes a burst with no capture time and omits the caption date key", () => {
     const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "e4", "e5", "e6"]);
     for (const [id, source] of sources) sources.set(id, { ...source, localTime: null });
@@ -121,6 +138,17 @@ describe("placeCollages", () => {
     expect(collages(result)).toHaveLength(2);
     expect(collages(result).length / result.videoClips.length).toBeLessThanOrEqual(0.4);
     expect(new Set(collages(result).map((clip) => "kind" in clip ? clip.chapterId : "" )).size).toBe(collages(result).length);
+  });
+
+  it.each([[20, 2], [50, 3]] as const)("uses synthetic media to cover the %i-photo collage tier", (mediaCount, expectedCollages) => {
+    const events = Array.from({ length: mediaCount }, (_, index) => `event-${Math.floor(index / 4)}`);
+    const { timeline, sources } = fixture(events);
+    const result = placeCollages(timeline, sources, `synthetic-${mediaCount}`, {
+      combos: [{ layoutId: "travel-mosaic", motionId: "print-drop", verdict: "keep" }],
+    }, { collageAmount: "lots" }, mediaCount);
+    const placed = collages(result);
+    expect(placed).toHaveLength(expectedCollages);
+    expect(placed.every((clip) => "kind" in clip && clip.spec.slots.length <= (mediaCount >= 50 ? 6 : 4))).toBe(true);
   });
 
   it("is deterministic for the same generation seed", () => {

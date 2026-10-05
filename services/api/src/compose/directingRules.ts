@@ -8,6 +8,7 @@ export const DIRECTING_RULES = {
   collageMaxPhotos: 6,
   minimumFilmSec: 20,
   singlePhotoMaxSec: 4,
+  shortTierMinSec: 1.2,
   cadenceMultiplier: { tender: 2, reflective: 1.8, playful: 1, energetic: 1, celebratory: 1.2 } satisfies Record<CadenceId, number>,
 } as const;
 

@@ -54,7 +54,7 @@ function firestore() {
   return db as unknown as Firestore;
 }
 
-function composeFirestore(proposalData: StoryProposal, focus?: string, excluded = false, duration: { durationId: string; durationSec?: number } = { durationId: "30s" }): Firestore {
+function composeFirestore(proposalData: StoryProposal, focus?: string, excluded = false, duration: { durationId: string | null; durationSec?: number } = { durationId: "30s" }): Firestore {
   const generationData = {
     schemaVersion: 1,
     proposalId: proposalData.id,
@@ -121,6 +121,23 @@ describe("createCompose render handoff", () => {
 
     expect(publishGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ userId: "owner", projectId, generationId }));
     expect(enqueueRender).not.toHaveBeenCalled();
+  });
+
+  it("marks a tierless film below 20 seconds with the existing Short tier", async () => {
+    const projectId = "project1";
+    const generationId = "generation1";
+    const db = composeFirestore(proposal(), undefined, false, { durationId: null });
+    vi.mocked(publishGeneration).mockResolvedValue({} as never);
+    vi.mocked(runCompose).mockResolvedValue({
+      ok: true, timeline: { durationSec: 12 } as never, droppedPicks: [], reasons: [],
+      durationSelection: { id: "short", durationSec: 12 },
+    } as never);
+    const compose = createCompose({ db, generateStructured: async () => ({}) as never });
+
+    await expect(compose({ projectId, generationId })).resolves.toBe("composed");
+    expect(publishGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      settings: expect.objectContaining({ durationId: "short", durationSec: 12 }),
+    }));
   });
 });
 

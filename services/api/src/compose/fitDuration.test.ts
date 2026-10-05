@@ -143,7 +143,7 @@ describe("fitDuration — edge cases", () => {
       expect(result.notes.join(" ")).toContain("Short tier applies");
     } else {
       expect(total).toBeGreaterThanOrEqual(20);
-      expect(result.targetSec).toBe(20);
+      expect(result.targetSec).toBeGreaterThanOrEqual(20);
     }
   });
 

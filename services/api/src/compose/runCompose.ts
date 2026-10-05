@@ -14,7 +14,7 @@ import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
 import { applyArc, orderByChronology, type ClipTime } from "./chronology.js";
 import { loadCollageReview, placeCollages, type CollageReview, type CollageSource } from "./placeCollages.js";
-import { fadeOutSec } from "./directingRules.js";
+import { DIRECTING_RULES, fadeOutSec } from "./directingRules.js";
 
 export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
   if (!momentOrder?.length) return clips;
@@ -38,6 +38,8 @@ export type ComposeResult = {
   /** What duration fitting had to do. Empty when the film landed on target. */
   notes: string[];
   reasons: string[];
+  /** Automatically selected Short tier when a tierless film cannot reach 20s. */
+  durationSelection?: { id: "short"; durationSec: number };
 } | {
   ok: false;
   reasons: string[];
@@ -348,13 +350,27 @@ export async function runCompose(
   const { clips: fittedClips, notes: fitNotes, targetSec: fittedTargetSec } = fitDuration(
     selectedClips,
     targetSec,
-    holdsFor(job.cadenceId),
+    job.durationId === "short"
+      ? { ...holdsFor(job.cadenceId), min: Math.min(holdsFor(job.cadenceId).min, DIRECTING_RULES.shortTierMinSec) }
+      : holdsFor(job.cadenceId),
     job.proposal.constraints.mustIncludeMomentIds,
     job.durationId === null ? { minimumFilmSec: 20, maximumStretchedPhotoSec: 4 } : {},
   );
 
   if (fittedClips.length === 0) {
     return { ok: false, reasons: ["no clips after duration fitting"] };
+  }
+  if (job.durationId === null) {
+    // The no-tier stretch is a documented exception to cadence's normal
+    // maximum and must be visible to reflow and the semantic validator.
+    for (const candidate of candidates) if (candidate.kind === "photo") candidate.maxHoldSec = 4;
+  }
+  if (job.durationId === "short") {
+    // Adaptive Short is an explicit tier choice and may compress cadence down
+    // to the 1.2-second base when the requested target needs it.
+    for (const candidate of candidates) {
+      if (candidate.kind === "photo") candidate.minHoldSec = Math.min(candidate.minHoldSec ?? DIRECTING_RULES.shortTierMinSec, DIRECTING_RULES.shortTierMinSec);
+    }
   }
 
   // Every clip must name a shot the renderer can resolve to a file. A moment id
@@ -544,5 +560,14 @@ export async function runCompose(
     return { ok: false, reasons: [`structural validation failed: ${parsedResult.errors.join("; ")}`] };
   }
 
-  return { ok: true, timeline: parsedResult.timeline, droppedPicks, notes: fitNotes, reasons: castReasons };
+  return {
+    ok: true,
+    timeline: parsedResult.timeline,
+    droppedPicks,
+    notes: fitNotes,
+    reasons: castReasons,
+    ...(job.durationId === null && parsedResult.timeline.durationSec < 20
+      ? { durationSelection: { id: "short" as const, durationSec: parsedResult.timeline.durationSec } }
+      : {}),
+  };
 }

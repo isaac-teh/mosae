@@ -97,6 +97,10 @@ export function fitDuration(
           excess -= cut;
         }
         notes.push(`trimmed silent video by ${(drift - excess).toFixed(1)}s`);
+        if (excess > 0.01) {
+          effectiveTargetSec = filmLength(workingClips);
+          notes.push(`photo holds exhausted at ${effectiveTargetSec.toFixed(1)}s (target was ${targetSec}s)`);
+        }
       } else {
         // Too short: photo holds exhausted at min, can't pad
         const currentTotal = filmLength(workingClips);
@@ -142,8 +146,8 @@ export function fitDuration(
       effectiveTargetSec = stretchedLength;
       notes.push(`maximum-stretched film is ${stretchedLength.toFixed(1)}s; Short tier applies`);
     } else {
-      effectiveTargetSec = options.minimumFilmSec;
-      notes.push(`stretched photo holds to ${stretchedLength.toFixed(1)}s minimum`);
+      effectiveTargetSec = stretchedLength;
+      notes.push(`tierless film reaches ${stretchedLength.toFixed(1)}s (20s minimum)`);
     }
   }
 

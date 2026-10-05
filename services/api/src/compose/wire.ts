@@ -326,6 +326,9 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       timeline: result.timeline,
       droppedPicks: result.droppedPicks,
       reasons: result.reasons,
+      ...(result.durationSelection ? {
+        settings: { ...settings.settings, durationId: result.durationSelection.id, durationSec: result.durationSelection.durationSec },
+      } : {}),
       now: Date.now(),
     });
 

@@ -5,7 +5,7 @@ import {
   applyEdits, type CollageClip, type Timeline,
 } from "@mosae/contracts";
 import { hamming64 } from "../cluster/duplicates.js";
-import { DIRECTING_RULES, deterministicPlacement, requestedCollageCount } from "./directingRules.js";
+import { collagePlacementOptions, DIRECTING_RULES, requestedCollageCount } from "./directingRules.js";
 
 export type CollageSource = {
   assetId: string;
@@ -165,11 +165,33 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     return skipped.has(index) ? [] : [clip];
   });
   // A stable seed selects a permitted boundary arrangement. Prefer a choice
-  // based on story metadata by seeding with event/chapter identities as well
-  // as the generation, so distinct stories can open or close on their strongest run.
+  // based on story metadata, but only if it preserves the already-directed
+  // order of every story beat around each collage.
   const collageCount = replacements.size;
-  const placement = deterministicPlacement(visual.length, collageCount, `${seed}:${[...replacements.values()].map(({ collage }) => `${collage.chapterId}:${collage.spec.slots.map((slot) => slot.shotId).join(",")}`).join("|")}`);
   const collageClips = [...replacements.values()].map(({ collage }) => collage);
+  const placementSeed = `${seed}:${collageClips.map((collage) => `${collage.chapterId}:${collage.spec.slots.map((slot) => slot.shotId).join(",")}`).join("|")}`;
+  const positionOptions = collagePlacementOptions(visual.length, collageCount);
+  const preservesArc = (positions: number[]) => {
+    const moved = [...visual];
+    for (let index = 0; index < positions.length; index++) {
+      const collage = collageClips[index]!;
+      const from = moved.findIndex((clip) => idOf(clip) === collage.clipId);
+      const [clip] = moved.splice(from, 1);
+      moved.splice(positions[index]!, 0, clip!);
+    }
+    return collageClips.every((collage) => {
+      const beforeOriginal = visual.slice(0, visual.findIndex((clip) => idOf(clip) === collage.clipId)).map(idOf);
+      const beforeMoved = moved.slice(0, moved.findIndex((clip) => idOf(clip) === collage.clipId)).map(idOf);
+      return beforeOriginal.length === beforeMoved.length && beforeOriginal.every((clipId, index) => clipId === beforeMoved[index]);
+    });
+  };
+  const safeOptions = positionOptions.filter(preservesArc);
+  let placement: number[] = [];
+  if (safeOptions.length) {
+    let value = 2166136261;
+    for (const char of placementSeed) value = Math.imul(value ^ char.charCodeAt(0), 16777619);
+    placement = safeOptions[(value >>> 0) % safeOptions.length]!;
+  }
   const targets = placement.map((position, index) => ({ clipId: collageClips[index]!.clipId, position }));
   const provisional: Timeline = { ...timeline, schemaVersion: 2, videoClips: visual };
   let relaid = provisional;
