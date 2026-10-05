@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -17,12 +18,17 @@ export type LibraryTrack = {
   durationSec: number;
   bpm: number;
   beatsSec: number[];
+  source?: string;
+  sourceId?: string;
+  artist?: string;
+  licence?: string;
+  sourceUrl?: string;
 };
 
 const FIXTURES = fileURLToPath(new URL("../../fixtures/music/", import.meta.url));
 
 export function loadLibrary(directory = FIXTURES): LibraryTrack[] {
-  const parsed = JSON.parse(readFileSync(`${directory}library.json`, "utf8")) as { tracks: LibraryTrack[] };
+  const parsed = JSON.parse(readFileSync(join(directory, "library.json"), "utf8")) as { tracks: LibraryTrack[] };
   return parsed.tracks;
 }
 
@@ -59,7 +65,9 @@ export async function ensureLibraryUploaded(bucket: Bucket, tracks: LibraryTrack
     const file = bucket.file(libraryPath(track));
     const [exists] = await file.exists();
     if (exists) continue;
-    await file.save(readFileSync(`${directory}${track.file}`), { contentType: "audio/mpeg" });
+    const localFile = join(directory, track.file);
+    if (!existsSync(localFile)) continue;
+    await file.save(readFileSync(localFile), { contentType: "audio/mpeg" });
     uploaded++;
   }
   return uploaded;

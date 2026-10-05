@@ -60,6 +60,8 @@ firebase_deploy --project "$PROJECT_ID" --only firestore:rules,firestore:indexes
 for track in services/api/fixtures/music/*.mp3; do
   run gcloud storage cp "$track" "gs://$BUCKET/library/music/$(basename "$track")" --project "$PROJECT_ID"
 done
+# Pixabay MP3s live outside the API image/repository. Upload them once from the
+# operator workstation with `npm run import:music -w services/api -- --bucket "$BUCKET"`.
 for photo in services/api/fixtures/demo/trip1-v2/photos/*.jpg; do
   run gcloud storage cp "$photo" "gs://$BUCKET/library/demo/trip1-v2/$(basename "$photo")" --project "$PROJECT_ID"
 done

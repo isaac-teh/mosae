@@ -320,6 +320,20 @@ describe("downstream story screens", () => {
     expect(repo.directFilm).toHaveBeenCalledWith("plan-a", expect.objectContaining({ cadenceId: "playful", soundtrackId: null }));
   });
 
+  it("shows a scrollable soundtrack picker for the full catalog", async () => {
+    const soundtracks = Array.from({ length: 38 }, (_, index) => ({ id: `pixabay-${index}`, name: `Track ${index}`, description: "Instrumental", mood: index < 4 ? "tender" : "playful", suggested: index < 4 }));
+    const options = { ...directionOptions("Our trip"), soundtracks };
+    const repo = { getDirectionOptions: vi.fn(async () => options), directFilm: vi.fn(async () => ({ filmId: "film-many" })) };
+    boundary.apiRepositories = new Map([["project-a", repo]]);
+    boundary.params = { planId: "plan-a", repository: "api", projectId: "project-a" };
+    await render(DirectFilmScreen);
+    expect(host.querySelectorAll('[aria-label^="Pick soundtrack Track "]')).toHaveLength(38);
+    const chosen = host.querySelector('[aria-label="Pick soundtrack Track 37"]') as HTMLButtonElement;
+    await act(async () => chosen.click());
+    await click("Direct my film");
+    expect(repo.directFilm).toHaveBeenCalledWith("plan-a", expect.objectContaining({ soundtrackId: "pixabay-37" }));
+  });
+
   it("shows the rendering overlay only while the film is actually rendering", async () => {
     const repo = { getFilm: vi.fn(async () => ({ ...film("film-1", "plan-a", "poster"), rendering: true })) };
     boundary.apiRepositories = new Map([["project-a", repo]]);

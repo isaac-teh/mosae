@@ -5,10 +5,14 @@ describe("music library", () => {
   const tracks = loadLibrary();
 
   it("loads every track with its measured beats", () => {
-    expect(tracks.length).toBeGreaterThanOrEqual(5);
+    expect(tracks).toHaveLength(38);
+    expect(new Set(tracks.map((track) => track.id)).size).toBe(tracks.length);
     for (const track of tracks) {
       expect(track.beatsSec.length).toBeGreaterThan(10);
       expect(track.durationSec).toBeGreaterThan(30);
+      expect(["tender", "reflective", "playful", "energetic", "celebratory"]).toContain(track.cadence);
+      expect(track.beatsSec.every((beat, index, values) => beat >= 0 && beat < track.durationSec && (!index || beat > values[index - 1]!))).toBe(true);
+      if (track.id.startsWith("pixabay-")) expect(track).toMatchObject({ source: "Pixabay", licence: "Pixabay Content License", sourceId: track.id.slice("pixabay-".length) });
     }
   });
 
@@ -37,7 +41,8 @@ describe("music library", () => {
         save: vi.fn(async () => { saved.push(path); }),
       }),
     };
-    expect(await ensureLibraryUploaded(bucket, tracks)).toBe(tracks.length - 1);
+    expect(await ensureLibraryUploaded(bucket, tracks, "/tmp/nonexistent-music-library/")).toBe(0);
+    expect(await ensureLibraryUploaded(bucket, tracks)).toBe(5);
     expect(saved).not.toContain(libraryPath(tracks[0]!));
   });
 });
