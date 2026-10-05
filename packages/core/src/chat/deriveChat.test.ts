@@ -123,6 +123,31 @@ describe("deriveChat state table", () => {
     }
   });
 
+  it("opens with a counted question when there is no meaningful suggestion", () => {
+    const state = deriveChat({ ...base(), summary: { ...summary, country: null, season: null, places: [] }, intent: null, people: null, peopleConfirmed: false, plan: null });
+    expect(state.items[0]).toMatchObject({ kind: "mosae", text: "What were these 10 moments about?" });
+  });
+
+  it("acknowledges the story answer and confirms a mentioned relationship against the top face cluster", () => {
+    const state = deriveChat({ ...base(), intent: { text: "My son children day celebration" }, people: [
+      { personId: "son", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
+      { personId: "other", name: null, role: null, skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
+    ], peopleConfirmed: false, plan: null });
+    expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ kind: "mosae", text: "A Children's Day celebration for your son — lovely!" });
+    expect(state.items.find((item) => item.kind === "person-confirm")).toMatchObject({ personId: "son", label: "My son", text: "Is this your son?" });
+  });
+
+  it("uses a warm question when the story answer does not mention a person", () => {
+    const state = deriveChat({ ...base(), intent: { text: "A day at the beach" }, people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
+    expect(state.items.find((item) => item.kind === "person")).toMatchObject({ personId: "p1", momentCount: 4, questionText: "Who's this? They're in 4 of your moments." });
+  });
+
+  it("uses a normalized interpret summary and named person when both are available", () => {
+    const state = deriveChat({ ...base(), intent: { text: "Mia's Children's Day party" }, storySummary: "Children's Day celebration", mentionedPeople: ["Mia"], people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
+    expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ text: "A Children's Day celebration for Mia — lovely!" });
+    expect(state.items.find((item) => item.kind === "person-confirm")).toMatchObject({ text: "Is this Mia?", label: "Mia" });
+  });
+
   it("uses the flow copy and surfaces summary progress", () => {
     const pending = deriveChat({ ...base(), summary: { ...summary, ready: { ...summary.ready, summary: false }, processed: { ...summary.processed, ingested: 3 } }, intent: null, people: null, peopleConfirmed: false, plan: null });
     expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Reading your photos, 3 of 10" });
@@ -137,7 +162,7 @@ describe("deriveChat state table", () => {
     const items = state.items;
     expect(items.findIndex((item) => item.id === "occasion-message")).toBeLessThan(items.findIndex((item) => item.id === "occasion-answer"));
     expect(items.findIndex((item) => item.id === "person-question-p1")).toBeLessThan(items.findIndex((item) => item.id === "person-answer-p1"));
-    expect(items.find((item) => item.id === "person-question-p1")).toMatchObject({ kind: "mosae", text: "One person appears in 12 moments. Who is this?", photos: ["face.jpg"] });
+    expect(items.find((item) => item.id === "person-question-p1")).toMatchObject({ kind: "mosae", text: "Who's this? They're in 12 of your moments.", photos: ["face.jpg"] });
     expect(items.findIndex((item) => item.id === "direction-question")).toBeLessThan(items.findIndex((item) => item.id === "direction-answer"));
   });
 

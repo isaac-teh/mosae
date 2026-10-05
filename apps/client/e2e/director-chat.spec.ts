@@ -63,6 +63,19 @@ for (const fixture of [
   });
 }
 
+test("R1 synthetic summary with no story suggestion asks openly without confirm chips", async ({ page }) => {
+  await page.route(/\/api\/projects\/[^/]+\/summary$/, route => route.fulfill({ json: {
+    total: 14, photos: 14, clips: 0, days: 1, places: [], country: null, season: null, dateRange: null,
+    processed: { ingested: 14, understood: 14, faces: 0 },
+    ready: { summary: true, faces: true, plan: false, story: true },
+  } }));
+  const summaryResponse = page.waitForResponse(response => /\/api\/projects\/open-story-question\/summary$/.test(response.url()));
+  await page.goto("/director?repository=api&projectId=open-story-question");
+  await summaryResponse;
+  await expect(page.getByText("What were these 14 moments about?", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Yes,/ })).toHaveCount(0);
+});
+
 test("R1 real upload: all-failed transfer offers retry and cannot continue", async ({ page }) => {
   test.setTimeout(120_000);
   await page.route(/:28199\//, route => route.fulfill({ status: 403, json: { error: { code: 403, message: "Synthetic denied upload" } } }));

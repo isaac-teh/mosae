@@ -183,6 +183,7 @@ export default function DirectorScreen() {
           <View className="flex-row gap-2"><Button label="Open in editor" variant="secondary" onPress={() => router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", planId: item.film.planId, generationId: item.film.filmId, request: "", ...story.flow } } as any)} /><Button label={item.film.generationStatus === "saved" ? "Saved" : "Save film"} disabled={saving || item.film.generationStatus === "saved"} onPress={() => scrollAfterAction(actions.saveFilm)} /></View>
         </View>;
         if (item.kind === "occasion") {
+          if (!projectSummary || (!projectSummary.country && !projectSummary.season && projectSummary.places.length === 0)) return null;
           const country = projectSummary?.country;
           const answer = country ? `Yes, our ${country} trip` : "Yes, that's our story";
           const storyText = country ? `${country} trip` : projectSummary?.places[0] ?? "Our story";
@@ -192,8 +193,13 @@ export default function DirectorScreen() {
           return <Pressable key={item.id} role="button" aria-label={answer} onPress={() => scrollAfterAction(() => actions.confirmOccasion(answer, storyText))} className="max-w-[80%] self-end rounded-md bg-bubble-you px-4 py-3"><Text className="font-sans text-body text-ink">{answer}</Text></Pressable>;
         }
         if (item.kind === "person") return <View key={item.id} className="gap-3">
-          <ChatPersonQuestion momentCount={item.momentCount} samples={item.sampleFaces} days={item.days} chips={personAnswerChips(item.ageBand, people.filter((person) => person.personId !== item.personId).map((person) => person.name ?? ""))} onPick={(role) => scrollAfterAction(() => actions.setPerson(item.personId, role))} onTypeName={() => scrollAfterAction(() => setNamingPerson(item.personId))} onSkip={() => scrollAfterAction(() => actions.setPerson(item.personId, "Skip"))} />
+          <ChatPersonQuestion momentCount={item.momentCount} samples={item.sampleFaces} days={item.days} question={item.questionText} chips={personAnswerChips(item.ageBand, people.filter((person) => person.personId !== item.personId).map((person) => person.name ?? ""))} onPick={(role) => scrollAfterAction(() => actions.setPerson(item.personId, role))} onTypeName={() => scrollAfterAction(() => setNamingPerson(item.personId))} onSkip={() => scrollAfterAction(() => actions.setPerson(item.personId, "Skip"))} />
           {namingPerson === item.personId && <View className="flex-row gap-2"><TextInput accessibilityLabel="Person name" value={name} onChangeText={setName} className="min-h-11 flex-1 rounded-md border border-line-strong px-3 font-sans text-ink" /><Pressable role="button" onPress={() => scrollAfterAction(() => { if (name.trim()) return actions.setPerson(item.personId, "Type a name", name.trim()); setName(""); setNamingPerson(null); })} className="min-h-11 justify-center px-3"><Text className="font-sans-semibold text-action">Save name</Text></Pressable></View>}
+        </View>;
+        if (item.kind === "person-confirm") return <View key={item.id} className="gap-3">
+          <ChatMessage from="mosae" text={item.text} photos={item.sampleFaces} />
+          <ChatProposal replies={[{ id: "yes", label: "Yes" }, { id: "someone-else", label: "Someone else" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveMentionedPerson(item.personId, item.label, choice === "yes"))} />
+          <Button label="Skip" variant="quiet" onPress={() => scrollAfterAction(() => actions.setPerson(item.personId, "Skip"))} />
         </View>;
         if (item.kind === "merge-followup") return <View key={item.id} className="gap-3">
           <ChatMessage from="mosae" text={item.text} />

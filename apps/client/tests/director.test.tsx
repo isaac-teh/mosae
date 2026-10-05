@@ -172,6 +172,12 @@ describe("Director chat", () => {
     expect(hasText("Yes, our Japan trip")).toBe(true);
   });
 
+  it("asks openly without a confirmation chip when the summary has no meaningful suggestion", async () => {
+    setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), places: [], country: null, season: null }); await renderScreen();
+    expect(hasText("What were these 8 moments about?")).toBe(true);
+    expect(host.querySelector('button[aria-label="Yes, that\'s our story"]')).toBeFalsy();
+  });
+
   it("titles the chat from country and season, then falls back to place and Your film", async () => {
     setup(); await renderScreen();
     expect(host.textContent).toContain("Japan, October");
@@ -294,7 +300,7 @@ describe("Director chat", () => {
     mocks.repo.getPeople.mockImplementation(async () => reads++ === 0 ? null : people);
     await renderScreen();
     await click("Yes, our Japan trip");
-    await waitFor(() => expect(hasText("Who is this?")).toBe(true));
+    await waitFor(() => expect(hasText("Who's this? They're in 212 of your moments.")).toBe(true));
     expect(host.querySelectorAll('[data-face-preview="true"]').length).toBeGreaterThan(0);
   });
 
@@ -315,7 +321,27 @@ describe("Director chat", () => {
     await click("Yes, our Japan trip");
     await click("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", role: "child", name: "My daughter" })]) })));
-    expect(hasText("One person appears in 90 moments. Who is this?")).toBe(true);
+    expect(hasText("Who's this? They're in 90 of your moments.")).toBe(true);
+  });
+
+  it("confirms a story-mentioned son on the top face cluster and saves Yes as My son", async () => {
+    setup({ interpret: async () => ({ reply: "Children's Day celebration", change: { kind: "occasion", storyText: "Children's Day celebration", mentionedPeople: ["son"] } }) }); await renderScreen();
+    const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "My son children day celebration"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("→"); await click("Yes, that's right");
+    await waitFor(() => expect(hasText("A Children's Day celebration for your son — lovely!")).toBe(true));
+    await waitFor(() => expect(hasText("Is this your son?")).toBe(true));
+    await click("Yes");
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "My son", role: "child" })]) })));
+  });
+
+  it("reveals existing person choices after Someone else", async () => {
+    setup({ interpret: async () => ({ reply: "Children's Day celebration", change: { kind: "occasion", storyText: "Children's Day celebration", mentionedPeople: ["son"] } }) }); await renderScreen();
+    const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "My son children day celebration"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("→"); await click("Yes, that's right"); await click("Someone else");
+    expect(hasText("Is this your son?")).toBe(false);
+    expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
   });
 
   it("does not revise a plan proposal until its asynchronous job has published it", async () => {
@@ -361,7 +387,7 @@ describe("Director chat", () => {
     await click("Me");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(2));
     expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ merges: [{ fromPersonId: "person-2", toPersonId: "person-1" }] }));
-    await waitFor(() => expect(hasText("One person appears in 90 moments. Who is this?")).toBe(true));
+    await waitFor(() => expect(hasText("Who's this? They're in 90 of your moments.")).toBe(true));
   });
 
   it("does not send a second cast edit while the first one is still pending", async () => {
