@@ -6,7 +6,7 @@ import { fixtureTimeline } from "./fixtureTimeline";
 vi.mock("remotion", () => ({
   AbsoluteFill: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
   Sequence: ({ children, from, durationInFrames }: React.PropsWithChildren<{ from: number; durationInFrames: number }>) => <section data-from={from} data-duration={durationInFrames}>{children}</section>,
-  Img: ({ src, style }: { src: string; style?: React.CSSProperties }) => <img src={src} style={style} />,
+  Img: ({ src, style, ...props }: { src: string; style?: React.CSSProperties; [key: string]: unknown }) => <img src={src} style={style} {...props} />,
   OffthreadVideo: ({ src, style }: { src: string; style?: React.CSSProperties }) => <video src={src} style={style} />,
   Audio: () => null,
   useCurrentFrame: () => 14,
@@ -41,6 +41,35 @@ describe("MosaeTimeline", () => {
     const onSelectClip = vi.fn();
     const active = renderToStaticMarkup(<MosaeTimeline timeline={fixtureTimeline} sources={{ film: "/film.mp4" }} onSelectClip={onSelectClip} />);
     expect(active).toContain('aria-label="Select video clip"');
+  });
+
+  it("stacks a portrait photo over the blurred fill and applies motion to the foreground", () => {
+    const timeline = {
+      ...fixtureTimeline,
+      aspect: "16:9" as const,
+      videoClips: [{
+        id: "portrait-first",
+        source: { kind: "photo" as const, shotId: "portrait", width: 400, height: 800 },
+        startSec: 0,
+        durationSec: 2,
+        transitionIn: { kind: "cut" as const, durationSec: 0 },
+        motion: { kind: "slow-zoom" as const, from: 1, to: 1.1 },
+      }],
+    };
+    const html = renderToStaticMarkup(<MosaeTimeline timeline={timeline} sources={{ portrait: "/portrait.jpg" }} />);
+
+    const backgroundIndex = html.indexOf('data-blurred-fill-background="true"');
+    const foregroundIndex = html.indexOf('data-photo-media="true"');
+    expect(backgroundIndex).toBeGreaterThanOrEqual(0);
+    expect(foregroundIndex).toBeGreaterThan(backgroundIndex);
+    expect(html.slice(backgroundIndex, foregroundIndex)).toContain("z-index:0");
+    expect(html.slice(backgroundIndex, foregroundIndex)).toContain("filter:blur(40px) brightness(0.6)");
+    expect(html.slice(backgroundIndex, foregroundIndex)).toContain("transform:scale(1.15)");
+    const foreground = html.slice(html.lastIndexOf('style="', foregroundIndex), html.indexOf(">", foregroundIndex));
+    expect(foreground).toContain("position:absolute;inset:0;z-index:1");
+    expect(foreground).toContain("object-fit:contain");
+    expect(foreground).toContain("transform:scale(1.0233333333333334) rotate(0deg)");
+    expect(foreground).not.toContain("scale(1.15)");
   });
 
   it("renders a collage video cell as video", () => {
