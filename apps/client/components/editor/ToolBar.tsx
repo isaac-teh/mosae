@@ -2,8 +2,8 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { contextToolbar, type ContextToolbarAction, type EditorSelection } from "@mosae/core";
 
-export function RatioIcon() {
-  return <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden>
+export function RatioIcon({ size = 24 }: { size?: number }) {
+  return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden>
     <Path d="M9 3H4v5M15 3h5v5M20 16v5h-5M9 21H4v-5" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>;
 }

@@ -91,11 +91,11 @@ export function SettingsIcon() {
   );
 }
 
-function HistoryArrow({ direction, disabled = false }: { direction: "undo" | "redo"; disabled?: boolean }) {
+function HistoryArrow({ direction, disabled = false, size = 24 }: { direction: "undo" | "redo"; disabled?: boolean; size?: number }) {
   const color = disabled ? "rgb(var(--color-ink-muted))" : "rgb(var(--color-on-screen))";
   const mirror = direction === "redo" ? "translate(24 0) scale(-1 1)" : undefined;
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <G transform={mirror}>
         <Path d="M21 12 C21 6.3 16.8 2.8 12 2.8 C6 2.8 2.8 7 2.8 12 C2.8 14.2 3.4 16.4 5 18.3" stroke={color} strokeWidth={2} strokeLinecap="round" />
         <Path d="M10.5 11.5 L5 18.3 L12.5 18.8" stroke={color} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
@@ -104,5 +104,5 @@ function HistoryArrow({ direction, disabled = false }: { direction: "undo" | "re
   );
 }
 
-export const UndoIcon = ({ disabled = false }: { disabled?: boolean }) => <HistoryArrow direction="undo" disabled={disabled} />;
-export const RedoIcon = ({ disabled = false }: { disabled?: boolean }) => <HistoryArrow direction="redo" disabled={disabled} />;
+export const UndoIcon = ({ disabled = false, size = 24 }: { disabled?: boolean; size?: number }) => <HistoryArrow direction="undo" disabled={disabled} size={size} />;
+export const RedoIcon = ({ disabled = false, size = 24 }: { disabled?: boolean; size?: number }) => <HistoryArrow direction="redo" disabled={disabled} size={size} />;
