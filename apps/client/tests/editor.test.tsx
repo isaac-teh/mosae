@@ -241,15 +241,15 @@ describe("film editor", () => {
     expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "move", clipId: "a", toIndex: 2 }]);
   });
 
-  it("renders 24px undo and redo arrows in fixed disabled header columns", async () => {
+  it("renders 18px undo and redo arrows in fixed disabled header columns", async () => {
     await render(<EditorScreen />);
     for (const label of ["Undo", "Redo"]) {
       const button = host.querySelector(`[aria-label="${label}"]`) as HTMLButtonElement;
-      expect(button.className).toContain("h-[48px]");
-      expect(button.className).toContain("w-[52px]");
+      expect(button.className).toContain("h-[40px]");
+      expect(button.className).toContain("w-[40px]");
       const svg = button.querySelector("svg");
-      expect(svg?.getAttribute("width")).toBe("24");
-      expect(svg?.getAttribute("height")).toBe("24");
+      expect(svg?.getAttribute("width")).toBe("18");
+      expect(svg?.getAttribute("height")).toBe("18");
       const paths = [...(svg?.querySelectorAll("path") ?? [])];
       expect(paths.some((path) => Number(path.getAttribute("stroke-width")) >= 2)).toBe(true);
       expect(paths.every((path) => path.getAttribute("stroke") === "rgb(var(--color-ink-muted))")).toBe(true);
