@@ -16,8 +16,9 @@ afterEach(async () => { await act(async () => root.unmount()); host.remove(); })
 describe("FormatSheet", () => {
   it("marks current format selected and closes without applying it", async () => {
     await render(<FormatSheet visible aspect="16:9" onApply={onApply} onClose={onClose} />);
-    expect(host.querySelector('[aria-label="16:9 · Landscape"]')?.getAttribute("aria-selected")).toBe("true");
-    await click("16:9 · Landscape");
+    expect(host.querySelector('[aria-label="🖥️ Landscape — best for TV & laptop"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(host.textContent).toContain("🖥️ Landscape — best for TV & laptop (current)");
+    await click("🖥️ Landscape — best for TV & laptop");
     expect(onApply).not.toHaveBeenCalled(); expect(onClose).toHaveBeenCalledOnce();
   });
 });
