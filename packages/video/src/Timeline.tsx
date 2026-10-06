@@ -28,13 +28,13 @@ function ClipBody({ clip, sources, sourceDimensions, aspect, selected, onSelect,
   if (!src) return null;
   return (
     <AbsoluteFill style={{ opacity }}>
-      {blurredFill ? <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+      {blurredFill ? <div data-blurred-fill-background="true" style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden" }}>
         {clip.source.kind === "video" ? <OffthreadVideo src={src} trimBefore={Math.round(clip.source.sourceInSec * fps)} style={{ ...style, objectFit: "cover", filter: "blur(40px) brightness(0.6)", transform: "scale(1.15)" }} /> : <Img src={src} style={{ ...style, objectFit: "cover", filter: "blur(40px) brightness(0.6)", transform: "scale(1.15)" }} />}
       </div> : null}
       {clip.source.kind === "video" ? (
-        <OffthreadVideo src={src} trimBefore={Math.round(clip.source.sourceInSec * fps)} style={blurredFill ? { ...style, objectFit: "contain", objectPosition: "50% 50%" } : style} />
+        <OffthreadVideo src={src} trimBefore={Math.round(clip.source.sourceInSec * fps)} style={blurredFill ? { ...style, position: "absolute", inset: 0, zIndex: 1, objectFit: "contain", objectPosition: "50% 50%" } : style} />
       ) : (
-        <Img src={src} data-photo-media="true" style={blurredFill ? { ...style, objectFit: "contain", objectPosition: "50% 50%" } : style} onImageError={(error) => console.error("render_image_decode_failed", { source: redactImageSource(src), error: error.name })} />
+        <Img src={src} data-photo-media="true" style={blurredFill ? { ...style, position: "absolute", inset: 0, zIndex: 1, objectFit: "contain", objectPosition: "50% 50%" } : style} onImageError={(error) => console.error("render_image_decode_failed", { source: redactImageSource(src), error: error.name })} />
       )}
       {clip.source.kind === "photo" ? <PhotoInteraction clipId={clip.id} selected={selected} transform={photoTransform} onSelect={onSelect} onCommit={onCommitPhotoCrop} /> : onSelect ? <div role="button" aria-label={selected ? "Selected video clip" : "Select video clip"} aria-pressed={Boolean(selected)} onClick={(event) => { event.stopPropagation(); onSelect(clip.id); }} style={{ position: "absolute", inset: 0, boxSizing: "border-box", border: selected ? "12px solid #f38a5b" : "3px solid transparent", cursor: "pointer" }} /> : null}
     </AbsoluteFill>
