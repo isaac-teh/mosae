@@ -128,6 +128,17 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Replace"]')?.textContent).toContain("Replace");
   });
 
+  it("labels the frame tool Ratio and opens the existing ratio action", async () => {
+    const { ToolBar } = await import("../components/editor/ToolBar");
+    const onTool = vi.fn();
+    await render(<ToolBar selection="none" onTool={onTool} />);
+    const ratio = host.querySelector('[aria-label="Ratio"]');
+    expect(ratio?.textContent).toContain("Ratio");
+    expect(ratio?.querySelector("svg")?.querySelectorAll("path")).toHaveLength(1);
+    await click("Ratio");
+    expect(onTool).toHaveBeenCalledWith("Format");
+  });
+
   it("shows an outlined speaker icon for the accessible Volume action", async () => {
     const { ToolBar } = await import("../components/editor/ToolBar");
     await render(<ToolBar selection="audio" onTool={() => {}} />);
