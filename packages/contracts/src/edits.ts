@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { COLLAGE_LAYOUTS, COLLAGE_MOTIONS, CollageSpecSchema } from "./collage.js";
+import { COLLAGE_LAYOUTS, CollageSpecSchema } from "./collage.js";
+import { ALLOWED_COMBOS } from "./collageCombos.js";
 import { safeParseTimeline, type AudioClip, type Caption, type CollageClip, type Timeline, type VideoClip } from "./timeline.js";
 
 const clipId = z.string().min(1);
@@ -283,8 +284,8 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
           if (oldLayout.aspect.some((supported: string) => supported === aspect)) return entry;
           const candidates = COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((supported: string) => supported === aspect) && spec.slots.length >= layout.minSlots && spec.slots.length <= layout.maxSlots)
             .sort((a, b) => Number(b.preferredSlots === spec.slots.length) - Number(a.preferredSlots === spec.slots.length));
-          const replacement = candidates.flatMap((layout) => COLLAGE_MOTIONS.map((motion) => collageWithSpec(entry.clip as CollageClip, { ...spec, layoutId: layout.id, motionId: motion.id }))).find((candidate) => typeof candidate !== "string");
-          return replacement && typeof replacement !== "string" ? { ...entry, clip: replacement } : entry;
+          const replacement = candidates.flatMap((layout) => ALLOWED_COMBOS.filter((combo) => combo.layoutId === layout.id).map((combo) => ({ ...entry.clip as CollageClip, spec: { ...spec, layoutId: layout.id, motionId: combo.motionId } }))).at(0);
+          return replacement ? { ...entry, clip: replacement } : entry;
         });
         break;
       }

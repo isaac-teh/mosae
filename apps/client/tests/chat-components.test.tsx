@@ -194,6 +194,17 @@ describe("director chat components", () => {
     await click("Lively"); expect(onChange).toHaveBeenCalled();
   });
 
+  it.each([
+    ["landscape", { portrait: 2, landscape: 8, suggested: "16:9" as const }, "Yes, landscape", "Portrait instead", "16:9"],
+    ["mixed", { portrait: 5, landscape: 5, suggested: null }, "📱 Portrait", "🖥️ Landscape", "9:16"],
+  ])("shows the %s suggestion as selected with explicit chip choices", async (_name, orientation, suggestedLabel, alternateLabel, selectedAspect) => {
+    const onChange = vi.fn();
+    await render(<ChatDirectionCard aspect={selectedAspect as "9:16" | "16:9"} orientation={orientation as any} pace="gentle" lengthSec={120} durations={[]} focus="family" collageAmount="few" motionFeel="calm" focusOptions={[]} onChange={onChange} />);
+    expect(host.querySelector(`[aria-label="${suggestedLabel}"]`)?.getAttribute("aria-pressed")).toBe("true");
+    await click(alternateLabel as string);
+    expect(onChange).toHaveBeenCalledWith({ aspect: selectedAspect === "16:9" ? "9:16" : "16:9" });
+  });
+
   it("shows shaping progress without promising a duration", async () => {
     await render(<ChatShaping progress={0.74} stepsDone={2} />);
     expect(host.textContent).toContain("Shaping your film");

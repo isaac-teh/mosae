@@ -59,12 +59,14 @@ function Harness() {
   const editor = useEditor("p1", "g1", boundary.repository);
   return <div>
     <span data-testid="order">{editor.timeline?.videoClips.map((clip) => "kind" in clip ? clip.clipId : clip.id).join(",")}</span>
+    <span data-testid="aspect">{editor.timeline?.aspect}</span>
     <span data-testid="ops">{JSON.stringify(editor.ops)}</span>
     <span data-testid="state">{editor.save.state}</span>
     <span data-testid="download-url">{editor.downloadUrl}</span>
     <span role="alert">{editor.editError}</span>
     <SaveState save={editor.save} onReload={() => void editor.reloadAfterConflict()} />
     <button aria-label="Move c first" onClick={() => editor.apply({ op: "move", clipId: "c", toIndex: 0 })}>Move c first</button>
+    <button aria-label="Set landscape" onClick={() => editor.apply({ op: "setAspect", aspect: "16:9" })}>Set landscape</button>
     <button aria-label="Move c second" onClick={() => editor.apply({ op: "move", clipId: "c", toIndex: 1 })}>Move c second</button>
     <button aria-label="Move b first" onClick={() => editor.apply({ op: "move", clipId: "b", toIndex: 0 })}>Move b first</button>
     <button aria-label="Apply two edits" onClick={() => editor.applyMany([{ op: "move", clipId: "c", toIndex: 0 }, { op: "move", clipId: "b", toIndex: 0 }])}>Apply two edits</button>
@@ -99,6 +101,13 @@ async function click(label: string) {
 async function advance(ms: number) { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); }
 
 describe("film editor", () => {
+  it("undoes an aspect change through editor history", async () => {
+    await render(<Harness />);
+    await click("Set landscape");
+    expect(host.querySelector('[data-testid="aspect"]')?.textContent).toBe("16:9");
+    await click("Undo");
+    expect(host.querySelector('[data-testid="aspect"]')?.textContent).toBe("9:16");
+  });
   it("loads the first cut into a selectable clip strip", async () => {
     await render(<EditorScreen />);
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
