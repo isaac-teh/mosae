@@ -7,6 +7,7 @@ import { PermanentIngestError } from "./errors.js";
 import type { ObjectStore } from "./objectStore.js";
 import type { DerivativeTiming, PhotoDerivatives, VideoDerivatives } from "./proxies.js";
 import type { ShotRange } from "./shots.js";
+import { extractShotSignals, type ShotSignals } from "./signals.js";
 import type { PlaceResolver } from "../understand/place.js";
 
 export type IngestTask = { projectId: string; assetId: string; generation: string; attempt?: number };
@@ -21,6 +22,7 @@ export type IngestDeps = {
   videoDerivatives(input: string, outDir: string, durationSec: number, onTiming?: DerivativeTiming): Promise<VideoDerivatives>;
   analyze(file: string): Promise<QualityFacts>;
   detectShots(proxy: string, durationSec: number): Promise<ShotRange[]>;
+  extractSignals?(proxy: string, startSec: number, endSec: number): Promise<ShotSignals>;
   commitIngested(commit: IngestCommit, enqueueUnderstand?: boolean): Promise<"ingested" | "skipped">;
   understand?(task: IngestTask): Promise<unknown>;
   commitFailed(input: { projectId: string; assetId: string; generation: string; reason: string; now: number }): Promise<"failed" | "skipped">;
@@ -63,6 +65,7 @@ async function ingestOriginal(deps: IngestDeps, asset: Asset, workDir: string, t
   let derivatives: Derivatives;
   let quality: QualityFacts;
   let ranges: ShotRange[] = [];
+  let signals: (ShotSignals | undefined)[] = [];
 
   if (kind === "photo") {
     const made = await deps.photoDerivatives(original, workDir, (stage, milliseconds) => { timings[stage] += Math.max(0, milliseconds); });
@@ -78,6 +81,10 @@ async function ingestOriginal(deps: IngestDeps, asset: Asset, workDir: string, t
     uploads.push({ source: made.thumb, path: thumbPath, contentType: "image/jpeg" }, { source: made.proxy, path: proxyPath, contentType: "video/mp4" });
     quality = await deps.analyze(made.thumb);
     ranges = await deps.detectShots(made.proxy, durationSec);
+    signals = await Promise.all(ranges.map(async (range) => {
+      try { return await (deps.extractSignals ?? extractShotSignals)(made.proxy, range.startSec, range.endSec); }
+      catch (error) { console.warn("video shot signal extraction failed", asset.id, range.startSec, range.endSec, error); return undefined; }
+    }));
   }
 
   // Derivatives first, commit last: a reader that sees "ingested" can always fetch the files.
@@ -87,7 +94,7 @@ async function ingestOriginal(deps: IngestDeps, asset: Asset, workDir: string, t
 
   const commit = {
     projectId: asset.projectId, assetId: asset.id, generation: asset.generation,
-    media, place, quality, derivatives, ranges, now: deps.now(),
+    media, place, quality, derivatives, ranges, ...(kind === "video" ? { signals } : {}), now: deps.now(),
   };
   return deps.understand ? deps.commitIngested(commit, false) : deps.commitIngested(commit);
 }

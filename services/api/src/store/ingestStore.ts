@@ -1,11 +1,12 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { canTransition } from "../domain/assetStatus.js";
-import { PIPELINE_VERSION } from "../domain/ids.js";
+import { ANALYSIS_VERSION, PIPELINE_VERSION } from "../domain/ids.js";
 import { newOutboxTask } from "../domain/outbox.js";
 import type { Derivatives, MediaFacts, MediaKind, QualityFacts } from "../domain/media.js";
 import type { ShotRange } from "../ingest/shots.js";
 import type { Asset } from "./finalizeStore.js";
 import type { Place } from "../understand/place.js";
+import type { ShotSignals } from "../ingest/signals.js";
 
 export const shotId = (assetId: string, index: number): string => `${assetId}_${String(index).padStart(4, "0")}`;
 
@@ -19,10 +20,11 @@ export type ShotRecord = {
   analysisVersion: number;
   sourceStartSec: number | null;
   sourceEndSec: number | null;
+  signals?: ShotSignals;
 };
 
-export function shotRecords(input: { assetId: string; generation: string; media: MediaFacts; ranges: ShotRange[] }): ShotRecord[] {
-  const base = { assetId: input.assetId, assetGeneration: input.generation, mediaType: input.media.kind, analysisVersion: PIPELINE_VERSION };
+export function shotRecords(input: { assetId: string; generation: string; media: MediaFacts; ranges: ShotRange[]; signals?: (ShotSignals | undefined)[] }): ShotRecord[] {
+  const base = { assetId: input.assetId, assetGeneration: input.generation, mediaType: input.media.kind, analysisVersion: ANALYSIS_VERSION };
   if (input.media.kind === "photo") {
     return [{ id: shotId(input.assetId, 0), index: 0, ...base, sourceStartSec: null, sourceEndSec: null }];
   }
@@ -32,6 +34,7 @@ export function shotRecords(input: { assetId: string; generation: string; media:
     ...base,
     sourceStartSec: range.startSec,
     sourceEndSec: range.endSec,
+    ...(input.signals?.[index] ? { signals: input.signals[index] } : {}),
   }));
 }
 
@@ -44,6 +47,7 @@ export type IngestCommit = {
   quality: QualityFacts;
   derivatives: Derivatives;
   ranges: ShotRange[];
+  signals?: (ShotSignals | undefined)[];
   now: number;
 };
 
@@ -64,7 +68,7 @@ export async function loadAsset(db: Firestore, projectId: string, assetId: strin
 export async function commitIngested(db: Firestore, commit: IngestCommit, enqueueUnderstand = true): Promise<"ingested" | "skipped"> {
   const ref = assetRef(db, commit.projectId, commit.assetId);
   const shotsCollection = db.collection("projects").doc(commit.projectId).collection("shots");
-  const records = shotRecords({ assetId: commit.assetId, generation: commit.generation, media: commit.media, ranges: commit.ranges });
+  const records = shotRecords({ assetId: commit.assetId, generation: commit.generation, media: commit.media, ranges: commit.ranges, signals: commit.signals });
   const task = newOutboxTask({ projectId: commit.projectId, subjectKind: "asset", subjectId: commit.assetId, generation: commit.generation, stage: "understand", now: commit.now });
   const taskRef = db.collection("projects").doc(commit.projectId).collection("taskOutbox").doc(task.id);
 
