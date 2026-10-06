@@ -283,10 +283,10 @@ describe("deriveChat state table", () => {
 });
 
 describe("contextual direction copy", () => {
-  it.each([
-    [{ portrait: 8, landscape: 2, suggested: "9:16" as const }, "9:16"],
-    [{ portrait: 2, landscape: 8, suggested: "16:9" as const }, "16:9"],
-    [{ portrait: 5, landscape: 5, suggested: null }, "9:16"],
+  it.each<[ProjectSummary["orientation"], "9:16" | "16:9"]>([
+    [{ portrait: 8, landscape: 2, square: 0, suggested: "9:16" }, "9:16"],
+    [{ portrait: 2, landscape: 8, square: 0, suggested: "16:9" }, "16:9"],
+    [{ portrait: 5, landscape: 5, square: 0, suggested: null }, "9:16"],
   ])("keeps the suggested aspect in direction data for %j", (orientation, aspect) => {
     const state = deriveChat({ ...base(), summary: { ...summary, orientation }, momentsConfirmed: true, direction: { confirmed: false, pace: "gentle", lengthSec: 120, focus: "family", aspect } });
     expect(state.items.find((item) => item.kind === "direction")).toMatchObject({ aspect, orientation });
