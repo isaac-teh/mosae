@@ -6,7 +6,7 @@ export type ResolveMode = "preview" | "render";
 /** Dependencies needed to resolve a timeline's source IDs to file paths. */
 export interface SourceDeps {
   /** Load an asset by projectId and assetId. Returns null if not found. */
-  loadAsset: (projectId: string, assetId: string) => Promise<{ storagePath: string; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
+  loadAsset: (projectId: string, assetId: string) => Promise<{ storagePath: string; width?: number; height?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
   /**
    * Resolve a soundtrack id to a file. The soundtrack library does not exist
    * yet, so this is normally absent and a scored film simply resolves no music
@@ -16,6 +16,17 @@ export interface SourceDeps {
    * configured library that does not have the track is a broken film.
    */
   loadSoundtrack?: (soundtrackId: string) => Promise<string | null>;
+}
+
+/** Adds stored, ingest-normalized dimensions to direct clip source descriptors. */
+export async function addSourceDimensions(timeline: Timeline, loadAsset: SourceDeps["loadAsset"], projectId: string): Promise<Timeline> {
+  const videoClips = await Promise.all(timeline.videoClips.map(async (clip) => {
+    if (!("source" in clip)) return clip;
+    const asset = await loadAsset(projectId, clip.source.shotId);
+    if (!asset?.width || !asset.height) return clip;
+    return { ...clip, source: { ...clip.source, width: asset.width, height: asset.height } };
+  }));
+  return { ...timeline, videoClips };
 }
 
 /**

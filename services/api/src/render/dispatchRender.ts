@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { GoogleAuth } from "google-auth-library";
 import { applyEdits, type EditOp, type Generation } from "@mosae/contracts";
-import { resolveSources, type SourceDeps } from "../compose/resolveSources.js";
+import { addSourceDimensions, resolveSources, type SourceDeps } from "../compose/resolveSources.js";
 import { failGeneration, markSaved, resetRender, setRenderProgress } from "../store/generationStore.js";
 import { throttleProgress } from "./throttleProgress.js";
 
@@ -153,8 +153,10 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
     }
 
     let sources: Record<string, string>;
+    let renderTimeline = generation.timeline;
     try {
-      sources = await resolveSources(generation.timeline, config.sources, task.projectId, "render");
+      renderTimeline = await addSourceDimensions(generation.timeline, config.sources.loadAsset, task.projectId);
+      sources = await resolveSources(renderTimeline, config.sources, task.projectId, "render");
       if (config.signRead) {
         sources = Object.fromEntries(
           await Promise.all(Object.entries(sources).map(async ([id, path]) => [id, await config.signRead!(path)] as const)),
@@ -179,7 +181,7 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
           name: `render-${workKey.replace(/[^A-Za-z0-9_-]/g, "_")}`,
           path: "/tasks/render",
           body: {
-            timeline: generation.timeline,
+            timeline: renderTimeline,
             sources,
             outputFile: `${task.generationId}.mp4`,
             resolution: "720p",
@@ -201,7 +203,7 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
     let done: Extract<RenderEvent, { done: true }> | undefined;
     try {
       const events = post(`${config.renderServiceUrl.replace(/\/$/, "")}/tasks/render`, {
-        timeline: generation.timeline,
+        timeline: renderTimeline,
         sources,
         outputFile: `${task.generationId}.mp4`,
         resolution: "720p",
@@ -277,8 +279,10 @@ async function renderEditRevision(
   if (!applied.ok) return fail(`invalid revision ${revision}: ${applied.error}`);
 
   let sources: Record<string, string>;
+  let renderTimeline = applied.timeline;
   try {
-    sources = await resolveSources(applied.timeline, config.sources, task.projectId, "render");
+    renderTimeline = await addSourceDimensions(applied.timeline, config.sources.loadAsset, task.projectId);
+    sources = await resolveSources(renderTimeline, config.sources, task.projectId, "render");
     if (config.signRead) sources = Object.fromEntries(await Promise.all(
       Object.entries(sources).map(async ([id, path]) => [id, await config.signRead!(path)] as const),
     ));
@@ -302,7 +306,7 @@ async function renderEditRevision(
         name: `render-${workKey.replace(/[^A-Za-z0-9_-]/g, "_")}`,
         path: "/tasks/render",
         body: {
-          timeline: applied.timeline,
+          timeline: renderTimeline,
           sources,
           outputFile: `${task.generationId}-edit-${revision}.mp4`,
           resolution: "720p",
@@ -319,7 +323,7 @@ async function renderEditRevision(
   let done: Extract<RenderEvent, { done: true }> | undefined;
   try {
     for await (const event of post(`${config.renderServiceUrl.replace(/\/$/, "")}/tasks/render`, {
-      timeline: applied.timeline,
+      timeline: renderTimeline,
       sources,
       outputFile: `${task.generationId}-edit-${revision}.mp4`,
       resolution: "720p",

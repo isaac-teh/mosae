@@ -21,7 +21,7 @@ function ClipBody({ clip, sources, sourceDimensions, aspect, selected, onSelect,
     ? interpolate(frame, [0, Math.round(clip.durationSec * fps)], [clip.motion.from, clip.motion.to], { extrapolateRight: "clamp" })
     : 1;
   const photoTransform = clip.source.kind === "photo" ? clip.source.crop : undefined;
-  const fit = clipFitForSource(sourceDimensions?.[clip.source.shotId], aspect, photoTransform);
+  const fit = clipFitForSource(sourceDimensions?.[clip.source.shotId] ?? (clip.source.width && clip.source.height ? { width: clip.source.width, height: clip.source.height } : undefined), aspect, photoTransform);
   const blurredFill = fit === "fill";
   const style: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover", objectPosition: photoTransform ? `${photoTransform.x * 100}% ${photoTransform.y * 100}%` : "50% 50%", transform: `scale(${scale * (photoTransform?.scale ?? 1)}) rotate(${photoTransform?.rotationDeg ?? 0}deg)` };
 

@@ -22,6 +22,8 @@ export const ChapterSchema = z.strictObject({
 const VideoSourceSchema = z.strictObject({
   kind: z.literal("video"),
   shotId: z.string().min(1),
+  width: positiveSeconds.optional(),
+  height: positiveSeconds.optional(),
   sourceInSec: seconds,
   sourceOutSec: positiveSeconds,
   sourceDurationSec: positiveSeconds.optional(),
@@ -40,6 +42,8 @@ export type PhotoCrop = z.infer<typeof PhotoCropSchema>;
 const PhotoSourceSchema = z.strictObject({
   kind: z.literal("photo"),
   shotId: z.string().min(1),
+  width: positiveSeconds.optional(),
+  height: positiveSeconds.optional(),
   crop: PhotoCropSchema.optional(),
 });
 

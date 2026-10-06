@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { resolveSources, collectSourceIds } from "./resolveSources.js";
+import { addSourceDimensions, resolveSources, collectSourceIds } from "./resolveSources.js";
 import type { Timeline } from "@mosae/contracts";
 
 const makeTimeline = (overrides?: Partial<Timeline>): Timeline => ({
@@ -29,6 +29,10 @@ const mockDeps = (assets: Record<string, { storagePath: string; derivatives?: { 
 });
 
 describe("resolveSources", () => {
+  it("adds normalized media dimensions to direct clips while leaving collage sources untouched", async () => {
+    const normalized = await addSourceDimensions(makeTimeline(), async (_projectId, id) => ({ storagePath: id, width: 640, height: 480 }), "proj-1");
+    expect(normalized.videoClips[0]).toMatchObject({ source: { width: 640, height: 480 } });
+  });
   it("resolves every collage slot for preview and render", async () => {
     const timeline = makeTimeline({
       schemaVersion: 2,
