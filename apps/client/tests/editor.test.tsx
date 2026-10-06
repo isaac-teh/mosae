@@ -14,7 +14,7 @@ vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ timeline
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
 vi.mock("react-native-svg", () => {
   const element = (tag: string) => ({ children, ...props }: any) => React.createElement(tag, props, children);
-  return { default: element("svg"), Path: element("path"), Circle: element("circle"), G: element("g") };
+  return { default: element("svg"), Path: element("path"), Rect: element("rect"), Circle: element("circle"), G: element("g") };
 });
 vi.mock("react-native", () => {
   const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, accessibilityState, ...props }: any) =>
@@ -121,6 +121,18 @@ describe("film editor", () => {
     await act(async () => timeline.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
     expect(Number(host.querySelector('[data-testid="preview"]')?.getAttribute("data-pause-request"))).toBeGreaterThan(0);
     expect(Number(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec"))).toBe(4);
+  });
+
+  it("places Ratio between Ask AI and Undo and opens the existing ratio sheet", async () => {
+    await render(<EditorScreen />);
+    const ask = host.querySelector('[aria-label="Ask AI"]')!;
+    const rowButtons = [...ask.parentElement!.querySelectorAll("button")].map((button) => button.getAttribute("aria-label"));
+    expect(rowButtons.slice(0, 4)).toEqual(["Ask AI", "Ratio", "Undo", "Redo"]);
+    const ratio = host.querySelector('[aria-label="Ratio"]')!;
+    expect(ratio.textContent).toContain("Ratio");
+    expect(ratio.querySelector("svg")?.querySelectorAll("path")).toHaveLength(1);
+    await click("Ratio");
+    expect(host.querySelector('[aria-label="9:16 TikTok / Reels"]')).not.toBeNull();
   });
 
   it("puts playback beside the editor time and sends play toggles to the preview", async () => {
