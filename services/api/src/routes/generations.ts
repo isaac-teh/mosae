@@ -26,7 +26,7 @@ function handleError(res: Response, error: unknown): void {
 export function generationsRouter(deps: {
   db: Firestore;
   /** Resolve a shot id to the asset whose files back it. */
-  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; sourceDurationSec?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
+  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; sourceDurationSec?: number; width?: number; height?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
   /** The bucket renders are stored in. The admin app has no default bucket. */
   storageBucket?: string;
   /** Map resolved object paths to URLs the editor's browser can load. */
