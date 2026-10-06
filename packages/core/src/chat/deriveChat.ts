@@ -220,7 +220,7 @@ export function deriveChat(input: ChatInput): ChatState {
     step = "direction";
     add({ kind: "mosae", id: "direction-question", text: input.directionNote ?? "For these moments, I’d suggest this." });
     add({
-      kind: "direction", id: "direction", pace: input.direction.pace, lengthSec: input.direction.lengthSec,
+      kind: "direction", id: "direction", aspect: input.direction.aspect ?? "9:16", ...(input.summary?.orientation ? { orientation: input.summary.orientation } : {}), pace: input.direction.pace, lengthSec: input.direction.lengthSec,
       focus: input.direction.focus, momentCount: input.plan.totalMomentCount ?? input.plan.moments.length,
     });
     return { items, step, confirmed, placeholder };

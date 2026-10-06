@@ -180,7 +180,9 @@ describe("director chat components", () => {
 
   it("renders the direction controls and header progress", async () => {
     const onChange = vi.fn();
-    await render(<><ChatDirectionCard pace="gentle" lengthSec={120} durations={[{ id: "30s", label: "30 sec", seconds: 30 }, { id: "1m", label: "1 min", seconds: 60 }, { id: "2m", label: "2 min", seconds: 120 }]} focus="family" collageAmount="few" motionFeel="calm" focusOptions={[{ id: "family", label: "Everyone" }, { id: "reactions", label: "Her reactions" }]} onChange={onChange} /><ChatHeader title="Japan, autumn" confirmed={3} ready={false} onBack={vi.fn()} /></>);
+    await render(<><ChatDirectionCard aspect="9:16" orientation={{ portrait: 8, landscape: 2, suggested: "9:16" }} pace="gentle" lengthSec={120} durations={[{ id: "30s", label: "30 sec", seconds: 30 }, { id: "1m", label: "1 min", seconds: 60 }, { id: "2m", label: "2 min", seconds: 120 }]} focus="family" collageAmount="few" motionFeel="calm" focusOptions={[{ id: "family", label: "Everyone" }, { id: "reactions", label: "Her reactions" }]} onChange={onChange} /><ChatHeader title="Japan, autumn" confirmed={3} ready={false} onBack={vi.fn()} /></>);
+    expect(host.textContent).toContain("Most of your photos are portrait (8 of 10)"); expect(host.textContent).toContain("Yes, portrait");
+    await click("Landscape instead"); expect(onChange).toHaveBeenCalledWith({ aspect: "16:9" });
     expect(host.textContent).toContain("Pace"); expect(host.textContent).toContain("Length"); expect(host.textContent).toContain("Focus");
     expect(host.textContent).not.toContain("With these moments, I can make up to");
     expect(host.textContent).toContain("Style"); expect(host.textContent).toContain("Collages"); expect(host.textContent).toContain("Motion");

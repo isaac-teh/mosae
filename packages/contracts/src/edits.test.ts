@@ -36,6 +36,12 @@ const apply = (ops: EditOp[]) => {
 };
 
 describe("applyEdits", () => {
+  it("switches format and remaps a portrait only collage while preserving its slots", () => {
+    const portraitOnly: Timeline = { ...firstCut, videoClips: firstCut.videoClips.map((clip) => "kind" in clip ? { ...clip, spec: { ...clip.spec, layoutId: "polaroid-garland" as const, motionId: "page-turn" as const } } : clip) };
+    const result = applyEdits(portraitOnly, [{ op: "setAspect", aspect: "16:9" }]);
+    expect(result).toMatchObject({ ok: true, timeline: { aspect: "16:9", videoClips: [expect.anything(), expect.anything(), expect.anything(), { spec: { slots: [{ slotId: "s1" }, { slotId: "s2" }, { slotId: "s3" }] } }] } });
+    if (result.ok) expect((result.timeline.videoClips[3] as Extract<Timeline["videoClips"][number], { kind: "collage" }>).spec.layoutId).not.toBe("polaroid-garland");
+  });
   it("returns the first cut unchanged when there are no edits", () => {
     const result = applyEdits(firstCut, []);
     expect(result).toEqual({ ok: true, timeline: firstCut, leftOutShotIds: [] });

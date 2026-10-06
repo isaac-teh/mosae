@@ -16,6 +16,19 @@ describe("summarise", () => {
     ], false);
     expect(result).toMatchObject({ total: 4, photos: 3, clips: 1, days: 2, places: ["Tokyo", "Kyoto"], country: "Japan", ready: { summary: true, faces: true, plan: false } });
   });
+  it("counts usable orientations, excluding squares, duplicates, blurry and non understood assets", () => {
+    const media = (width: number, height: number, overrides: Partial<SummaryAsset> = {}): SummaryAsset => ({ ...asset("photo", null), media: { kind: "photo", localTime: null, width, height }, ...overrides });
+    const result = summarise([
+      media(100, 200), media(100, 200), media(200, 100), media(100, 100),
+      media(100, 200, { dupOf: "primary" } as never), media(100, 200, { quality: { blurry: true } } as never),
+    ], false);
+    expect(result.orientation).toEqual({ portrait: 2, landscape: 1, square: 1, suggested: null });
+  });
+  it.each([[7, 3, "9:16"], [3, 7, "16:9"], [6, 4, null], [0, 0, "9:16"]] as const)("suggests %s with portrait %i and landscape %i", (p, l, suggested) => {
+    const items = [...Array(p)].map(() => ({ ...asset("photo", null), media: { kind: "photo" as const, localTime: null, width: 100, height: 200 } }))
+      .concat([...Array(l)].map(() => ({ ...asset("photo", null), media: { kind: "photo" as const, localTime: null, width: 200, height: 100 } })));
+    expect(summarise(items, false).orientation.suggested).toBe(suggested);
+  });
   it("returns status keyed by asset id for the existing summary poll", () => {
     expect(summarise([{ ...asset("photo", null), id: "photo-a", status: "ingested" }], false).assetStatuses).toEqual([{ assetId: "photo-a", kind: "photo", status: "ingested" }]);
   });
