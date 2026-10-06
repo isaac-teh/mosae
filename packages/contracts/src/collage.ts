@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { ALLOWED_COMBO_KEYS } from "./collageCombos.js";
 
+export function isApprovedCollageCombination(layoutId: string, motionId: string): boolean {
+  return ALLOWED_COMBO_KEYS.has(`${layoutId}::${motionId}`);
+}
+
 export const COLLAGE_LAYOUTS = [
   { id: "single-photo", label: "Single photo", minSlots: 1, maxSlots: 1, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 1 },
   { id: "two-photo-diptych", label: "Two-photo diptych", minSlots: 2, maxSlots: 2, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 2 },
@@ -90,7 +94,7 @@ export const CollageSpecSchema = z.strictObject({
   if (spec.slots.length < layout.minSlots || spec.slots.length > layout.maxSlots) {
     ctx.addIssue({ code: "custom", path: ["slots"], message: `${layout.id} requires ${layout.minSlots}–${layout.maxSlots} slots` });
   }
-  if (!ALLOWED_COMBO_KEYS.has(`${spec.layoutId}::${spec.motionId}`)) {
+  if (!isApprovedCollageCombination(spec.layoutId, spec.motionId)) {
     ctx.addIssue({ code: "custom", path: ["motionId"], message: `${spec.layoutId} × ${spec.motionId} is not an approved collage combination` });
   }
   const slotIds = spec.slots.map((slot) => slot.slotId);

@@ -29,7 +29,7 @@ vi.mock("@/components/sceneIcons", () => ({
 vi.mock("@/components/icons", () => ({ CheckIcon: () => null }));
 vi.mock("@/components/StepHeader", () => ({ StepHeader: () => null }));
 vi.mock("@/components/BottomTabBar", () => ({ BottomTabBar: () => null }));
-vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: ({ poster }: { poster: { uri?: string } | string }) => React.createElement("div", { "data-testid": "film-player", "data-poster": typeof poster === "string" ? poster : poster.uri }) }));
+vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: ({ poster, aspect }: { poster: { uri?: string } | string; aspect?: string }) => React.createElement("div", { "data-testid": "film-player", "data-poster": typeof poster === "string" ? poster : poster.uri, "data-aspect": aspect }) }));
 vi.mock("@/components/PrimaryButton", () => ({ PrimaryButton: ({ label, onPress }: { label: string; onPress: () => void }) => React.createElement("button", { "aria-label": label, onClick: onPress }, label) }));
 vi.mock("@/lib/storyImage", () => ({ storyImage: (key: string) => ({ uri: key }) }));
 vi.mock("@/lib/downloadFilm", () => ({ downloadFilm: boundary.downloadFilm, prepareFilmDownload: boundary.prepareFilmDownload }));
@@ -116,7 +116,7 @@ describe("review screens", () => {
 
   it("shows the v13 saved screen with a poster, download, editor, and home actions", async () => {
     boundary.params = { filmId: "saved-film", repository: "fixture", directorChat: "true" };
-    boundary.repository = { getFilm: vi.fn(async () => ({ ...film("saved-film", "plan-1", "poster"), title: "Japan, autumn", momentCount: 419, videoUrl: "https://film.example/saved.mp4" })) };
+    boundary.repository = { getFilm: vi.fn(async () => ({ ...film("saved-film", "plan-1", "poster"), aspect: "16:9" as const, title: "Japan, autumn", momentCount: 419, videoUrl: "https://film.example/saved.mp4" })) };
     await render(SaveFilmScreen);
     expect(host.textContent).toContain("✓ Saved to your films");
     expect(host.textContent).not.toContain("OpenStreetMap contributors");
@@ -125,6 +125,7 @@ describe("review screens", () => {
     expect(host.textContent).not.toContain("STEP 6 OF 6");
     expect(host.textContent).not.toContain("Fine-Art Print Edition");
     expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-poster")).toBe("poster");
+    expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-aspect")).toBe("landscape");
     await click("Edit film");
     expect(boundary.navigate).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "fixture", planId: "plan-1", generationId: "saved-film", request: "", repository: "fixture" } });
     for (const label of ["Download", "Share", "Edit film", "Back to your films"]) expect(host.querySelector(`button[aria-label="${label}"]`)).not.toBeNull();
@@ -335,13 +336,14 @@ describe("downstream story screens", () => {
   });
 
   it("shows the rendering overlay only while the film is actually rendering", async () => {
-    const repo = { getFilm: vi.fn(async () => ({ ...film("film-1", "plan-a", "poster"), rendering: true })) };
+    const repo = { getFilm: vi.fn(async () => ({ ...film("film-1", "plan-a", "poster"), aspect: "16:9" as const, rendering: true })) };
     boundary.apiRepositories = new Map([["project-a", repo]]);
     boundary.params = { filmId: "film-1", repository: "api", projectId: "project-a" };
     await render(ReviewFilmScreen);
     expect(document.body.textContent).toContain("Rendering your film…");
+    expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-aspect")).toBe("landscape");
 
-    repo.getFilm.mockResolvedValue({ ...film("film-1", "plan-a", "poster"), rendering: false, videoUrl: "http://x/film.mp4" });
+    repo.getFilm.mockResolvedValue({ ...film("film-1", "plan-a", "poster"), aspect: "16:9", rendering: false, videoUrl: "http://x/film.mp4" });
     await act(async () => { await new Promise((done) => setTimeout(done, 2100)); });
     expect(document.body.textContent).not.toContain("Rendering your film…");
     const calls = repo.getFilm.mock.calls.length;

@@ -36,6 +36,20 @@ const apply = (ops: EditOp[]) => {
 };
 
 describe("applyEdits", () => {
+  it("remaps portrait-only collages to landscape and keeps each slot through a round trip", () => {
+    for (const layoutId of ["polaroid-garland", "postcard-stack", "route-map"] as const) {
+      const portraitOnly: Timeline = { ...firstCut, videoClips: firstCut.videoClips.map((clip) => "kind" in clip ? { ...clip, spec: { ...clip.spec, layoutId, motionId: layoutId === "polaroid-garland" ? "page-turn" as const : "stack-deal" as const } } : clip) };
+      const landscape = applyEdits(portraitOnly, [{ op: "setAspect", aspect: "16:9" }]);
+      expect(landscape).toMatchObject({ ok: true, timeline: { aspect: "16:9", videoClips: [expect.anything(), expect.anything(), expect.anything(), { spec: { slots: [{ slotId: "s1" }, { slotId: "s2" }, { slotId: "s3" }] } }] } });
+      if (!landscape.ok) continue;
+      const collage = landscape.timeline.videoClips[3] as Extract<Timeline["videoClips"][number], { kind: "collage" }>;
+      expect(collage.spec.layoutId).not.toBe(layoutId);
+      expect(collage.spec.slots).toHaveLength(3);
+      const portrait = applyEdits(landscape.timeline, [{ op: "setAspect", aspect: "9:16" }]);
+      expect(portrait.ok).toBe(true);
+      if (portrait.ok) expect(portrait.timeline.videoClips[3]).toMatchObject({ kind: "collage", spec: { slots: [{ slotId: "s1" }, { slotId: "s2" }, { slotId: "s3" }] } });
+    }
+  });
   it("returns the first cut unchanged when there are no edits", () => {
     const result = applyEdits(firstCut, []);
     expect(result).toEqual({ ok: true, timeline: firstCut, leftOutShotIds: [] });

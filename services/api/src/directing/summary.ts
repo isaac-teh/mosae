@@ -2,8 +2,9 @@ import type { AssetStatus } from "../domain/assetStatus.js";
 
 export type SummaryAsset = {
   id?: string;
-  facts?: { kind?: "photo" | "video"; localTime?: string | null };
-  media?: { kind?: "photo" | "video"; localTime?: string | null };
+  facts?: { kind?: "photo" | "video"; localTime?: string | null; width?: number; height?: number };
+  media?: { kind?: "photo" | "video"; localTime?: string | null; width?: number; height?: number };
+  dupOf?: string | null; quality?: { blurry?: boolean };
   place?: { name?: string; country?: string | null } | null;
   status: AssetStatus;
   hasFaces?: boolean;
@@ -17,6 +18,7 @@ export type ProjectSummary = {
   upload: { expected: number; settled: number; failed: number; cancelled: number; closed: boolean };
   ready: { summary: boolean; faces: boolean; plan: boolean; story: boolean };
   assetStatuses: { assetId: string; kind: "photo" | "video"; status: AssetStatus }[];
+  orientation: { portrait: number; landscape: number; square: number; suggested: "9:16" | "16:9" | null };
 };
 
 export function summarise(assets: SummaryAsset[], hasPlan: boolean, context: {
@@ -28,6 +30,18 @@ export function summarise(assets: SummaryAsset[], hasPlan: boolean, context: {
     const kind = (asset.media ?? asset.facts)?.kind;
     return asset.id && (kind === "photo" || kind === "video") ? [{ assetId: asset.id, kind, status: asset.status }] : [];
   });
+  const oriented = assets.filter((asset) => asset.status === "understood" && !asset.dupOf && !asset.quality?.blurry);
+  let portrait = 0, landscape = 0, square = 0;
+  for (const asset of oriented) {
+    const media = asset.media ?? asset.facts;
+    const width = media?.width ?? 0, height = media?.height ?? 0;
+    if (!(width > 0 && height > 0)) continue;
+    if (height > width * 1.05) portrait++;
+    else if (width > height * 1.05) landscape++;
+    else square++;
+  }
+  const nonSquare = portrait + landscape;
+  const suggested = nonSquare === 0 || portrait / nonSquare >= 0.7 ? "9:16" : portrait / nonSquare <= 0.3 ? "16:9" : null;
   const upload = context.upload ?? { expected: 0, settled: 0, failed: assets.filter((asset) => asset.status === "failed").length, cancelled: 0, closed: true };
   // Failed processing stays visible for acknowledgement, but is not reviewed media.
   assets = assets.filter((asset) => asset.status !== "failed");
@@ -59,7 +73,7 @@ export function summarise(assets: SummaryAsset[], hasPlan: boolean, context: {
     && upload.closed && upload.settled === upload.expected && (context.manifestReady ?? true)
     && (context.projectStatus === "ready" || context.projectStatus === "ready_with_errors");
   return {
-    upload,
+    upload, orientation: { portrait, landscape, square, suggested },
     total: assets.length, photos: photos.length, clips: assets.length - photos.length,
     days: uniqueDates.length, dateRange: uniqueDates.length ? { from: uniqueDates[0]!, to: uniqueDates[uniqueDates.length - 1]! } : null,
     places: places.slice(0, 6), country, season,

@@ -113,9 +113,10 @@ export type DirectionOptions = {
   motionFeel?: "calm" | "playful";
 };
 
-export type Direction = { focus?: string; note: string; cadenceId: string; soundtrackId: string | null; durationId: DurationChoice["id"] | null; durationSec?: number; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
+export type Direction = { aspect?: "9:16" | "16:9"; focus?: string; note: string; cadenceId: string; soundtrackId: string | null; durationId: DurationChoice["id"] | null; durationSec?: number; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
 
 export type Film = {
+  aspect?: "9:16" | "16:9";
   filmId: string;
   planId: string;
   version: number;

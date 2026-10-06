@@ -1,5 +1,5 @@
 export type EditorSelection = "none" | "slot" | "collage" | "collageCell" | "audio";
-export type ContextToolbarAction = "Deselect" | "Back" | "Music" | "Add" | "Ask" | "Replace" | "ReplaceCell" | "AddCell" | "Duplicate" | "Delete" | "Remove" | "Volume" | "Layout" | "Motion";
+export type ContextToolbarAction = "Deselect" | "Back" | "Music" | "Add" | "Ask" | "Replace" | "ReplaceCell" | "AddCell" | "Duplicate" | "Delete" | "Remove" | "Volume" | "Layout" | "Motion" | "Format";
 
 const actions: Record<EditorSelection, ContextToolbarAction[]> = {
   none: ["Ask"],

@@ -45,15 +45,15 @@ export function generationsRouter(deps: {
   // A Timeline names shots. Files hang off assets, so the shot is the hop in
   // between — `resolveSources` is deliberately given a flat id-to-file lookup
   // and never learns the project's collection layout.
-  const resolve: (projectId: string, shotId: string) => Promise<{ storagePath: string; sourceDurationSec?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null> =
+  const resolve: (projectId: string, shotId: string) => Promise<{ storagePath: string; sourceDurationSec?: number; width?: number; height?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null> =
     deps.loadSource ?? (async (projectId, shotId) => {
       const project = deps.db.collection("projects").doc(projectId);
       const shot = await project.collection("shots").doc(shotId).get();
       if (!shot.exists) return null;
       const asset = await project.collection("assets").doc(shot.get("assetId") as string).get();
       if (!asset.exists) return null;
-      const media = asset.get("media") as { durationSec?: unknown } | undefined;
-      return { storagePath: asset.get("storagePath") as string, ...(typeof media?.durationSec === "number" && media.durationSec > 0 ? { sourceDurationSec: media.durationSec } : {}), derivatives: asset.get("derivatives") };
+      const media = asset.get("media") as { durationSec?: unknown; width?: unknown; height?: unknown } | undefined;
+      return { storagePath: asset.get("storagePath") as string, ...(typeof media?.durationSec === "number" && media.durationSec > 0 ? { sourceDurationSec: media.durationSec } : {}), ...(typeof media?.width === "number" && media.width > 0 ? { width: media.width } : {}), ...(typeof media?.height === "number" && media.height > 0 ? { height: media.height } : {}), derivatives: asset.get("derivatives") };
     });
 
   for (const name of ["projectId", "generationId"]) {
@@ -172,9 +172,10 @@ export function generationsRouter(deps: {
       let sources: Record<string, string> | undefined;
       if (generation.timeline) {
         const videoClips = await Promise.all(generation.timeline.videoClips.map(async (clip) => {
-          if (!("source" in clip) || clip.source.kind !== "video" || clip.source.sourceDurationSec !== undefined) return clip;
+          if (!("source" in clip)) return clip;
           const source = await resolve(projectId, clip.source.shotId);
-          return source?.sourceDurationSec !== undefined ? { ...clip, source: { ...clip.source, sourceDurationSec: source.sourceDurationSec } } : clip;
+          if (!source) return clip;
+          return { ...clip, source: { ...clip.source, ...(clip.source.kind === "video" && clip.source.sourceDurationSec === undefined && source.sourceDurationSec !== undefined ? { sourceDurationSec: source.sourceDurationSec } : {}), ...(source.width ? { width: source.width } : {}), ...(source.height ? { height: source.height } : {}) } };
         }));
         response.timeline = { ...generation.timeline, videoClips };
         if (deps.loadUnusedMedia) response.unusedMedia = await deps.loadUnusedMedia(projectId, generation.timeline);

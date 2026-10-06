@@ -11,6 +11,7 @@ export type ProjectSummary = {
   country: string | null;
   season: string | null;
   processed: { ingested: number; understood: number; faces: number };
+  orientation?: { portrait: number; landscape: number; square: number; suggested: "9:16" | "16:9" | null };
   upload?: { expected: number; settled: number; failed: number; cancelled: number; closed: boolean };
   ready: { summary: boolean; faces: boolean; plan: boolean; story?: boolean };
   assetStatuses?: { assetId: string; kind: "photo" | "video"; status: "uploaded" | "ingested" | "understood" | "failed" }[];
@@ -29,7 +30,7 @@ export type ChatInput = {
   plan: StoryPlan | null;
   momentsConfirmed: boolean;
   conflict: { shotIds: string[]; message: string } | null;
-  direction: { confirmed: boolean; pace: "gentle" | "lively"; lengthSec: number; focus: string; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" } | null;
+  direction: { aspect?: "9:16" | "16:9"; confirmed: boolean; pace: "gentle" | "lively"; lengthSec: number; focus: string; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" } | null;
   directionNote?: string;
   generation: { status: "queued" | "running" | "done" | "failed"; stage: "queued" | "composing" | "playable" | "rendering" | "saved" | "failed"; progress: number; stepsDone: number; film: Film | null } | null;
   notes: string[];
@@ -47,7 +48,7 @@ export type ChatItem =
   | { kind: "anyone-else"; id: string }
   | { kind: "set-aside"; id: string; blurry: number; duplicates: number; blurryPhotos: { shotId: string; uri: string }[]; blurryMore: number; duplicatePhotos: { shotId: string; uri: string }[]; duplicateMore: number }
   | { kind: "moments"; id: string; suggestedShotIds: string[] }
-  | { kind: "direction"; id: string; pace: string; lengthSec: number; focus: string; momentCount: number }
+  | { kind: "direction"; id: string; aspect: "9:16" | "16:9"; orientation?: NonNullable<ProjectSummary["orientation"]>; pace: string; lengthSec: number; focus: string; momentCount: number }
   | { kind: "shaping"; id: string; progress: number; stepsDone: number }
   | { kind: "film"; id: string; film: Film };
 

@@ -12,13 +12,14 @@ function VolumeIcon() {
 
 const icons: Record<Exclude<ContextToolbarAction, "Volume">, string> = {
   Deselect: "‹", Music: "♫", Add: "+", Ask: "✦", Replace: "⇄", Duplicate: "⧉", Delete: "⌫", Layout: "▦", Motion: "◌",
-  Back: "‹", ReplaceCell: "⇄", AddCell: "+", Remove: "⌫",
+  Format: "▣", Back: "‹", ReplaceCell: "⇄", AddCell: "+", Remove: "⌫",
 };
 
 export function ToolBar({ selection = "none", onTool, disabledActions = {}, emptyCollageCell = false, hasEmptyCollageSlot = false }: { selection?: EditorSelection; onTool?: (tool: ContextToolbarAction) => void; disabledActions?: Partial<Record<ContextToolbarAction, string>>; emptyCollageCell?: boolean; hasEmptyCollageSlot?: boolean }) {
   const disabledHint = [...new Set(Object.values(disabledActions).filter(Boolean))].join(" · ");
   return <View className="border-t border-on-screen-muted/25 bg-screen pb-2 pt-2">
     <View className="flex-row items-center px-2" accessibilityLabel="Editor tools">
+      <Pressable role="button" accessibilityLabel="Format" onPress={() => onTool?.("Format")} className="min-h-[55px] min-w-[64px] items-center justify-center px-1"><Text className="font-sans text-[27px] leading-[30px] text-on-screen">▣</Text><Text className="mt-0.5 font-sans text-[11px] text-on-screen">Format</Text></Pressable>
       {selection === "none" ? <View className="min-h-[55px] flex-1 items-center justify-center px-2"><Text className="font-sans text-[12px] text-on-screen-muted">Tap on a clip to edit it</Text></View> : <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1" contentContainerClassName="flex-grow items-center justify-center">
       {contextToolbar(selection, { hasEmptyCollageSlot }).filter((name) => name !== "Ask").map((name) => <Pressable key={name} role="button" accessibilityLabel={(name === "ReplaceCell" && emptyCollageCell) || (name === "AddCell" && hasEmptyCollageSlot) ? "Add photo" : name === "ReplaceCell" ? "Replace" : name} accessibilityHint={disabledActions[name]} disabled={Boolean(disabledActions[name])} onPress={() => onTool?.(name)} className="min-h-[55px] min-w-[64px] items-center justify-center px-1">
         {name === "Volume" ? <View className="h-[30px] items-center justify-center"><VolumeIcon /></View> : <Text className="font-sans text-[27px] leading-[30px] text-on-screen">{(emptyCollageCell && name === "ReplaceCell") || (hasEmptyCollageSlot && name === "AddCell") ? "+" : icons[name]}</Text>}

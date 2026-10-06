@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { COLLAGE_LAYOUTS, CollageSpecSchema } from "./collage.js";
+import { ALLOWED_COMBOS } from "./collageCombos.js";
 import { safeParseTimeline, type AudioClip, type Caption, type CollageClip, type Timeline, type VideoClip } from "./timeline.js";
 
 const clipId = z.string().min(1);
@@ -26,6 +27,7 @@ export const EditOpSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("addCollageSlot"), clipId, slotId: z.string().min(1), shotId, kind: z.enum(["photo", "video"]) }),
   z.strictObject({ op: z.literal("removeCollageSlot"), clipId, slotId: z.string().min(1) }),
   z.strictObject({ op: z.literal("splitCollage"), clipId }),
+  z.strictObject({ op: z.literal("setAspect"), aspect: z.enum(["9:16", "16:9"]) }),
   z.strictObject({ op: z.literal("setSoundtrack"), soundtrackId: z.string().min(1) }),
   z.strictObject({ op: z.literal("setMusicVolume"), audioClipId: clipId, gainDb: z.number().finite().min(-60).max(12) }),
 ]);
@@ -125,6 +127,7 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
     ? [[idOf(item.clip), { inSec: item.clip.source.sourceStartSec ?? (item.clip.source.sourceDurationSec !== undefined ? 0 : item.clip.source.sourceInSec), outSec: item.clip.source.sourceEndSec ?? item.clip.source.sourceDurationSec ?? item.clip.source.sourceOutSec }] as const]
     : []));
   let soundtrackId: string | undefined;
+  let aspect = base.timeline.aspect;
   const musicGains = new Map<string, number>();
   const leftOutShotIds: string[] = [];
   for (let opIndex = 0; opIndex < ops.length; opIndex++) {
@@ -272,6 +275,20 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         work.splice(index, 1, ...split);
         break;
       }
+      case "setAspect": {
+        aspect = op.aspect;
+        work = work.map((entry) => {
+          if (!("kind" in entry.clip)) return entry;
+          const spec = entry.clip.spec;
+          const oldLayout = COLLAGE_LAYOUTS.find((layout) => layout.id === spec.layoutId)!;
+          if (oldLayout.aspect.some((supported: string) => supported === aspect)) return entry;
+          const candidates = COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((supported: string) => supported === aspect) && spec.slots.length >= layout.minSlots && spec.slots.length <= layout.maxSlots)
+            .sort((a, b) => Number(b.preferredSlots === spec.slots.length) - Number(a.preferredSlots === spec.slots.length));
+          const replacement = candidates.flatMap((layout) => ALLOWED_COMBOS.filter((combo) => combo.layoutId === layout.id).map((combo) => ({ ...entry.clip as CollageClip, spec: { ...spec, layoutId: layout.id, motionId: combo.motionId } }))).at(0);
+          return replacement ? { ...entry, clip: replacement } : entry;
+        });
+        break;
+      }
       case "setSoundtrack": soundtrackId = op.soundtrackId; break;
       case "setMusicVolume": {
         const music = base.timeline.audioClips.find((track) => track.id === op.audioClipId && track.role === "music" && track.source.kind === "soundtrack");
@@ -281,10 +298,10 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         break;
       }
     }
-    const result = safeParseTimeline(buildTimeline(base.timeline, work, soundtrackId, musicGains));
+    const result = safeParseTimeline({ ...buildTimeline(base.timeline, work, soundtrackId, musicGains), aspect });
     if (!result.ok) return fail(result.errors.join("; "));
   }
-  const result = safeParseTimeline(buildTimeline(base.timeline, work, soundtrackId, musicGains));
+  const result = safeParseTimeline({ ...buildTimeline(base.timeline, work, soundtrackId, musicGains), aspect });
   if (!result.ok) return { ok: false, error: result.errors.join("; "), opIndex: Math.max(0, ops.length - 1) };
   return { ok: true, timeline: result.timeline, leftOutShotIds };
 }

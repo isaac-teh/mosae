@@ -20,6 +20,19 @@ vi.mock("remotion", () => ({
 }));
 
 import { MosaeTimeline } from "./Timeline";
+import { clipFitForSource } from "./timelineMetadata";
+
+describe("clipFitForSource", () => {
+  it("uses blurred fill for orientation mismatches and cover otherwise", () => {
+    expect(clipFitForSource({ width: 400, height: 800 }, "16:9")).toBe("fill");
+    expect(clipFitForSource({ width: 800, height: 400 }, "16:9")).toBe("cover");
+    expect(clipFitForSource({ width: 800, height: 400 }, "9:16")).toBe("fill");
+  });
+  it("keeps user crops in cover mode and unknown dimensions safe", () => {
+    expect(clipFitForSource({ width: 400, height: 800 }, "16:9", { x: 0.5 })).toBe("cover");
+    expect(clipFitForSource(undefined, "16:9")).toBe("cover");
+  });
+});
 
 describe("MosaeTimeline", () => {
   it("renders video selection layers only when an editor selection handler is supplied", () => {

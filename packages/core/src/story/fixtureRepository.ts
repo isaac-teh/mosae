@@ -180,6 +180,7 @@ const directionOptions: DirectionOptions = {
 };
 
 const baseFilm: Film = {
+  aspect: "9:16",
   filmId: FILM_ID,
   planId: PLAN_ID,
   version: 1,

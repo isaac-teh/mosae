@@ -578,7 +578,7 @@ export function createApiStoryRepository(
         schemaVersion: 1, id: newId(), projectId, version: 1, note: direction.note,
         cadenceId: direction.cadenceId, soundtrackId: direction.soundtrackId, durationId: direction.durationId, ...(direction.durationSec === undefined ? {} : { durationSec: direction.durationSec }),
         ...(direction.focus === undefined ? {} : { focus: direction.focus }),
-        aspect: "9:16", captions: false,
+        aspect: direction.aspect ?? "9:16", captions: false,
         collageAmount: direction.collageAmount ?? "few", motionFeel: direction.motionFeel ?? "calm",
       };
       return { filmId: await postGeneration({ proposalId: planId, settings }) };
@@ -722,6 +722,7 @@ export function createApiStoryRepository(
     const dateLabel = [place, projectDateRange(projectRecord.dateRange)].filter(Boolean).join(" • ");
     const length = `${Math.floor(durationSec / 60)}:${String(Math.round(durationSec % 60)).padStart(2, "0")}`;
     return {
+      aspect: timeline?.aspect === "16:9" ? "16:9" : "9:16",
       filmId,
       planId,
       version,
