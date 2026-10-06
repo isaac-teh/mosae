@@ -128,6 +128,7 @@ describe("film editor", () => {
     const ask = host.querySelector('[aria-label="Ask AI"]')!;
     const rowButtons = [...ask.parentElement!.querySelectorAll("button")].map((button) => button.getAttribute("aria-label"));
     expect(rowButtons.slice(0, 4)).toEqual(["Ask AI", "Ratio", "Undo", "Redo"]);
+    expect([...ask.parentElement!.querySelectorAll("button")].slice(0, 4).map((button) => button.textContent)).toEqual(["Ask AI", "Ratio", "Undo", "Redo"]);
     const ratio = host.querySelector('[aria-label="Ratio"]')!;
     expect(ratio.textContent).toContain("Ratio");
     expect(ratio.querySelector("svg")?.querySelectorAll("path")).toHaveLength(1);
@@ -240,15 +241,15 @@ describe("film editor", () => {
     expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "move", clipId: "a", toIndex: 2 }]);
   });
 
-  it("renders prominent undo and redo arrows in 44px disabled header controls", async () => {
+  it("renders 24px undo and redo arrows in fixed disabled header columns", async () => {
     await render(<EditorScreen />);
     for (const label of ["Undo", "Redo"]) {
       const button = host.querySelector(`[aria-label="${label}"]`) as HTMLButtonElement;
-      expect(button.className).toContain("min-h-11");
-      expect(button.className).toContain("min-w-11");
+      expect(button.className).toContain("h-[48px]");
+      expect(button.className).toContain("w-[52px]");
       const svg = button.querySelector("svg");
-      expect(svg?.getAttribute("width")).toBe("28");
-      expect(svg?.getAttribute("height")).toBe("28");
+      expect(svg?.getAttribute("width")).toBe("24");
+      expect(svg?.getAttribute("height")).toBe("24");
       const paths = [...(svg?.querySelectorAll("path") ?? [])];
       expect(paths.some((path) => Number(path.getAttribute("stroke-width")) >= 2)).toBe(true);
       expect(paths.every((path) => path.getAttribute("stroke") === "rgb(var(--color-ink-muted))")).toBe(true);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Share, Text, View, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import Svg, { Path } from "react-native-svg";
 import { Asset } from "expo-asset";
 import { COLLAGE_LAYOUTS, type EditOp, type Timeline } from "@mosae/contracts";
 import { createReplacementGuard, duplicateClip, trimRange, uploadReplacement, videoTrimBounds, type ContextToolbarAction, type UploadProgress } from "@mosae/core";
@@ -327,11 +328,11 @@ export default function EditorScreen() {
         </View>
         <View className="mt-4 flex-row items-center justify-between">
           <View className="flex-row items-center gap-3"><Pressable role="button" accessibilityLabel={playing ? "Pause film" : "Play film"} onPress={() => setTogglePlayRequest((request) => request + 1)} className="min-h-11 min-w-11 items-center justify-center rounded-full bg-black/35"><Text className="font-sans text-[18px] text-on-screen">{playing ? "Ⅱ" : "▶"}</Text></Pressable><Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text></View>
-          <View className="flex-row gap-1">
-            <Pressable role="button" accessibilityLabel="Ask AI" onPress={() => openTool("Ask")} className="min-h-11 min-w-11 items-center justify-center"><Text className="text-[25px] text-on-screen">✦</Text><Text className="font-sans text-[9px] text-on-screen-muted">Ask AI</Text></Pressable>
-            <Pressable role="button" accessibilityLabel="Ratio" onPress={() => openTool("Format")} className="min-h-11 min-w-11 items-center justify-center"><RatioIcon /><Text className="font-sans text-[9px] text-on-screen-muted">Ratio</Text></Pressable>
-            <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="min-h-11 min-w-11 items-center justify-center"><UndoIcon disabled={!editor.canUndo} /></Pressable>
-            <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="min-h-11 min-w-11 items-center justify-center"><RedoIcon disabled={!editor.canRedo} /></Pressable>
+          <View className="flex-row items-start gap-1">
+            <Pressable role="button" accessibilityLabel="Ask AI" onPress={() => openTool("Ask")} className="h-[48px] w-[52px] items-center justify-start"><View className="h-7 w-7 items-center justify-center"><Svg width={24} height={24} viewBox="0 0 24 24" accessibilityElementsHidden><Path d="m12 2 1.8 7.2L21 11l-7.2 1.8L12 20l-1.8-7.2L3 11l7.2-1.8L12 2Zm7 13 .8 3.2L23 19l-3.2.8L19 23l-.8-3.2L15 19l3.2-.8L19 15Z" fill="white" /></Svg></View><Text className="mt-1 font-sans text-[10px] leading-[12px] text-on-screen-muted">Ask AI</Text></Pressable>
+            <Pressable role="button" accessibilityLabel="Ratio" onPress={() => openTool("Format")} className="h-[48px] w-[52px] items-center justify-start"><View className="h-7 w-7 items-center justify-center"><RatioIcon /></View><Text className="mt-1 font-sans text-[10px] leading-[12px] text-on-screen-muted">Ratio</Text></Pressable>
+            <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="h-[48px] w-[52px] items-center justify-start"><View className="h-7 w-7 items-center justify-center"><UndoIcon disabled={!editor.canUndo} /></View><Text className={`mt-1 font-sans text-[10px] leading-[12px] text-on-screen-muted ${editor.canUndo ? "" : "opacity-50"}`}>Undo</Text></Pressable>
+            <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="h-[48px] w-[52px] items-center justify-start"><View className="h-7 w-7 items-center justify-center"><RedoIcon disabled={!editor.canRedo} /></View><Text className={`mt-1 font-sans text-[10px] leading-[12px] text-on-screen-muted ${editor.canRedo ? "" : "opacity-50"}`}>Redo</Text></Pressable>
           </View>
         </View>
         <TimelineStrip timeline={editor.timeline} sources={editor.sources} thumbnails={editor.thumbnails} selectedClipId={editor.selectedClipId} selectedAudioClipId={selectedAudioClipId} playheadSec={playhead} soundtrackName={soundtrackName ? `${soundtrackName} · paced to the film` : null}
