@@ -8,6 +8,7 @@ export type TimelineProps = {
    * usable from a test fixture and from Cloud Run without changing.
    */
   sources: Record<string, string>;
+  sourceDimensions?: Record<string, { width: number; height: number }>;
   selectedClipId?: string | null;
   onSelectClip?: (clipId: string) => void;
   onCommitPhotoCrop?: (clipId: string, crop: { x: number; y: number; scale: number; rotationDeg?: number }) => void;
@@ -15,6 +16,14 @@ export type TimelineProps = {
   onSelectCollageCell?: (clipId: string, slotId: string) => void;
   onCommitCollageCrop?: (clipId: string, slotId: string, crop: { x: number; y: number; scale: number; rotationDeg?: number }) => void;
 };
+
+export type ClipFit = "fill" | "cover";
+export function clipFitForSource(dimensions: { width: number; height: number } | undefined, aspect: Timeline["aspect"], photoTransform?: unknown): ClipFit {
+  if (photoTransform || !dimensions || dimensions.width <= 0 || dimensions.height <= 0) return "cover";
+  const sourceLandscape = dimensions.width / dimensions.height > 1;
+  const timelineLandscape = aspect === "16:9";
+  return sourceLandscape === timelineLandscape ? "cover" : "fill";
+}
 
 const FRAME_SIZES = { "16:9": { width: 1920, height: 1080 }, "9:16": { width: 1080, height: 1920 } } as const;
 
