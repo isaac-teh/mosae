@@ -2,7 +2,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { contextToolbar, type ContextToolbarAction, type EditorSelection } from "@mosae/core";
 
-function RatioIcon() {
+export function RatioIcon() {
   return <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" accessibilityElementsHidden>
     <Path d="M9 3H4v5M15 3h5v5M20 16v5h-5M9 21H4v-5" stroke="white" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>;
@@ -25,7 +25,6 @@ export function ToolBar({ selection = "none", onTool, disabledActions = {}, empt
   const disabledHint = [...new Set(Object.values(disabledActions).filter(Boolean))].join(" · ");
   return <View className="border-t border-on-screen-muted/25 bg-screen pb-2 pt-2">
     <View className="flex-row items-center px-2" accessibilityLabel="Editor tools">
-      <Pressable role="button" accessibilityLabel="Ratio" onPress={() => onTool?.("Format")} className="min-h-[55px] min-w-[64px] items-center justify-center px-1"><View className="h-[30px] items-center justify-center"><RatioIcon /></View><Text className="mt-0.5 font-sans text-[11px] text-on-screen">Ratio</Text></Pressable>
       {selection === "none" ? <View className="min-h-[55px] flex-1 items-center justify-center px-2"><Text className="font-sans text-[12px] text-on-screen-muted">Tap on a clip to edit it</Text></View> : <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1" contentContainerClassName="flex-grow items-center justify-center">
       {contextToolbar(selection, { hasEmptyCollageSlot }).filter((name) => name !== "Ask").map((name) => <Pressable key={name} role="button" accessibilityLabel={(name === "ReplaceCell" && emptyCollageCell) || (name === "AddCell" && hasEmptyCollageSlot) ? "Add photo" : name === "ReplaceCell" ? "Replace" : name} accessibilityHint={disabledActions[name]} disabled={Boolean(disabledActions[name])} onPress={() => onTool?.(name)} className="min-h-[55px] min-w-[64px] items-center justify-center px-1">
         {name === "Volume" ? <View className="h-[30px] items-center justify-center"><VolumeIcon /></View> : <Text className="font-sans text-[27px] leading-[30px] text-on-screen">{(emptyCollageCell && name === "ReplaceCell") || (hasEmptyCollageSlot && name === "AddCell") ? "+" : icons[name]}</Text>}

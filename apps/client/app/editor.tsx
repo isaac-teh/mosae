@@ -9,7 +9,7 @@ import { useEditor } from "@/lib/useEditor";
 import type { StoryPlan, DirectionOptions, Moment } from "@mosae/core";
 import { EditorPreview } from "@/components/editor/EditorPreview";
 import { TimelineStrip } from "@/components/editor/TimelineStrip";
-import { ToolBar } from "@/components/editor/ToolBar";
+import { RatioIcon, ToolBar } from "@/components/editor/ToolBar";
 import { SaveState } from "@/components/editor/SaveState";
 import { AddSheet } from "@/components/editor/AddSheet";
 import { CollagePanel } from "@/components/editor/CollagePanel";
@@ -329,6 +329,7 @@ export default function EditorScreen() {
           <View className="flex-row items-center gap-3"><Pressable role="button" accessibilityLabel={playing ? "Pause film" : "Play film"} onPress={() => setTogglePlayRequest((request) => request + 1)} className="min-h-11 min-w-11 items-center justify-center rounded-full bg-black/35"><Text className="font-sans text-[18px] text-on-screen">{playing ? "Ⅱ" : "▶"}</Text></Pressable><Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text></View>
           <View className="flex-row gap-1">
             <Pressable role="button" accessibilityLabel="Ask AI" onPress={() => openTool("Ask")} className="min-h-11 min-w-11 items-center justify-center"><Text className="text-[25px] text-on-screen">✦</Text><Text className="font-sans text-[9px] text-on-screen-muted">Ask AI</Text></Pressable>
+            <Pressable role="button" accessibilityLabel="Ratio" onPress={() => openTool("Format")} className="min-h-11 min-w-11 items-center justify-center"><RatioIcon /><Text className="font-sans text-[9px] text-on-screen-muted">Ratio</Text></Pressable>
             <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="min-h-11 min-w-11 items-center justify-center"><UndoIcon disabled={!editor.canUndo} /></Pressable>
             <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="min-h-11 min-w-11 items-center justify-center"><RedoIcon disabled={!editor.canRedo} /></Pressable>
           </View>

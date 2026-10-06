@@ -128,15 +128,11 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Replace"]')?.textContent).toContain("Replace");
   });
 
-  it("labels the frame tool Ratio and opens the existing ratio action", async () => {
+  it("keeps the empty-state toolbar focused on clip editing", async () => {
     const { ToolBar } = await import("../components/editor/ToolBar");
-    const onTool = vi.fn();
-    await render(<ToolBar selection="none" onTool={onTool} />);
-    const ratio = host.querySelector('[aria-label="Ratio"]');
-    expect(ratio?.textContent).toContain("Ratio");
-    expect(ratio?.querySelector("svg")?.querySelectorAll("path")).toHaveLength(1);
-    await click("Ratio");
-    expect(onTool).toHaveBeenCalledWith("Format");
+    await render(<ToolBar selection="none" onTool={() => {}} />);
+    expect(host.textContent).toContain("Tap on a clip to edit it");
+    expect(host.querySelector('[aria-label="Ratio"]')).toBeNull();
   });
 
   it("shows an outlined speaker icon for the accessible Volume action", async () => {
