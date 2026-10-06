@@ -79,6 +79,12 @@ describe("Director chat", () => {
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ aspect: expectedAspect })));
   });
 
+  it("renders the completed chat film card in its landscape format", async () => {
+    setup({ readyPlan: true, getFilm: async () => ({ ...filmFixture, aspect: "16:9" }), getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: "film-1", generationStatus: "playable" }) });
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('[data-testid="film-player"]')?.getAttribute("data-aspect")).toBe("landscape"));
+  });
+
   it("keeps the chat history in a constrained, independently scrollable flex region", async () => {
     setup(); await renderScreen();
     const history = host.querySelector('[aria-label="Director chat history"]') as HTMLElement | null;

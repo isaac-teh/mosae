@@ -51,6 +51,11 @@ describe("web editor preview seeks", () => {
     expect(host.querySelector(".mosae-editor-preview [role=button]")?.getAttribute("data-current-time")).toBe("4");
   });
 
+  it("passes a landscape timeline through to the shared Remotion composition", async () => {
+    await act(async () => root.render(<EditorPreview timeline={{ ...timeline, aspect: "16:9" }} sources={{}} />));
+    expect(playerMock.inputProps[0]).toMatchObject({ timeline: { aspect: "16:9" } });
+  });
+
   it("keeps player inputs stable and never seeks when a playback frame updates", async () => {
     const sources = { "shot-a": "photo.jpg", "lyria-playful": "soundtrack.mp3" };
     function Harness() {
