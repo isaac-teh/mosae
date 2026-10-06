@@ -51,6 +51,8 @@ export type VideoShotAnalysis = {
   quality: number;
   usable: boolean;
   reason: string;
+  /** Original-video timebase; absent on legacy analyses. */
+  highlights?: { startSec: number; endSec: number; label: string; score: number }[];
 };
 
 export type ShotAnalysis = PhotoAnalysis | VideoShotAnalysis;

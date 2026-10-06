@@ -19,7 +19,7 @@ const shots = (projectId: string) => adminDb.collection(`projects/${projectId}/s
 describe("shotRecords", () => {
   it("makes one interval-less shot for a photo", () => {
     expect(shotRecords({ assetId: "a1", generation: "7", media: photo, ranges: [] })).toEqual([
-      { id: "a1_0000", index: 0, assetId: "a1", assetGeneration: "7", mediaType: "photo", analysisVersion: 1, sourceStartSec: null, sourceEndSec: null },
+      { id: "a1_0000", index: 0, assetId: "a1", assetGeneration: "7", mediaType: "photo", analysisVersion: 2, sourceStartSec: null, sourceEndSec: null },
     ]);
   });
 

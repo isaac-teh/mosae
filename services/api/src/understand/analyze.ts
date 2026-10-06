@@ -6,7 +6,7 @@ import { MODELS } from "../gemini/pricing.js";
 import { normalizeFaces } from "./faceDetect.js";
 
 const photoPrompt = "Analyze this photo for a family-memory shot catalog. Do not identify people by name, gender or relationship. Be concise and only describe visible evidence. Score aesthetics and keyMomentScore as integers from 1 to 5. Detect every human face; for each give bbox as [ymin, xmin, ymax, xmax] on a 0-1000 grid, confidence 0-1, ageBand (child, teen, adult or senior), appearance (clothing, hair and accessories only), prominence (primary, secondary or background), expression, lookingAtCamera, and faceVisible. Set faceVisible false when the face is hidden, turned away, or only the back of the head is visible. List interactions between faces as {from, to, kind} using face indices, e.g. carrying, holding hands, hugging.";
-const videoPrompt = (count: number, duration: number) => `Analyze this video, already split into exactly ${count} shots in order. Return one analysis object per shot, in the same order, plus a transcript of audible speech with timestamps. Keep every timestamp within duration ${duration.toFixed(2)} seconds. Do not identify people by name.`;
+const videoPrompt = (count: number, duration: number) => `Analyze this video, already split into exactly ${count} shots in order. Return one analysis object per shot, in the same order, plus a transcript of audible speech with timestamps. For each shot also return up to 3 highlights with startSec, endSec, label and score from 0 to 1; use timestamps in the original video timebase. Keep every timestamp within duration ${duration.toFixed(2)} seconds. Do not identify people by name.`;
 
 const VALID_AGE_BANDS = new Set(["child", "teen", "adult", "senior"]);
 const VALID_PROMINENCES = new Set(["primary", "secondary", "background"]);
@@ -107,7 +107,7 @@ function isFlatBox(face: unknown): boolean {
   const bbox = (face as Record<string, unknown>).bbox;
   return Array.isArray(bbox) && bbox.length === 4 && bbox.every((value) => typeof value === "number" && Number.isFinite(value));
 }
-const videoShotSchema = z.strictObject({ description: z.string().min(1), camera: z.string().min(1), role: z.enum(["A_ROLL", "B_ROLL"]), subjects: z.array(z.string()), emotion: z.string().min(1), quality: z.number().min(1).max(5), usable: z.boolean(), reason: z.string().min(1) });
+const videoShotSchema = z.strictObject({ description: z.string().min(1), camera: z.string().min(1), role: z.enum(["A_ROLL", "B_ROLL"]), subjects: z.array(z.string()), emotion: z.string().min(1), quality: z.number().min(1).max(5), usable: z.boolean(), reason: z.string().min(1), highlights: z.array(z.strictObject({ startSec: z.number().finite(), endSec: z.number().finite(), label: z.string().min(1), score: z.number().finite() })).optional() });
 const videoSchema = z.strictObject({ shots: z.array(videoShotSchema), transcript: z.array(z.strictObject({ startSec: z.number().min(0), endSec: z.number().min(0), text: z.string() })) });
 // responseJsonSchema CONSTRAINS the reply, it does not hint at it: an empty
 // `properties` makes Gemini return `{}` every time. Name the fields; the Zod
@@ -174,6 +174,7 @@ const videoResponseSchema = {
           quality: { type: "number" },
           usable: { type: "boolean" },
           reason: { type: "string" },
+          highlights: { type: "array", maxItems: 3, items: { type: "object", properties: { startSec: { type: "number" }, endSec: { type: "number" }, label: { type: "string" }, score: { type: "number" } }, required: ["startSec", "endSec", "label", "score"] } },
         },
         required: ["description", "camera", "role", "subjects", "emotion", "quality", "usable", "reason"],
       },
@@ -236,7 +237,19 @@ export async function analyzePhoto(deps: GenerateDeps, input: { assetId: string;
   };
 }
 export type VideoFile = { uri: string; mimeType: string };
-export async function analyzeVideo(deps: GenerateDeps, input: { assetId: string; file: VideoFile; shotCount: number; durationSec: number }): Promise<{ shots: VideoShotAnalysis[]; transcript: TranscriptLine[] }> {
+export async function analyzeVideo(deps: GenerateDeps, input: { assetId: string; file: VideoFile; shotCount: number; durationSec: number; shotRanges?: { startSec: number | null; endSec: number | null }[] }): Promise<{ shots: VideoShotAnalysis[]; transcript: TranscriptLine[] }> {
   const parsed = await generateStructured({ model: MODELS.analyze, stage: "understand.analyze", subjectId: input.assetId, contents: [{ text: videoPrompt(input.shotCount, input.durationSec) }, { fileData: { fileUri: input.file.uri, mimeType: input.file.mimeType } }], responseSchema: videoResponseSchema, validate: (value) => { const result = videoSchema.parse(value); if (result.shots.length !== input.shotCount) throw new Error(`expected ${input.shotCount} shots, got ${result.shots.length}`); return result; }, thinking: "LOW" }, deps);
-  return { shots: parsed.shots.map((shot) => ({ kind: "video" as const, ...shot })), transcript: parsed.transcript };
+  return { shots: parsed.shots.map((shot, i) => {
+    const range = input.shotRanges?.[i];
+    if (!shot.highlights) return { kind: "video" as const, ...shot };
+    const rangeStart = range?.startSec ?? 0;
+    const rangeEnd = range?.endSec ?? input.durationSec;
+    const highlights = shot.highlights.flatMap((highlight) => {
+      if (highlight.score < 0 || highlight.score > 1) return [];
+      const startSec = Math.max(rangeStart, Math.min(rangeEnd, highlight.startSec));
+      const endSec = Math.max(rangeStart, Math.min(rangeEnd, highlight.endSec));
+      return endSec > startSec ? [{ ...highlight, startSec, endSec }] : [];
+    }).sort((a, b) => b.score - a.score).slice(0, 3);
+    return { kind: "video" as const, ...shot, ...(highlights.length ? { highlights } : { highlights: undefined }) };
+  }), transcript: parsed.transcript };
 }

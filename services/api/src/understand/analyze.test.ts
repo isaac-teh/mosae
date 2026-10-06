@@ -41,6 +41,20 @@ describe("Gemini shot analysis", () => {
     await expect(analyzeVideo(deps(generateContent), { assetId: "a1", file: { uri: "gs://x", mimeType: "video/mp4" }, shotCount: 3, durationSec: 5 })).rejects.toThrow("expected 3 shots, got 1");
   });
 
+  it("clamps highlights to each source shot, drops invalid ranges and scores, and keeps the top three", async () => {
+    const value = { shots: [{ description: "moment", camera: "static", role: "B_ROLL", subjects: [], emotion: "joy", quality: 4, usable: true, reason: "clear", highlights: [
+      { startSec: 8, endSec: 12, label: "clamped", score: 0.8 }, { startSec: 10, endSec: 11, label: "invalid", score: 1.2 },
+      { startSec: 12, endSec: 12, label: "empty", score: 0.9 }, { startSec: 11, endSec: 12, label: "third", score: 0.7 },
+      { startSec: 10, endSec: 11, label: "best", score: 0.95 }, { startSec: 10, endSec: 11, label: "second", score: 0.85 },
+    ] }], transcript: [] };
+    const result = await analyzeVideo(deps(vi.fn().mockResolvedValue(reply(JSON.stringify(value)))), { assetId: "a1", file: { uri: "gs://x", mimeType: "video/mp4" }, shotCount: 1, durationSec: 20, shotRanges: [{ startSec: 10, endSec: 12 }] });
+    expect(result.shots[0]?.highlights).toEqual([
+      { startSec: 10, endSec: 11, label: "best", score: 0.95 },
+      { startSec: 10, endSec: 11, label: "second", score: 0.85 },
+      { startSec: 10, endSec: 12, label: "clamped", score: 0.8 },
+    ]);
+  });
+
   it("extracts per-face attributes and maps interactions to faceIds", async () => {
     const enrichedJson = JSON.stringify({
       caption: "c",
