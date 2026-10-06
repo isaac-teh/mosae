@@ -181,8 +181,8 @@ describe("director chat components", () => {
   it("renders the direction controls and header progress", async () => {
     const onChange = vi.fn();
     await render(<><ChatDirectionCard aspect="9:16" orientation={{ portrait: 8, landscape: 2, suggested: "9:16" }} pace="gentle" lengthSec={120} durations={[{ id: "30s", label: "30 sec", seconds: 30 }, { id: "1m", label: "1 min", seconds: 60 }, { id: "2m", label: "2 min", seconds: 120 }]} focus="family" collageAmount="few" motionFeel="calm" focusOptions={[{ id: "family", label: "Everyone" }, { id: "reactions", label: "Her reactions" }]} onChange={onChange} /><ChatHeader title="Japan, autumn" confirmed={3} ready={false} onBack={vi.fn()} /></>);
-    expect(host.textContent).toContain("Most of your photos are portrait (8 of 10)"); expect(host.textContent).toContain("Yes, portrait");
-    await click("Landscape instead"); expect(onChange).toHaveBeenCalledWith({ aspect: "16:9" });
+    expect(host.textContent).toContain("Most of your photos are vertical (8 of 10) — make it TikTok / Reels style? 📱"); expect(host.textContent).toContain("Yes, TikTok style"); expect(host.textContent).toContain("YouTube style instead");
+    await click("YouTube style instead"); expect(onChange).toHaveBeenCalledWith({ aspect: "16:9" });
     expect(host.textContent).toContain("Pace"); expect(host.textContent).toContain("Length"); expect(host.textContent).toContain("Focus");
     expect(host.textContent).not.toContain("With these moments, I can make up to");
     expect(host.textContent).toContain("Style"); expect(host.textContent).toContain("Collages"); expect(host.textContent).toContain("Motion");
@@ -195,11 +195,12 @@ describe("director chat components", () => {
   });
 
   it.each([
-    ["landscape", { portrait: 2, landscape: 8, suggested: "16:9" as const }, "Yes, landscape", "Portrait instead", "16:9"],
-    ["mixed", { portrait: 5, landscape: 5, suggested: null }, "📱 Portrait", "🖥️ Landscape", "9:16"],
-  ])("shows the %s suggestion as selected with explicit chip choices", async (_name, orientation, suggestedLabel, alternateLabel, selectedAspect) => {
+    ["landscape", { portrait: 2, landscape: 8, suggested: "16:9" as const }, "Most of your photos are horizontal (8 of 10) — make it YouTube style? 🖥️", "Yes, YouTube style", "TikTok style instead", "16:9"],
+    ["mixed", { portrait: 5, landscape: 5, suggested: null }, "Your photos are a mix — which style do you want?", "📱 TikTok / Reels style", "🖥️ YouTube style", "9:16"],
+  ])("shows the %s suggestion as selected with explicit chip choices", async (_name, orientation, prompt, suggestedLabel, alternateLabel, selectedAspect) => {
     const onChange = vi.fn();
     await render(<ChatDirectionCard aspect={selectedAspect as "9:16" | "16:9"} orientation={orientation as any} pace="gentle" lengthSec={120} durations={[]} focus="family" collageAmount="few" motionFeel="calm" focusOptions={[]} onChange={onChange} />);
+    expect(host.textContent).toContain(prompt);
     expect(host.querySelector(`[aria-label="${suggestedLabel}"]`)?.getAttribute("aria-pressed")).toBe("true");
     await click(alternateLabel as string);
     expect(onChange).toHaveBeenCalledWith({ aspect: selectedAspect === "16:9" ? "9:16" : "16:9" });

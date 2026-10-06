@@ -7,9 +7,9 @@ type ChatDirectionCardProps = { aspect: "9:16" | "16:9"; orientation?: { portrai
 export function ChatDirectionCard({ aspect, orientation, pace, lengthSec, durations, focus, collageAmount, motionFeel, focusOptions, onChange }: ChatDirectionCardProps) {
   const total = (orientation?.portrait ?? 0) + (orientation?.landscape ?? 0);
   const suggested = orientation?.suggested;
-  const prompt = suggested === "9:16" ? `Most of your photos are portrait (${orientation!.portrait} of ${total}) — make it a portrait film for phones? 📱` : suggested === "16:9" ? `Most of your photos are landscape (${orientation!.landscape} of ${total}) — make it a landscape film for TV/laptop? 🖥️` : "Your photos are a mix of portrait and landscape — how will you mostly watch it?";
-  const yes = suggested === "9:16" ? "Yes, portrait" : suggested === "16:9" ? "Yes, landscape" : "📱 Portrait";
-  const other = suggested ? (suggested === "9:16" ? "Landscape instead" : "Portrait instead") : "🖥️ Landscape";
+  const prompt = suggested === "9:16" ? `Most of your photos are vertical (${orientation!.portrait} of ${total}) — make it TikTok / Reels style? 📱` : suggested === "16:9" ? `Most of your photos are horizontal (${orientation!.landscape} of ${total}) — make it YouTube style? 🖥️` : "Your photos are a mix — which style do you want?";
+  const yes = suggested === "9:16" ? "Yes, TikTok style" : suggested === "16:9" ? "Yes, YouTube style" : "📱 TikTok / Reels style";
+  const other = suggested ? (suggested === "9:16" ? "YouTube style instead" : "TikTok style instead") : "🖥️ YouTube style";
   return <View className="w-full flex-col gap-4 rounded-md border border-line bg-surface-raised p-4">
     <View className="flex-col gap-2"><Text className="text-label font-sans-medium text-ink">{prompt}</Text><View className="flex-row flex-wrap gap-2"><FocusChip label={yes} selected={aspect === (suggested ?? "9:16")} onPress={() => onChange({ aspect: suggested ?? "9:16" })} /><FocusChip label={other} selected={aspect === (suggested ? (suggested === "9:16" ? "16:9" : "9:16") : "16:9")} onPress={() => onChange({ aspect: suggested ? (suggested === "9:16" ? "16:9" : "9:16") : "16:9" })} /></View></View>
     <View className="flex-col gap-2"><Text className="text-label font-sans-medium text-ink-muted">Pace</Text><View className="flex-row flex-wrap gap-2"><FocusChip label="Gentle" selected={pace === "gentle"} onPress={() => onChange({ pace: "gentle" })} /><FocusChip label="Lively" selected={pace === "lively"} onPress={() => onChange({ pace: "lively" })} /></View></View>

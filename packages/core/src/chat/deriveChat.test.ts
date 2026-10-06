@@ -219,10 +219,10 @@ describe("deriveChat state table", () => {
       ...base(),
       people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }],
       momentsConfirmed: true,
-      direction: { confirmed: true, pace: "lively", lengthSec: 30, focus: "family", collageAmount: "few", motionFeel: "calm" },
+      direction: { confirmed: true, aspect: "16:9", pace: "lively", lengthSec: 30, focus: "family", collageAmount: "few", motionFeel: "calm" },
     });
     expect(state.items.filter((item) => item.kind === "you" && item.id === "direction-answer")).toEqual([
-      { kind: "you", id: "direction-answer", text: "Pace: Lively\nLength: 30 sec\nFocus: Everyone\nCollages: A few\nMotion: Calm" },
+      { kind: "you", id: "direction-answer", text: "Format: YouTube style\nPace: Lively\nLength: 30 sec\nFocus: Everyone\nCollages: A few\nMotion: Calm" },
     ]);
   });
 

@@ -61,9 +61,10 @@ function mentionedPerson(text: string, people: NonNullable<ChatInput["people"]>,
 function directionAnswer(input: ChatInput): string {
   const direction = input.direction!;
   const focus = directionFocus(input.people, direction.focus, true).label;
-  const labels: Record<string, string> = { pace: "Pace", lengthSec: "Length", focus: "Focus", collageAmount: "Collages", motionFeel: "Motion" };
+  const labels: Record<string, string> = { aspect: "Format", pace: "Pace", lengthSec: "Length", focus: "Focus", collageAmount: "Collages", motionFeel: "Motion" };
   const words = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (first) => first.toUpperCase());
   const displayValue = (key: string, value: unknown) => {
+    if (key === "aspect") return value === "16:9" ? "YouTube style" : "TikTok style";
     if (key === "pace") return value === "lively" ? "Lively" : "Gentle";
     if (key === "lengthSec") return `${value} sec`;
     if (key === "focus") return focus;
