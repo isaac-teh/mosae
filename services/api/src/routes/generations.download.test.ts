@@ -54,7 +54,7 @@ vi.mock("../firebase/admin.js", () => ({ getAdminApp: () => ({}), adminDb: {} })
 const { generationsRouter } = await import("./generations.js");
 
 function buildApp(db: Firestore, fakeBucket: ReturnType<typeof makeBucket>, sourceDeps: {
-  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; sourceDurationSec?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
+  loadSource?: (projectId: string, shotId: string) => Promise<{ storagePath: string; sourceDurationSec?: number; width?: number; height?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
   loadSoundtrack?: (soundtrackId: string) => Promise<string | null>;
   loadSoundtrackLibrary?: () => Promise<{ id: string; path: string }[]>;
   loadUnusedMedia?: (projectId: string, timeline: unknown) => Promise<{ shotId: string; kind: "photo" | "video"; thumbnailUrl: string; previewUrl: string; date: string; eventLabel: string; sourceInSec?: number; sourceOutSec?: number; sourceDurationSec?: number }[]>;
@@ -74,6 +74,22 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("GET /download — emulator branch", () => {
+  it("backfills oriented source dimensions into the editor timeline", async () => {
+    const timeline = {
+      schemaVersion: 1, projectId: "p1", mode: "creator", aspect: "16:9", fps: 30, durationSec: 3,
+      chapters: [{ title: "Trip", startSec: 0 }],
+      videoClips: [{ id: "photo-1", source: { kind: "photo", shotId: "asset-1_0000" }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }],
+      audioClips: [], captions: [],
+    };
+    const app = buildApp(makeDb({ ...generation, timeline }), makeBucket(), {
+      loadSource: async () => ({ storagePath: "original/photo.jpg", width: 4082, height: 6123, derivatives: { thumbPath: "thumb/photo.jpg" } }),
+      signReadUrl: async (path) => `http://127.0.0.1:9199/download/${path}`,
+    });
+    const res = await request(await listeningServer(app)).get("/api/projects/p1/generations/g1").set("Authorization", "Bearer owner");
+    expect(res.status).toBe(200);
+    expect(res.body.timeline.videoClips[0].source).toMatchObject({ width: 4082, height: 6123 });
+  });
+
   it("returns source video duration metadata for editor trim bounds", async () => {
     const timeline = {
       schemaVersion: 1, projectId: "p1", mode: "creator", aspect: "9:16", fps: 30, durationSec: 3,

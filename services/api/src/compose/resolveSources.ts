@@ -18,11 +18,15 @@ export interface SourceDeps {
   loadSoundtrack?: (soundtrackId: string) => Promise<string | null>;
 }
 
-/** Adds stored, ingest-normalized dimensions to direct clip source descriptors. */
-export async function addSourceDimensions(timeline: Timeline, loadAsset: SourceDeps["loadAsset"], projectId: string): Promise<Timeline> {
-  const videoClips = await Promise.all(timeline.videoClips.map(async (clip) => {
+/** Adds ingest-normalized dimensions to direct clip sources. The resolver takes a shotId (not an assetId). */
+export async function addSourceDimensions(
+  timeline: Timeline,
+  loadShot: (projectId: string, shotId: string) => Promise<{ width?: number; height?: number } | null>,
+  projectId: string,
+): Promise<Timeline> {
+  const videoClips = await Promise.all((timeline.videoClips ?? []).map(async (clip) => {
     if (!("source" in clip)) return clip;
-    const asset = await loadAsset(projectId, clip.source.shotId);
+    const asset = await loadShot(projectId, clip.source.shotId);
     if (!asset?.width || !asset.height) return clip;
     return { ...clip, source: { ...clip.source, width: asset.width, height: asset.height } };
   }));
