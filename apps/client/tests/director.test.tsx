@@ -70,11 +70,11 @@ function setup(options: { faces?: boolean; orientation?: { portrait: number; lan
 describe("Director chat", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it.each([[false, "16:9"], [true, "9:16"]] as const)("uses the landscape suggestion until the user explicitly chooses portrait (%s)", async (choosePortrait, expectedAspect) => {
+  it.each([[false, "16:9"], [true, "9:16"]] as const)("uses the YouTube suggestion until the user explicitly chooses TikTok style (%s)", async (choosePortrait, expectedAspect) => {
     setup({ readyPlan: true, orientation: { portrait: 1, landscape: 7, square: 0, suggested: "16:9" }, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
     await renderScreen(); await waitFor(() => expect(hasText("Looks fine")).toBe(true)); await click("Looks fine");
-    await waitFor(() => expect(host.querySelector('button[aria-label="Yes, landscape"]')?.getAttribute("aria-pressed")).toBe("true"));
-    if (choosePortrait) await click("Portrait instead");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Yes, YouTube style"]')?.getAttribute("aria-pressed")).toBe("true"));
+    if (choosePortrait) await click("TikTok style instead");
     await click("Sounds good");
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ aspect: expectedAspect })));
   });
