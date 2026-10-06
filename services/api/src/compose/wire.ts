@@ -13,6 +13,7 @@ import { castSummary } from "../cast/castSummary.js";
 import { photoRoles } from "../cast/prominence.js";
 import type { Cast, FaceRef } from "../cast/types.js";
 import type { ClipTime } from "./chronology.js";
+import { addSourceDimensions } from "./resolveSources.js";
 
 export type ComposeTask = {
   projectId: string;
@@ -319,11 +320,26 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
 
     if (!result.ok) return fail(result.reasons);
 
+    // Timeline sources refer to shots, while dimensions live on the backing
+    // asset. Resolve through the shot record before persisting the timeline.
+    const timeline = await addSourceDimensions(result.timeline, async (projectId, shotId) => {
+      const shot = await db.collection("projects").doc(projectId).collection("shots").doc(shotId).get();
+      if (!shot.exists) return null;
+      const asset = await db.collection("projects").doc(projectId).collection("assets").doc(shot.get("assetId") as string).get();
+      if (!asset.exists) return null;
+      const media = asset.get("media") as { width?: unknown; height?: unknown } | undefined;
+      return {
+        storagePath: asset.get("storagePath") as string,
+        ...(typeof media?.width === "number" ? { width: media.width } : {}),
+        ...(typeof media?.height === "number" ? { height: media.height } : {}),
+      };
+    }, task.projectId);
+
     await publishGeneration(db, {
       userId,
       projectId: task.projectId,
       generationId: task.generationId,
-      timeline: result.timeline,
+      timeline,
       droppedPicks: result.droppedPicks,
       reasons: result.reasons,
       ...(result.durationSelection ? {

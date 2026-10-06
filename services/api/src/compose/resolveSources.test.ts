@@ -30,8 +30,15 @@ const mockDeps = (assets: Record<string, { storagePath: string; derivatives?: { 
 
 describe("resolveSources", () => {
   it("adds normalized media dimensions to direct clips while leaving collage sources untouched", async () => {
-    const normalized = await addSourceDimensions(makeTimeline(), async (_projectId, id) => ({ storagePath: id, width: 640, height: 480 }), "proj-1");
-    expect(normalized.videoClips[0]).toMatchObject({ source: { width: 640, height: 480 } });
+    const loadedShotIds: string[] = [];
+    const normalized = await addSourceDimensions(makeTimeline({ aspect: "16:9" }), async (_projectId, shotId) => {
+      loadedShotIds.push(shotId);
+      // The shot resolver hops to its asset, where ingest stores oriented media dimensions.
+      const assetByShot = { "shot-photo-1": { storagePath: "original.jpg", width: 4082, height: 6123 } };
+      return assetByShot[shotId as keyof typeof assetByShot] ?? null;
+    }, "proj-1");
+    expect(loadedShotIds).toEqual(["shot-photo-1"]);
+    expect(normalized.videoClips[0]).toMatchObject({ source: { width: 4082, height: 6123 } });
   });
   it("resolves every collage slot for preview and render", async () => {
     const timeline = makeTimeline({
