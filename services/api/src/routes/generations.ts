@@ -7,6 +7,8 @@ import { enqueueRender } from "../store/enqueueRender.js";
 import { newOutboxTask } from "../domain/outbox.js";
 import { safeParseDirectionSettings, type Generation } from "@mosae/contracts";
 import type { UnusedProjectMedia } from "./editorMedia.js";
+import { loadSourceForShot } from "../store/sourceStore.js";
+import { addSourceDimensions, resolveSources } from "../compose/resolveSources.js";
 
 const STATUS: Record<StoreError["code"], number> = {
   not_found: 404,
@@ -46,15 +48,7 @@ export function generationsRouter(deps: {
   // between — `resolveSources` is deliberately given a flat id-to-file lookup
   // and never learns the project's collection layout.
   const resolve: (projectId: string, shotId: string) => Promise<{ storagePath: string; sourceDurationSec?: number; width?: number; height?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null> =
-    deps.loadSource ?? (async (projectId, shotId) => {
-      const project = deps.db.collection("projects").doc(projectId);
-      const shot = await project.collection("shots").doc(shotId).get();
-      if (!shot.exists) return null;
-      const asset = await project.collection("assets").doc(shot.get("assetId") as string).get();
-      if (!asset.exists) return null;
-      const media = asset.get("media") as { durationSec?: unknown; width?: unknown; height?: unknown } | undefined;
-      return { storagePath: asset.get("storagePath") as string, ...(typeof media?.durationSec === "number" && media.durationSec > 0 ? { sourceDurationSec: media.durationSec } : {}), ...(typeof media?.width === "number" && media.width > 0 ? { width: media.width } : {}), ...(typeof media?.height === "number" && media.height > 0 ? { height: media.height } : {}), derivatives: asset.get("derivatives") };
-    });
+    deps.loadSource ?? ((projectId, shotId) => loadSourceForShot(deps.db, projectId, shotId));
 
   for (const name of ["projectId", "generationId"]) {
     router.param(name, (_req, res, next, value: string) => {
@@ -171,17 +165,11 @@ export function generationsRouter(deps: {
       // Resolve preview-mode sources if timeline exists
       let sources: Record<string, string> | undefined;
       if (generation.timeline) {
-        const videoClips = await Promise.all(generation.timeline.videoClips.map(async (clip) => {
-          if (!("source" in clip)) return clip;
-          const source = await resolve(projectId, clip.source.shotId);
-          if (!source) return clip;
-          return { ...clip, source: { ...clip.source, ...(clip.source.kind === "video" && clip.source.sourceDurationSec === undefined && source.sourceDurationSec !== undefined ? { sourceDurationSec: source.sourceDurationSec } : {}), ...(source.width ? { width: source.width } : {}), ...(source.height ? { height: source.height } : {}) } };
-        }));
-        response.timeline = { ...generation.timeline, videoClips };
+        const enrichedTimeline = await addSourceDimensions(generation.timeline, resolve, projectId);
+        response.timeline = enrichedTimeline;
         if (deps.loadUnusedMedia) response.unusedMedia = await deps.loadUnusedMedia(projectId, generation.timeline);
-        const { resolveSources } = await import("../compose/resolveSources.js");
         try {
-          const paths = await resolveSources(generation.timeline, {
+          const paths = await resolveSources(enrichedTimeline, {
             loadAsset: resolve,
             ...(deps.loadSoundtrack ? { loadSoundtrack: deps.loadSoundtrack } : {}),
           }, projectId, "preview");

@@ -13,6 +13,7 @@ const sourceUri = (value: string) => value === "demo:film" ? Asset.fromModule(re
 
 export function useEditor(projectId: string, generationId: string, repository: StoryRepository = getStoryRepository()) {
   const [firstCut, setFirstCut] = useState<Timeline | null>(null);
+  const [sourceDimensions, setSourceDimensions] = useState<Record<string, { width: number; height: number }>>({});
   const [sources, setSources] = useState<Record<string, string>>({});
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [unusedMedia, setUnusedMedia] = useState<EditorMediaItem[]>([]);
@@ -48,6 +49,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
       .then(([film, edits]) => {
         if (!active) return;
         setFirstCut(film.timeline);
+        setSourceDimensions(edits.sourceDimensions ?? {});
         setSources(Object.fromEntries([
           ...Object.entries(film.sources),
           ...(film.unusedMedia ?? []).map((media) => [media.shotId, media.previewUrl] as const),
@@ -71,13 +73,24 @@ export function useEditor(projectId: string, generationId: string, repository: S
   const timeline = useMemo(() => {
     if (!firstCut) return null;
     const result = applyEdits(firstCut, ops);
-    return result.ok ? result.timeline : firstCut;
-  }, [firstCut, ops]);
+    if (!result.ok) return firstCut;
+    return { ...result.timeline, videoClips: result.timeline.videoClips.map((clip) => {
+      if ("source" in clip) {
+        const dimensions = sourceDimensions[clip.source.shotId];
+        return dimensions ? { ...clip, source: { ...clip.source, ...dimensions } } : clip;
+      }
+      return { ...clip, spec: { ...clip.spec, slots: clip.spec.slots.map((slot) => {
+        const dimensions = slot.shotId ? sourceDimensions[slot.shotId] : undefined;
+        return dimensions ? { ...slot, ...dimensions } : slot;
+      }) } };
+    }) };
+  }, [firstCut, ops, sourceDimensions]);
 
   const persist = useCallback((snapshot: EditOp[]): Promise<boolean> => {
     if (pendingSave.current) return pendingSave.current;
     const attempt = repository.saveEdits(projectId, generationId, revisionRef.current + 1, snapshot)
       .then((document) => {
+        setSourceDimensions(document.sourceDimensions ?? {});
         revisionRef.current = document.revision;
         setSavedRevision(document.revision);
         savedOpsKeyRef.current = keyOf(snapshot);
@@ -149,6 +162,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
     savedOpsKeyRef.current = keyOf(edits.ops);
     setSavedOpsKey(savedOpsKeyRef.current);
     setHistory({ snapshots: [edits.ops], index: 0 });
+    setSourceDimensions(edits.sourceDimensions ?? {});
     setRetryAttempt(0);
     setSave({ state: "saved" });
   }, [projectId, generationId, repository]);

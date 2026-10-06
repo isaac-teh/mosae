@@ -1,12 +1,20 @@
 import { randomUUID } from "node:crypto";
 import type { Firestore } from "firebase-admin/firestore";
 import { EditOpSchema, applyEdits, type EditOp, type Timeline } from "@mosae/contracts";
+import { addSourceDimensions } from "../compose/resolveSources.js";
+import { loadSourceForShot } from "../store/sourceStore.js";
 
-export type EditDocument = { revision: number; ops: EditOp[]; updatedAt: number | null };
+export type EditDocument = { revision: number; ops: EditOp[]; updatedAt: number | null; sourceDimensions?: Record<string, { width: number; height: number }> };
 export class EditInterpretationStaleRevision extends Error {
   constructor(readonly currentRevision: number) { super("stale_revision"); }
 }
-export const emptyEdits = (): EditDocument => ({ revision: 0, ops: [], updatedAt: null });
+export const emptyEdits = (): EditDocument => ({ revision: 0, ops: [], updatedAt: null, sourceDimensions: {} });
+
+function sourceDimensionsOf(timeline: Timeline): NonNullable<EditDocument["sourceDimensions"]> {
+  return Object.fromEntries(timeline.videoClips.flatMap((clip) => "source" in clip
+    ? clip.source.width && clip.source.height ? [[clip.source.shotId, { width: clip.source.width, height: clip.source.height }]] : []
+    : clip.spec.slots.flatMap((slot) => slot.shotId && slot.width && slot.height ? [[slot.shotId, { width: slot.width, height: slot.height }]] : [])));
+}
 
 export type EditValidation =
   | { ok: true; revision: number; ops: EditOp[] }
@@ -31,7 +39,7 @@ export function validateEditRequest(timeline: Timeline, body: unknown): EditVali
 
 function asEditDocument(value: FirebaseFirestore.DocumentData | undefined): EditDocument {
   if (!value) return emptyEdits();
-  return { revision: value.revision as number, ops: value.ops as EditOp[], updatedAt: value.updatedAt as number };
+  return { revision: value.revision as number, ops: value.ops as EditOp[], updatedAt: value.updatedAt as number, sourceDimensions: (value.sourceDimensions ?? {}) as EditDocument["sourceDimensions"] };
 }
 
 export async function getEditDocument(db: Firestore, userId: string, projectId: string, generationId: string): Promise<EditDocument | null> {
@@ -40,7 +48,14 @@ export async function getEditDocument(db: Firestore, userId: string, projectId: 
   if (!projectSnap.exists || projectSnap.get("userId") !== userId) return null;
   const generation = project.collection("generations").doc(generationId);
   if (!(await generation.get()).exists) return null;
-  return asEditDocument((await generation.collection("edits").doc("current").get()).data());
+  const document = asEditDocument((await generation.collection("edits").doc("current").get()).data());
+  const timeline = (await generation.get()).get("timeline") as Timeline | undefined;
+  if (!timeline) return document;
+  const applied = applyEdits(timeline, document.ops);
+  if (!applied.ok) return document;
+  const normalized = await addSourceDimensions(applied.timeline, (id, shotId) => loadSourceForShot(db, id, shotId), projectId);
+  document.sourceDimensions = sourceDimensionsOf(normalized);
+  return document;
 }
 
 export type SaveEditResult =
@@ -65,7 +80,11 @@ export async function saveEditDocument(db: Firestore, userId: string, projectId:
     if (!timeline) return { status: "invalid", error: "timeline_unavailable", opIndex: -1 };
     const validated = validateEditRequest(timeline, body);
     if (!validated.ok) return { status: "invalid", error: validated.error, opIndex: validated.opIndex };
-    const document: EditDocument = { revision: validated.revision, ops: validated.ops, updatedAt: now() };
+    const applied = applyEdits(timeline, validated.ops);
+    if (!applied.ok) return { status: "invalid", error: applied.error, opIndex: applied.opIndex };
+    const normalized = await addSourceDimensions(applied.timeline, (id, shotId) => loadSourceForShot(db, id, shotId), projectId);
+    const sourceDimensions = sourceDimensionsOf(normalized);
+    const document: EditDocument = { revision: validated.revision, ops: validated.ops, updatedAt: now(), sourceDimensions };
     transaction.set(currentRef, document);
     transaction.set(currentRef.collection("revisions").doc(String(document.revision)), document);
     return { status: "saved", document };
