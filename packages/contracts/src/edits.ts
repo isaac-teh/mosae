@@ -144,8 +144,8 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         if (!item || !("source" in item.clip)) return fail("swapShot requires a photo or video clip");
         const source = item.clip.source;
         const replacementSource = source.kind === "video"
-          ? (({ sourceDurationSec: _oldDuration, sourceStartSec: _oldStart, sourceEndSec: _oldEnd, ...boundsFree }) => ({ ...boundsFree, shotId: op.shotId, ...(op.sourceStartSec !== undefined ? { sourceStartSec: op.sourceStartSec } : {}), ...(op.sourceEndSec !== undefined ? { sourceEndSec: op.sourceEndSec } : {}) }))(source)
-          : { ...source, shotId: op.shotId };
+          ? (({ sourceDurationSec: _oldDuration, sourceStartSec: _oldStart, sourceEndSec: _oldEnd, width: _oldWidth, height: _oldHeight, ...boundsFree }) => ({ ...boundsFree, shotId: op.shotId, ...(op.sourceStartSec !== undefined ? { sourceStartSec: op.sourceStartSec } : {}), ...(op.sourceEndSec !== undefined ? { sourceEndSec: op.sourceEndSec } : {}) }))(source)
+          : (({ width: _oldWidth, height: _oldHeight, ...photoSource }) => ({ ...photoSource, shotId: op.shotId }))(source);
         item.clip = { ...item.clip, source: replacementSource } as VideoClip;
         if (item.clip.source.kind === "video") videoBounds.set(op.clipId, op.sourceEndSec !== undefined ? { inSec: op.sourceStartSec ?? 0, outSec: op.sourceEndSec } : { inSec: item.clip.source.sourceInSec, outSec: item.clip.source.sourceOutSec });
         break;

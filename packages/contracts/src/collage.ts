@@ -64,6 +64,8 @@ const slotSchema = z.strictObject({
   shotId: z.string().min(1).optional(),
   src: z.string().min(1).optional(),
   kind: z.enum(["photo", "video"]).optional(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
   empty: z.literal(true).optional(),
   crop: z.strictObject({
     x: z.number().min(0).max(1),

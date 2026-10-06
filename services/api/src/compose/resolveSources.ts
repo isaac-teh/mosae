@@ -6,7 +6,7 @@ export type ResolveMode = "preview" | "render";
 /** Dependencies needed to resolve a timeline's source IDs to file paths. */
 export interface SourceDeps {
   /** Load an asset by projectId and assetId. Returns null if not found. */
-  loadAsset: (projectId: string, assetId: string) => Promise<{ storagePath: string; width?: number; height?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
+  loadAsset: (projectId: string, assetId: string) => Promise<{ storagePath: string; width?: number; height?: number; sourceDurationSec?: number; derivatives?: { proxyPath?: string | null; renderPath?: string | null; thumbPath: string } } | null>;
   /**
    * Resolve a soundtrack id to a file. The soundtrack library does not exist
    * yet, so this is normally absent and a scored film simply resolves no music
@@ -21,14 +21,25 @@ export interface SourceDeps {
 /** Adds ingest-normalized dimensions to direct clip sources. The resolver takes a shotId (not an assetId). */
 export async function addSourceDimensions(
   timeline: Timeline,
-  loadShot: (projectId: string, shotId: string) => Promise<{ width?: number; height?: number } | null>,
+  loadShot: (projectId: string, shotId: string) => Promise<{ width?: number; height?: number; sourceDurationSec?: number } | null>,
   projectId: string,
 ): Promise<Timeline> {
   const videoClips = await Promise.all((timeline.videoClips ?? []).map(async (clip) => {
-    if (!("source" in clip)) return clip;
-    const asset = await loadShot(projectId, clip.source.shotId);
-    if (!asset?.width || !asset.height) return clip;
-    return { ...clip, source: { ...clip.source, width: asset.width, height: asset.height } };
+    if ("source" in clip) {
+      const asset = await loadShot(projectId, clip.source.shotId);
+      if (!asset) return clip;
+      return { ...clip, source: {
+        ...clip.source,
+        ...(asset.width && asset.height ? { width: asset.width, height: asset.height } : {}),
+        ...(clip.source.kind === "video" && clip.source.sourceDurationSec === undefined && asset.sourceDurationSec ? { sourceDurationSec: asset.sourceDurationSec } : {}),
+      } };
+    }
+    const slots = await Promise.all(clip.spec.slots.map(async (slot) => {
+      if (!slot.shotId) return slot;
+      const asset = await loadShot(projectId, slot.shotId);
+      return asset?.width && asset.height ? { ...slot, width: asset.width, height: asset.height } : slot;
+    }));
+    return { ...clip, spec: { ...clip.spec, slots } };
   }));
   return { ...timeline, videoClips };
 }

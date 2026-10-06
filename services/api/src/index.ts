@@ -47,6 +47,7 @@ import { buildOriginalPath } from "./domain/ids.js";
 import { recordFinalize } from "./store/finalizeStore.js";
 import { settleReadyProject } from "./store/settledProject.js";
 import { ensureCast } from "./cast/ensureCast.js";
+import { loadSourceForShot } from "./store/sourceStore.js";
 
 const config = loadConfig();
 
@@ -99,15 +100,7 @@ void ensureLibraryUploaded(getStorage(getAdminApp()).bucket(config.storageBucket
   .then((count) => { if (count) console.log(`uploaded ${count} soundtrack(s) to the bucket`); })
   .catch((error) => console.error("soundtrack library upload failed", error));
 
-const loadSource = async (projectId: string, shotId: string) => {
-  const project = adminDb.collection("projects").doc(projectId);
-  const shot = await project.collection("shots").doc(shotId).get();
-  if (!shot.exists) return null;
-  const asset = await project.collection("assets").doc(shot.get("assetId") as string).get();
-  if (!asset.exists) return null;
-  const media = asset.get("media") as { durationSec?: unknown } | undefined;
-  return { storagePath: asset.get("storagePath") as string, ...(typeof media?.durationSec === "number" && media.durationSec > 0 ? { sourceDurationSec: media.durationSec } : {}), derivatives: asset.get("derivatives") };
-};
+const loadSource = (projectId: string, shotId: string) => loadSourceForShot(adminDb, projectId, shotId);
 const renderBucket = () => getStorage(getAdminApp()).bucket(config.storageBucket);
 const renderQueue = config.tasks
   ? new CloudTasksQueue({ ...config.tasks, serviceUrl: config.renderServiceUrl })

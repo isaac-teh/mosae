@@ -90,7 +90,7 @@ function build(db: FakeFirestore, events: RenderEvent[], overrides: Record<strin
   const render = createRender({
     db: db as unknown as Firestore,
     renderServiceUrl: "http://render.test/",
-    sources: { loadAsset: async () => ({ storagePath: "uploads/owner/p1/s/a/original.jpg", derivatives: { thumbPath: "t.jpg" } }) },
+    sources: { loadAsset: async () => ({ storagePath: "uploads/owner/p1/s/a/original.jpg", width: 4401, height: 6602, derivatives: { thumbPath: "t.jpg" } }) },
     post: (url, body) => post(url, body),
     now: () => 0,
     ...overrides,
@@ -108,6 +108,7 @@ describe("createRender", () => {
     const body = post.mock.calls[0][1] as { timeline: Timeline; sources: Record<string, string>; outputFile: string };
     expect(body.timeline.durationSec).toBe(5);
     expect(body.timeline.videoClips[0].durationSec).toBe(5);
+    expect(body.timeline.videoClips[0]).toMatchObject({ source: { width: 4401, height: 6602 } });
     expect(body.sources["shot-1"]).toBe("uploads/owner/p1/s/a/original.jpg");
     expect(body.outputFile).toBe("g1-edit-3.mp4");
     expect(db.docs.get(revisionPath(3))).toMatchObject({ status: "ready", outputPath: "renders/owner/p1/g1-edit-3.mp4" });

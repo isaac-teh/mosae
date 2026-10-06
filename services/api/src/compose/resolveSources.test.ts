@@ -29,7 +29,7 @@ const mockDeps = (assets: Record<string, { storagePath: string; derivatives?: { 
 });
 
 describe("resolveSources", () => {
-  it("adds normalized media dimensions to direct clips while leaving collage sources untouched", async () => {
+  it("adds normalized media dimensions to direct clips", async () => {
     const loadedShotIds: string[] = [];
     const normalized = await addSourceDimensions(makeTimeline({ aspect: "16:9" }), async (_projectId, shotId) => {
       loadedShotIds.push(shotId);
@@ -39,6 +39,14 @@ describe("resolveSources", () => {
     }, "proj-1");
     expect(loadedShotIds).toEqual(["shot-photo-1"]);
     expect(normalized.videoClips[0]).toMatchObject({ source: { width: 4082, height: 6123 } });
+  });
+  it("backfills dimensions on collage cells added or replaced by edits", async () => {
+    const timeline = makeTimeline({ schemaVersion: 2, videoClips: [{
+      kind: "collage", clipId: "collage-1", startSec: 0, durationSec: 4,
+      spec: { layoutId: "torn-paper", motionId: "print-drop", effectId: null, seed: "s", durationSec: 4, slots: [{ slotId: "new", shotId: "device-photo_0000", kind: "photo" }] },
+    }] });
+    const normalized = await addSourceDimensions(timeline, async (_projectId, shotId) => shotId === "device-photo_0000" ? { width: 4401, height: 6602 } : null, "proj-1");
+    expect(normalized.videoClips[0]).toMatchObject({ spec: { slots: [{ shotId: "device-photo_0000", width: 4401, height: 6602 }] } });
   });
   it("resolves every collage slot for preview and render", async () => {
     const timeline = makeTimeline({

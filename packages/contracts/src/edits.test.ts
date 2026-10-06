@@ -267,6 +267,13 @@ describe("applyEdits", () => {
     expect(apply([{ op: "setSoundtrack", soundtrackId: "new-theme" }]).timeline.audioClips[0].source).toMatchObject({ soundtrackId: "new-theme" });
   });
 
+  it("clears prior photo dimensions when swapping to a different shot", () => {
+    const withDimensions: Timeline = { ...firstCut, videoClips: firstCut.videoClips.map((clip) => "source" in clip && clip.id === "p1" ? { ...clip, source: { ...clip.source, width: 4401, height: 6602 } } : clip) };
+    const result = applyEdits(withDimensions, [{ op: "swapShot", clipId: "p1", shotId: "replacement" }]);
+    expect(result.ok && result.timeline.videoClips[0]).toMatchObject({ source: { shotId: "replacement" } });
+    expect(result.ok && "source" in result.timeline.videoClips[0] ? result.timeline.videoClips[0].source : null).not.toHaveProperty("width");
+  });
+
   it("changes only music gain and preserves it through subsequent timeline edits", () => {
     const withOtherAudio = { ...firstCut, audioClips: [...firstCut.audioClips, { id: "fx", source: { kind: "asset" as const, assetId: "shot-p1", sourceInSec: 0, sourceOutSec: 2 }, role: "ambient" as const, startSec: 0, gainDb: -3, fadeInSec: 0, fadeOutSec: 0 }] };
     const changed = applyEdits(withOtherAudio, [{ op: "setMusicVolume", audioClipId: "music", gainDb: 0 }, { op: "setPhotoDuration", clipId: "p1", sec: 3 }]);
