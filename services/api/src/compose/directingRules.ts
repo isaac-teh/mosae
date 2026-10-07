@@ -10,6 +10,9 @@ export const DIRECTING_RULES = {
   singlePhotoMaxSec: 4,
   tierlessPhotoStretchMultiplier: 10 / 3,
   shortTierMinSec: 1.2,
+  videoMinClipSec: 2,
+  sameSceneMaxMotionStdDev: 0.05,
+  sameSceneMaxLoudnessStdDev: 0.05,
   cadenceMultiplier: { tender: 2, reflective: 1.8, playful: 1, energetic: 1, celebratory: 1.2 } satisfies Record<CadenceId, number>,
   videoLength: { tender: [4, 6], reflective: [4, 6], playful: [2, 3], energetic: [2, 3], celebratory: [3, 4] } satisfies Record<CadenceId, readonly [number, number]>,
   videoMaxSpeechSec: 8,
@@ -18,7 +21,7 @@ export const DIRECTING_RULES = {
 } as const;
 
 export function videoTargetLength(cadence: CadenceId, availableSec: number, windowScore = 0): number {
-  if (availableSec < 4) return Math.max(0, availableSec);
+  if (availableSec < DIRECTING_RULES.videoMinClipSec) return Math.max(0, availableSec);
   const [min, max] = DIRECTING_RULES.videoLength[cadence];
   const score = Math.max(0, Math.min(1, windowScore));
   return Number(Math.min(availableSec, min + (max - min) * score).toFixed(2));

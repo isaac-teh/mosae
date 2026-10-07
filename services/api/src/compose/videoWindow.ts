@@ -32,7 +32,7 @@ export function bestWindow(shot: ScoredShot, lengthSec: number, options: { speec
   if (!Number.isFinite(shot.startSec) || !Number.isFinite(shot.endSec) || !(duration > 0)) return null;
   const signals = shot.signals;
   const speech = (options.speech ?? []).filter(s => s.endSec > shot.startSec && s.startSec < shot.endSec);
-  if (duration < 4) {
+  if (duration <= lengthSec) {
     const count = Math.max(shot.signals?.shake.length ?? 0, shot.signals?.blur.length ?? 0);
     const allBad = count > 0 && Array.from({ length: count }, (_, i) => (shot.signals?.shake[i] ?? 0) > 0.6 || (shot.signals?.blur[i] ?? 0) > 0.6).every(Boolean);
     return allBad ? null : { inSec: shot.startSec, outSec: shot.endSec, score: scoreWindow(shot, shot.startSec, shot.endSec) };
