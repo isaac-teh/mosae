@@ -251,6 +251,34 @@ describe("runCompose — collages", () => {
   });
 });
 
+describe("runCompose — founder video coverage rules", () => {
+  it("keeps all five videos in a 12-second playful Short even when coverage exceeds half the cut", async () => {
+    const videoLengths = [6.08, 6, 8.08, 50.05, 6.08];
+    const videos = videoLengths.map((length, index) => ({ id: `video-${index}`, shotId: `shot-video-${index}`, kind: "video" as const, previewInSec: 0, previewOutSec: length, title: `Video ${index}`, description: "", rationale: "" }));
+    const photos = [0, 1, 2].map((index) => ({ id: `photo-${index}`, shotId: `shot-photo-${index}`, kind: "photo" as const, title: `Photo ${index}`, description: "", rationale: "" }));
+    const moments = [...videos, ...photos];
+    const proposal = makeProposal({
+      moments,
+      chapters: [{ id: "all", title: "Day", summary: "", momentIds: moments.map((moment) => moment.id) }],
+      constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+    });
+    const assets = new Map(moments.map((moment) => [moment.id, moment.kind === "video"
+      ? { kind: "video" as const, assetId: moment.id, analysis: { shots: [{ startSec: 0, endSec: videoLengths[Number(moment.id.split("-")[1])]!, usable: true, highlights: [] }] } }
+      : { kind: "photo" as const, assetId: moment.id, analysis: { caption: moment.title } }]));
+    const result = await runCompose(makeJob({ proposal, cadenceId: "playful", durationId: "short", durationSec: 12 }), makeDeps({
+      assets,
+      generateStructured: async () => ({ clips: moments.map((moment) => ({ candidateId: moment.kind === "video" ? `${moment.id}#s0@0.15c0` : `${moment.id}#still@c0`, transition: "cut", audio: "mute", holdSec: 2 })), musicCues: [] }),
+    }));
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    const clips = result.timeline.videoClips.filter((clip): clip is import("@mosae/contracts").VideoClip => "source" in clip && clip.source.kind === "video");
+    expect(clips).toHaveLength(5);
+    expect(clips.every((clip) => clip.durationSec >= 2)).toBe(true);
+    expect(clips.map((clip) => clip.source.shotId).sort()).toEqual(videos.map((video) => video.shotId).sort());
+    expect(result.droppedPicks.some((drop) => drop.includes("video share limit"))).toBe(false);
+    expect(clips.reduce((sum, clip) => sum + clip.durationSec, 0) / result.timeline.durationSec).toBeGreaterThan(0.5);
+  });
+});
+
 // --- Tests ---
 
 describe("runCompose — happy path", () => {
@@ -527,8 +555,8 @@ describe("runCompose — arc ordering after cast guards", () => {
     }), arcDeps());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "chapter2#s0@0.15c1"]);
-    expect(result.droppedPicks).toContain("b: video share limit");
+    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "a#s0@0.15c0", "b#s0@0.15c0", "chapter2#s0@0.15c1"]);
+    expect(result.droppedPicks).not.toContain("b: video share limit");
   });
 
   it("orders a cast replacement by time while keeping the chapter peak last", async () => {
@@ -538,6 +566,6 @@ describe("runCompose — arc ordering after cast guards", () => {
     }), arcDeps());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "chapter2#s0@0.15c1"]);
+    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "a#s0@0.15c0", "b#s0@0.15c0", "chapter2#s0@0.15c1"]);
   });
 });

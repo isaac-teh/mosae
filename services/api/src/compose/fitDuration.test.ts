@@ -100,6 +100,11 @@ describe("fitDuration — photo holds", () => {
 });
 
 describe("fitDuration — silent video trimming", () => {
+  it("never trims a silent video below two seconds", () => {
+    const result = fitDuration([makeVideoClip("video1", 0, 4, false)], 2, holds);
+    expect(result.clips[0]!.sourceOutSec).toBeGreaterThanOrEqual(2);
+  });
+
   it("trims silent video when photo holds are exhausted and film is too long", () => {
     const clips: AssembledClip[] = [
       makePhotoClip("photo1", 2), // at min, can't shrink

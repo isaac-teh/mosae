@@ -70,28 +70,30 @@ export function directionOptionsRouter(deps: {
       const keptMoments = moments.filter((moment) => typeof moment.id === "string" && typeof moment.shotId === "string" && !deselected.has(moment.id) && !excluded.has(moment.shotId) && !hidden.has(moment.shotId));
       const photoCount = keptMoments.filter((m) => m.kind === "photo").length;
       const videos = keptMoments.filter((m) => m.kind === "video");
-      const videoSeconds = videos.reduce((sum, moment) => {
+      const videoClipCapacities = videos.map((moment) => {
         const start = typeof moment.previewInSec === "number" ? moment.previewInSec : 0;
         const end = typeof moment.previewOutSec === "number" ? moment.previewOutSec : start;
         const sourceLength = Math.max(0, end - start);
         const clips = sourceLength >= 30 ? 3 : sourceLength >= 12 ? 2 : 1;
-        return sum + clips * Math.min(sourceLength, 6);
-      }, 0);
+        return { clips, sourceLength };
+      });
       // Capacity uses the same v2 collage bands and per-clip limits as compose.
       // A single photo caps at four seconds; collage holds use their photo-count base.
       const collageCount = requestedCollageCount(keptMoments.length, "few");
       const photosPerCollage = keptMoments.length < 20 ? 4 : keptMoments.length < 50 ? 4 : DIRECTING_RULES.collageMaxPhotos;
       const collagePhotos = Math.min(photoCount, collageCount * photosPerCollage);
       const maximumDurationSecByCadence = Object.fromEntries(CADENCES.map(({ id }) => {
+        const videoMax = DIRECTING_RULES.videoLength[id][1];
+        const videoSeconds = videoClipCapacities.reduce((sum, video) => sum + video.clips * Math.min(video.sourceLength, videoMax), 0);
         const singleMax = Math.min(DIRECTING_RULES.singlePhotoMaxSec, photoBaseDuration(1, id) * DIRECTING_RULES.tierlessPhotoStretchMultiplier);
         const collageGroups = collagePhotos > 0 ? Math.min(collageCount, Math.ceil(photoCount / photosPerCollage)) : 0;
         const collageMax = collageGroups > 0
           ? collageGroups * photoBaseDuration(Math.min(photosPerCollage, Math.ceil(collagePhotos / collageGroups)), id) * DIRECTING_RULES.tierlessPhotoStretchMultiplier
           : 0;
         const photoCapacity = Math.max(0, photoCount - collagePhotos) * singleMax + collageMax;
-        // The 50% video-share rule means video can add at most as many seconds
-        // as the stills support, even when more footage is available.
-        const capacity = photoCapacity + Math.min(videoSeconds, photoCapacity);
+        // The 50% video-share rule caps extra capacity, while a one-clip-per-
+        // source coverage floor may exceed it at compose time.
+        const capacity = Math.max(videoSeconds, photoCapacity + Math.min(videoSeconds, photoCapacity));
         return [id, Math.floor(capacity)];
       })) as Record<CadenceId, number>;
       const maximumDurationSec = Math.max(...Object.values(maximumDurationSecByCadence));

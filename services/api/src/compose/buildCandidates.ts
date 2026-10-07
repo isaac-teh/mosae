@@ -1,5 +1,5 @@
 import { bestWindow, scoreWindow } from "./videoWindow.js";
-import { videoTargetLength } from "./directingRules.js";
+import { DIRECTING_RULES, videoTargetLength } from "./directingRules.js";
 
 /**
  * Build every legal clip candidate before the model chooses.
@@ -66,7 +66,7 @@ export interface ChapterCandidateInput {
   itemIds: string[];
 }
 
-const MIN_CLIP = 1.2;
+const MIN_CLIP = DIRECTING_RULES.videoMinClipSec;
 const HANDLE = 0.15; // leave room at each end so a crossfade has something to work with
 
 /**
@@ -92,6 +92,21 @@ function legalRanges(shot: Shot, transcript: TranscriptSegment[], maxLen: number
   }
 
   return ranges;
+}
+
+function deviation(values: number[]): number {
+  if (!values.length) return 0;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
+}
+
+function isSameScene(shots: Shot[]): boolean {
+  if (shots.length !== 1) return false;
+  const shot = shots[0]!;
+  if ((shot.highlights ?? []).some((highlight) => highlight.score >= DIRECTING_RULES.videoHighlightBoundaryMin)) return false;
+  const signals = shot.signals;
+  if (!signals) return false;
+  return deviation(signals.shake) <= DIRECTING_RULES.sameSceneMaxMotionStdDev && deviation(signals.loud) <= DIRECTING_RULES.sameSceneMaxLoudnessStdDev;
 }
 
 /**
@@ -133,6 +148,7 @@ export function buildCandidates(
 
       const shots: Shot[] = (asset.analysis?.shots || []).filter((s: Shot) => s.usable !== false);
       const transcript: TranscriptSegment[] = asset.analysis?.transcript || [];
+      const sameScene = isSameScene(shots);
       const ranked = shots.map((shot, index) => ({ shot, index })).sort((a, b) => (b.shot.quality || 0) - (a.shot.quality || 0));
 
       if (cadence) {
@@ -144,7 +160,7 @@ export function buildCandidates(
           if (!Number.isFinite(shot.startSec) || !Number.isFinite(shot.endSec) || !Number.isFinite(duration) || duration <= 0) continue;
           const speechInShot = transcript.filter(s => s.endSec > shot.startSec && s.startSec < shot.endSec);
           const probe = bestWindow(shot, Math.min(maxLength, duration), { speech: speechInShot });
-          const target = duration < 4 ? duration : videoTargetLength(cadence, duration, probe?.score ?? 0);
+          const target = sameScene ? Math.min(DIRECTING_RULES.videoMinClipSec, duration) : Math.max(Math.min(DIRECTING_RULES.videoMinClipSec, duration), videoTargetLength(cadence, duration, probe?.score ?? 0));
           const window = bestWindow(shot, target, { speech: speechInShot });
           if (!window) continue;
           const hasSpeech = speechInShot.some(s => s.startSec >= window.inSec - 0.01 && s.endSec <= window.outSec + 0.01);
@@ -153,11 +169,12 @@ export function buildCandidates(
           const signalStep = shot.signals?.stepSec ?? 0.25;
           const loudPeak = Math.max(0, ...(shot.signals?.loud ?? []).filter((_, i) => shot.startSec + i * signalStep < window.outSec && shot.startSec + (i + 1) * signalStep > window.inSec));
           out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${window.inSec}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: window.inSec, outSec: window.outSec, lengthSec: Number((window.outSec - window.inSec).toFixed(2)), hasSpeech, windowScore: score, highlightScore, loudPeak, description: `${shot.role === 'A_ROLL' ? 'speech to camera: ' : ''}${shot.description || ''}`.slice(0, 160) });
+          if (sameScene) { added++; break; }
           // Emit other explicitly strong, distinct moments from the same shot.
           // Signals alone can select the primary window, but never authorize extras.
           for (const highlight of (shot.highlights ?? []).filter((h) => h.score >= 0.7)) {
             if (out.filter((c) => c.itemId === itemId && c.chapterIndex === chapter.index && c.kind === 'video').length >= perItem) break;
-            const extraLength = duration < 4 ? duration : videoTargetLength(cadence, duration, highlight.score);
+            const extraLength = Math.max(Math.min(DIRECTING_RULES.videoMinClipSec, duration), videoTargetLength(cadence, duration, highlight.score));
             const center = (Math.max(shot.startSec, highlight.startSec) + Math.min(shot.endSec, highlight.endSec)) / 2;
             const extraIn = Math.max(shot.startSec + 0.15, Math.min(shot.endSec - 0.15 - extraLength, center - extraLength / 2));
             const extraOut = extraIn + extraLength;

@@ -446,7 +446,20 @@ export async function runCompose(
       return currentLength > minimum ? { ...clip, sourceOutSec: inSec + minimum } : clip;
     });
   }
+  // If even one minimum-length primary clip per usable source exceeds half
+  // the film, coverage takes priority. Extras never qualify for this exception.
+  const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]));
+  const usablePrimarySources = new Set(primaryCandidates.filter((candidate) => candidate.kind === "video")
+    .map((candidate) => deps.assets.get(candidate.itemId)?.assetId ?? candidate.itemId));
+  const representedPrimarySources = new Set(fittedClips.filter((clip) => clip.kind === "video" && !candidateById.get(clip.candidateId)?.isExtraMoment)
+    .map((clip) => deps.assets.get(clip.itemId)?.assetId ?? clip.itemId));
+  const coverageMinimumSeconds = fittedClips.filter((clip) => clip.kind === "video" && !candidateById.get(clip.candidateId)?.isExtraMoment)
+    .reduce((sum, clip) => sum + Math.min(paceMinimum, Math.max(0, (clip.sourceOutSec ?? 0) - (clip.sourceInSec ?? 0))), 0);
+  const coverageExceedsCap = usablePrimarySources.size > 0 && [...usablePrimarySources].every((source) => representedPrimarySources.has(source))
+    && coverageMinimumSeconds > fittedFilmLength(fittedClips) * 0.5 + 1e-6;
+  if (coverageExceedsCap) fittedClips = fittedClips.filter((clip) => clip.kind !== "video" || !candidateById.get(clip.candidateId)?.isExtraMoment);
   while (fittedClips.some(c => c.kind === "video") && videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6) {
+    if (coverageExceedsCap) break;
     const loser = fittedClips.filter(c => c.kind === "video").sort((a, b) => (a.windowScore ?? 0) - (b.windowScore ?? 0) || a.candidateId.localeCompare(b.candidateId))[0]!;
     fittedClips = fittedClips.filter(c => c !== loser);
     videoShareDrops.push(`${loser.itemId}: video share limit`);

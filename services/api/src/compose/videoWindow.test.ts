@@ -34,8 +34,8 @@ describe("video window scoring and selection", () => {
     expect(scoreWindow(shot({ signals: { stepSec: -1, shake: [0], blur: [0], loud: [0] } }), 0, 0.25)).toBe(0);
   });
 
-  it("keeps shots shorter than four seconds whole", () => {
-    expect(bestWindow(shot({ endSec: 3.5 }), 2)).toMatchObject({ inSec: 0, outSec: 3.5 });
+  it("chooses the requested window from a shot shorter than four seconds", () => {
+    expect(bestWindow(shot({ endSec: 3.5 }), 2)).toMatchObject({ inSec: 0.15, outSec: 2.15 });
   });
 
   it("breaks equal scores by earliest legal start and uses earliest without data", () => {

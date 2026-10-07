@@ -1,6 +1,7 @@
 import type { AssembledClip } from "./assemble.js";
 import type { Holds } from "./brief.js";
 import { overlapSec } from "./transitions.js";
+import { DIRECTING_RULES } from "./directingRules.js";
 
 /**
  * Fit assembled clips to target duration by adjusting photo holds and trimming silent video.
@@ -90,7 +91,7 @@ export function fitDuration(
         let excess = drift;
         for (const clip of [...workingClips].reverse()) {
           if (excess <= 0.01 || clip.sourceOutSec == null || clip.hasSpeech) continue;
-          const spare = (clip.sourceOutSec - (clip.sourceInSec ?? 0)) - 1.5;
+          const spare = (clip.sourceOutSec - (clip.sourceInSec ?? 0)) - DIRECTING_RULES.videoMinClipSec;
           const cut = Math.min(spare, excess);
           if (cut <= 0) continue;
           clip.sourceOutSec = Number((clip.sourceOutSec! - cut).toFixed(2));

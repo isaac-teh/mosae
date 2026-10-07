@@ -176,6 +176,28 @@ describe("buildCandidates — strength", () => {
 });
 
 describe("buildCandidates — directed video windows", () => {
+  it("holds a low-variation single scene for exactly two seconds with no extras", () => {
+    const shot = makeShot(0, 8, { signals: { stepSec: 0.25, shake: Array(32).fill(0.2), blur: Array(32).fill(0), loud: Array(32).fill(0.1) }, highlights: [] });
+    const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", makeAsset("video", { analysis: { shots: [shot] } })]]), holds, 6, "tender");
+    expect(result).toHaveLength(1);
+    expect(result[0]!.lengthSec).toBe(2);
+    expect(result[0]!.isExtraMoment).toBeUndefined();
+  });
+
+  it("keeps a 0.8 highlight at the cadence length instead of same-scene length", () => {
+    const shot = makeShot(0, 8, { signals: { stepSec: 0.25, shake: Array(32).fill(0.2), blur: Array(32).fill(0), loud: Array(32).fill(0.1) }, highlights: [{ startSec: 4, endSec: 5, score: 0.8 }] });
+    const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", makeAsset("video", { analysis: { shots: [shot] } })]]), holds, 6, "playful");
+    expect(result[0]!.lengthSec).toBeGreaterThanOrEqual(2);
+    expect(result[0]!.lengthSec).toBeLessThanOrEqual(3);
+    expect(result[0]!.highlightScore).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("uses the whole source when it is shorter than the two-second minimum", () => {
+    const shot = makeShot(0, 1.5, { signals: { stepSec: 0.25, shake: Array(6).fill(0.2), blur: Array(6).fill(0), loud: Array(6).fill(0.1) }, highlights: [] });
+    const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", makeAsset("video", { analysis: { shots: [shot] } })]]), holds, 6, "playful");
+    expect(result[0]!.lengthSec).toBe(1.5);
+  });
+
   it("chooses an energetic highlight window in cadence bounds and keeps one clip per source video", () => {
     const assets = new Map<string, Asset>([
       ["moment-a", { kind: "video", assetId: "source-video", analysis: { shots: [{ ...makeShot(0, 10), highlights: [{ startSec: 7, endSec: 8, score: 0.9, label: "action" }] }] } }],
@@ -197,13 +219,13 @@ describe("buildCandidates — directed video windows", () => {
   it("selects from low-shake signals without highlights on a 15.265-second shot", () => {
     const shot = makeShot(0, 15.265, { highlights: [], signals: { stepSec: 0.25, shake: Array(62).fill(0.25), blur: Array(62).fill(0), loud: Array(62).fill(0.05) } });
     const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", makeAsset("video", { analysis: { shots: [shot] } })]]), holds, 6, "tender");
-    expect(result[0]).toMatchObject({ kind: "video", inSec: 0.15, outSec: 4.15, highlightScore: 0 });
+    expect(result[0]).toMatchObject({ kind: "video", inSec: 0.15, outSec: 2.15, highlightScore: 0 });
   });
 
-  it.each([3.2, 3.8])("keeps a %.1f-second clip whole", (duration) => {
+  it.each([3.2, 3.8])("chooses a two-second playful window from a %.1f-second clip", (duration) => {
     const shot = makeShot(0, duration, { highlights: [], signals: { stepSec: 0.25, shake: Array(Math.ceil(duration * 4)).fill(0.25), blur: Array(Math.ceil(duration * 4)).fill(0), loud: Array(Math.ceil(duration * 4)).fill(0.05) } });
     const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", makeAsset("video", { analysis: { shots: [shot] } })]]), holds, 6, "tender");
-    expect(result[0]).toMatchObject({ inSec: 0, outSec: duration, lengthSec: duration });
+    expect(result[0]!.lengthSec).toBe(2);
   });
 
   it("offers two separated strong moments from a 20-second source in score order", () => {
