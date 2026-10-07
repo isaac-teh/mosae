@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { runCompose, applyUserOrder, isAutomaticDayLabel, type ComposeJob, type ComposeDeps } from "./runCompose.js";
 import { castSummary } from "../cast/castSummary.js";
 import { safeParseTimeline } from "@mosae/contracts";
+import { MODELS } from "../gemini/pricing.js";
+import { estimateUsd } from "../gemini/client.js";
 
 describe("applyUserOrder", () => {
   const clips = ["m1", "m2", "m3"].map((itemId) => ({ itemId }));
@@ -399,7 +401,7 @@ describe("runCompose — Gemini mock", () => {
     expect(mockGenerate.mock.calls[0]?.[0]).toMatchObject({ contents: expect.stringContaining(`Cast: 1 parents, 1 children; focus: ${expectedFocus};`) });
   });
 
-  it("calls generateStructured with the correct model and stage", async () => {
+  it("calls generateStructured with the configured model and prices its token usage", async () => {
     const job = makeJob();
     const mockGenerate = vi.fn().mockResolvedValue({
       clips: [
@@ -414,7 +416,8 @@ describe("runCompose — Gemini mock", () => {
 
     expect(mockGenerate).toHaveBeenCalledOnce();
     const callArgs = mockGenerate.mock.calls[0]!;
-    expect(callArgs[0]).toMatchObject({ model: "gemini-2.5-flash", stage: "compose" });
+    expect(callArgs[0]).toMatchObject({ model: MODELS.compose, stage: "compose" });
+    expect(estimateUsd(MODELS.compose, { promptTokens: 100, candidatesTokens: 20, thoughtsTokens: 0 })).toBeGreaterThan(0);
   });
 });
 
