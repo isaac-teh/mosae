@@ -171,6 +171,9 @@ function completeDurationMaterial(
     .sort((a, b) => (b.windowScore ?? 0) - (a.windowScore ?? 0) || a.itemId.localeCompare(b.itemId));
   for (const candidate of extras) {
     if (projectedMaxSec() >= targetSec * 0.9) break;
+    const currentVideoSec = output.filter((clip) => clip.kind === "video").reduce((sum, clip) => sum + Math.max(0, (clip.sourceOutSec ?? 0) - (clip.sourceInSec ?? 0)), 0);
+    const addedVideoSec = candidate.lengthSec ?? 0;
+    if (currentVideoSec + addedVideoSec > (fittedFilmLength(output) + addedVideoSec) * 0.5 + 1e-6) continue;
     add(candidate);
   }
   return output;
