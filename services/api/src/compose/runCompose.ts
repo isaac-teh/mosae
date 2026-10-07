@@ -126,28 +126,28 @@ function completeDurationMaterial(
   baseHoldSec: number,
 ): AssembledClip[] {
   const output = [...selected];
-  const usedItems = new Set(output.map((clip) => clip.itemId));
-  const usedShots = new Set(output.map((clip) => shotIdByMoment.get(clip.itemId)).filter((id): id is string => Boolean(id)));
+  const usedItems = new Set(output.filter((clip) => clip.kind === "photo").map((clip) => clip.itemId));
+  const usedCandidates = new Set(output.map((clip) => clip.candidateId));
 
   const projectedMaxSec = () => Math.max(0, output.reduce((sum, clip, index) =>
     sum + maximumClipDuration(clip, maxHoldSec) - (index ? overlapSec(clip.transition) : 0), 0));
 
   const available = candidates.filter((candidate) => {
     const shotId = shotIdByMoment.get(candidate.itemId);
-    return Boolean(shotId) && !usedItems.has(candidate.itemId) && !deselectedMomentIds.has(candidate.itemId) && !hiddenShotIds.has(shotId!) && !excludedShotIds.has(shotId!);
+    return Boolean(shotId) && !usedCandidates.has(candidate.candidateId) && (candidate.kind === "video" || !usedItems.has(candidate.itemId)) && !deselectedMomentIds.has(candidate.itemId) && !hiddenShotIds.has(shotId!) && !excludedShotIds.has(shotId!);
   });
   const ordered = [
     ...available.filter((candidate) => mustIncludeMomentIds.includes(candidate.itemId)),
-    ...available.filter((candidate) => !mustIncludeMomentIds.includes(candidate.itemId)),
+    ...available.filter((candidate) => candidate.kind === "video" && !mustIncludeMomentIds.includes(candidate.itemId)).sort((a, b) => (b.windowScore ?? 0) - (a.windowScore ?? 0)),
+    ...available.filter((candidate) => candidate.kind === "photo" && !mustIncludeMomentIds.includes(candidate.itemId)),
   ];
 
   for (const candidate of ordered) {
     if (projectedMaxSec() >= targetSec * 0.9) break;
-    if (usedItems.has(candidate.itemId)) continue;
+    if (usedCandidates.has(candidate.candidateId) || candidate.kind === "photo" && usedItems.has(candidate.itemId)) continue;
     const shotId = shotIdByMoment.get(candidate.itemId)!;
-    if (usedShots.has(shotId)) continue;
-    usedItems.add(candidate.itemId);
-    usedShots.add(shotId);
+    if (candidate.kind === "photo") usedItems.add(candidate.itemId);
+    usedCandidates.add(candidate.candidateId);
     const isPhoto = candidate.kind === "photo";
     output.push({
       ...candidate,

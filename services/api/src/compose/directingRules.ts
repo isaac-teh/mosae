@@ -17,10 +17,11 @@ export const DIRECTING_RULES = {
   videoHighlightBoundaryMin: 0.7,
 } as const;
 
-export function videoTargetLength(cadence: CadenceId, availableSec: number): number {
+export function videoTargetLength(cadence: CadenceId, availableSec: number, windowScore = 0): number {
   if (availableSec < 4) return Math.max(0, availableSec);
   const [min, max] = DIRECTING_RULES.videoLength[cadence];
-  return Number(Math.min(max, availableSec).toFixed(2));
+  const score = Math.max(0, Math.min(1, windowScore));
+  return Number(Math.min(availableSec, min + (max - min) * score).toFixed(2));
 }
 
 export function photoBaseDuration(photoCount: number, cadence: CadenceId): number {

@@ -1,4 +1,5 @@
-import { bestWindow } from "./videoWindow.js";
+import { bestWindow, scoreWindow } from "./videoWindow.js";
+import { videoTargetLength } from "./directingRules.js";
 
 /**
  * Build every legal clip candidate before the model chooses.
@@ -140,10 +141,9 @@ export function buildCandidates(
           const duration = shot.endSec - shot.startSec;
           if (!Number.isFinite(shot.startSec) || !Number.isFinite(shot.endSec) || !Number.isFinite(duration) || duration <= 0) continue;
           const speechInShot = transcript.filter(s => s.endSec > shot.startSec && s.startSec < shot.endSec);
-          const lengths: number[] = [];
-          if (duration < 4) lengths.push(duration);
-          else for (let len = Math.min(maxLength, duration); len >= Math.min(minLength, duration); len = Number((len - 0.25).toFixed(2))) lengths.push(len);
-          const window = lengths.map(len => bestWindow(shot, len, { speech: speechInShot })).filter((v): v is NonNullable<typeof v> => Boolean(v)).sort((a, b) => b.score - a.score || (a.outSec - a.inSec) - (b.outSec - b.inSec) || a.inSec - b.inSec)[0];
+          const probe = bestWindow(shot, Math.min(maxLength, duration), { speech: speechInShot });
+          const target = duration < 4 ? duration : videoTargetLength(cadence, duration, probe?.score ?? 0);
+          const window = bestWindow(shot, target, { speech: speechInShot });
           if (!window) continue;
           const hasSpeech = speechInShot.some(s => s.startSec >= window.inSec - 0.01 && s.endSec <= window.outSec + 0.01);
           const score = window.score;
@@ -151,6 +151,19 @@ export function buildCandidates(
           const signalStep = shot.signals?.stepSec ?? 0.25;
           const loudPeak = Math.max(0, ...(shot.signals?.loud ?? []).filter((_, i) => shot.startSec + i * signalStep < window.outSec && shot.startSec + (i + 1) * signalStep > window.inSec));
           out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${window.inSec}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: window.inSec, outSec: window.outSec, lengthSec: Number((window.outSec - window.inSec).toFixed(2)), hasSpeech, windowScore: score, highlightScore, loudPeak, description: `${shot.role === 'A_ROLL' ? 'speech to camera: ' : ''}${shot.description || ''}`.slice(0, 160) });
+          // Emit other explicitly strong, distinct moments from the same shot.
+          // Signals alone can select the primary window, but never authorize extras.
+          for (const highlight of (shot.highlights ?? []).filter((h) => h.score >= 0.7)) {
+            if (out.filter((c) => c.itemId === itemId && c.chapterIndex === chapter.index && c.kind === 'video').length >= perItem) break;
+            const extraLength = duration < 4 ? duration : videoTargetLength(cadence, duration, highlight.score);
+            const center = (Math.max(shot.startSec, highlight.startSec) + Math.min(shot.endSec, highlight.endSec)) / 2;
+            const extraIn = Math.max(shot.startSec + 0.15, Math.min(shot.endSec - 0.15 - extraLength, center - extraLength / 2));
+            const extraOut = extraIn + extraLength;
+            if (!(extraOut > extraIn) || speechInShot.some((s) => (extraIn > s.startSec + 0.01 && extraIn < s.endSec - 0.01) || (extraOut > s.startSec + 0.01 && extraOut < s.endSec - 0.01))) continue;
+            if (Math.max(0, Math.max(extraIn, window.inSec) - Math.min(extraOut, window.outSec)) < 3) continue;
+            const extraScore = scoreWindow(shot, extraIn, extraOut);
+            out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${extraIn.toFixed(2)}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: Number(extraIn.toFixed(2)), outSec: Number(extraOut.toFixed(2)), lengthSec: Number(extraLength.toFixed(2)), hasSpeech: false, windowScore: extraScore, highlightScore: highlight.score, loudPeak: 0, description: `${shot.description || ''}`.slice(0, 160) });
+          }
           if (++added >= perItem) break;
         }
         continue;
@@ -180,8 +193,7 @@ export function buildCandidates(
 
   if (!cadence) return out;
 
-  // A source video can contribute at most one shot. Keep its strongest window,
-  // with stable earliest/ID tie breaks, regardless of how many moments name it.
+  // Keep distinct strong highlights per source video, with chronological separation.
   const videoBySource = new Map<string, Candidate[]>();
   const retained: Candidate[] = [];
   for (const candidate of out) {
@@ -193,7 +205,17 @@ export function buildCandidates(
   }
   for (const group of videoBySource.values()) {
     group.sort((a, b) => (b.windowScore ?? 0) - (a.windowScore ?? 0) || (a.inSec ?? 0) - (b.inSec ?? 0) || a.candidateId.localeCompare(b.candidateId));
-    retained.push(group[0]!);
+    const asset = assets.get(group[0]!.itemId);
+    const sourceDuration = Math.max(0, ...(asset?.analysis?.shots ?? []).map((shot) => shot.endSec));
+    const maxClips = sourceDuration >= 30 ? 3 : sourceDuration >= 12 ? 2 : 1;
+    const chosen: Candidate[] = [];
+    for (const candidate of group) {
+      if (chosen.length >= maxClips) break;
+      if (chosen.length && (candidate.highlightScore ?? 0) < 0.7) continue;
+      if (chosen.some((other) => Math.max(0, Math.max(candidate.inSec ?? 0, other.inSec ?? 0) - Math.min(candidate.outSec ?? 0, other.outSec ?? 0)) < 3)) continue;
+      chosen.push(candidate);
+    }
+    retained.push(...chosen);
   }
   return retained.sort((a, b) => a.chapterIndex - b.chapterIndex || a.itemId.localeCompare(b.itemId) || (a.inSec ?? 0) - (b.inSec ?? 0));
 }
