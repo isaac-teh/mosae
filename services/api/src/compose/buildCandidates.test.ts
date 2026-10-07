@@ -224,7 +224,7 @@ describe("buildCandidates — directed video windows", () => {
   });
 
   it("does not offer a second signals-only window", () => {
-    const shot = makeShot(0, 20, { signals: { stepSec: 0.25, shake: Array(80).fill(0), blur: Array(80).fill(1), loud: Array(80).fill(0) } });
+    const shot = makeShot(0, 20, { signals: { stepSec: 0.25, shake: Array(80).fill(0), blur: Array(80).fill(0), loud: Array(80).fill(0) } });
     const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", makeAsset("video", { analysis: { shots: [shot] } })]]), holds, 6, "energetic");
     expect(result.filter((candidate) => candidate.kind === "video")).toHaveLength(1);
   });

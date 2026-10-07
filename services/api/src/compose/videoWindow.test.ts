@@ -31,7 +31,7 @@ describe("video window scoring and selection", () => {
 
   it("rejects invalid timestamps and normalizes nonpositive signal steps", () => {
     expect(bestWindow(shot({ startSec: Number.NaN }), 2)).toBeNull();
-    expect(scoreWindow(shot({ signals: { stepSec: -1, shake: [0], blur: [1], loud: [0] } }), 0, 0.25)).toBe(0);
+    expect(scoreWindow(shot({ signals: { stepSec: -1, shake: [0], blur: [0], loud: [0] } }), 0, 0.25)).toBe(0);
   });
 
   it("keeps shots shorter than four seconds whole", () => {
