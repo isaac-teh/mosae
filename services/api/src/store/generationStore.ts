@@ -107,6 +107,9 @@ export async function publishGeneration(
     const genSnap = await tx.get(genRef);
     if (!genSnap.exists) throw new StoreError("not_found");
 
+    const editsRef = genRef.collection("edits").doc("current");
+    const editsSnap = await tx.get(editsRef);
+
     const existing = genSnap.data() as Generation;
 
     // Only allow publishing from composing state
@@ -130,6 +133,7 @@ export async function publishGeneration(
       droppedPicks: input.droppedPicks,
       ...(input.reasons ? { reasons: input.reasons } : {}),
       status: "playable",
+      composedEditRevision: Number(editsSnap.get("revision") ?? 0),
     };
     tx.set(genRef, updated);
 

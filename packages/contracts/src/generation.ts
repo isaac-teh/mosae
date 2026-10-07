@@ -26,6 +26,18 @@ export const GenerationSchema = z.strictObject({
   renderProgress: z.number().min(0).max(1),
   /** Milliseconds since epoch when the finished film was saved. */
   savedAt: z.number().int().nonnegative().optional(),
+  /** Edit revision captured when the initial cut was published. */
+  composedEditRevision: z.number().int().nonnegative().optional(),
+  /** Latest edit revision written by the late-video worker itself. */
+  lateVideoRevision: z.number().int().nonnegative().optional(),
+  /** Server side late-video outcomes, used by the director chat to offer actions. */
+  lateVideoEvents: z.array(z.strictObject({
+    assetId: z.string().min(1), shotId: z.string().min(1), label: z.string().min(1),
+    status: z.enum(["added", "offered", "dismissed"]),
+    sourceInSec: z.number().finite().nonnegative(), sourceOutSec: z.number().finite().positive(),
+    afterClipId: z.string().nullable(),
+    previousOps: z.array(z.unknown()).optional(),
+  })).optional(),
 });
 
 export type Generation = z.infer<typeof GenerationSchema>;

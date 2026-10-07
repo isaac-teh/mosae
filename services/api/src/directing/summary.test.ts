@@ -42,6 +42,20 @@ describe("summarise", () => {
   it("is not ready while an asset is still ingesting", () => {
     expect(summarise([{ ...asset("photo", null), status: "uploaded", hasFaces: false }], false)).toMatchObject({ ready: { summary: false, faces: false } });
   });
+  it("starts chat from photos while videos process and reports video progress", () => {
+    const result = summarise([
+      { ...asset("photo", null), id: "p1" },
+      { ...asset("video", null), id: "v1", status: "ingested" },
+    ], false, { projectStatus: "clustering", upload: { expected: 2, settled: 2, failed: 0, cancelled: 0, closed: true }, manifestReady: true });
+    expect(result.ready).toMatchObject({ summary: true, faces: true, story: true, film: false });
+    expect(result.videoStatuses).toEqual([{ assetId: "v1", status: "processing", progress: 0.5 }]);
+  });
+  it("starts the story question immediately for a videos-only upload and waits for video faces", () => {
+    const result = summarise([{ ...asset("video", null), id: "v1", status: "ingested", hasFaces: false }], false, {
+      projectStatus: "clustering", upload: { expected: 1, settled: 1, failed: 0, cancelled: 0, closed: true }, manifestReady: true,
+    });
+    expect(result.ready).toMatchObject({ summary: true, faces: false, story: true, film: false });
+  });
   it.each([[1, "early"], [10, "early"], [11, "mid"], [19, "mid"], [20, "late"], [31, "late"]])("labels October day %i as %s October", (day, part) => {
     const summary = summarise([asset("photo", `2026-10-${String(day).padStart(2, "0")}T10:00:00`)], false);
     expect(summary.season).toBe(`${part} October`);
@@ -51,11 +65,11 @@ describe("summarise", () => {
 
 describe("authoritative story readiness", () => {
   const upload = { expected: 12, settled: 1, failed: 0, cancelled: 0, closed: false };
-  it("requires a nonempty understood catalog and planning-ready project", () => {
+  it("requires all photos and the upload manifest before chat is ready", () => {
     expect(summarise([], false).ready.story).toBe(false);
     expect(summarise([asset("photo", null)], false).ready.story).toBe(false);
     expect(summarise([asset("photo", null)], false, { projectStatus: "ready" }).ready.story).toBe(true);
-    expect(summarise([asset("photo", null)], false, { projectStatus: "clustering" }).ready.story).toBe(false);
+    expect(summarise([asset("photo", null)], false, { projectStatus: "clustering", upload: { expected: 1, settled: 1, failed: 0, cancelled: 0, closed: true }, manifestReady: true }).ready.story).toBe(true);
   });
   it("does not count failed assets as ingested or usable", () => {
     expect(summarise([{ ...asset("photo", null), status: "failed" }], false, { projectStatus: "ready" })).toMatchObject({ processed: { ingested: 0 }, upload: { failed: 1 }, ready: { story: false } });

@@ -164,6 +164,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const [nextSummary, people] = result;
     if (!startedWhilePending && !previousLocalPending.current && refreshEpoch === uploadEpoch.current) acceptedSummaryEpoch.current = refreshEpoch;
     setSummary(nextSummary);
+    if (activeFilmId.current) pollFilmRef.current(activeFilmId.current);
     const mapped = people?.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
       return { ...person, ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
@@ -203,7 +204,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           generation,
         }));
         if (plan && !hasGeneration && !needsFilteredPhotoReview) await loadDirectionOptions(plan.planId, stillValid);
-        if (stillValid() && resume.generationId && hasGeneration && !isFilmReady) void pollFilmRef.current(resume.generationId);
+        if (stillValid() && resume.generationId && hasGeneration) {
+          activeFilmId.current = resume.generationId;
+          if (!isFilmReady) void pollFilmRef.current(resume.generationId);
+        }
       } catch (cause) {
         if (stillValid()) { resumeProjectId.current = null; throw cause; }
       }
@@ -285,7 +289,6 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         } }));
         generationTimer.current = setTimeout(() => { void pollFilm(filmId); }, 1500);
       } else {
-        activeFilmId.current = null;
         setError(null);
         setInput((current) => ({ ...current, generation: { status: "done", stage: film.generationStatus === "saved" ? "saved" : "playable", progress: 1, stepsDone: 3, film } }));
       }
@@ -310,6 +313,26 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   pollFilmRef.current = (filmId) => { void pollFilm(filmId); };
 
   const actions = {
+    async resolveLateVideo(assetId: string, choice: "add" | "undo" | "dismiss") {
+      const film = input.generation?.film;
+      const event = film?.lateVideoEvents?.find((item) => item.assetId === assetId);
+      if (!event || !film) {
+        setInput((current) => ({ ...current, lateVideoDismissals: [...new Set([...(current.lateVideoDismissals ?? []), assetId])] }));
+        return;
+      }
+      try {
+        if (choice !== "dismiss") {
+          const edits = await repository.getEdits(projectId, film.filmId);
+          const ops = choice === "undo"
+            ? event.previousOps ?? []
+            : [...edits.ops, { op: "add" as const, shotId: event.shotId, kind: "video" as const, afterClipId: event.afterClipId, durationSec: event.sourceOutSec - event.sourceInSec, sourceInSec: event.sourceInSec, sourceOutSec: event.sourceOutSec }];
+          await repository.saveEdits(projectId, film.filmId, edits.revision + 1, ops);
+        }
+        await repository.dismissLateVideo(projectId, film.filmId, assetId);
+        setInput((current) => ({ ...current, lateVideoDismissals: [...new Set([...(current.lateVideoDismissals ?? []), assetId])] }));
+        void pollFilm(film.filmId);
+      } catch (cause) { setError(reportFailure(cause)); }
+    },
     async confirmOccasion(answer?: string, storyTextOverride?: string, mentionedPeople?: string[], storySummary?: string) {
       if (occasionSaving.current || !canConfirmStory({ ...input, ...confirmationState })) return;
       occasionSaving.current = true;
@@ -456,7 +479,25 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const focusLabel = focus.label;
         const direction: Direction & { focus: string } = { note: `${directionOptions?.note ?? ""}${directionOptions?.note ? "\n" : ""}Focus: ${focusLabel}.`, cadenceId: directionSelection.cadenceId, soundtrackId: directionSelection.soundtrackId, durationId: directionSelection.durationId, ...(directionSelection.durationId === "short" ? { durationSec: directionSelection.durationSec } : {}), focus: focus.selected, collageAmount: directionSelection.collageAmount, motionFeel: directionSelection.motionFeel, aspect: effectiveAspect };
         compositionStartedAt.current = Date.now();
-        setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction, generation: { status: "queued", stage: "queued", progress: 0, stepsDone: 0, film: null } }));
+        setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction }));
+        let latestSummary = input.summary;
+        const pendingVideos = () => latestSummary?.videoStatuses?.filter((video) => video.status === "processing") ?? [];
+        const waitingVideoCount = pendingVideos().length;
+        const waitStarted = Date.now();
+        if (waitingVideoCount) {
+          while (Date.now() - waitStarted < 60_000 && isCurrentProject() && pendingVideos().length > 0) {
+            const elapsedSec = Math.floor((Date.now() - waitStarted) / 1000);
+            setInput((current) => ({ ...current, filmWait: { elapsedSec, videoCount: waitingVideoCount } }));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            try {
+              latestSummary = await repository.getSummary(projectId);
+              if (!isCurrentProject()) return;
+              setSummary(latestSummary);
+              setInput((current) => ({ ...current, summary: latestSummary }));
+            } catch { /* Existing summary polling will recover a transient read failure. */ }
+          }
+        }
+        setInput((current) => ({ ...current, filmWait: undefined, generation: { status: "queued", stage: "queued", progress: 0, stepsDone: 0, film: null } }));
         const { filmId } = await repository.directFilm(input.plan.planId, direction);
         if (mounted.current && isCurrentProject()) { setInput((current) => ({ ...current, generation: current.generation ? { ...current.generation, status: "running", stage: "composing" } : current.generation })); void pollFilm(filmId); }
       } catch (cause) {

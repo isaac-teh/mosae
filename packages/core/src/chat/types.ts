@@ -13,8 +13,9 @@ export type ProjectSummary = {
   processed: { ingested: number; understood: number; faces: number };
   orientation?: { portrait: number; landscape: number; square: number; suggested: "9:16" | "16:9" | null };
   upload?: { expected: number; settled: number; failed: number; cancelled: number; closed: boolean };
-  ready: { summary: boolean; faces: boolean; plan: boolean; story?: boolean };
+  ready: { summary: boolean; faces: boolean; plan: boolean; story?: boolean; film?: boolean };
   assetStatuses?: { assetId: string; kind: "photo" | "video"; status: "uploaded" | "ingested" | "understood" | "failed" }[];
+  videoStatuses?: { assetId: string; status: "processing" | "ready" | "failed"; progress: number }[];
 };
 
 export type ChatInput = {
@@ -34,6 +35,8 @@ export type ChatInput = {
   directionNote?: string;
   generation: { status: "queued" | "running" | "done" | "failed"; stage: "queued" | "composing" | "playable" | "rendering" | "saved" | "failed"; progress: number; stepsDone: number; film: Film | null } | null;
   notes: string[];
+  filmWait?: { elapsedSec: number; videoCount: number };
+  lateVideoDismissals?: string[];
   mergeEvents?: { id: string; personId: string; targetPersonId: string; answer: string; targetName: string; sampleFaces: string[]; questionFaces?: string[]; momentCount: number; automatic?: boolean; response?: "Yes, same person" | "No, another person" }[];
 };
 
@@ -41,6 +44,7 @@ export type ChatItem =
   | { kind: "mosae"; id: string; text: string; facts?: string[]; photos?: string[] }
   | { kind: "you"; id: string; text: string }
   | { kind: "typing"; id: string; text: string; photoProgress?: NonNullable<ProjectSummary["assetStatuses"]> }
+  | { kind: "preparing-videos"; id: string; text: string; progress: number }
   | { kind: "occasion"; id: string }
   | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; questionText?: string }
   | { kind: "person-confirm"; id: string; personId: string; label: string; text: string; momentCount: number; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[] }
@@ -50,6 +54,7 @@ export type ChatItem =
   | { kind: "moments"; id: string; suggestedShotIds: string[] }
   | { kind: "direction"; id: string; aspect: "9:16" | "16:9"; orientation?: NonNullable<ProjectSummary["orientation"]>; pace: string; lengthSec: number; focus: string; momentCount: number }
   | { kind: "shaping"; id: string; progress: number; stepsDone: number }
+  | { kind: "late-video"; id: string; assetId: string; text: string; status: "added" | "offered" }
   | { kind: "film"; id: string; film: Film };
 
 export type ChatState = {

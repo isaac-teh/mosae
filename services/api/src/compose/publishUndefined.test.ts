@@ -60,7 +60,8 @@ describe("publishGeneration", () => {
       outputPath: null,
       renderProgress: 0,
     };
-    const genRef = { path: `projects/${projectId}/generations/${generationId}` };
+    const editsRef = { path: `projects/${projectId}/generations/${generationId}/edits/current` };
+    const genRef = { path: `projects/${projectId}/generations/${generationId}`, collection: vi.fn(() => ({ doc: vi.fn(() => editsRef) })) };
     const projectRef = {
       path: `projects/${projectId}`,
       collection: vi.fn(() => ({ doc: vi.fn(() => genRef) })),
@@ -68,7 +69,7 @@ describe("publishGeneration", () => {
     const projectSnap = { exists: true, get: (field: string) => field === "userId" ? "owner" : generationId };
     const genSnap = { exists: true, data: () => generation };
     const tx = {
-      get: vi.fn(async (ref: unknown) => ref === projectRef ? projectSnap : genSnap),
+      get: vi.fn(async (ref: unknown) => ref === projectRef ? projectSnap : ref === editsRef ? { exists: false, get: () => undefined } : genSnap),
       set: vi.fn((_ref: unknown, value: unknown) => assertNoUndefined(value)),
       update: vi.fn(),
     };

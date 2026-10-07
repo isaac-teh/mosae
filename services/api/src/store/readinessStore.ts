@@ -83,7 +83,7 @@ export async function settleProject(
 }
 
 /** Join every registered manifest entry to its asset, including files not yet registered. */
-export async function gatherSummaryUpload(db: Firestore, projectId: string, assets: { id?: string; status: string }[]) {
+export async function gatherSummaryUpload(db: Firestore, projectId: string, assets: { id?: string; status: string; media?: { kind?: string }; facts?: { kind?: string } }[]) {
   const sessions = await db.collection("projects").doc(projectId).collection("uploadSessions").get();
   const byId = new Map(assets.map((asset) => [asset.id, asset]));
   const upload = { expected: 0, settled: 0, failed: assets.filter((asset) => asset.status === "failed").length, cancelled: 0, closed: true };
@@ -100,7 +100,9 @@ export async function gatherSummaryUpload(db: Firestore, projectId: string, asse
       if (entry.outcome !== "pending") upload.settled += 1;
       if (entry.outcome === "cancelled") upload.cancelled += 1;
       if (entry.outcome === "failed" && byId.get(entry.assetId)?.status !== "failed") upload.failed += 1;
-      if (entry.outcome === "finalized" && !["understood", "failed"].includes(byId.get(entry.assetId)?.status ?? "")) manifestReady = false;
+      const asset = byId.get(entry.assetId);
+      const isVideo = (asset?.media ?? asset?.facts)?.kind === "video";
+      if (!isVideo && entry.outcome === "finalized" && !["understood", "failed"].includes(asset?.status ?? "")) manifestReady = false;
     }
   }
   return { upload, manifestReady, excludedAssetIds };
