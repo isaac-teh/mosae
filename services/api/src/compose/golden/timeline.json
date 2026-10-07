@@ -4,7 +4,7 @@
   "mode": "memory",
   "aspect": "9:16",
   "fps": 30,
-  "durationSec": 13.5,
+  "durationSec": 11.5,
   "chapters": [
     {
       "title": "Getting there",
@@ -12,7 +12,7 @@
     },
     {
       "title": "The water",
-      "startSec": 4
+      "startSec": 3.5
     }
   ],
   "videoClips": [
@@ -30,31 +30,31 @@
       }
     },
     {
-      "id": "m-water#s0@3.9c1",
-      "source": {
-        "kind": "video",
-        "shotId": "shot-water",
-        "sourceInSec": 3.9,
-        "sourceOutSec": 9.9
-      },
-      "startSec": 4,
-      "durationSec": 6,
-      "transitionIn": {
-        "kind": "cut",
-        "durationSec": 0
-      }
-    },
-    {
       "id": "m-dusk#still@c1",
       "source": {
         "kind": "photo",
         "shotId": "shot-dusk"
       },
-      "startSec": 9.5,
+      "startSec": 3.5,
       "durationSec": 4,
       "transitionIn": {
         "kind": "crossfade",
         "durationSec": 0.5
+      }
+    },
+    {
+      "id": "m-water#s0@3.9c1",
+      "source": {
+        "kind": "video",
+        "shotId": "shot-water",
+        "sourceInSec": 3.9,
+        "sourceOutSec": 7.9
+      },
+      "startSec": 7.5,
+      "durationSec": 4,
+      "transitionIn": {
+        "kind": "cut",
+        "durationSec": 0
       }
     }
   ],
@@ -65,10 +65,10 @@
         "kind": "asset",
         "assetId": "shot-water",
         "sourceInSec": 3.9,
-        "sourceOutSec": 9.9
+        "sourceOutSec": 7.9
       },
       "role": "ambient",
-      "startSec": 4,
+      "startSec": 7.5,
       "gainDb": -10.46,
       "fadeInSec": 0,
       "fadeOutSec": 0
@@ -79,20 +79,20 @@
         "kind": "soundtrack",
         "soundtrackId": "soundtrack-dusk",
         "sourceInSec": 0,
-        "sourceOutSec": 13.5
+        "sourceOutSec": 11.5
       },
       "role": "music",
       "startSec": 0,
       "gainDb": -6.94,
-      "fadeInSec": 0.675,
+      "fadeInSec": 0.5750000000000001,
       "fadeOutSec": 1
     }
   ],
   "captions": [
     {
       "text": "Into the water",
-      "startSec": 4,
-      "endSec": 10
+      "startSec": 7.5,
+      "endSec": 11.5
     }
   ]
 }

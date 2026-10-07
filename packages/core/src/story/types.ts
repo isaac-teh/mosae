@@ -18,6 +18,8 @@ export type Moment = {
   sourceInSec?: number;
   sourceOutSec?: number;
   sourceDurationSec?: number;
+  width?: number;
+  height?: number;
   badge?: string;
   selected: boolean;
   favorite: boolean;

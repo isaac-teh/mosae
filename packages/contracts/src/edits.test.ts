@@ -267,6 +267,13 @@ describe("applyEdits", () => {
     expect(apply([{ op: "setSoundtrack", soundtrackId: "new-theme" }]).timeline.audioClips[0].source).toMatchObject({ soundtrackId: "new-theme" });
   });
 
+  it("replaces a photo clip with a playable video range and its own dimensions", () => {
+    const result = applyEdits(firstCut, [{ op: "swapShot", clipId: "p1", shotId: "video-shot", kind: "video", sourceInSec: 1, sourceOutSec: 4, durationSec: 3, sourceDurationSec: 12, width: 1920, height: 1080 }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.timeline.videoClips[0]).toMatchObject({ durationSec: 3, source: { kind: "video", shotId: "video-shot", sourceInSec: 1, sourceOutSec: 4, sourceDurationSec: 12, width: 1920, height: 1080 } });
+  });
+
   it("clears prior photo dimensions when swapping to a different shot", () => {
     const withDimensions: Timeline = { ...firstCut, videoClips: firstCut.videoClips.map((clip) => "source" in clip && clip.id === "p1" ? { ...clip, source: { ...clip.source, width: 4401, height: 6602 } } : clip) };
     const result = applyEdits(withDimensions, [{ op: "swapShot", clipId: "p1", shotId: "replacement" }]);

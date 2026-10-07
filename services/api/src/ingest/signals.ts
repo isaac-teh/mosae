@@ -55,11 +55,15 @@ export async function extractShotSignals(proxy: string, startSec: number, endSec
   }
   const targetCount = Math.min(expected, Math.max(frameCount, loud.length));
   const resample = (values: number[], count: number) => Array.from({ length: count }, (_, i) => values.length ? values[Math.min(values.length - 1, Math.floor(i * values.length / count))] : 0);
-  // Normalize by fixed proxy-domain limits, making scores comparable between shots.
+  // Laplacian variance is highly skewed: detailed phone footage commonly sits
+  // well above 500 even after downscaling to the 160x90 proxy. A square-root
+  // curve keeps sharp frames near zero while preserving separation between
+  // sharp and box-blurred footage instead of saturating both at zero.
+  const blurSeverity = (variance: number) => round2(1 - Math.min(1, Math.sqrt(Math.max(0, variance) / 1500)));
   return {
     stepSec: SIGNAL_STEP_SEC,
     shake: resample(motionRaw, targetCount).map((v) => round2(v * 5)),
-    blur: resample(blurRaw, targetCount).map((v) => round2(1 - Math.min(1, v / 500))),
+    blur: resample(blurRaw, targetCount).map(blurSeverity),
     loud: resample(loud, targetCount).map((v) => round2(v * 4)),
   };
 }

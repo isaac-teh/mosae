@@ -154,6 +154,11 @@ export function useEditor(projectId: string, generationId: string, repository: S
     return { snapshots: [...current.snapshots.slice(0, current.index + 1), next], index: current.index + 1 };
   }), []);
   const setSource = useCallback((shotId: string, path: string) => setSources((current) => ({ ...current, [shotId]: sourceUri(path) })), []);
+  const setThumbnail = useCallback((shotId: string, path: string) => setThumbnails((current) => ({ ...current, [shotId]: sourceUri(path) })), []);
+  const setDimensions = useCallback((shotId: string, width: number, height: number) => {
+    if (!(width > 0 && height > 0)) return;
+    setSourceDimensions((current) => ({ ...current, [shotId]: { width, height } }));
+  }, []);
 
   const reloadAfterConflict = useCallback(async () => {
     const edits = await repository.getEdits(projectId, generationId);
@@ -255,7 +260,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
   }, [renderRequest, projectId, generationId, repository]);
 
   return {
-    timeline, firstCut, sources, thumbnails, unusedMedia, setSource, ops, selectedClipId, select: setSelectedClipId,
+    timeline, firstCut, sources, thumbnails, unusedMedia, setSource, setThumbnail, setDimensions, ops, selectedClipId, select: setSelectedClipId,
     apply, applyMany, undo, redo, reset, canUndo: history.index > 0, canRedo: history.index < history.snapshots.length - 1,
     save, savedRevision, getSavedRevision: () => revisionRef.current, getSnapshotKey: () => keyOf(opsRef.current), savePendingNow,
     downloadUrl, renderProgress, renderEtaMinutes, savedFilm, reloadAfterConflict, render, loaded, error, editError,

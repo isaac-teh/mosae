@@ -48,6 +48,7 @@ const timeline: Timeline = { schemaVersion: 1, projectId: "p1", mode: "memory", 
 const videoClip = { id: "video-1", source: { kind: "video" as const, shotId: "video-shot", sourceInSec: 1, sourceOutSec: 9 }, startSec: 0, durationSec: 8, transitionIn: { kind: "cut" as const, durationSec: 0 } };
 const collage = { kind: "collage" as const, clipId: "collage-1", startSec: 0, durationSec: 4, transitionIn: { kind: "cut" as const, durationSec: 0 }, spec: { layoutId: "photo-table" as const, slots: [{ slotId: "s1", shotId: "shot-1", kind: "photo" as const }, { slotId: "s2", shotId: "shot-2", kind: "photo" as const }, { slotId: "s3", shotId: "shot-3", kind: "photo" as const }, { slotId: "s4", shotId: "shot-4", kind: "photo" as const }], motionId: "stack-deal" as const, effectId: "vignette" as const, seed: "seed", durationSec: 4 } };
 const moments: Moment[] = [{ id: "m-left", title: "Left out moment", meta: "Day 1", tag: { emoji: "📷", label: "Photo" }, imageKey: "left.jpg", kind: "photo", selected: false, favorite: false, shotId: "shot-left" }];
+const videoMoment: Moment = { id: "m-video", title: "Trip video", meta: "Day 2", tag: { emoji: "🎬", label: "Video" }, imageKey: "video-poster.jpg", kind: "video", selected: false, favorite: false, shotId: "video-shot", sourceInSec: 1, sourceOutSec: 9, sourceDurationSec: 12, width: 1920, height: 1080 };
 const soundtracks: Soundtrack[] = [{ id: "soft-piano", name: "Soft piano", description: "Quiet and warm" }];
 
 let host: HTMLDivElement;
@@ -82,7 +83,18 @@ describe("editor tool operations", () => {
     await render(<SwapSheet visible clipId="a" kind="photo" moments={moments} planId={null} momentId={null} repository={repo} onApply={apply} onSource={onSource} onClose={() => {}} />);
     await click("Replace with Left out moment");
     expect(onSource).toHaveBeenCalledWith("shot-left", "left.jpg");
-    expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "shot-left" });
+    expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "shot-left", kind: "photo" });
+  });
+
+  it("replaces a photo clip with a playable video window and stores its thumbnail", async () => {
+    const onThumbnail = vi.fn();
+    const onDimensions = vi.fn();
+    await render(<SwapSheet visible clipId="a" kind="photo" clipDurationSec={4} moments={[videoMoment]} sources={{ "video-shot": "signed-proxy.mp4" }} planId={null} momentId={null} repository={repo} onApply={apply} onSource={onSource} onThumbnail={onThumbnail} onDimensions={onDimensions} onClose={() => {}} />);
+    await click("Replace with Trip video");
+    expect(onSource).toHaveBeenCalledWith("video-shot", "signed-proxy.mp4");
+    expect(onThumbnail).toHaveBeenCalledWith("video-shot", "video-poster.jpg");
+    expect(onDimensions).toHaveBeenCalledWith("video-shot", 1920, 1080);
+    expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "video-shot", kind: "video", sourceInSec: 3, sourceOutSec: 7, durationSec: 4, sourceDurationSec: 12, width: 1920, height: 1080, sourceStartSec: 1, sourceEndSec: 9 });
   });
 
   it("hands a device-selected photo to the project replacement uploader", async () => {

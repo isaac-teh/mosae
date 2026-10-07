@@ -1,8 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import path from "node:path";
 import { closeProbe } from "./probe.js";
 import { makeVideo, tempDir } from "./testMedia.js";
 import { makeVideoDerivatives } from "./proxies.js";
 import { extractShotSignals, MAX_SIGNAL_SAMPLES } from "./signals.js";
+
+const exec = promisify(execFile);
 
 describe("extractShotSignals (ffmpeg)", () => {
   let dir: string;
@@ -28,5 +33,22 @@ describe("extractShotSignals (ffmpeg)", () => {
       }
       expect(signals.loud.some((value) => value > 0)).toBe(true);
     } finally { await out.cleanup(); }
+  });
+
+  it("scores a sharp generated clip lower for blur than the same clip with ffmpeg boxblur", async () => {
+    const sharpSource = await makeVideo(dir, "sharp.mp4", { seconds: 2 });
+    const blurredSource = path.join(dir, "blurred.mp4");
+    await exec("ffmpeg", ["-y", "-loglevel", "error", "-i", sharpSource, "-vf", "boxblur=10:1", "-c:v", "libx264", "-pix_fmt", "yuv420p", blurredSource]);
+    const sharpOut = await tempDir();
+    const blurredOut = await tempDir();
+    try {
+      const sharpProxy = await makeVideoDerivatives(sharpSource, sharpOut.dir, 2);
+      const blurredProxy = await makeVideoDerivatives(blurredSource, blurredOut.dir, 2);
+      const sharp = await extractShotSignals(sharpProxy.proxy, 0, 2);
+      const blurred = await extractShotSignals(blurredProxy.proxy, 0, 2);
+      const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+      expect(mean(sharp.blur)).toBeLessThan(0.35);
+      expect(mean(blurred.blur)).toBeGreaterThan(mean(sharp.blur) + 0.2);
+    } finally { await sharpOut.cleanup(); await blurredOut.cleanup(); }
   });
 });

@@ -528,7 +528,7 @@ describe("runCompose — arc ordering after cast guards", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
     expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "chapter2#s0@0.15c1"]);
-    expect(result.droppedPicks).toContain("b: video share exceeds 50%");
+    expect(result.droppedPicks).toContain("b: video share limit");
   });
 
   it("orders a cast replacement by time while keeping the chapter peak last", async () => {

@@ -104,7 +104,7 @@ describe("createApiStoryRepository", () => {
 
   it("loads unused project shots with signed thumbnails and preview sources", async () => {
     const timeline = { schemaVersion: 1, projectId: "project-1", mode: "memory", aspect: "9:16", fps: 30, durationSec: 3, chapters: [], videoClips: [{ id: "c1", source: { kind: "photo", shotId: "used" }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } }], audioClips: [], captions: [] };
-    const unusedMedia = [{ shotId: "s-unused", kind: "video", thumbnailUrl: "poster.jpg", previewUrl: "proxy.mp4", date: "2026-06-03", eventLabel: "Day 3, evening", sourceInSec: 1, sourceOutSec: 8, sourceDurationSec: 20 }];
+    const unusedMedia = [{ shotId: "s-unused", kind: "video", thumbnailUrl: "poster.jpg", previewUrl: "proxy.mp4", date: "2026-06-03", eventLabel: "Day 3, evening", sourceInSec: 1, sourceOutSec: 8, sourceDurationSec: 20, width: 1920, height: 1080 }];
     const deps = dependencies({ request: vi.fn(async () => ({ timeline, sources: {}, thumbnails: {}, unusedMedia })) });
     await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getFilmTimeline("project-1", "g1")).resolves.toEqual({ timeline, sources: {}, thumbnails: {}, unusedMedia });
   });
