@@ -4,7 +4,7 @@
   "mode": "memory",
   "aspect": "9:16",
   "fps": 30,
-  "durationSec": 12.266666666666666,
+  "durationSec": 13.5,
   "chapters": [
     {
       "title": "Getting there",
@@ -30,15 +30,15 @@
       }
     },
     {
-      "id": "m-water#s0@4.15c1",
+      "id": "m-water#s0@3.9c1",
       "source": {
         "kind": "video",
         "shotId": "shot-water",
-        "sourceInSec": 4.15,
-        "sourceOutSec": 8.9
+        "sourceInSec": 3.9,
+        "sourceOutSec": 9.9
       },
       "startSec": 4,
-      "durationSec": 4.766666666666667,
+      "durationSec": 6,
       "transitionIn": {
         "kind": "cut",
         "durationSec": 0
@@ -50,7 +50,7 @@
         "kind": "photo",
         "shotId": "shot-dusk"
       },
-      "startSec": 8.266666666666666,
+      "startSec": 9.5,
       "durationSec": 4,
       "transitionIn": {
         "kind": "crossfade",
@@ -64,8 +64,8 @@
       "source": {
         "kind": "asset",
         "assetId": "shot-water",
-        "sourceInSec": 4.15,
-        "sourceOutSec": 8.916666666666668
+        "sourceInSec": 3.9,
+        "sourceOutSec": 9.9
       },
       "role": "ambient",
       "startSec": 4,
@@ -79,12 +79,12 @@
         "kind": "soundtrack",
         "soundtrackId": "soundtrack-dusk",
         "sourceInSec": 0,
-        "sourceOutSec": 12.266666666666666
+        "sourceOutSec": 13.5
       },
       "role": "music",
       "startSec": 0,
       "gainDb": -6.94,
-      "fadeInSec": 0.6133333333333333,
+      "fadeInSec": 0.675,
       "fadeOutSec": 1
     }
   ],
@@ -92,7 +92,7 @@
     {
       "text": "Into the water",
       "startSec": 4,
-      "endSec": 8.766666666666666
+      "endSec": 10
     }
   ]
 }

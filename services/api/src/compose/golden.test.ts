@@ -196,15 +196,15 @@ describe("golden composition", () => {
 
   it("lands within 10% of the length it was fitted to", async () => {
     const timeline = await composeOrThrow();
-    // Selected tiers fit only to the maximum reachable duration when the
-    // requested tier exceeds the chosen windows' available capacity.
-    expect(timeline.durationSec).toBeCloseTo(12.2666666667);
-    expect(Math.abs(timeline.durationSec - 12.2666666667)).toBeLessThanOrEqual(1.23);
+    // The score-led best window is six seconds; the selected media cannot
+    // reach the requested 30-second tier without padding or repeating clips.
+    expect(timeline.durationSec).toBeCloseTo(13.5);
+    expect(Math.abs(timeline.durationSec - 13.5)).toBeLessThanOrEqual(1.35);
   });
 
   it("burns in the model's text overlay and ducks the music under speech or loud peaks", async () => {
     const timeline = await composeOrThrow();
-    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 4, endSec: 8.766666666666666 }]);
+    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 4, endSec: 10 }]);
 
     const music = timeline.audioClips.find((clip) => clip.role === "music");
     const ambient = timeline.audioClips.find((clip) => clip.role === "ambient");

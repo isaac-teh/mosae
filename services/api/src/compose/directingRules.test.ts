@@ -42,8 +42,10 @@ describe("deterministic directing rules", () => {
     expect(fadeOutSec(60)).toBe(1);
     expect(fadeOutSec(0.5)).toBe(0.5);
   });
-  it.each([["tender", 6], ["reflective", 6], ["playful", 3], ["energetic", 3], ["celebratory", 4]] as const)("uses the %s video cadence ceiling when enough footage is available", (cadence, expected) => {
-    expect(videoTargetLength(cadence, 10)).toBe(expected);
+  it.each([["tender", 4, 6], ["reflective", 4, 6], ["playful", 2, 3], ["energetic", 2, 3], ["celebratory", 3, 4]] as const)("uses the full %s video cadence range", (cadence, min, max) => {
+    expect(videoTargetLength(cadence, 10, 0)).toBe(min);
+    expect(videoTargetLength(cadence, 10, 1)).toBe(max);
+    expect(videoTargetLength(cadence, 10, 0.5)).toBeCloseTo((min + max) / 2);
   });
   it("uses all available short footage and records directing limits", () => {
     expect(videoTargetLength("tender", 2.5)).toBe(2.5);

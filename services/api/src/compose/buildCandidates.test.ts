@@ -193,6 +193,29 @@ describe("buildCandidates — directed video windows", () => {
     const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", asset]]), holds, 6, "playful");
     expect(result[0]).toMatchObject({ inSec: 0.15, lengthSec: 2, windowScore: 0 });
   });
+
+  it("offers two separated strong moments from a 20-second source in score order", () => {
+    const shot = makeShot(0, 20, { highlights: [
+      { startSec: 2, endSec: 5, score: 0.8 },
+      { startSec: 12, endSec: 15, score: 0.95 },
+    ] });
+    const assets = new Map([["video", makeAsset("video", { analysis: { shots: [shot] } })]]);
+    const result = buildCandidates([{ index: 0, itemIds: ["video"] }], assets, holds, 6, "energetic");
+    const clips = result.filter((candidate) => candidate.kind === "video");
+    expect(clips).toHaveLength(2);
+    const starts = clips.map((clip) => clip.inSec!).sort((a, b) => a - b);
+    expect(starts[0]).toBeGreaterThanOrEqual(2);
+    expect(starts[0]).toBeLessThan(3);
+    expect(starts[1]).toBeGreaterThanOrEqual(12);
+    expect(starts[1]).toBeLessThan(13);
+    expect(clips.every((clip) => (clip.highlightScore ?? 0) >= 0.7)).toBe(true);
+  });
+
+  it("does not offer a second signals-only window", () => {
+    const shot = makeShot(0, 20, { signals: { stepSec: 0.25, shake: Array(80).fill(0), blur: Array(80).fill(1), loud: Array(80).fill(0) } });
+    const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", makeAsset("video", { analysis: { shots: [shot] } })]]), holds, 6, "energetic");
+    expect(result.filter((candidate) => candidate.kind === "video")).toHaveLength(1);
+  });
 });
 
 describe("buildCandidates — edge cases", () => {
