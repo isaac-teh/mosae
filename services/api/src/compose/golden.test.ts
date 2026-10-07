@@ -182,16 +182,15 @@ describe("golden composition", () => {
     // landed one boundary early, so m-talking got no overlap and m-water —
     // which asked for a hard cut — was pulled back half a second.
     const timeline = await composeOrThrow();
-    const [arrival, water, dusk] = timeline.videoClips;
+    const [arrival, dusk, water] = timeline.videoClips;
 
     const boundary = (out: typeof arrival, incoming: typeof arrival) =>
       Number(((out.startSec + out.durationSec) - incoming.startSec).toFixed(6));
 
-    expect(water.transitionIn?.kind).toBe("cut");
-    expect(boundary(arrival, water)).toBeCloseTo(0);
-
     expect(dusk.transitionIn?.kind).toBe("crossfade");
-    expect(boundary(water, dusk)).toBeCloseTo(0.5);
+    expect(boundary(arrival, dusk)).toBeCloseTo(0.5);
+    expect(water.transitionIn?.kind).toBe("cut");
+    expect(boundary(dusk, water)).toBeCloseTo(0);
   });
 
   it("lands within 10% of the length it was fitted to", async () => {
@@ -203,7 +202,7 @@ describe("golden composition", () => {
 
   it("burns in the model's text overlay and ducks the music under speech or loud peaks", async () => {
     const timeline = await composeOrThrow();
-    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 4, endSec: 8 }]);
+    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 7.5, endSec: 11.5 }]);
 
     const music = timeline.audioClips.find((clip) => clip.role === "music");
     const ambient = timeline.audioClips.find((clip) => clip.role === "ambient");

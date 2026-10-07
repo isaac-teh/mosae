@@ -12,7 +12,7 @@
     },
     {
       "title": "The water",
-      "startSec": 4
+      "startSec": 3.5
     }
   ],
   "videoClips": [
@@ -30,6 +30,19 @@
       }
     },
     {
+      "id": "m-dusk#still@c1",
+      "source": {
+        "kind": "photo",
+        "shotId": "shot-dusk"
+      },
+      "startSec": 3.5,
+      "durationSec": 4,
+      "transitionIn": {
+        "kind": "crossfade",
+        "durationSec": 0.5
+      }
+    },
+    {
       "id": "m-water#s0@3.9c1",
       "source": {
         "kind": "video",
@@ -37,24 +50,11 @@
         "sourceInSec": 3.9,
         "sourceOutSec": 7.9
       },
-      "startSec": 4,
+      "startSec": 7.5,
       "durationSec": 4,
       "transitionIn": {
         "kind": "cut",
         "durationSec": 0
-      }
-    },
-    {
-      "id": "m-dusk#still@c1",
-      "source": {
-        "kind": "photo",
-        "shotId": "shot-dusk"
-      },
-      "startSec": 7.5,
-      "durationSec": 4,
-      "transitionIn": {
-        "kind": "crossfade",
-        "durationSec": 0.5
       }
     }
   ],
@@ -68,7 +68,7 @@
         "sourceOutSec": 7.9
       },
       "role": "ambient",
-      "startSec": 4,
+      "startSec": 7.5,
       "gainDb": -10.46,
       "fadeInSec": 0,
       "fadeOutSec": 0
@@ -91,8 +91,8 @@
   "captions": [
     {
       "text": "Into the water",
-      "startSec": 4,
-      "endSec": 8
+      "startSec": 7.5,
+      "endSec": 11.5
     }
   ]
 }

@@ -12,7 +12,7 @@ import { applyCastGuards } from "./castGuards.js";
 import type { AssembledClip } from "./assemble.js";
 import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
-import { applyArc, orderByChronology, type ClipTime } from "./chronology.js";
+import { applyArc, orderByChronology, spreadVideoClips, type ClipTime } from "./chronology.js";
 import { loadCollageReview, placeCollages, type CollageReview, type CollageSource } from "./placeCollages.js";
 import { DIRECTING_RULES, fadeOutSec } from "./directingRules.js";
 import { MODELS } from "../gemini/pricing.js";
@@ -414,6 +414,8 @@ export async function runCompose(
     let cursor = 0;
     selectedClips = selectedClips.map((clip) => pinned.has(clip.itemId) ? clip : ordered[cursor++]!);
   }
+
+  selectedClips = spreadVideoClips(selectedClips, timeOf, (clip) => deps.assets.get(clip.itemId)?.assetId ?? clip.itemId);
 
   // Stage 5: fitDuration — adjust photo holds to target duration
   const { clips: initiallyFittedClips, notes: fitNotes, targetSec: fittedTargetSec } = fitDuration(

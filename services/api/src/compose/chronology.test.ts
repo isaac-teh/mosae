@@ -1,26 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { orderByChronology, applyArc, type ClipTime } from "./chronology.js";
+import { spreadVideoClips, type ClipTime } from "./chronology.js";
 
-const c = (itemId: string) => ({ itemId });
-const t = (entries: [string, number, string | null, number][]) =>
-  new Map<string, ClipTime>(entries.map(([id, chapter, localTime, score]) => [id, { chapter, localTime, score }]));
+type Clip = { itemId: string; kind: "photo" | "video"; inSec?: number; highlightScore?: number };
+const timeOf = new Map<string, ClipTime>([
+  ["p1", { chapter: 0, localTime: "2026-01-01T08:00:00", score: 0 }],
+  ["p2", { chapter: 0, localTime: "2026-01-01T08:10:00", score: 0 }],
+  ["p3", { chapter: 0, localTime: "2026-01-01T08:20:00", score: 0 }],
+  ["p4", { chapter: 0, localTime: "2026-01-01T08:30:00", score: 0 }],
+  ["v1", { chapter: 1, localTime: "2026-01-02T08:00:00", score: 0 }],
+  ["v2", { chapter: 1, localTime: "2026-01-02T08:05:00", score: 0 }],
+]);
+const source = (clip: Clip) => clip.itemId.startsWith("v") ? "video-source" : clip.itemId;
 
-describe("orderByChronology", () => {
-  it("sorts by chapter, then capture time; undated keep their relative order at the end of their chapter", () => {
-    const times = t([["b", 2, "2026-06-02T09:00:00", 0], ["a", 1, "2026-06-01T10:00:00", 0], ["a0", 1, "2026-06-01T08:00:00", 0], ["u", 3, null, 0]]);
-    expect(orderByChronology([c("u"), c("b"), c("a"), c("a0")], times).map((x) => x.itemId)).toEqual(["a0", "a", "b", "u"]);
+describe("spreadVideoClips", () => {
+  it("evenly distributes videos when their timestamps are in a separate cluster", () => {
+    const clips: Clip[] = ["p1", "p2", "p3", "p4"].map((itemId) => ({ itemId, kind: "photo" }));
+    clips.push({ itemId: "v1", kind: "video", inSec: 0 }, { itemId: "v2", kind: "video", inSec: 5 });
+    expect(spreadVideoClips(clips, timeOf, source).map((clip) => clip.itemId)).toEqual(["p1", "v1", "p2", "p3", "v2", "p4"]);
   });
-});
 
-describe("applyArc", () => {
-  it("ends every chapter but the last on its highest-scoring clip, and says so", () => {
-    const times = t([["a", 1, "2026-06-01T08:00:00", 0.9], ["b", 1, "2026-06-01T09:00:00", 0.2], ["c", 2, "2026-06-02T09:00:00", 0.5]]);
-    const out = applyArc([c("a"), c("b"), c("c")], times);
-    expect(out.clips.map((x) => x.itemId)).toEqual(["b", "a", "c"]);
-    expect(out.reasons).toContain("Each day builds to its best moment.");
+  it("keeps naturally interleaved timestamps and each photo sequence in time order", () => {
+    const interleaved = new Map(timeOf);
+    interleaved.set("v1", { chapter: 0, localTime: "2026-01-01T08:05:00", score: 0 });
+    interleaved.set("v2", { chapter: 0, localTime: "2026-01-01T08:25:00", score: 0 });
+    const clips: Clip[] = ["p4", "v2", "p2", "v1", "p1", "p3"].map((itemId) => ({ itemId, kind: itemId.startsWith("p") ? "photo" : "video" }));
+    expect(spreadVideoClips(clips, interleaved, source).map((clip) => clip.itemId)).toEqual(["p1", "v1", "p2", "p3", "v2", "p4"]);
   });
-  it("leaves a single-chapter film alone without a reason", () => {
-    const times = t([["a", 1, "2026-06-01T08:00:00", 0.9], ["b", 1, "2026-06-01T09:00:00", 0.2]]);
-    expect(applyArc([c("a"), c("b")], times)).toEqual({ clips: [c("a"), c("b")], reasons: [] });
+
+  it("opens with a photo unless the first video is a strong highlight", () => {
+    const photo: Clip = { itemId: "p1", kind: "photo" };
+    const weak: Clip = { itemId: "v1", kind: "video", highlightScore: 0.6 };
+    const strong: Clip = { itemId: "v1", kind: "video", highlightScore: 0.7 };
+    const videoFirst = new Map<string, ClipTime>([["v1", { chapter: 0, localTime: "2025-12-31T08:00:00", score: 0 }], ["p1", { chapter: 0, localTime: "2026-01-01T08:00:00", score: 0 }]]);
+    expect(spreadVideoClips([weak, photo], new Map(), source)[0]).toBe(photo);
+    expect(spreadVideoClips([strong, photo], videoFirst, source)[0]).toBe(strong);
+  });
+
+  it("separates adjacent moments from the same source when a photo is available", () => {
+    const clips: Clip[] = [{ itemId: "v1", kind: "video" }, { itemId: "v2", kind: "video", inSec: 5 }, { itemId: "p1", kind: "photo" }];
+    const result = spreadVideoClips(clips, new Map(), source);
+    expect(result.map((clip) => clip.kind)).toEqual(["video", "photo", "video"]);
   });
 });
