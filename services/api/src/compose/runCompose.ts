@@ -126,7 +126,8 @@ function completeDurationMaterial(
   baseHoldSec: number,
 ): AssembledClip[] {
   const output = [...selected];
-  const usedItems = new Set(output.filter((clip) => clip.kind === "photo").map((clip) => clip.itemId));
+  const usedPhotos = new Set(output.filter((clip) => clip.kind === "photo").map((clip) => clip.itemId));
+  const usedVideos = new Set(output.filter((clip) => clip.kind === "video").map((clip) => clip.itemId));
   const usedCandidates = new Set(output.map((clip) => clip.candidateId));
 
   const projectedMaxSec = () => Math.max(0, output.reduce((sum, clip, index) =>
@@ -134,19 +135,12 @@ function completeDurationMaterial(
 
   const available = candidates.filter((candidate) => {
     const shotId = shotIdByMoment.get(candidate.itemId);
-    return Boolean(shotId) && !usedCandidates.has(candidate.candidateId) && (candidate.kind === "video" || !usedItems.has(candidate.itemId)) && !deselectedMomentIds.has(candidate.itemId) && !hiddenShotIds.has(shotId!) && !excludedShotIds.has(shotId!);
+    return Boolean(shotId) && !usedCandidates.has(candidate.candidateId) && (candidate.kind === "video" || !usedPhotos.has(candidate.itemId)) && !deselectedMomentIds.has(candidate.itemId) && !hiddenShotIds.has(shotId!) && !excludedShotIds.has(shotId!);
   });
-  const ordered = [
-    ...available.filter((candidate) => mustIncludeMomentIds.includes(candidate.itemId)),
-    ...available.filter((candidate) => candidate.kind === "video" && !mustIncludeMomentIds.includes(candidate.itemId)).sort((a, b) => (b.windowScore ?? 0) - (a.windowScore ?? 0)),
-    ...available.filter((candidate) => candidate.kind === "photo" && !mustIncludeMomentIds.includes(candidate.itemId)),
-  ];
-
-  for (const candidate of ordered) {
-    if (projectedMaxSec() >= targetSec * 0.9) break;
-    if (usedCandidates.has(candidate.candidateId) || candidate.kind === "photo" && usedItems.has(candidate.itemId)) continue;
+  const add = (candidate: Candidate) => {
+    if (usedCandidates.has(candidate.candidateId) || candidate.kind === "video" && usedVideos.has(candidate.itemId) || candidate.kind === "photo" && usedPhotos.has(candidate.itemId)) return;
     const shotId = shotIdByMoment.get(candidate.itemId)!;
-    if (candidate.kind === "photo") usedItems.add(candidate.itemId);
+    if (candidate.kind === "photo") usedPhotos.add(candidate.itemId); else usedVideos.add(candidate.itemId);
     usedCandidates.add(candidate.candidateId);
     const isPhoto = candidate.kind === "photo";
     output.push({
@@ -156,6 +150,28 @@ function completeDurationMaterial(
       audio: isPhoto || !candidate.hasSpeech ? "mute" : "keep",
       ...(isPhoto ? { holdSec: baseHoldSec } : { sourceInSec: candidate.inSec, sourceOutSec: candidate.outSec, hasSpeech: candidate.hasSpeech }),
     });
+  };
+
+  // Coverage is the first constraint: represent every video source before
+  // using photos to fill the requested length.
+  const primaryVideos = available.filter((candidate) => candidate.kind === "video" && !candidate.isExtraMoment)
+    .sort((a, b) => (b.windowScore ?? 0) - (a.windowScore ?? 0) || a.itemId.localeCompare(b.itemId));
+  for (const candidate of primaryVideos) add(candidate);
+
+  const mustIncludePhotos = available.filter((candidate) => candidate.kind === "photo" && mustIncludeMomentIds.includes(candidate.itemId));
+  const otherPhotos = available.filter((candidate) => candidate.kind === "photo" && !mustIncludeMomentIds.includes(candidate.itemId));
+  for (const candidate of [...mustIncludePhotos, ...otherPhotos]) {
+    if (projectedMaxSec() >= targetSec * 0.9) break;
+    add(candidate);
+  }
+
+  // Extra moments are optional: include them only after source coverage and
+  // still-photo fill leave the film short.
+  const extras = available.filter((candidate) => candidate.kind === "video" && candidate.isExtraMoment)
+    .sort((a, b) => (b.windowScore ?? 0) - (a.windowScore ?? 0) || a.itemId.localeCompare(b.itemId));
+  for (const candidate of extras) {
+    if (projectedMaxSec() >= targetSec * 0.9) break;
+    add(candidate);
   }
   return output;
 }
@@ -196,6 +212,7 @@ export async function runCompose(
     6,
     job.cadenceId,
   );
+  const primaryCandidates = candidates.filter((candidate) => !candidate.isExtraMoment);
   const candidateVideoSources = new Set(candidates.filter(candidate => candidate.kind === "video").map(candidate => deps.assets.get(candidate.itemId)?.assetId ?? candidate.itemId));
   const noWindowDrops = job.proposal.moments.flatMap(moment => {
     const asset = deps.assets.get(moment.id);
@@ -239,7 +256,7 @@ export async function runCompose(
   // Stage 2: composeCall — build the brief and prompt for Gemini
   const brief = craftBrief(job.cadenceId, targetSec);
   const { prompt, schema } = composeCall({
-    candidates,
+    candidates: primaryCandidates,
     proposal: job.proposal,
     brief,
     holds: holdsFor(job.cadenceId),
@@ -275,12 +292,14 @@ export async function runCompose(
   // The model may choose the story order and emphasis, but it cannot omit usable media.
   // Append every remaining legal candidate in its deterministic catalog order.
   const pickedCandidates = new Set(assembledClips.map((clip) => clip.candidateId));
+  const pickedVideoItems = new Set(assembledClips.filter((clip) => clip.kind === "video").map((clip) => clip.itemId));
   const excludedShotIds = new Set(job.proposal.constraints.excludedShotIds ?? []);
   const deselectedMomentIds = new Set(job.proposal.constraints.deselectedMomentIds ?? []);
-  for (const candidate of candidates) {
+  for (const candidate of primaryCandidates) {
     const shotId = shotIdByMoment.get(candidate.itemId);
     if (pickedCandidates.has(candidate.candidateId) || deselectedMomentIds.has(candidate.itemId)
       || hiddenShotIds.has(shotId ?? "") || excludedShotIds.has(shotId ?? "")) continue;
+    if (candidate.kind === "video" && pickedVideoItems.has(candidate.itemId)) continue;
     assembledClips.push({
       ...candidate,
       order: assembledClips.length + 1,
@@ -291,6 +310,7 @@ export async function runCompose(
         : { sourceInSec: candidate.inSec, sourceOutSec: candidate.outSec, hasSpeech: candidate.hasSpeech }),
     });
     pickedCandidates.add(candidate.candidateId);
+    if (candidate.kind === "video") pickedVideoItems.add(candidate.itemId);
   }
 
   if (isEmptyResult(dropped, parsed.picks.clips.length)) {
@@ -411,10 +431,20 @@ export async function runCompose(
   // Enforce the cap against actual fitted run time, including crossfade overlaps.
   let fittedClips = initiallyFittedClips;
   const videoSeconds = () => fittedClips.filter(c => c.kind === "video").reduce((sum, c) => sum + Math.max(0, (c.sourceOutSec ?? 0) - (c.sourceInSec ?? 0)), 0);
+  const paceMinimum = ({ tender: 4, reflective: 4, playful: 2, energetic: 2, celebratory: 3 } as const)[job.cadenceId];
+  if (videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6) {
+    fittedClips = fittedClips.map((clip) => {
+      if (clip.kind !== "video") return clip;
+      const inSec = clip.sourceInSec ?? 0;
+      const currentLength = (clip.sourceOutSec ?? inSec) - inSec;
+      const minimum = Math.min(currentLength, paceMinimum);
+      return currentLength > minimum ? { ...clip, sourceOutSec: inSec + minimum } : clip;
+    });
+  }
   while (fittedClips.some(c => c.kind === "video") && videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6) {
     const loser = fittedClips.filter(c => c.kind === "video").sort((a, b) => (a.windowScore ?? 0) - (b.windowScore ?? 0) || a.candidateId.localeCompare(b.candidateId))[0]!;
     fittedClips = fittedClips.filter(c => c !== loser);
-    videoShareDrops.push(`${loser.itemId}: video share exceeds 50%`);
+    videoShareDrops.push(`${loser.itemId}: video share limit`);
   }
 
   if (fittedClips.length === 0) {

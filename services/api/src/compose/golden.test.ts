@@ -69,7 +69,7 @@ describe("golden composition", () => {
   it("keeps photos and the highest-scoring video that fits the 50% cap", async () => {
     const result = await compose();
     if (!result.ok) throw new Error(result.reasons.join("; "));
-    expect(result.droppedPicks).toEqual(["m-talking: video share exceeds 50%"]);
+    expect(result.droppedPicks).toEqual(["m-talking: video share limit"]);
     const included = new Set(result.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.shotId) : [clip.source.shotId]));
     expect(included).toEqual(new Set(["shot-arrival", "shot-water", "shot-dusk"]));
     const videoSec = result.timeline.videoClips.filter((clip) => "source" in clip && clip.source.kind === "video").reduce((sum, clip) => sum + clip.durationSec, 0);
@@ -196,15 +196,14 @@ describe("golden composition", () => {
 
   it("lands within 10% of the length it was fitted to", async () => {
     const timeline = await composeOrThrow();
-    // The score-led best window is six seconds; the selected media cannot
-    // reach the requested 30-second tier without padding or repeating clips.
-    expect(timeline.durationSec).toBeCloseTo(13.5);
-    expect(Math.abs(timeline.durationSec - 13.5)).toBeLessThanOrEqual(1.35);
+    // Coverage retains one clip per source until the share cap has to discard
+    // the lowest-scoring source after the remaining clips reach pace minimum.
+    expect(timeline.durationSec).toBeCloseTo(11.5);
   });
 
   it("burns in the model's text overlay and ducks the music under speech or loud peaks", async () => {
     const timeline = await composeOrThrow();
-    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 4, endSec: 10 }]);
+    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 4, endSec: 8 }]);
 
     const music = timeline.audioClips.find((clip) => clip.role === "music");
     const ambient = timeline.audioClips.find((clip) => clip.role === "ambient");

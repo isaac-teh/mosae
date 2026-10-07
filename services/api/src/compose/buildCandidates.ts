@@ -20,6 +20,8 @@ export interface Candidate {
   hasSpeech?: boolean;
   windowScore?: number;
   highlightScore?: number;
+  /** Additional strong beat from a source after one primary clip is represented. */
+  isExtraMoment?: boolean;
   loudPeak?: number;
   description: string;
 }
@@ -162,7 +164,7 @@ export function buildCandidates(
             if (!(extraOut > extraIn) || speechInShot.some((s) => (extraIn > s.startSec + 0.01 && extraIn < s.endSec - 0.01) || (extraOut > s.startSec + 0.01 && extraOut < s.endSec - 0.01))) continue;
             if (Math.max(0, Math.max(extraIn, window.inSec) - Math.min(extraOut, window.outSec)) < 3) continue;
             const extraScore = scoreWindow(shot, extraIn, extraOut);
-            out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${extraIn.toFixed(2)}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: Number(extraIn.toFixed(2)), outSec: Number(extraOut.toFixed(2)), lengthSec: Number(extraLength.toFixed(2)), hasSpeech: false, windowScore: extraScore, highlightScore: highlight.score, loudPeak: 0, description: `${shot.description || ''}`.slice(0, 160) });
+            out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${extraIn.toFixed(2)}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: Number(extraIn.toFixed(2)), outSec: Number(extraOut.toFixed(2)), lengthSec: Number(extraLength.toFixed(2)), hasSpeech: false, windowScore: extraScore, highlightScore: highlight.score, isExtraMoment: true, loudPeak: 0, description: `${shot.description || ''}`.slice(0, 160) });
           }
           if (++added >= perItem) break;
         }

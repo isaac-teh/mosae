@@ -4,7 +4,7 @@
   "mode": "memory",
   "aspect": "9:16",
   "fps": 30,
-  "durationSec": 13.5,
+  "durationSec": 11.5,
   "chapters": [
     {
       "title": "Getting there",
@@ -35,10 +35,10 @@
         "kind": "video",
         "shotId": "shot-water",
         "sourceInSec": 3.9,
-        "sourceOutSec": 9.9
+        "sourceOutSec": 7.9
       },
       "startSec": 4,
-      "durationSec": 6,
+      "durationSec": 4,
       "transitionIn": {
         "kind": "cut",
         "durationSec": 0
@@ -50,7 +50,7 @@
         "kind": "photo",
         "shotId": "shot-dusk"
       },
-      "startSec": 9.5,
+      "startSec": 7.5,
       "durationSec": 4,
       "transitionIn": {
         "kind": "crossfade",
@@ -65,7 +65,7 @@
         "kind": "asset",
         "assetId": "shot-water",
         "sourceInSec": 3.9,
-        "sourceOutSec": 9.9
+        "sourceOutSec": 7.9
       },
       "role": "ambient",
       "startSec": 4,
@@ -79,12 +79,12 @@
         "kind": "soundtrack",
         "soundtrackId": "soundtrack-dusk",
         "sourceInSec": 0,
-        "sourceOutSec": 13.5
+        "sourceOutSec": 11.5
       },
       "role": "music",
       "startSec": 0,
       "gainDb": -6.94,
-      "fadeInSec": 0.675,
+      "fadeInSec": 0.5750000000000001,
       "fadeOutSec": 1
     }
   ],
@@ -92,7 +92,7 @@
     {
       "text": "Into the water",
       "startSec": 4,
-      "endSec": 10
+      "endSec": 8
     }
   ]
 }
