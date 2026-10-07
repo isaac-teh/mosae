@@ -8,10 +8,12 @@ export function lateVideoDecision(input: {
   composedRevision: number;
   currentRevision: number;
   hasShot: boolean;
+  alreadyJoined?: boolean;
+  lastAutoRevision?: number;
 }): LateVideoDecision {
-  if (!input.hasShot) return "skip";
+  if (!input.hasShot || input.alreadyJoined) return "skip";
   if (input.status !== "playable") return input.status === "saved" ? "offer" : "skip";
-  return input.currentRevision === input.composedRevision ? "insert" : "offer";
+  return input.currentRevision === input.composedRevision || input.currentRevision === input.lastAutoRevision ? "insert" : "offer";
 }
 
 /** Pick the best legal late-join window using the compose scorer unchanged. */

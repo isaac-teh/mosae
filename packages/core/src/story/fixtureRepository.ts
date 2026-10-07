@@ -368,6 +368,7 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
       writeBrowserValue(browserEditKey(projectId, generationId), document);
       return structuredClone(document);
     },
+    dismissLateVideo: async () => undefined,
     renderRevision: async (projectId, generationId, revision) => {
       const saved = editDocuments.get(`${projectId}/${generationId}`) ?? readBrowserValue<FilmEdits>(browserEditKey(projectId, generationId)) ?? { revision: 0, ops: [], updatedAt: null };
       if (saved.revision !== revision) throw new Error("stale_revision");

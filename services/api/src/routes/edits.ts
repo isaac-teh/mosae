@@ -3,11 +3,12 @@ import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
 import { getEditDocument, saveEditDocument } from "../directing/editStore.js";
+import { dismissLateVideo } from "../store/lateVideoStore.js";
 
 export function editsRouter(deps: { db: Firestore; auth?: RequestHandler; now?: () => number }): Router {
   const router = Router();
   router.use(deps.auth ?? requireUser());
-  for (const name of ["projectId", "generationId"]) {
+  for (const name of ["projectId", "generationId", "assetId"]) {
     router.param(name, (_req, res, next, value: string) => {
       if (!isValidId(value)) { res.status(404).json({ error: "not_found" }); return; }
       next();
@@ -31,6 +32,15 @@ export function editsRouter(deps: { db: Firestore; auth?: RequestHandler; now?: 
       return res.json(result.document);
     } catch (error) {
       console.error("save edits failed", error);
+      return res.status(500).json({ error: "internal" });
+    }
+  });
+  router.post("/:projectId/generations/:generationId/late-videos/:assetId/dismiss", async (req, res) => {
+    try {
+      const dismissed = await dismissLateVideo(deps.db, res.locals.userId, req.params.projectId, req.params.generationId, req.params.assetId);
+      return dismissed ? res.json({ status: "dismissed" }) : res.status(404).json({ error: "not_found" });
+    } catch (error) {
+      console.error("dismiss late video failed", error);
       return res.status(500).json({ error: "internal" });
     }
   });

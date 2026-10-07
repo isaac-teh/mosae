@@ -292,6 +292,13 @@ describe("deriveChat state table", () => {
     const state = deriveChat({ ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } });
     expect(state.placeholder).toBe("Ask for a change");
   });
+  it.each([
+    [{ assetId: "a1", shotId: "s1", label: "beach", status: "added" as const, sourceInSec: 1, sourceOutSec: 4, afterClipId: "p1", previousOps: [] }, "Added your beach video 🎬"],
+    [{ assetId: "a2", shotId: "s2", label: "cake", status: "offered" as const, sourceInSec: 1, sourceOutSec: 4, afterClipId: null }, "Add your cake video?"],
+  ])("shows late-video chat copy %s", (event, text) => {
+    const state = deriveChat({ ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stage: "playable", progress: 1, stepsDone: 3, film: { ...film, lateVideoEvents: [event] } } });
+    expect(state.items.find((item) => item.kind === "late-video")).toMatchObject({ kind: "late-video", text });
+  });
 });
 
 describe("contextual direction copy", () => {

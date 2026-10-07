@@ -41,6 +41,7 @@ export interface StoryRepository {
   acknowledgeEditInterpretation(projectId: string, generationId: string, requestId: string, revision: number): Promise<void>;
   interpretEdit(projectId: string, generationId: string, text: string, revision: number, context?: EditInterpretContext): Promise<EditInterpretation>;
   saveEdits(projectId: string, generationId: string, revision: number, ops: EditOp[]): Promise<FilmEdits>;
+  dismissLateVideo(projectId: string, generationId: string, assetId: string): Promise<void>;
   renderRevision(projectId: string, generationId: string, revision: number): Promise<{ renderId: string }>;
   getRender(projectId: string, generationId: string, revision: number): Promise<FilmRender>;
   reviseFilm(filmId: string, request: string): Promise<Film>;

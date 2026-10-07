@@ -618,6 +618,9 @@ export function createApiStoryRepository(
     saveEdits: async (projectId, generationId, revision, ops) => record(await deps.request(
       "PUT", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits`, { revision, ops },
     ), "edits") as FilmEdits,
+    dismissLateVideo: async (projectId, generationId, assetId) => {
+      await deps.request("POST", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/late-videos/${encodeURIComponent(assetId)}/dismiss`);
+    },
     renderRevision: async (projectId, generationId, revision) => record(await deps.request(
       "POST", `/api/projects/${encodeURIComponent(projectId)}/generations/${encodeURIComponent(generationId)}/edits/${revision}/render`,
     ), "render request") as { renderId: string },
@@ -743,6 +746,7 @@ export function createApiStoryRepository(
       rendering: isStatus(generation, "composing", "rendering"),
       renderProgress: typeof generation.renderProgress === "number" ? generation.renderProgress : 0,
       reasons: Array.isArray(generation.reasons) ? generation.reasons.filter((reason): reason is string => typeof reason === "string") : [],
+      lateVideoEvents: Array.isArray(generation.lateVideoEvents) ? generation.lateVideoEvents as NonNullable<Film["lateVideoEvents"]> : [],
     };
   }
 }

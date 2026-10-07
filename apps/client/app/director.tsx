@@ -134,6 +134,9 @@ export default function DirectorScreen() {
       {state.items.map((item) => {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveConflict(choice as "keep" | "leave"))} />;
         if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} photos={item.photos} />;
+        if (item.kind === "late-video") return item.status === "added"
+          ? <View key={item.id} className="gap-2"><ChatMessage from="mosae" text={item.text} /><Button label="Undo" variant="quiet" onPress={() => scrollAfterAction(() => actions.resolveLateVideo(item.assetId, "undo"))} /></View>
+          : <ChatProposal key={item.id} question={item.text} replies={[{ id: "add", label: "Add" }, { id: "dismiss", label: "No thanks" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveLateVideo(item.assetId, choice as "add" | "dismiss"))} />;
         if (item.kind === "you") return <ChatMessage key={item.id} from="you" text={item.text} />;
         if (item.kind === "preparing-videos") return <View key={item.id} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 1, now: item.progress }} className="gap-2 rounded-md bg-surface-raised p-3"><Text className="font-sans text-body text-ink">{item.text}</Text><View className="h-2 overflow-hidden rounded-full bg-line"><View className="h-full rounded-full bg-action" style={{ width: `${Math.round(item.progress * 100)}%` }} /></View></View>;
         if (item.kind === "typing") {

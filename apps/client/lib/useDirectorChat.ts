@@ -164,6 +164,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const [nextSummary, people] = result;
     if (!startedWhilePending && !previousLocalPending.current && refreshEpoch === uploadEpoch.current) acceptedSummaryEpoch.current = refreshEpoch;
     setSummary(nextSummary);
+    if (activeFilmId.current) pollFilmRef.current(activeFilmId.current);
     const mapped = people?.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
       return { ...person, ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
@@ -203,7 +204,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           generation,
         }));
         if (plan && !hasGeneration && !needsFilteredPhotoReview) await loadDirectionOptions(plan.planId, stillValid);
-        if (stillValid() && resume.generationId && hasGeneration && !isFilmReady) void pollFilmRef.current(resume.generationId);
+        if (stillValid() && resume.generationId && hasGeneration) {
+          activeFilmId.current = resume.generationId;
+          if (!isFilmReady) void pollFilmRef.current(resume.generationId);
+        }
       } catch (cause) {
         if (stillValid()) { resumeProjectId.current = null; throw cause; }
       }
@@ -285,7 +289,6 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         } }));
         generationTimer.current = setTimeout(() => { void pollFilm(filmId); }, 1500);
       } else {
-        activeFilmId.current = null;
         setError(null);
         setInput((current) => ({ ...current, generation: { status: "done", stage: film.generationStatus === "saved" ? "saved" : "playable", progress: 1, stepsDone: 3, film } }));
       }
@@ -310,6 +313,26 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   pollFilmRef.current = (filmId) => { void pollFilm(filmId); };
 
   const actions = {
+    async resolveLateVideo(assetId: string, choice: "add" | "undo" | "dismiss") {
+      const film = input.generation?.film;
+      const event = film?.lateVideoEvents?.find((item) => item.assetId === assetId);
+      if (!event || !film) {
+        setInput((current) => ({ ...current, lateVideoDismissals: [...new Set([...(current.lateVideoDismissals ?? []), assetId])] }));
+        return;
+      }
+      try {
+        if (choice !== "dismiss") {
+          const edits = await repository.getEdits(projectId, film.filmId);
+          const ops = choice === "undo"
+            ? event.previousOps ?? []
+            : [...edits.ops, { op: "add" as const, shotId: event.shotId, kind: "video" as const, afterClipId: event.afterClipId, durationSec: event.sourceOutSec - event.sourceInSec, sourceInSec: event.sourceInSec, sourceOutSec: event.sourceOutSec }];
+          await repository.saveEdits(projectId, film.filmId, edits.revision + 1, ops);
+        }
+        await repository.dismissLateVideo(projectId, film.filmId, assetId);
+        setInput((current) => ({ ...current, lateVideoDismissals: [...new Set([...(current.lateVideoDismissals ?? []), assetId])] }));
+        void pollFilm(film.filmId);
+      } catch (cause) { setError(reportFailure(cause)); }
+    },
     async confirmOccasion(answer?: string, storyTextOverride?: string, mentionedPeople?: string[], storySummary?: string) {
       if (occasionSaving.current || !canConfirmStory({ ...input, ...confirmationState })) return;
       occasionSaving.current = true;

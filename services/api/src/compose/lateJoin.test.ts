@@ -11,9 +11,15 @@ describe("late video join decisions", () => {
   it("offers rather than overwriting an edit made since composition", () => {
     expect(lateVideoDecision({ status: "playable", composedRevision: 0, currentRevision: 1, hasShot: true })).toBe("offer");
   });
+  it("keeps auto-inserting subsequent videos after its own prior revision", () => {
+    expect(lateVideoDecision({ status: "playable", composedRevision: 0, currentRevision: 1, lastAutoRevision: 1, hasShot: true })).toBe("insert");
+  });
   it("skips missing footage and non-playable generations", () => {
     expect(lateVideoDecision({ status: "playable", composedRevision: 0, currentRevision: 0, hasShot: false })).toBe("skip");
     expect(lateVideoDecision({ status: "composing", composedRevision: 0, currentRevision: 0, hasShot: true })).toBe("skip");
+  });
+  it("skips a video already joined when a readiness task is retried", () => {
+    expect(lateVideoDecision({ status: "playable", composedRevision: 0, currentRevision: 1, hasShot: true, alreadyJoined: true })).toBe("skip");
   });
   it("selects a best window with the existing compose helper", () => {
     const shot = { startSec: 0, endSec: 8, highlights: [{ startSec: 5, endSec: 7, score: 1 }] };

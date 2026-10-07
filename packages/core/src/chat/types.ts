@@ -36,6 +36,7 @@ export type ChatInput = {
   generation: { status: "queued" | "running" | "done" | "failed"; stage: "queued" | "composing" | "playable" | "rendering" | "saved" | "failed"; progress: number; stepsDone: number; film: Film | null } | null;
   notes: string[];
   filmWait?: { elapsedSec: number; videoCount: number };
+  lateVideoDismissals?: string[];
   mergeEvents?: { id: string; personId: string; targetPersonId: string; answer: string; targetName: string; sampleFaces: string[]; questionFaces?: string[]; momentCount: number; automatic?: boolean; response?: "Yes, same person" | "No, another person" }[];
 };
 
@@ -53,6 +54,7 @@ export type ChatItem =
   | { kind: "moments"; id: string; suggestedShotIds: string[] }
   | { kind: "direction"; id: string; aspect: "9:16" | "16:9"; orientation?: NonNullable<ProjectSummary["orientation"]>; pace: string; lengthSec: number; focus: string; momentCount: number }
   | { kind: "shaping"; id: string; progress: number; stepsDone: number }
+  | { kind: "late-video"; id: string; assetId: string; text: string; status: "added" | "offered" }
   | { kind: "film"; id: string; film: Film };
 
 export type ChatState = {

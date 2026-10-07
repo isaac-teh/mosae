@@ -15,6 +15,7 @@ export type UnderstandDeps = {
   analyzePhoto(input: { assetId: string; shotId: string; renderPath: string }): Promise<PhotoAnalysis>; analyzeVideo(input: { assetId: string; file: VideoFile; shotCount: number; durationSec: number; shotRanges?: { startSec: number | null; endSec: number | null }[] }): Promise<{ shots: VideoShotAnalysis[]; transcript: TranscriptLine[] }>;
   embedShots(shots: { shotId: string; analysis: ShotAnalysis }[]): Promise<{ shotId: string; embedding: number[] | null }[]>; embedImageContent: EmbedImageContent; uploadVideoFile(path: string): Promise<VideoFile & { name: string }>; deleteVideoFile(name: string): Promise<void>;
   commitUnderstood(input: UnderstandCommit): Promise<"understood" | "skipped">; commitUnderstandFailed(input: { projectId: string; assetId: string; generation: string; reason: string; now: number }): Promise<"failed" | "skipped">; settle(projectId: string): Promise<void>; makeWorkDir(): Promise<string>; removeWorkDir(dir: string): Promise<void>; now(): number;
+  lateJoinVideo?(projectId: string, assetId: string): Promise<unknown>;
 };
 type UnderstandTimings = { downloadMs: number; analyzeMs: number; faceEmbedMs: number; shotEmbedMs: number; commitMs: number; faces: number };
 async function timed<T>(deps: UnderstandDeps, timings: UnderstandTimings, stage: keyof Pick<UnderstandTimings, "downloadMs" | "analyzeMs" | "faceEmbedMs" | "shotEmbedMs" | "commitMs">, operation: () => Promise<T>): Promise<T> {
@@ -68,7 +69,11 @@ function permanentGeminiError(error: unknown): PermanentIngestError | null {
 export async function understandAsset(deps: UnderstandDeps, task: UnderstandTask): Promise<UnderstandResult> {
   const totalStartedAt = deps.now();
   const asset = await deps.loadAsset(task.projectId, task.assetId); if (!asset || asset.generation !== task.generation) return "skipped";
-  if (asset.status !== "ingested") { await deps.settle(task.projectId); return "skipped"; }
+  if (asset.status !== "ingested") {
+    if (asset.status === "understood" && asset.media?.kind === "video") await deps.lateJoinVideo?.(task.projectId, task.assetId);
+    await deps.settle(task.projectId);
+    return "skipped";
+  }
   const timings: UnderstandTimings = { downloadMs: 0, analyzeMs: 0, faceEmbedMs: 0, shotEmbedMs: 0, commitMs: 0, faces: 0 };
   const shots = await deps.loadShots(task.projectId, task.assetId); const workDir = await deps.makeWorkDir(); let result: UnderstandResult;
   try { if (shots.length === 0) throw new PermanentIngestError("no_shots"); result = await understandOriginal(deps, asset, shots, workDir, timings); }
@@ -77,5 +82,6 @@ export async function understandAsset(deps: UnderstandDeps, task: UnderstandTask
     await deps.removeWorkDir(workDir);
     console.info("understand_timing", { queueWaitMs: Number.isFinite(asset.createdAt) ? Math.max(0, totalStartedAt - asset.createdAt) : null, downloadMs: timings.downloadMs, analyzeMs: timings.analyzeMs, faceEmbedMs: timings.faceEmbedMs, shotEmbedMs: timings.shotEmbedMs, commitMs: timings.commitMs, totalMs: Math.max(0, deps.now() - totalStartedAt), faces: timings.faces });
   }
+  if (result === "understood" && asset.media?.kind === "video") await deps.lateJoinVideo?.(task.projectId, task.assetId);
   if (result === "understood" || result === "failed") await deps.settle(asset.projectId); return result;
 }

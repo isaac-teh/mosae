@@ -244,6 +244,10 @@ export function deriveChat(input: ChatInput): ChatState {
   if (input.generation?.status === "done" && input.generation.film) {
     step = "ready";
     placeholder = "Ask for a change";
+    for (const event of input.generation.film.lateVideoEvents ?? []) {
+      if (event.status === "dismissed" || input.lateVideoDismissals?.includes(event.assetId)) continue;
+      add({ kind: "late-video", id: `late-video-${event.assetId}`, assetId: event.assetId, status: event.status, text: event.status === "added" ? `Added your ${event.label} video 🎬` : `Add your ${event.label} video?` });
+    }
     add({ kind: "film", id: "film", film: input.generation.film });
     return { items, step, confirmed, placeholder };
   }
