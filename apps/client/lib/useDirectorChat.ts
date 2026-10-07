@@ -456,7 +456,25 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const focusLabel = focus.label;
         const direction: Direction & { focus: string } = { note: `${directionOptions?.note ?? ""}${directionOptions?.note ? "\n" : ""}Focus: ${focusLabel}.`, cadenceId: directionSelection.cadenceId, soundtrackId: directionSelection.soundtrackId, durationId: directionSelection.durationId, ...(directionSelection.durationId === "short" ? { durationSec: directionSelection.durationSec } : {}), focus: focus.selected, collageAmount: directionSelection.collageAmount, motionFeel: directionSelection.motionFeel, aspect: effectiveAspect };
         compositionStartedAt.current = Date.now();
-        setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction, generation: { status: "queued", stage: "queued", progress: 0, stepsDone: 0, film: null } }));
+        setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction }));
+        let latestSummary = input.summary;
+        const pendingVideos = () => latestSummary?.videoStatuses?.filter((video) => video.status === "processing") ?? [];
+        const waitingVideoCount = pendingVideos().length;
+        const waitStarted = Date.now();
+        if (waitingVideoCount) {
+          while (Date.now() - waitStarted < 60_000 && isCurrentProject() && pendingVideos().length > 0) {
+            const elapsedSec = Math.floor((Date.now() - waitStarted) / 1000);
+            setInput((current) => ({ ...current, filmWait: { elapsedSec, videoCount: waitingVideoCount } }));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            try {
+              latestSummary = await repository.getSummary(projectId);
+              if (!isCurrentProject()) return;
+              setSummary(latestSummary);
+              setInput((current) => ({ ...current, summary: latestSummary }));
+            } catch { /* Existing summary polling will recover a transient read failure. */ }
+          }
+        }
+        setInput((current) => ({ ...current, filmWait: undefined, generation: { status: "queued", stage: "queued", progress: 0, stepsDone: 0, film: null } }));
         const { filmId } = await repository.directFilm(input.plan.planId, direction);
         if (mounted.current && isCurrentProject()) { setInput((current) => ({ ...current, generation: current.generation ? { ...current.generation, status: "running", stage: "composing" } : current.generation })); void pollFilm(filmId); }
       } catch (cause) {

@@ -109,12 +109,21 @@ export function deriveChat(input: ChatInput): ChatState {
   let confirmed: ChatState["confirmed"] = 0;
   let placeholder = DEFAULT_PLACEHOLDER;
   const add = (item: ChatItem) => items.push(item);
+  const addVideoFailures = () => (input.summary?.videoStatuses ?? []).filter((video) => video.status === "failed")
+    .forEach((video) => add({ kind: "mosae", id: `video-failed-${video.assetId}`, text: "Couldn't read this video" }));
   const addPhotoProgress = () => {
     const processed = input.summary?.processed.ingested ?? 0;
     const total = input.summary?.total ?? 0;
     const text = total > 0 ? `Reading your photos, ${processed} of ${total}` : "Waiting for your photos to arrive…";
     add({ kind: "typing", id: "summary-wait", text, photoProgress: input.summary?.assetStatuses });
   };
+
+  if (input.filmWait) {
+    const statuses = input.summary?.videoStatuses ?? [];
+    const progress = statuses.length ? statuses.reduce((sum, video) => sum + video.progress, 0) / statuses.length : 0;
+    add({ kind: "preparing-videos", id: "preparing-videos", text: `Preparing ${input.filmWait.videoCount} ${input.filmWait.videoCount === 1 ? "video" : "videos"}…`, progress });
+    return { items, step: "shaping", confirmed: 4, placeholder };
+  }
 
   if ((!input.intent && !canConfirmStory(input)) || !input.summary?.ready.summary) {
     addPhotoProgress();
@@ -125,6 +134,7 @@ export function deriveChat(input: ChatInput): ChatState {
 
   if (!input.intent) {
     add({ kind: "mosae", id: "occasion-message", text: occasionText(input) });
+    addVideoFailures();
     input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
     add({ kind: "occasion", id: "occasion" });
     return { items, step, confirmed, placeholder };
@@ -133,6 +143,7 @@ export function deriveChat(input: ChatInput): ChatState {
   add({ kind: "mosae", id: "occasion-message", text: occasionText(input) });
   add({ kind: "you", id: "occasion-answer", text: input.intent.text });
   add({ kind: "mosae", id: "story-acknowledgement", text: storyAcknowledgement(input.intent.text, input.storySummary, input.mentionedPeople) });
+  addVideoFailures();
   input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
   confirmed = 1;
 

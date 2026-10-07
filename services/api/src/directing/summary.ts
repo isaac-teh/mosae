@@ -16,8 +16,9 @@ export type ProjectSummary = {
   places: string[]; country: string | null; season: string | null;
   processed: { ingested: number; understood: number; faces: number };
   upload: { expected: number; settled: number; failed: number; cancelled: number; closed: boolean };
-  ready: { summary: boolean; faces: boolean; plan: boolean; story: boolean };
+  ready: { summary: boolean; faces: boolean; plan: boolean; story: boolean; film: boolean };
   assetStatuses: { assetId: string; kind: "photo" | "video"; status: AssetStatus }[];
+  videoStatuses: { assetId: string; status: "processing" | "ready" | "failed"; progress: number }[];
   orientation: { portrait: number; landscape: number; square: number; suggested: "9:16" | "16:9" | null };
 };
 
@@ -29,6 +30,12 @@ export function summarise(assets: SummaryAsset[], hasPlan: boolean, context: {
   const assetStatuses = assets.flatMap((asset) => {
     const kind = (asset.media ?? asset.facts)?.kind;
     return asset.id && (kind === "photo" || kind === "video") ? [{ assetId: asset.id, kind, status: asset.status }] : [];
+  });
+  const videoStatuses = assets.flatMap((asset) => {
+    const kind = (asset.media ?? asset.facts)?.kind;
+    if (!asset.id || kind !== "video") return [];
+    const status = asset.status === "failed" ? "failed" as const : asset.status === "understood" ? "ready" as const : "processing" as const;
+    return [{ assetId: asset.id, status, progress: status === "processing" ? (asset.status === "ingested" ? 0.5 : 0) : 1 }];
   });
   const oriented = assets.filter((asset) => asset.status === "understood" && !asset.dupOf && !asset.quality?.blurry);
   let portrait = 0, landscape = 0, square = 0;
@@ -69,16 +76,18 @@ export function summarise(assets: SummaryAsset[], hasPlan: boolean, context: {
   const understood = assets.filter((asset) => asset.status === "understood").length;
   const facePhotos = photos.filter((asset) => asset.hasFaces).length;
   const usable = assets.filter((asset) => asset.status !== "failed");
-  const story = usable.length > 0 && usable.every((asset) => asset.status === "understood")
-    && upload.closed && upload.settled === upload.expected && (context.manifestReady ?? true)
-    && (context.projectStatus === "ready" || context.projectStatus === "ready_with_errors");
+  const chatReady = assets.length > 0 && photos.every((asset) => asset.status === "understood" || asset.status === "failed")
+    && upload.closed && upload.settled === upload.expected && (context.manifestReady ?? true);
+  const story = assets.length > 0 && (context.projectStatus !== undefined || context.upload !== undefined)
+    && photos.every((asset) => asset.status === "understood" || asset.status === "failed")
+    && upload.closed && upload.settled === upload.expected && (context.manifestReady ?? true);
   return {
     upload, orientation: { portrait, landscape, square, suggested },
     total: assets.length, photos: photos.length, clips: assets.length - photos.length,
     days: uniqueDates.length, dateRange: uniqueDates.length ? { from: uniqueDates[0]!, to: uniqueDates[uniqueDates.length - 1]! } : null,
     places: places.slice(0, 6), country, season,
     processed: { ingested, understood, faces: facePhotos },
-    ready: { summary: ingested === assets.length, faces: photos.every((asset) => asset.status === "understood"), plan: hasPlan, story },
-    assetStatuses,
+    ready: { summary: chatReady, faces: photos.length ? photos.every((asset) => asset.status === "understood") : videoStatuses.some((video) => video.status === "ready"), plan: hasPlan, story, film: videoStatuses.every((video) => video.status !== "processing") },
+    assetStatuses, videoStatuses,
   };
 }

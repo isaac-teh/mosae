@@ -50,6 +50,18 @@ describe("deriveChat state table", () => {
     ] });
   });
 
+  it("shows video preparation progress without requesting more input", () => {
+    const state = deriveChat({ ...base(), filmWait: { elapsedSec: 4, videoCount: 2 }, summary: { ...summary, videoStatuses: [
+      { assetId: "v1", status: "ready", progress: 1 }, { assetId: "v2", status: "processing", progress: 0.5 },
+    ] } });
+    expect(state.items).toEqual([{ kind: "preparing-videos", id: "preparing-videos", text: "Preparing 2 videos…", progress: 0.75 }]);
+  });
+
+  it("shows failed videos as unreadable chat notes", () => {
+    const state = deriveChat({ ...base(), summary: { ...summary, videoStatuses: [{ assetId: "v1", status: "failed", progress: 1 }] } });
+    expect(state.items).toContainEqual({ kind: "mosae", id: "video-failed-v1", text: "Couldn't read this video" });
+  });
+
   it("waits for the first photos instead of claiming there are zero", () => {
     const pending = deriveChat({ ...base(), summary: { ...summary, total: 0, photos: 0, clips: 0, ready: { ...summary.ready, summary: false } }, intent: null, people: null, peopleConfirmed: false, plan: null });
     expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Waiting for your photos to arrive…" });
