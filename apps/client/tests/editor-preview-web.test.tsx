@@ -42,6 +42,12 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("web editor preview seeks", () => {
+  it.each([undefined, "chat"] as const)("passes a replaced video source through the %s shared preview", async (controls) => {
+    const videoTimeline: Timeline = { ...timeline, durationSec: 4, videoClips: [{ id: "replaced", source: { kind: "video", shotId: "video-shot", sourceInSec: 2, sourceOutSec: 6, sourceDurationSec: 12, width: 1920, height: 1080 }, startSec: 0, durationSec: 4, transitionIn: { kind: "cut", durationSec: 0 } }] };
+    await act(async () => root.render(<EditorPreview timeline={videoTimeline} sources={{ "video-shot": "signed-proxy.mp4" }} controls={controls} />));
+    expect(playerMock.inputProps.at(-1)).toMatchObject({ timeline: { videoClips: [{ source: { kind: "video", sourceInSec: 2, sourceOutSec: 6 } }] }, sources: { "video-shot": "signed-proxy.mp4" } });
+  });
+
   it("seeks the Remotion player to requested seconds and reports frame updates", async () => {
     const onTimeChange = vi.fn();
     await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} onTimeChange={onTimeChange} seekRequest={{ seconds: 2.25 }} />));

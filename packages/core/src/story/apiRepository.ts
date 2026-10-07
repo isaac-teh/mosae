@@ -598,6 +598,8 @@ export function createApiStoryRepository(
           ...(typeof media.sourceInSec === "number" ? { sourceInSec: media.sourceInSec } : {}),
           ...(typeof media.sourceOutSec === "number" ? { sourceOutSec: media.sourceOutSec } : {}),
           ...(typeof media.sourceDurationSec === "number" ? { sourceDurationSec: media.sourceDurationSec } : {}),
+          ...(typeof media.width === "number" ? { width: media.width } : {}),
+          ...(typeof media.height === "number" ? { height: media.height } : {}),
         }];
       }) : [];
       return { timeline: parseTimeline(response.timeline), sources: Object.fromEntries(Object.entries(sources).map(([id, path]) => [id, stringField(path, "preview source")])), thumbnails: Object.fromEntries(Object.entries(thumbnails).map(([id, path]) => [id, stringField(path, "video thumbnail")])), unusedMedia };

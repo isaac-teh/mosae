@@ -9,7 +9,7 @@ const seconds = z.number().finite().nonnegative();
 const positiveSeconds = z.number().finite().positive();
 
 export const EditOpSchema = z.discriminatedUnion("op", [
-  z.strictObject({ op: z.literal("swapShot"), clipId, shotId, sourceStartSec: seconds.optional(), sourceEndSec: positiveSeconds.optional() }),
+  z.strictObject({ op: z.literal("swapShot"), clipId, shotId, kind: z.enum(["photo", "video"]).optional(), sourceInSec: seconds.optional(), sourceOutSec: positiveSeconds.optional(), sourceDurationSec: positiveSeconds.optional(), durationSec: positiveSeconds.optional(), width: positiveSeconds.optional(), height: positiveSeconds.optional(), sourceStartSec: seconds.optional(), sourceEndSec: positiveSeconds.optional() }),
   z.strictObject({ op: z.literal("trim"), clipId, inSec: seconds, outSec: positiveSeconds }),
   z.strictObject({ op: z.literal("setPhotoDuration"), clipId, sec: positiveSeconds }),
   z.strictObject({ op: z.literal("setCollageDuration"), clipId, sec: positiveSeconds }),
@@ -143,11 +143,23 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
       case "swapShot": {
         if (!item || !("source" in item.clip)) return fail("swapShot requires a photo or video clip");
         const source = item.clip.source;
-        const replacementSource = source.kind === "video"
-          ? (({ sourceDurationSec: _oldDuration, sourceStartSec: _oldStart, sourceEndSec: _oldEnd, width: _oldWidth, height: _oldHeight, ...boundsFree }) => ({ ...boundsFree, shotId: op.shotId, ...(op.sourceStartSec !== undefined ? { sourceStartSec: op.sourceStartSec } : {}), ...(op.sourceEndSec !== undefined ? { sourceEndSec: op.sourceEndSec } : {}) }))(source)
-          : (({ width: _oldWidth, height: _oldHeight, ...photoSource }) => ({ ...photoSource, shotId: op.shotId }))(source);
-        item.clip = { ...item.clip, source: replacementSource } as VideoClip;
-        if (item.clip.source.kind === "video") videoBounds.set(op.clipId, op.sourceEndSec !== undefined ? { inSec: op.sourceStartSec ?? 0, outSec: op.sourceEndSec } : { inSec: item.clip.source.sourceInSec, outSec: item.clip.source.sourceOutSec });
+        const replacementKind = op.kind ?? source.kind;
+        if (replacementKind === "video") {
+          const sourceInSec = op.sourceInSec ?? (source.kind === "video" ? source.sourceInSec : 0);
+          const sourceOutSec = op.sourceOutSec ?? (source.kind === "video" ? source.sourceOutSec : sourceInSec + (op.durationSec ?? item.clip.durationSec));
+          if (sourceOutSec <= sourceInSec) return fail("video replacement range must be positive");
+          const sourceDurationSec = op.sourceDurationSec;
+          item.clip = { ...item.clip, durationSec: op.durationSec ?? sourceOutSec - sourceInSec, source: {
+            kind: "video", shotId: op.shotId, sourceInSec, sourceOutSec,
+            ...(sourceDurationSec !== undefined ? { sourceDurationSec } : {}),
+            ...(op.width !== undefined ? { width: op.width } : {}), ...(op.height !== undefined ? { height: op.height } : {}),
+            ...(op.sourceStartSec !== undefined ? { sourceStartSec: op.sourceStartSec } : {}), ...(op.sourceEndSec !== undefined ? { sourceEndSec: op.sourceEndSec } : {}),
+          } } as VideoClip;
+          videoBounds.set(op.clipId, { inSec: op.sourceStartSec ?? sourceInSec, outSec: op.sourceEndSec ?? sourceOutSec });
+        } else {
+          item.clip = { ...item.clip, durationSec: op.durationSec ?? item.clip.durationSec, source: { kind: "photo", shotId: op.shotId, ...(op.width !== undefined ? { width: op.width } : {}), ...(op.height !== undefined ? { height: op.height } : {}) } } as VideoClip;
+          videoBounds.delete(op.clipId);
+        }
         break;
       }
       case "trim": {
