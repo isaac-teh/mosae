@@ -47,15 +47,15 @@
       "kind": "video",
       "file": "MVI_0102.mp4",
       "analysis": {
-        "shots": [{ "startSec": 0, "endSec": 20, "description": "She talks to camera about the beach", "role": "A_ROLL", "quality": 0.9, "usable": true }],
-        "transcript": [{ "startSec": 4, "endSec": 9, "text": "We came here every summer when I was small." }]
+        "shots": [{ "startSec": 0, "endSec": 20, "description": "She talks to camera about the beach", "role": "A_ROLL", "quality": 0.9, "usable": true, "highlights": [{ "startSec": 4, "endSec": 8, "label": "family story", "score": 0.9 }] }],
+        "transcript": [{ "startSec": 4, "endSec": 8, "text": "We came here every summer when I was small." }]
       }
     },
     "m-water": {
       "kind": "video",
       "file": "MVI_0103.mp4",
       "analysis": {
-        "shots": [{ "startSec": 0, "endSec": 14, "description": "Running into the shallows", "role": "B_ROLL", "quality": 0.7, "usable": true }],
+        "shots": [{ "startSec": 0, "endSec": 14, "description": "Running into the shallows", "role": "B_ROLL", "quality": 0.7, "usable": true, "highlights": [{ "startSec": 4, "endSec": 9, "label": "splash", "score": 0.95 }], "signals": { "stepSec": 0.25, "shake": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "blur": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "loud": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } }],
         "transcript": []
       }
     },
@@ -65,7 +65,7 @@
     "clips": [
       { "candidateId": "m-arrival#still@c0", "holdSec": 3.5, "transition": "cut", "audio": "mute", "textOverlay": "Day 1 · Siloso Beach" },
       { "candidateId": "m-talking#s0@4c0", "transition": "crossfade", "audio": "keep" },
-      { "candidateId": "m-water#s0@0.15c1", "transition": "cut", "audio": "duck", "textOverlay": "Into the water" },
+      { "candidateId": "m-water#s0@4.15c1", "transition": "cut", "audio": "duck", "textOverlay": "Into the water" },
       { "candidateId": "m-dusk#still@c1", "holdSec": 5, "transition": "crossfade", "audio": "mute" }
     ],
     "musicCues": [

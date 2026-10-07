@@ -66,14 +66,14 @@ describe("golden composition", () => {
     expect(serialize(await composeOrThrow())).toBe(expected);
   });
 
-  it("drops none of the recorded picks, so the golden locks the whole film", async () => {
+  it("keeps photos and the highest-scoring video that fits the 50% cap", async () => {
     const result = await compose();
     if (!result.ok) throw new Error(result.reasons.join("; "));
-    // A golden built from a film that quietly lost half its picks would still
-    // be stable, and would still be worthless.
-    expect(result.droppedPicks).toEqual([]);
+    expect(result.droppedPicks).toEqual(["m-talking: video share exceeds 50%"]);
     const included = new Set(result.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.shotId) : [clip.source.shotId]));
-    expect(included).toEqual(new Set(input.proposal.moments.map((moment) => moment.shotId)));
+    expect(included).toEqual(new Set(["shot-arrival", "shot-water", "shot-dusk"]));
+    const videoSec = result.timeline.videoClips.filter((clip) => "source" in clip && clip.source.kind === "video").reduce((sum, clip) => sum + clip.durationSec, 0);
+    expect(videoSec / result.timeline.durationSec).toBeLessThanOrEqual(0.5);
   });
 
   it("produces a structurally valid timeline", async () => {
@@ -182,16 +182,13 @@ describe("golden composition", () => {
     // landed one boundary early, so m-talking got no overlap and m-water —
     // which asked for a hard cut — was pulled back half a second.
     const timeline = await composeOrThrow();
-    const [arrival, talking, water, dusk] = timeline.videoClips;
+    const [arrival, water, dusk] = timeline.videoClips;
 
     const boundary = (out: typeof arrival, incoming: typeof arrival) =>
       Number(((out.startSec + out.durationSec) - incoming.startSec).toFixed(6));
 
-    expect(talking.transitionIn?.kind).toBe("crossfade");
-    expect(boundary(arrival, talking)).toBeCloseTo(0.5);
-
     expect(water.transitionIn?.kind).toBe("cut");
-    expect(boundary(talking, water)).toBeCloseTo(0);
+    expect(boundary(arrival, water)).toBeCloseTo(0);
 
     expect(dusk.transitionIn?.kind).toBe("crossfade");
     expect(boundary(water, dusk)).toBeCloseTo(0.5);
@@ -199,20 +196,19 @@ describe("golden composition", () => {
 
   it("lands within 10% of the length it was fitted to", async () => {
     const timeline = await composeOrThrow();
-    // All four proposal moments remain in the cut; selected tiers fit only to
-    // the maximum reachable duration when the requested tier exceeds capacity.
-    expect(timeline.durationSec).toBeCloseTo(27.4);
-    expect(Math.abs(timeline.durationSec - 27.4)).toBeLessThanOrEqual(2.74);
+    // Selected tiers fit only to the maximum reachable duration when the
+    // requested tier exceeds the chosen windows' available capacity.
+    expect(timeline.durationSec).toBeCloseTo(12.2666666667);
+    expect(Math.abs(timeline.durationSec - 12.2666666667)).toBeLessThanOrEqual(1.23);
   });
 
-  it("burns in the model's text overlay and ducks the music under speech", async () => {
+  it("burns in the model's text overlay and ducks the music under speech or loud peaks", async () => {
     const timeline = await composeOrThrow();
-    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 8.5, endSec: 14.266666666666666 }]);
+    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 4, endSec: 8.766666666666666 }]);
 
     const music = timeline.audioClips.find((clip) => clip.role === "music");
-    const speech = timeline.audioClips.find((clip) => clip.role === "speech");
-    expect(speech?.gainDb).toBe(0);
-    // Ducked, not the flat -6 the role-keyed constant used to hardcode.
+    const ambient = timeline.audioClips.find((clip) => clip.role === "ambient");
+    expect(ambient?.gainDb).toBeLessThan(0);
     expect(music?.gainDb).toBeLessThan(-6);
   });
 

@@ -175,7 +175,7 @@ describe("placeCollages", () => {
     expect(collages(placeCollages(timeline, sources, "project-1:generation-1", review, {}, 8))).toHaveLength(1);
   });
 
-  it("uses ingest duplicate groups and allows only one video cell", () => {
+  it("keeps video clips outside collages", () => {
     const { timeline, sources } = fixture(["e0", "e1", "e2", "e3", "e4", "e5", "e6"]);
     for (let index = 0; index < 4; index++) sources.set(`clip-${index}`, {
       ...sources.get(`clip-${index}`)!, assetId: `asset-${index}`,
@@ -190,7 +190,8 @@ describe("placeCollages", () => {
     const result = placeCollages(videoTimeline, sources, "project-1:generation-1", review, {}, 8);
     const collage = collages(result)[0];
     if (!("kind" in collage)) throw new Error("expected collage");
-    expect(collage.spec.slots.filter((slot) => slot.kind === "video")).toHaveLength(1);
+    expect(collage.spec.slots.filter((slot) => slot.kind === "video")).toHaveLength(0);
+    expect(result.videoClips.filter((clip) => "source" in clip && clip.source.kind === "video")).toHaveLength(1);
   });
 
   it("varies layouts across consecutive collages when two kept layouts fit", () => {

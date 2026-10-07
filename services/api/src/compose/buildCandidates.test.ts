@@ -175,6 +175,26 @@ describe("buildCandidates — strength", () => {
   });
 });
 
+describe("buildCandidates — directed video windows", () => {
+  it("chooses an energetic highlight window in cadence bounds and keeps one clip per source video", () => {
+    const assets = new Map<string, Asset>([
+      ["moment-a", { kind: "video", assetId: "source-video", analysis: { shots: [{ ...makeShot(0, 10), highlights: [{ startSec: 7, endSec: 8, score: 0.9, label: "action" }] }] } }],
+      ["moment-b", { kind: "video", assetId: "source-video", analysis: { shots: [{ ...makeShot(0, 10), highlights: [{ startSec: 2, endSec: 3, score: 0.7, label: "other" }] }] } }],
+    ]);
+    const result = buildCandidates([{ index: 0, itemIds: ["moment-a", "moment-b"] }], assets, holds, 6, "energetic");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ itemId: "moment-a", highlightScore: 0.9 });
+    expect(result[0]!.lengthSec).toBeGreaterThanOrEqual(2);
+    expect(result[0]!.lengthSec).toBeLessThanOrEqual(3);
+  });
+
+  it("falls back to the earliest legal target window when highlights and signals are absent", () => {
+    const asset = makeAsset("video", { analysis: { shots: [makeShot(0, 10)] } });
+    const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", asset]]), holds, 6, "playful");
+    expect(result[0]).toMatchObject({ inSec: 0.15, lengthSec: 2, windowScore: 0 });
+  });
+});
+
 describe("buildCandidates — edge cases", () => {
   it("handles missing asset gracefully", () => {
     const assets = new Map<string, Asset>();

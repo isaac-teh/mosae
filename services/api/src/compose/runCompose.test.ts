@@ -524,7 +524,8 @@ describe("runCompose — arc ordering after cast guards", () => {
     }), arcDeps());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "b#s0@0.15c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
+    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "chapter2#s0@0.15c1"]);
+    expect(result.droppedPicks).toContain("b: video share exceeds 50%");
   });
 
   it("orders a cast replacement by time while keeping the chapter peak last", async () => {
@@ -534,6 +535,6 @@ describe("runCompose — arc ordering after cast guards", () => {
     }), arcDeps());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "b#s0@0.15c0", "a#s0@0.15c0", "chapter2#s0@0.15c1"]);
+    expect(result.timeline.videoClips.map((clip) => "id" in clip ? clip.id : clip.clipId)).toEqual(["new#still@c0", "chapter2#s0@0.15c1"]);
   });
 });

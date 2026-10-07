@@ -8,6 +8,7 @@ import { publishGeneration, failGeneration } from "../store/generationStore.js";
 import { stripProposalEnvelope } from "../store/directingStore.js";
 import { runCompose, type ComposeDeps, type ComposeJob } from "./runCompose.js";
 import type { Asset as CandidateAsset } from "./buildCandidates.js";
+import type { ShotSignals } from "../ingest/signals.js";
 import type { Face } from "../domain/understanding.js";
 import { castSummary } from "../cast/castSummary.js";
 import { photoRoles } from "../cast/prominence.js";
@@ -106,6 +107,8 @@ export async function loadComposeCatalog(
           role: analysis?.kind === "video" ? analysis.role : undefined,
           quality: analysis?.kind === "video" ? analysis.quality : undefined,
           usable: analysis?.kind === "video" ? analysis.usable : true,
+          highlights: analysis?.kind === "video" ? analysis.highlights : undefined,
+          signals: shot.get("signals") as ShotSignals | undefined,
         }],
         transcript: (asset.transcript ?? []).filter((line) => line.endSec > startSec && line.startSec < endSec),
       },

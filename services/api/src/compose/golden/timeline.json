@@ -4,7 +4,7 @@
   "mode": "memory",
   "aspect": "9:16",
   "fps": 30,
-  "durationSec": 27.4,
+  "durationSec": 12.266666666666666,
   "chapters": [
     {
       "title": "Getting there",
@@ -12,7 +12,7 @@
     },
     {
       "title": "The water",
-      "startSec": 8.5
+      "startSec": 4
     }
   ],
   "videoClips": [
@@ -30,30 +30,15 @@
       }
     },
     {
-      "id": "m-talking#s0@4c0",
-      "source": {
-        "kind": "video",
-        "shotId": "shot-talking",
-        "sourceInSec": 4,
-        "sourceOutSec": 9
-      },
-      "startSec": 3.5,
-      "durationSec": 5,
-      "transitionIn": {
-        "kind": "crossfade",
-        "durationSec": 0.5
-      }
-    },
-    {
-      "id": "m-water#s0@0.15c1",
+      "id": "m-water#s0@4.15c1",
       "source": {
         "kind": "video",
         "shotId": "shot-water",
-        "sourceInSec": 0.15,
-        "sourceOutSec": 5.91
+        "sourceInSec": 4.15,
+        "sourceOutSec": 8.9
       },
-      "startSec": 8.5,
-      "durationSec": 5.766666666666667,
+      "startSec": 4,
+      "durationSec": 4.766666666666667,
       "transitionIn": {
         "kind": "cut",
         "durationSec": 0
@@ -65,41 +50,11 @@
         "kind": "photo",
         "shotId": "shot-dusk"
       },
-      "startSec": 13.766666666666666,
+      "startSec": 8.266666666666666,
       "durationSec": 4,
       "transitionIn": {
         "kind": "crossfade",
         "durationSec": 0.5
-      }
-    },
-    {
-      "id": "m-talking#s0@0.15c0",
-      "source": {
-        "kind": "video",
-        "shotId": "shot-talking",
-        "sourceInSec": 0.15,
-        "sourceOutSec": 4
-      },
-      "startSec": 17.766666666666666,
-      "durationSec": 3.8666666666666667,
-      "transitionIn": {
-        "kind": "cut",
-        "durationSec": 0
-      }
-    },
-    {
-      "id": "m-talking#s0@9c0",
-      "source": {
-        "kind": "video",
-        "shotId": "shot-talking",
-        "sourceInSec": 9,
-        "sourceOutSec": 14.76
-      },
-      "startSec": 21.633333333333333,
-      "durationSec": 5.766666666666667,
-      "transitionIn": {
-        "kind": "cut",
-        "durationSec": 0
       }
     }
   ],
@@ -108,50 +63,36 @@
       "id": "audio-1",
       "source": {
         "kind": "asset",
-        "assetId": "shot-talking",
-        "sourceInSec": 4,
-        "sourceOutSec": 9
+        "assetId": "shot-water",
+        "sourceInSec": 4.15,
+        "sourceOutSec": 8.916666666666668
       },
-      "role": "speech",
-      "startSec": 3.5,
-      "gainDb": 0,
+      "role": "ambient",
+      "startSec": 4,
+      "gainDb": -10.46,
       "fadeInSec": 0,
       "fadeOutSec": 0
     },
     {
       "id": "audio-2",
       "source": {
-        "kind": "asset",
-        "assetId": "shot-water",
-        "sourceInSec": 0.15,
-        "sourceOutSec": 5.916666666666667
-      },
-      "role": "ambient",
-      "startSec": 8.5,
-      "gainDb": -10.46,
-      "fadeInSec": 0,
-      "fadeOutSec": 0
-    },
-    {
-      "id": "audio-3",
-      "source": {
         "kind": "soundtrack",
         "soundtrackId": "soundtrack-dusk",
         "sourceInSec": 0,
-        "sourceOutSec": 27.4
+        "sourceOutSec": 12.266666666666666
       },
       "role": "music",
       "startSec": 0,
-      "gainDb": -10.46,
-      "fadeInSec": 1,
+      "gainDb": -6.94,
+      "fadeInSec": 0.6133333333333333,
       "fadeOutSec": 1
     }
   ],
   "captions": [
     {
       "text": "Into the water",
-      "startSec": 8.5,
-      "endSec": 14.266666666666666
+      "startSec": 4,
+      "endSec": 8.766666666666666
     }
   ]
 }

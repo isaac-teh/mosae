@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collageCountRange, collagePlacementOptions, deterministicPlacement, DIRECTING_RULES, fadeOutSec, photoBaseDuration, photoHoldRange, requestedCollageCount } from "./directingRules.js";
+import { collageCountRange, collagePlacementOptions, deterministicPlacement, DIRECTING_RULES, fadeOutSec, photoBaseDuration, photoHoldRange, requestedCollageCount, videoTargetLength } from "./directingRules.js";
 
 describe("deterministic directing rules", () => {
   it.each([1, 2, 3, 4, 5, 6])("uses photo-count base pace for %i photos", (n) => expect(photoBaseDuration(n, "playful")).toBeCloseTo(1 + 0.2 * n));
@@ -41,5 +41,14 @@ describe("deterministic directing rules", () => {
   it("fades out over exactly the final second or the full sub-second film", () => {
     expect(fadeOutSec(60)).toBe(1);
     expect(fadeOutSec(0.5)).toBe(0.5);
+  });
+  it.each([["tender", 6], ["reflective", 6], ["playful", 3], ["energetic", 3], ["celebratory", 4]] as const)("uses the %s video cadence ceiling when enough footage is available", (cadence, expected) => {
+    expect(videoTargetLength(cadence, 10)).toBe(expected);
+  });
+  it("uses all available short footage and records directing limits", () => {
+    expect(videoTargetLength("tender", 2.5)).toBe(2.5);
+    expect(DIRECTING_RULES.videoMaxSpeechSec).toBe(8);
+    expect(DIRECTING_RULES.videoShareMax).toBe(0.5);
+    expect(DIRECTING_RULES.videoHighlightBoundaryMin).toBe(0.7);
   });
 });

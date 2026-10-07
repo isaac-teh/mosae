@@ -11,7 +11,17 @@ export const DIRECTING_RULES = {
   tierlessPhotoStretchMultiplier: 10 / 3,
   shortTierMinSec: 1.2,
   cadenceMultiplier: { tender: 2, reflective: 1.8, playful: 1, energetic: 1, celebratory: 1.2 } satisfies Record<CadenceId, number>,
+  videoLength: { tender: [4, 6], reflective: [4, 6], playful: [2, 3], energetic: [2, 3], celebratory: [3, 4] } satisfies Record<CadenceId, readonly [number, number]>,
+  videoMaxSpeechSec: 8,
+  videoShareMax: 0.5,
+  videoHighlightBoundaryMin: 0.7,
 } as const;
+
+export function videoTargetLength(cadence: CadenceId, availableSec: number): number {
+  if (availableSec < 4) return Math.max(0, availableSec);
+  const [min, max] = DIRECTING_RULES.videoLength[cadence];
+  return Number(Math.min(max, availableSec).toFixed(2));
+}
 
 export function photoBaseDuration(photoCount: number, cadence: CadenceId): number {
   const count = Math.max(1, Math.min(DIRECTING_RULES.collageMaxPhotos, Math.floor(photoCount)));
