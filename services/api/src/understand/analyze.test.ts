@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { UsageRecord } from "../gemini/client.js";
-import { analyzePhoto, analyzeVideo } from "./analyze.js";
+import { analyzePhoto, analyzeVideo, normaliseVideoQuality } from "./analyze.js";
 
 const deps = (generateContent: ReturnType<typeof vi.fn>) => {
   const usage: UsageRecord[] = [];
@@ -14,6 +14,16 @@ const photoJson = JSON.stringify({ caption: "A family on a beach", subjects: [{ 
 const videoJson = (count: number) => JSON.stringify({ shots: Array.from({ length: count }, (_, i) => ({ description: `shot ${i}`, camera: "handheld", role: "A_ROLL", subjects: ["child"], emotion: "happy", quality: 4, usable: true, reason: "clear" })), transcript: [{ startSec: 0, endSec: 1, text: "hello" }] });
 
 describe("Gemini shot analysis", () => {
+  it.each([[7, 4], [0.8, 4], [12, 5], [Number.NaN, 3]] as const)("normalises video quality %s to %s", (raw, expected) => {
+    expect(normaliseVideoQuality(raw)).toBe(expected);
+  });
+
+  it.each([[7, 4], [0.8, 4], [12, 5], [null, 3]] as const)("parses video quality %s as %s before schema validation", async (quality, expected) => {
+    const value = { shots: [{ description: "moment", camera: "static", role: "B_ROLL", subjects: [], emotion: "joy", quality, usable: true, reason: "clear" }], transcript: [] };
+    const result = await analyzeVideo(deps(vi.fn().mockResolvedValue(reply(JSON.stringify(value)))), { assetId: "a1", file: { uri: "gs://x", mimeType: "video/mp4" }, shotCount: 1, durationSec: 1 });
+    expect(result.shots[0]?.quality).toBe(expected);
+  });
+
   it("sends a photo inline and returns its validated analysis", async () => {
     const generateContent = vi.fn().mockResolvedValue(reply(photoJson));
     const dir = await mkdtemp(path.join(tmpdir(), "mosae-analyze-test-"));
@@ -43,7 +53,7 @@ describe("Gemini shot analysis", () => {
 
   it("clamps highlights to each source shot, drops invalid ranges and scores, and keeps the top three", async () => {
     const value = { shots: [{ description: "moment", camera: "static", role: "B_ROLL", subjects: [], emotion: "joy", quality: 4, usable: true, reason: "clear", highlights: [
-      { startSec: 8, endSec: 12, label: "clamped", score: 0.8 }, { startSec: 10, endSec: 11, label: "invalid", score: 1.2 },
+      { startSec: 8, endSec: 12, label: "clamped", score: 0.8 }, { startSec: 10, endSec: 11, label: "invalid", score: 1.5 },
       { startSec: 12, endSec: 12, label: "empty", score: 0.9 }, { startSec: 11, endSec: 12, label: "third", score: 0.7 },
       { startSec: 10, endSec: 11, label: "best", score: 0.95 }, { startSec: 10, endSec: 11, label: "second", score: 0.85 },
     ] }], transcript: [] };
