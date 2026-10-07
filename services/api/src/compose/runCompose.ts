@@ -15,6 +15,7 @@ import type { Candidate, Asset } from "./buildCandidates.js";
 import { applyArc, orderByChronology, type ClipTime } from "./chronology.js";
 import { loadCollageReview, placeCollages, type CollageReview, type CollageSource } from "./placeCollages.js";
 import { DIRECTING_RULES, fadeOutSec } from "./directingRules.js";
+import { MODELS } from "../gemini/pricing.js";
 
 export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
   if (!momentOrder?.length) return clips;
@@ -251,7 +252,7 @@ export async function runCompose(
   let rawResponse;
   try {
     rawResponse = await deps.generateStructured({
-      model: "gemini-2.5-flash",
+      model: MODELS.compose,
       contents: prompt,
       responseSchema: schema,
       validate: (value: unknown) => value,

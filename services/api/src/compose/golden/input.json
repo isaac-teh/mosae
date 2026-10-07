@@ -1,5 +1,5 @@
 {
-  "note": "The fixed input half of the determinism guard. The proposal and catalog are hand-built; `response` is one recorded structured reply from gemini-2.5-flash, kept verbatim so no live call is ever needed to reproduce the film.",
+  "note": "The fixed input half of the determinism guard. The proposal and catalog are hand-built; `response` is one recorded structured reply from the configured compose model, kept verbatim so no live call is ever needed to reproduce the film.",
   "job": {
     "projectId": "golden-project",
     "generationId": "golden-generation",
