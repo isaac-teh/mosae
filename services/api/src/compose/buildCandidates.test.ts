@@ -194,6 +194,18 @@ describe("buildCandidates — directed video windows", () => {
     expect(result[0]).toMatchObject({ inSec: 0.15, lengthSec: 2, windowScore: 0 });
   });
 
+  it("selects from low-shake signals without highlights on a 15.265-second shot", () => {
+    const shot = makeShot(0, 15.265, { highlights: [], signals: { stepSec: 0.25, shake: Array(62).fill(0.25), blur: Array(62).fill(0), loud: Array(62).fill(0.05) } });
+    const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", makeAsset("video", { analysis: { shots: [shot] } })]]), holds, 6, "tender");
+    expect(result[0]).toMatchObject({ kind: "video", inSec: 0.15, outSec: 4.15, highlightScore: 0 });
+  });
+
+  it.each([3.2, 3.8])("keeps a %.1f-second clip whole", (duration) => {
+    const shot = makeShot(0, duration, { highlights: [], signals: { stepSec: 0.25, shake: Array(Math.ceil(duration * 4)).fill(0.25), blur: Array(Math.ceil(duration * 4)).fill(0), loud: Array(Math.ceil(duration * 4)).fill(0.05) } });
+    const result = buildCandidates([{ index: 0, itemIds: ["video"] }], new Map([["video", makeAsset("video", { analysis: { shots: [shot] } })]]), holds, 6, "tender");
+    expect(result[0]).toMatchObject({ inSec: 0, outSec: duration, lengthSec: duration });
+  });
+
   it("offers two separated strong moments from a 20-second source in score order", () => {
     const shot = makeShot(0, 20, { highlights: [
       { startSec: 2, endSec: 5, score: 0.8 },

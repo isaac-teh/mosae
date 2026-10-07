@@ -23,7 +23,8 @@ export function scoreWindow(shot: ScoredShot, startSec: number, endSec: number):
   if (!indexes.length) return score;
   const mean = (values: number[]) => indexes.reduce((sum, i) => sum + (values[i] ?? 0), 0) / indexes.length;
   const peak = Math.max(0, ...indexes.map(i => signals.loud[i] ?? 0));
-  return score + VIDEO_WINDOW_WEIGHTS.loudPeak * peak - VIDEO_WINDOW_WEIGHTS.meanShakePenalty * mean(signals.shake) - VIDEO_WINDOW_WEIGHTS.meanBlurPenalty * (1 - mean(signals.blur));
+  // `blur` is normalized as blur severity: 0 is sharp, 1 is blurry.
+  return score + VIDEO_WINDOW_WEIGHTS.loudPeak * peak - VIDEO_WINDOW_WEIGHTS.meanShakePenalty * mean(signals.shake) - VIDEO_WINDOW_WEIGHTS.meanBlurPenalty * mean(signals.blur);
 }
 
 export function bestWindow(shot: ScoredShot, lengthSec: number, options: { speech?: TranscriptSegment[] } = {}): { inSec: number; outSec: number; score: number } | null {
@@ -33,7 +34,7 @@ export function bestWindow(shot: ScoredShot, lengthSec: number, options: { speec
   const speech = (options.speech ?? []).filter(s => s.endSec > shot.startSec && s.startSec < shot.endSec);
   if (duration < 4) {
     const count = Math.max(shot.signals?.shake.length ?? 0, shot.signals?.blur.length ?? 0);
-    const allBad = count > 0 && Array.from({ length: count }, (_, i) => (shot.signals?.shake[i] ?? 0) > 0.6 || (shot.signals?.blur[i] ?? 1) < 0.4).every(Boolean);
+    const allBad = count > 0 && Array.from({ length: count }, (_, i) => (shot.signals?.shake[i] ?? 0) > 0.6 || (shot.signals?.blur[i] ?? 0) > 0.6).every(Boolean);
     return allBad ? null : { inSec: shot.startSec, outSec: shot.endSec, score: scoreWindow(shot, shot.startSec, shot.endSec) };
   }
   let len = Math.min(Math.max(0.01, lengthSec), duration);
@@ -47,7 +48,7 @@ export function bestWindow(shot: ScoredShot, lengthSec: number, options: { speec
   const qualityAtStart = (t: number) => {
     const step = Number.isFinite(signals?.stepSec) && (signals?.stepSec ?? 0) > 0 ? signals!.stepSec : STEP_SEC;
     const i = Math.floor((t - shot.startSec) / step);
-    return Boolean(signals && ((signals.shake[i] ?? 0) > 0.6 || (signals.blur[i] ?? 1) < 0.4));
+    return Boolean(signals && ((signals.shake[i] ?? 0) > 0.6 || (signals.blur[i] ?? 0) > 0.6));
   };
   for (let tick = 0; tick <= maxTick; tick++) {
     const start = Number((firstStart + tick * STEP_SEC).toFixed(2));
