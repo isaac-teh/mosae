@@ -178,6 +178,12 @@ describe("buildAudioClips — edge cases", () => {
     expect(result[2]!.kind).toBe("music"); // music is last
   });
 
+  it("lowers music gain under loud video peaks", () => {
+    const clip = { ...makeVideoClip("loud-video", 0, 3, "mute"), loudPeak: 0.9 };
+    const result = buildAudioClips([clip], "soundtrack-1", 3);
+    expect(result.find(ac => ac.kind === "music")?.gain).toBe(0.45);
+  });
+
 describe("gainToDb", () => {
   it("converts the linear gain the audio layer reasons in to the decibels the contract stores", async () => {
     const { gainToDb } = await import("./audio.js");

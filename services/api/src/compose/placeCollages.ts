@@ -150,14 +150,14 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     const origin = sources.get(idOf(first));
     if (!origin || "kind" in first || (chapterCounts.get(origin.chapterId) ?? 0) >= maxPerChapter) { index++; continue; }
     const group = [first];
-    let videos = first.source.kind === "video" ? 1 : 0;
+    // Video clips remain independent timeline clips; never convert them into collage slots.
+    if (first.source.kind === "video") { index++; continue; }
     for (let nextIndex = index + 1; nextIndex < clips.length && group.length < maxCandidateSlots; nextIndex++) {
       const next = clips[nextIndex];
       const metadata = sources.get(idOf(next));
-      if (!metadata || "kind" in next || videos + Number(next.source.kind === "video") > 1) break;
-      if (!related(origin, metadata, videos === 0 && next.source.kind === "photo")) break;
+      if (!metadata || "kind" in next || next.source.kind === "video") break;
+      if (!related(origin, metadata, true)) break;
       group.push(next);
-      videos += Number(next.source.kind === "video");
     }
     // Ordinary trips rarely have sub-minute duplicate bursts. If the tight
     // candidate set is too small for a reviewed layout, use a coherent run

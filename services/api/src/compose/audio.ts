@@ -107,7 +107,8 @@ export function buildAudioClips(
   // Music track: one clip spanning the film with fades at both ends
   if (soundtrackId) {
     const fadeDuration = fadeOutSec(timelineDurationSec);
-    const musicGain = 0.6; // base music gain
+    const hasLoudPeak = clips.some(clip => (clip.loudPeak ?? 0) >= 0.7);
+    const musicGain = hasLoudPeak ? 0.45 : 0.6; // lower bed under loud cheers, laughs or splashes
 
     audioClips.push({
       order: order++,

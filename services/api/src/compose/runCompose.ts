@@ -107,6 +107,10 @@ function maximumClipDuration(clip: AssembledClip, maxHoldSec: number): number {
   return 0;
 }
 
+function fittedFilmLength(clips: AssembledClip[]): number {
+  return Math.max(0, clips.reduce((total, clip, index) => total + (clip.holdSec ?? (clip.sourceOutSec ?? 0) - (clip.sourceInSec ?? 0)) - (index ? overlapSec(clip.transition) : 0), 0));
+}
+
 /** Add proposal media only when the model's edit cannot reach the requested duration. */
 function completeDurationMaterial(
   selected: AssembledClip[],
@@ -188,7 +192,15 @@ export async function runCompose(
     chapterInputs,
     deps.assets,
     holdsFor(job.cadenceId),
+    6,
+    job.cadenceId,
   );
+  const candidateVideoSources = new Set(candidates.filter(candidate => candidate.kind === "video").map(candidate => deps.assets.get(candidate.itemId)?.assetId ?? candidate.itemId));
+  const noWindowDrops = job.proposal.moments.flatMap(moment => {
+    const asset = deps.assets.get(moment.id);
+    const sourceId = asset?.assetId ?? moment.id;
+    return asset?.kind === "video" && !candidateVideoSources.has(sourceId) ? [`${shotIdByMoment.get(moment.id) ?? moment.id}: no usable legal video window`] : [];
+  });
 
   if (candidates.length === 0) {
     return { ok: false, reasons: ["no legal candidates — proposal has no media"] };
@@ -332,6 +344,8 @@ export async function runCompose(
     holds.base,
   );
 
+  const videoShareDrops: string[] = [];
+
   // Stage 4: assemble → orderByChronology → applyArc → applyCastGuards
   // (coverage, focus, closing-in-last-chapter, opening-from-first-chapter)
   // → restore the arc after guard swaps, then re-pin only guard-selected
@@ -381,7 +395,7 @@ export async function runCompose(
   }
 
   // Stage 5: fitDuration — adjust photo holds to target duration
-  const { clips: fittedClips, notes: fitNotes, targetSec: fittedTargetSec } = fitDuration(
+  const { clips: initiallyFittedClips, notes: fitNotes, targetSec: fittedTargetSec } = fitDuration(
     selectedClips,
     targetSec,
     job.durationId === "short" && !tierlessShort
@@ -392,6 +406,15 @@ export async function runCompose(
     job.proposal.constraints.mustIncludeMomentIds,
     job.durationId === null || tierlessShort ? { minimumFilmSec: DIRECTING_RULES.minimumFilmSec, maximumStretchedPhotoMultiplier: DIRECTING_RULES.tierlessPhotoStretchMultiplier } : {},
   );
+
+  // Enforce the cap against actual fitted run time, including crossfade overlaps.
+  let fittedClips = initiallyFittedClips;
+  const videoSeconds = () => fittedClips.filter(c => c.kind === "video").reduce((sum, c) => sum + Math.max(0, (c.sourceOutSec ?? 0) - (c.sourceInSec ?? 0)), 0);
+  while (fittedClips.some(c => c.kind === "video") && videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6) {
+    const loser = fittedClips.filter(c => c.kind === "video").sort((a, b) => (a.windowScore ?? 0) - (b.windowScore ?? 0) || a.candidateId.localeCompare(b.candidateId))[0]!;
+    fittedClips = fittedClips.filter(c => c !== loser);
+    videoShareDrops.push(`${loser.itemId}: video share exceeds 50%`);
+  }
 
   if (fittedClips.length === 0) {
     return { ok: false, reasons: ["no clips after duration fitting"] };
@@ -579,7 +602,7 @@ export async function runCompose(
     fps: 30,
   };
 
-  const droppedPicks = [...dropped.map((drop) => drop.reason), ...duplicateDropReasons];
+  const droppedPicks = [...dropped.map((drop) => drop.reason), ...duplicateDropReasons, ...videoShareDrops, ...noWindowDrops];
   const issues = validateTimeline(withCollages, validationCtx);
 
   let final = withCollages;

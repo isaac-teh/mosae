@@ -1,3 +1,5 @@
+import { bestWindow } from "./videoWindow.js";
+
 /**
  * Build every legal clip candidate before the model chooses.
  * The model picks illegal ranges on its own: spanning two shots or slicing a sentence in half.
@@ -15,6 +17,9 @@ export interface Candidate {
   minHoldSec?: number;
   maxHoldSec?: number;
   hasSpeech?: boolean;
+  windowScore?: number;
+  highlightScore?: number;
+  loudPeak?: number;
   description: string;
 }
 
@@ -25,6 +30,8 @@ export interface Shot {
   role?: string;
   quality?: number;
   usable?: boolean;
+  highlights?: { startSec: number; endSec: number; label?: string; score: number }[];
+  signals?: { stepSec: number; shake: number[]; blur: number[]; loud: number[] };
 }
 
 export interface TranscriptSegment {
@@ -94,6 +101,7 @@ export function buildCandidates(
   assets: Map<string, Asset>,
   holds: { min: number; max: number },
   perItem = 6,
+  cadence?: import("@mosae/contracts").CadenceId,
 ): Candidate[] {
   const out: Candidate[] = [];
   const seen = new Set<string>();
@@ -124,6 +132,30 @@ export function buildCandidates(
       const transcript: TranscriptSegment[] = asset.analysis?.transcript || [];
       const ranked = shots.map((shot, index) => ({ shot, index })).sort((a, b) => (b.shot.quality || 0) - (a.shot.quality || 0));
 
+      if (cadence) {
+        const targets: Record<typeof cadence, [number, number]> = { tender: [4, 6], reflective: [4, 6], playful: [2, 3], energetic: [2, 3], celebratory: [3, 4] };
+        const [minLength, maxLength] = targets[cadence];
+        let added = 0;
+        for (const { shot } of ranked) {
+          const duration = shot.endSec - shot.startSec;
+          if (!Number.isFinite(shot.startSec) || !Number.isFinite(shot.endSec) || !Number.isFinite(duration) || duration <= 0) continue;
+          const speechInShot = transcript.filter(s => s.endSec > shot.startSec && s.startSec < shot.endSec);
+          const lengths: number[] = [];
+          if (duration < 4) lengths.push(duration);
+          else for (let len = Math.min(maxLength, duration); len >= Math.min(minLength, duration); len = Number((len - 0.25).toFixed(2))) lengths.push(len);
+          const window = lengths.map(len => bestWindow(shot, len, { speech: speechInShot })).filter((v): v is NonNullable<typeof v> => Boolean(v)).sort((a, b) => b.score - a.score || (a.outSec - a.inSec) - (b.outSec - b.inSec) || a.inSec - b.inSec)[0];
+          if (!window) continue;
+          const hasSpeech = speechInShot.some(s => s.startSec >= window.inSec - 0.01 && s.endSec <= window.outSec + 0.01);
+          const score = window.score;
+          const highlightScore = Math.max(0, ...(shot.highlights ?? []).filter(h => h.endSec > window.inSec && h.startSec < window.outSec).map(h => h.score));
+          const signalStep = shot.signals?.stepSec ?? 0.25;
+          const loudPeak = Math.max(0, ...(shot.signals?.loud ?? []).filter((_, i) => shot.startSec + i * signalStep < window.outSec && shot.startSec + (i + 1) * signalStep > window.inSec));
+          out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${window.inSec}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: window.inSec, outSec: window.outSec, lengthSec: Number((window.outSec - window.inSec).toFixed(2)), hasSpeech, windowScore: score, highlightScore, loudPeak, description: `${shot.role === 'A_ROLL' ? 'speech to camera: ' : ''}${shot.description || ''}`.slice(0, 160) });
+          if (++added >= perItem) break;
+        }
+        continue;
+      }
+
       let added = 0;
       for (const { shot } of ranked) {
         for (const range of legalRanges(shot, transcript, holds.max * 2)) {
@@ -146,5 +178,22 @@ export function buildCandidates(
     }
   }
 
-  return out;
+  if (!cadence) return out;
+
+  // A source video can contribute at most one shot. Keep its strongest window,
+  // with stable earliest/ID tie breaks, regardless of how many moments name it.
+  const videoBySource = new Map<string, Candidate[]>();
+  const retained: Candidate[] = [];
+  for (const candidate of out) {
+    if (candidate.kind !== 'video') { retained.push(candidate); continue; }
+    const sourceId = assets.get(candidate.itemId)?.assetId ?? candidate.itemId;
+    const group = videoBySource.get(sourceId) ?? [];
+    group.push(candidate);
+    videoBySource.set(sourceId, group);
+  }
+  for (const group of videoBySource.values()) {
+    group.sort((a, b) => (b.windowScore ?? 0) - (a.windowScore ?? 0) || (a.inSec ?? 0) - (b.inSec ?? 0) || a.candidateId.localeCompare(b.candidateId));
+    retained.push(group[0]!);
+  }
+  return retained.sort((a, b) => a.chapterIndex - b.chapterIndex || a.itemId.localeCompare(b.itemId) || (a.inSec ?? 0) - (b.inSec ?? 0));
 }
