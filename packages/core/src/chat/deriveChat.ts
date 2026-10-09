@@ -4,17 +4,6 @@ import { orderPeopleByMergeSimilarity } from "./personChips.js";
 
 const DEFAULT_PLACEHOLDER = "Tell me anything about the story";
 
-function occasionText(input: ChatInput): string {
-  const summary = input.summary;
-  if (!summary) return "What were these moments about?";
-  if (!summary.country && !summary.season && summary.places.length === 0) return `What were these ${summary.total} moments about?`;
-  const total = summary.total;
-  const subject = summary.country ? `a trip to ${summary.country}` : "a story";
-  const when = summary.season ? ` in ${summary.season}` : "";
-  const places = summary.places.length ? `: ${summary.places.join(", ")}` : "";
-  return `I've looked through all ${total}. It looks like ${subject}${when}${places}. Is that the story?`;
-}
-
 function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string {
   if (person.skipped) return "Skip";
   return person.name ?? "";
@@ -109,38 +98,55 @@ export function deriveChat(input: ChatInput): ChatState {
   let confirmed: ChatState["confirmed"] = 0;
   let placeholder = DEFAULT_PLACEHOLDER;
   const add = (item: ChatItem) => items.push(item);
+  const summary = input.summary;
+  const uploadTotal = input.localUpload?.total ?? summary?.upload?.expected ?? summary?.total ?? 0;
+  const uploadDone = input.localUpload ? input.localUpload.settled + input.localUpload.failed : summary?.upload?.settled ?? summary?.processed.ingested ?? 0;
+  const photos = input.localUpload?.photos ?? summary?.photos ?? 0;
+  const clips = input.localUpload?.clips ?? summary?.clips ?? 0;
+  const understoodTotal = summary?.total ?? uploadTotal;
+  const understood = summary?.processed.understood ?? 0;
+  const uploadComplete = uploadTotal > 0 && (input.localUpload ? uploadDone >= uploadTotal : summary?.upload ? summary.upload.closed && uploadDone >= summary.upload.expected : Boolean(summary && summary.processed.ingested >= uploadTotal));
+  const failedCount = summary?.upload?.failed ?? 0;
+  const understandingActive = Boolean(summary && (summary.processed.ingested > 0 || uploadComplete || summary.ready.summary));
+  const understoodComplete = Boolean(summary && (summary.ready.story === true || (summary.ready.summary && understood + failedCount >= understoodTotal)));
+  const addUploadStatus = () => add({ kind: "upload-status", id: "upload-status", photos, clips, uploadTotal, uploadDone: Math.min(uploadDone, uploadTotal), understood, understoodTotal, uploadComplete, understandingActive, understoodComplete });
+  const addUploadIntro = () => add({ kind: "mosae", id: "upload-intro", text: `I'm bringing in your ${uploadTotal || photos + clips} ${photos > 0 && clips > 0 ? "photos and clips" : photos > 0 ? `photo${photos === 1 ? "" : "s"}` : `clip${clips === 1 ? "" : "s"}`}. Then I'll look through them.` });
+  const addOccasionQuestion = () => add({ kind: "occasion-question", id: "occasion-question" });
   const addVideoFailures = () => (input.summary?.videoStatuses ?? []).filter((video) => video.status === "failed")
     .forEach((video) => add({ kind: "mosae", id: `video-failed-${video.assetId}`, text: "Couldn't read this video" }));
-  const addPhotoProgress = () => {
-    const processed = input.summary?.processed.ingested ?? 0;
-    const total = input.summary?.total ?? 0;
-    const text = total > 0 ? `Reading your photos, ${processed} of ${total}` : "Waiting for your photos to arrive…";
-    add({ kind: "typing", id: "summary-wait", text, photoProgress: input.summary?.assetStatuses });
-  };
-
   if (input.filmWait) {
     const statuses = input.summary?.videoStatuses ?? [];
     const progress = statuses.length ? statuses.reduce((sum, video) => sum + video.progress, 0) / statuses.length : 0;
+    addUploadIntro();
+    addUploadStatus();
     add({ kind: "preparing-videos", id: "preparing-videos", text: `Preparing ${input.filmWait.videoCount} ${input.filmWait.videoCount === 1 ? "video" : "videos"}…`, progress });
     return { items, step: "shaping", confirmed: 4, placeholder };
   }
 
   if ((!input.intent && !canConfirmStory(input)) || !input.summary?.ready.summary) {
-    addPhotoProgress();
+    addUploadIntro();
+    addUploadStatus();
+    if (input.earlyOccasionAnswer) {
+      add({ kind: "you", id: "occasion-answer", text: input.earlyOccasionAnswer });
+      add({ kind: "mosae", id: "story-acknowledgement", text: storyAcknowledgement(input.earlyOccasionAnswer) });
+    } else addOccasionQuestion();
     input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
     return { items, step, confirmed, placeholder };
   }
-  if (input.summary.photos > 0 && !input.summary.ready.faces) addPhotoProgress();
+  addUploadIntro();
+  addUploadStatus();
 
   if (!input.intent) {
-    add({ kind: "mosae", id: "occasion-message", text: occasionText(input) });
     addVideoFailures();
+    if (input.earlyOccasionAnswer) {
+      add({ kind: "you", id: "occasion-answer", text: input.earlyOccasionAnswer });
+      add({ kind: "mosae", id: "story-acknowledgement", text: storyAcknowledgement(input.earlyOccasionAnswer) });
+    } else addOccasionQuestion();
     input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
-    add({ kind: "occasion", id: "occasion" });
     return { items, step, confirmed, placeholder };
   }
 
-  add({ kind: "mosae", id: "occasion-message", text: occasionText(input) });
+  add({ kind: "mosae", id: "occasion-message", text: "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?" });
   add({ kind: "you", id: "occasion-answer", text: input.intent.text });
   add({ kind: "mosae", id: "story-acknowledgement", text: storyAcknowledgement(input.intent.text, input.storySummary, input.mentionedPeople) });
   addVideoFailures();
