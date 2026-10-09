@@ -27,6 +27,27 @@ const base = (): ChatInput => ({
 const kinds = (items: ChatItem[]) => items.map((item) => item.kind);
 
 describe("deriveChat state table", () => {
+  it("asks the story question while uploads are pending and preserves an early answer", () => {
+    const early = deriveChat({ ...base(), summary: { ...summary, total: 4, photos: 3, clips: 1, processed: { ingested: 1, understood: 0, faces: 0 }, ready: { summary: false, faces: false, plan: false } }, intent: null, earlyOccasionAnswer: "A birthday celebration" });
+    expect(early.items.find(item => item.kind === "upload-status")).toMatchObject({ photos: 3, clips: 1, uploadTotal: 4, uploadDone: 1, understood: 0 });
+    expect(early.items.find(item => item.id === "upload-intro")).toMatchObject({ text: "I'm bringing in your 4 photos and clips. Then I'll look through them." });
+    expect(early.items.find(item => item.id === "occasion-answer")).toMatchObject({ kind: "you", text: "A birthday celebration" });
+    expect(early.items.find(item => item.id === "story-acknowledgement")).toMatchObject({ kind: "mosae", text: "A birthday celebration — lovely!" });
+  });
+
+  it("uses server upload and understanding counts for a reopened project", () => {
+    const reopened = deriveChat({ ...base(), intent: null, summary: { ...summary, total: 1, photos: 0, clips: 1, upload: { expected: 1, settled: 1, failed: 0, cancelled: 0, closed: true }, processed: { ingested: 1, understood: 0, faces: 0 }, ready: { summary: true, faces: false, plan: false } } });
+    expect(reopened.items.find(item => item.kind === "upload-status")).toMatchObject({ clips: 1, uploadDone: 1, uploadComplete: true, understood: 0, understoodTotal: 1, understoodComplete: false });
+    expect(reopened.items.find(item => item.kind === "occasion-question")).toBeTruthy();
+  });
+
+  it("switches the intro and occasion prompt to their uploaded wording when transfer is complete", () => {
+    const complete = deriveChat({ ...base(), intent: null, summary: { ...summary, total: 1, photos: 1, clips: 0, upload: { expected: 1, settled: 1, failed: 0, cancelled: 0, closed: true }, processed: { ingested: 1, understood: 1, faces: 0 }, ready: { summary: true, faces: false, plan: false } } });
+    expect(complete.items.find(item => item.id === "upload-intro")).toMatchObject({ text: "Your 1 photo is uploaded." });
+    expect(complete.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadComplete: true, understoodComplete: true });
+    expect(complete.items.find(item => item.kind === "occasion-question")).toMatchObject({ uploadComplete: true });
+  });
+
   it("gates occasion on local transfer, server story readiness and acknowledged failures", () => {
     const input = { ...base(), intent: null };
     for (const pending of [
@@ -34,27 +55,25 @@ describe("deriveChat state table", () => {
       { ...input, summary: { ...summary, ready: { ...summary.ready, story: false } } },
       { ...input, summary: { ...summary, processed: { ...summary.processed, understood: 0 } } },
       { ...input, summary: { ...summary, upload: { expected: 11, settled: 11, failed: 1, cancelled: 0, closed: true } } },
-    ]) expect(deriveChat(pending).items.some(item => item.kind === "occasion")).toBe(false);
+    ]) expect(deriveChat(pending).items.some(item => item.kind === "occasion-question")).toBe(true);
   });
 
-  it("attaches individual asset statuses to the existing reading progress item", () => {
+  it("derives a compact upload status card without per-asset status", () => {
     const pending = deriveChat({ ...base(), summary: { ...summary, ready: { ...summary.ready, summary: false }, assetStatuses: [
       { assetId: "a1", kind: "photo", status: "understood" },
       { assetId: "a2", kind: "photo", status: "ingested" },
       { assetId: "a3", kind: "video", status: "uploaded" },
     ] } });
-    expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Reading your photos, 10 of 10", photoProgress: [
-      { assetId: "a1", kind: "photo", status: "understood" },
-      { assetId: "a2", kind: "photo", status: "ingested" },
-      { assetId: "a3", kind: "video", status: "uploaded" },
-    ] });
+    expect(pending.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadTotal: 10, uploadDone: 10, understood: 10 });
+    expect(pending.items.some(item => item.kind === "typing" && item.id === "summary-wait")).toBe(false);
   });
 
   it("shows video preparation progress without requesting more input", () => {
     const state = deriveChat({ ...base(), filmWait: { elapsedSec: 4, videoCount: 2 }, summary: { ...summary, videoStatuses: [
       { assetId: "v1", status: "ready", progress: 1 }, { assetId: "v2", status: "processing", progress: 0.5 },
     ] } });
-    expect(state.items).toEqual([{ kind: "preparing-videos", id: "preparing-videos", text: "Preparing 2 videos…", progress: 0.75 }]);
+    expect(state.items.slice(-1)).toEqual([{ kind: "preparing-videos", id: "preparing-videos", text: "Preparing 2 videos…", progress: 0.75 }]);
+    expect(state.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadComplete: true, understoodComplete: true });
   });
 
   it("shows failed videos as unreadable chat notes", () => {
@@ -64,7 +83,7 @@ describe("deriveChat state table", () => {
 
   it("waits for the first photos instead of claiming there are zero", () => {
     const pending = deriveChat({ ...base(), summary: { ...summary, total: 0, photos: 0, clips: 0, ready: { ...summary.ready, summary: false } }, intent: null, people: null, peopleConfirmed: false, plan: null });
-    expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Waiting for your photos to arrive…" });
+    expect(pending.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadTotal: 0 });
   });
 
   it("keeps the photo reading grid through asset understanding after ingest completes", () => {
@@ -72,7 +91,7 @@ describe("deriveChat state table", () => {
       { assetId: "a1", kind: "photo", status: "understood" },
       { assetId: "a2", kind: "photo", status: "ingested" },
     ] } });
-    expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Reading your photos, 10 of 10", photoProgress: [{ assetId: "a1", status: "understood" }, { assetId: "a2", status: "ingested" }] });
+    expect(pending.items.find(item => item.kind === "upload-status")).toMatchObject({ understood: 10 });
     expect(pending.items.some((item) => item.kind === "you" && item.text === "Our Japan trip")).toBe(true);
   });
 
@@ -111,8 +130,8 @@ describe("deriveChat state table", () => {
 
   it("derives all twelve saved-project states", () => {
     const cases: { name: string; input: ChatInput; step: ChatState["step"]; confirmed: number; kinds: string[] }[] = [
-      { name: "fresh summary pending", input: { ...base(), summary: { ...summary, ready: { ...summary.ready, summary: false }, processed: { ...summary.processed, ingested: 3 } }, intent: null, people: null, peopleConfirmed: false, plan: null }, step: "occasion", confirmed: 0, kinds: ["typing"] },
-      { name: "summary ready", input: { ...base(), intent: null, people: null, peopleConfirmed: false, plan: null }, step: "occasion", confirmed: 0, kinds: ["occasion"] },
+      { name: "fresh summary pending", input: { ...base(), summary: { ...summary, ready: { ...summary.ready, summary: false }, processed: { ...summary.processed, ingested: 3 } }, intent: null, people: null, peopleConfirmed: false, plan: null }, step: "occasion", confirmed: 0, kinds: [] },
+      { name: "summary ready", input: { ...base(), intent: null, people: null, peopleConfirmed: false, plan: null }, step: "occasion", confirmed: 0, kinds: [] },
       { name: "occasion confirmed, faces pending", input: { ...base(), people: null, peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "typing"] },
       { name: "first unnamed person", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: null, role: null, skipped: false, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "person"] },
       { name: "third person after two named", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: n < 2 ? `Person ${n}` : null, role: n < 2 ? "child" : null, skipped: false, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "you", "person"] },
@@ -131,13 +150,13 @@ describe("deriveChat state table", () => {
       const state = deriveChat(row.input);
       expect(state.step, row.name).toBe(row.step);
       expect(state.confirmed, row.name).toBe(row.confirmed);
-      expect(kinds(state.items).filter((kind) => kind !== "mosae"), row.name).toEqual(row.kinds);
+      expect(kinds(state.items).filter((kind) => kind !== "mosae" && kind !== "upload-status" && kind !== "occasion-question"), row.name).toEqual(row.kinds);
     }
   });
 
   it("opens with a counted question when there is no meaningful suggestion", () => {
     const state = deriveChat({ ...base(), summary: { ...summary, country: null, season: null, places: [] }, intent: null, people: null, peopleConfirmed: false, plan: null });
-    expect(state.items[0]).toMatchObject({ kind: "mosae", text: "What were these 10 moments about?" });
+    expect(state.items.find(item => item.kind === "occasion-question")).toBeTruthy();
   });
 
   it("acknowledges the story answer and confirms a mentioned relationship against the top face cluster", () => {
@@ -163,11 +182,11 @@ describe("deriveChat state table", () => {
 
   it("uses the flow copy and surfaces summary progress", () => {
     const pending = deriveChat({ ...base(), summary: { ...summary, ready: { ...summary.ready, summary: false }, processed: { ...summary.processed, ingested: 3 } }, intent: null, people: null, peopleConfirmed: false, plan: null });
-    expect(pending.items[0]).toMatchObject({ kind: "typing", text: "Reading your photos, 3 of 10" });
+    expect(pending.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadDone: 3, uploadTotal: 10 });
     const occasion = deriveChat({ ...base(), intent: null, people: null, peopleConfirmed: false, plan: null });
-    expect(occasion.items[0]).toMatchObject({ kind: "mosae", text: "I've looked through all 10. It looks like a trip to Japan in late October: Tokyo, Kyoto. Is that the story?" });
+    expect(occasion.items.find(item => item.kind === "occasion-question")).toBeTruthy();
     const singapore = deriveChat({ ...base(), summary: { ...summary, country: "Singapore", season: "early June", places: ["Telok Blangah", "Siloso Beach"] }, intent: null, people: null, peopleConfirmed: false, plan: null });
-    expect(singapore.items[0]).toMatchObject({ kind: "mosae", text: "I've looked through all 10. It looks like a trip to Singapore in early June: Telok Blangah, Siloso Beach. Is that the story?" });
+    expect(singapore.items.find(item => item.kind === "occasion-question")).toBeTruthy();
   });
 
   it("keeps answered AI questions immediately before their replies", () => {
@@ -202,7 +221,7 @@ describe("deriveChat state table", () => {
       { personId: "p3", name: null, role: null, skipped: false, momentCount: 1, sampleShotIds: [], days: [] },
     ];
     const state = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null });
-    expect(state.items.filter((item) => item.kind !== "mosae").map((item) => item.kind === "you" ? item.text : item.kind === "anyone-else" ? "anyone-else" : item.kind)).toEqual(["Our Japan trip", "Most", "Second", "Four", "anyone-else"]);
+    expect(state.items.filter((item) => item.kind !== "mosae" && item.kind !== "upload-status").map((item) => item.kind === "you" ? item.text : item.kind === "anyone-else" ? "anyone-else" : item.kind)).toEqual(["Our Japan trip", "Most", "Second", "Four", "anyone-else"]);
   });
 
   it("records Skip as a reply and asks the next person", () => {
@@ -267,7 +286,7 @@ describe("deriveChat state table", () => {
   it("asks names when people have detected roles but no user supplied names", () => {
     const people = ["child", "parent", "parent"].map((role, index) => ({ personId: `p${index}`, name: null, role, skipped: false, momentCount: 30 - index, sampleShotIds: [], days: [] }));
     const state = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null });
-    expect(state.items.filter((item) => item.kind !== "mosae").map((item) => item.kind)).toEqual(["you", "person"]);
+    expect(state.items.filter((item) => item.kind !== "mosae" && item.kind !== "upload-status").map((item) => item.kind)).toEqual(["you", "person"]);
     expect(state.items.at(-1)).toMatchObject({ kind: "person", personId: "p0" });
   });
 

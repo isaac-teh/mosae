@@ -58,11 +58,10 @@ export default function DirectorScreen() {
   const uploadFailure = ownsPendingMedia ? sharedUploadFailure : null;
   const pendingMedia = useSyncExternalStore(subscribeUploadProgress, getPendingMediaAssets, getPendingMediaAssets);
   const pendingPhotos = (ownsPendingMedia ? pendingMedia : []).filter(({ file }) => !contentTypeFor(file).startsWith("video/"));
-  const readingAssets = pendingPhotos.filter(({ assetId }) => Boolean(assetId)).map(({ file, assetId }) => ({ assetId: assetId!, key: previewUrls.current!.key(file), uri: previewUrls.current!.get(file) }));
-  const selectedPhotos = pendingPhotos.map(({ file }, index) => ({ key: previewUrls.current!.key(file), uri: previewUrls.current!.get(file), index }));
   const [uploadFailuresAcknowledged, setUploadFailuresAcknowledged] = useState(false);
   const localMediaPending = Boolean(preparationProgress) || Boolean(uploadProgress && (uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles || uploadProgress.finishedFiles === 0)) || Boolean((uploadFailure || uploadProgress?.failedFiles) && !uploadFailuresAcknowledged);
-  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged });
+  const localUpload = uploadProgress || preparationProgress ? { total: uploadProgress?.totalFiles ?? preparationProgress!.totalFiles, settled: uploadProgress?.finishedFiles ?? 0, failed: uploadProgress?.failedFiles ?? 0, photos: pendingPhotos.length, clips: (ownsPendingMedia ? pendingMedia : []).length - pendingPhotos.length } : undefined;
+  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged, ...(localUpload ? { localUpload } : {}) });
   useEffect(() => { setUploadFailuresAcknowledged(false); }, [uploadProgress?.failedFiles, preparationProgress?.totalFiles]);
   useEffect(() => { previewUrls.current!.retain(pendingPhotos.map(({ file }) => file)); });
   useEffect(() => {
@@ -114,19 +113,6 @@ export default function DirectorScreen() {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       if (contentOffset && contentSize && layoutMeasurement) userScrolledUp.current = contentOffset.y + layoutMeasurement.height < contentSize.height - 32;
     }} scrollEventThrottle={16} style={{ flex: 1, minHeight: 0 }}>
-      {(preparationProgress || uploadProgress && uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles) && <View accessibilityRole="progressbar" aria-label="Preparing and uploading selected photos" className="gap-3 rounded-md bg-surface-sunken p-3">
-        <View className="flex-row items-center justify-between"><Text className="font-sans-semibold text-label text-ink">{preparationProgress ? `Preparing ${preparationProgress.preparedFiles} of ${preparationProgress.totalFiles}` : "Uploading your photos"}</Text>{uploadProgress && <Text className="font-sans text-caption text-ink-muted">{uploadProgress.finishedFiles + uploadProgress.failedFiles} of {uploadProgress.totalFiles}</Text>}</View>
-        {preparationProgress && <Text className="font-sans text-caption text-ink-muted">Getting your photos ready while you start your story.</Text>}
-        {uploadProgress && <><View className="h-1.5 overflow-hidden rounded-pill bg-line"><View className="h-full rounded-pill bg-action" style={{ width: `${uploadProgress.totalBytes ? Math.min(100, Math.round(uploadProgress.bytesSent / uploadProgress.totalBytes * 100)) : 100}%` }} /></View>
-        <Text className="font-sans text-caption text-ink-muted">{(uploadProgress.bytesSent / 1_000_000).toFixed(1)} of {(uploadProgress.totalBytes / 1_000_000).toFixed(1)} MB transferred</Text></>}
-        <View className="flex-row flex-wrap gap-2">{preparationProgress ? selectedPhotos.map(({ key, uri, index }) => <Image key={key} source={{ uri }} accessibilityLabel={`Selected photo ${index + 1}`} className="size-12 rounded-sm" />) : readingAssets.map(({ key, assetId, uri }, index) => {
-          const local = uploadProgress?.assetStatuses?.find((asset) => asset.assetId === assetId)?.status;
-          const server = projectSummary?.assetStatuses?.find((asset) => asset.assetId === assetId)?.status;
-          const status = server === "understood" ? "understood" : server === "ingested" || server === "uploaded" ? "uploaded" : local;
-          const label = status === "understood" ? "understood" : status === "uploaded" ? "uploaded" : status === "failed" ? "failed" : "uploading";
-          return <Image key={key} source={{ uri }} accessibilityLabel={`Photo ${index + 1}, ${label}`} className="size-12 rounded-sm" />;
-        })}</View>
-      </View>}
       {(uploadFailure || (projectSummary?.upload?.failed ?? 0) + (projectSummary?.upload?.cancelled ?? 0) > 0) && <View accessibilityRole="alert" className="gap-2 rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure ?? `${(projectSummary?.upload?.failed ?? 0) + (projectSummary?.upload?.cancelled ?? 0)} files could not upload.`}</Text>
         <Button label="Retry uploads" variant="secondary" disabled={Boolean(preparationProgress) || Boolean(uploadProgress && uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles)} onPress={() => { setUploadFailuresAcknowledged(false); void retryPendingMedia(projectId).then((retried) => { if (!retried) router.push("/"); }); }} />
         {Boolean(uploadProgress ? uploadProgress.finishedFiles : projectSummary && projectSummary.total > 0 && projectSummary.processed.understood > 0) && !uploadFailuresAcknowledged && <Button label="Continue with uploaded files" onPress={() => setUploadFailuresAcknowledged(true)} />}
@@ -134,21 +120,28 @@ export default function DirectorScreen() {
       {state.items.map((item) => {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveConflict(choice as "keep" | "leave"))} />;
         if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} photos={item.photos} />;
+        if (item.kind === "upload-status") {
+          const uploadProgressValue = item.uploadTotal ? item.uploadDone / item.uploadTotal : 0;
+          const understoodProgressValue = item.understoodTotal ? item.understood / item.understoodTotal : 0;
+          const complete = item.uploadComplete && item.understoodComplete;
+          const overallProgress = uploadProgressValue * 0.5 + understoodProgressValue * 0.5;
+          const filledSegments = complete ? 10 : Math.floor(overallProgress * 10);
+          const activeSegment = !complete && overallProgress < 1 ? filledSegments : -1;
+          const segmentRow = <View className="flex-row gap-1">{Array.from({ length: 10 }, (_, index) => <View key={index} testID="upload-progress-segment" className={`h-1.5 flex-1 rounded-pill ${index === activeSegment ? "bg-accent" : index < filledSegments ? "bg-ink-muted" : "bg-line"}`} />)}</View>;
+          const subject = item.photos && item.clips ? "photos and clips" : item.photos ? `photo${item.photos === 1 ? "" : "s"}` : `clip${item.clips === 1 ? "" : "s"}`;
+          return <View key={item.id} accessibilityRole="progressbar" aria-label={`Uploading ${item.uploadDone} of ${item.uploadTotal}`} className="gap-3 rounded-md bg-surface-sunken p-3">
+            {segmentRow}
+            <View className="flex-row items-center gap-2"><Text className="font-sans text-caption text-ink-muted">{item.uploadComplete ? "✓" : "◷"}</Text><Text className="flex-1 font-sans text-caption text-ink">{item.uploadComplete ? `Uploaded your ${subject}` : `Uploading your ${subject}`}</Text><Text className="font-sans text-caption text-ink-muted">{item.uploadDone} of {item.uploadTotal}</Text></View>
+            <View className="flex-row items-center gap-2"><Text className="font-sans text-caption text-ink-muted">{item.understoodComplete ? "✓" : item.understandingActive ? "◷" : "○"}</Text><Text className="flex-1 font-sans text-caption text-ink">{item.understoodComplete ? "Looked through all of them" : "Looking through them"}</Text>{item.understandingActive && !item.understoodComplete && <Text className="font-sans text-caption text-ink-muted">{item.understood} of {item.understoodTotal}</Text>}</View>
+          </View>;
+        }
         if (item.kind === "late-video") return item.status === "added"
           ? <View key={item.id} className="gap-2"><ChatMessage from="mosae" text={item.text} /><Button label="Undo" variant="quiet" onPress={() => scrollAfterAction(() => actions.resolveLateVideo(item.assetId, "undo"))} /></View>
           : <ChatProposal key={item.id} question={item.text} replies={[{ id: "add", label: "Add" }, { id: "dismiss", label: "No thanks" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveLateVideo(item.assetId, choice as "add" | "dismiss"))} />;
         if (item.kind === "you") return <ChatMessage key={item.id} from="you" text={item.text} />;
         if (item.kind === "preparing-videos") return <View key={item.id} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 1, now: item.progress }} className="gap-2 rounded-md bg-surface-raised p-3"><Text className="font-sans text-body text-ink">{item.text}</Text><View className="h-2 overflow-hidden rounded-full bg-line"><View className="h-full rounded-full bg-action" style={{ width: `${Math.round(item.progress * 100)}%` }} /></View></View>;
         if (item.kind === "typing") {
-          const statuses = new Map((item.photoProgress ?? projectSummary?.assetStatuses ?? []).map((asset) => [asset.assetId, asset.status]));
-          const localStatuses = new Map((uploadProgress?.assetStatuses ?? []).map((asset) => [asset.assetId, asset.status]));
-          const photos = readingAssets.flatMap(({ assetId, key, uri }, index) => {
-            const server = statuses.get(assetId);
-            const status = server === "understood" ? "understood" : server === "ingested" || server === "uploaded" ? "uploaded" : localStatuses.get(assetId);
-            const label = status === "understood" ? "understood" : status === "uploaded" ? "uploaded" : status === "failed" ? "couldn't read" : status === "uploading" ? "uploading" : "still reading";
-            return status || (readingAssets.length > 0 && localMediaPending) ? [{ id: key, uri, understood: status === "understood", label: `Photo ${index + 1} of ${readingAssets.length}, ${label}` }] : [];
-          });
-          return <ChatTyping key={item.id} text={item.text} photos={photos} />;
+          return <ChatTyping key={item.id} text={item.text} />;
         }
         if (item.kind === "shaping") return <ChatShaping key={item.id} progress={item.progress} stepsDone={item.stepsDone} />;
         if (item.kind === "set-aside") {
@@ -189,16 +182,7 @@ export default function DirectorScreen() {
           <View className="gap-2"><Text className="font-sans-semibold text-button text-ink">How I directed it</Text>{item.film.reasons.slice(0, 3).map((reason, index) => <Text key={`${item.id}-reason-${index}`} className="font-sans text-body text-ink">• {reason}</Text>)}</View>
           <View className="flex-row gap-2"><Button label="Open in editor" variant="secondary" onPress={() => router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", planId: item.film.planId, generationId: item.film.filmId, request: "", ...story.flow } } as any)} /><Button label={item.film.generationStatus === "saved" ? "Saved" : "Save film"} disabled={saving || item.film.generationStatus === "saved"} onPress={() => scrollAfterAction(actions.saveFilm)} /></View>
         </View>;
-        if (item.kind === "occasion") {
-          if (!projectSummary || (!projectSummary.country && !projectSummary.season && projectSummary.places.length === 0)) return null;
-          const country = projectSummary?.country;
-          const answer = country ? `Yes, our ${country} trip` : "Yes, that's our story";
-          const storyText = country ? `${country} trip` : projectSummary?.places[0] ?? "Our story";
-          // The occasion chip is only an available answer until the user has
-          // typed a free-text answer; then the confirmation card owns the turn.
-          if (saving || pendingInterpret) return null;
-          return <Pressable key={item.id} role="button" aria-label={answer} onPress={() => scrollAfterAction(() => actions.confirmOccasion(answer, storyText))} className="max-w-[80%] self-end rounded-md bg-bubble-you px-4 py-3"><Text className="font-sans text-body text-ink">{answer}</Text></Pressable>;
-        }
+        if (item.kind === "occasion-question") return pendingInterpret ? null : <View key={item.id} className="gap-2"><ChatMessage from="mosae" text={item.uploadComplete ? "Tell me a little about them. Is it a trip, a birthday celebration, or something else?" : "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?"} /><View className="flex-row flex-wrap gap-2"><Pressable role="button" aria-label="A trip" onPress={() => scrollAfterAction(() => actions.answerOccasion("A trip", projectSummary?.country ? `${projectSummary.country} trip` : "Our trip"))} className="rounded-pill border border-line-strong px-4 py-2"><Text className="font-sans text-caption text-ink">A trip</Text></Pressable><Pressable role="button" aria-label="A birthday celebration" onPress={() => scrollAfterAction(() => actions.answerOccasion("A birthday celebration", "Birthday celebration"))} className="rounded-pill border border-line-strong px-4 py-2"><Text className="font-sans text-caption text-ink">A birthday celebration</Text></Pressable></View><Text className="font-sans text-caption text-ink-muted">Something else? Type it in the box below.</Text></View>;
         if (item.kind === "person") return <View key={item.id} className="gap-3">
           <ChatPersonQuestion momentCount={item.momentCount} samples={item.sampleFaces} days={item.days} question={item.questionText} chips={personAnswerChips(item.ageBand, people.filter((person) => person.personId !== item.personId).map((person) => person.name ?? ""))} onPick={(role) => scrollAfterAction(() => actions.setPerson(item.personId, role))} onTypeName={() => scrollAfterAction(() => setNamingPerson(item.personId))} onSkip={() => scrollAfterAction(() => actions.setPerson(item.personId, "Skip"))} />
           {namingPerson === item.personId && <View className="flex-row gap-2"><TextInput accessibilityLabel="Person name" value={name} onChangeText={setName} className="min-h-11 flex-1 rounded-md border border-line-strong px-3 font-sans text-ink" /><Pressable role="button" onPress={() => scrollAfterAction(() => { if (name.trim()) return actions.setPerson(item.personId, "Type a name", name.trim()); setName(""); setNamingPerson(null); })} className="min-h-11 justify-center px-3"><Text className="font-sans-semibold text-action">Save name</Text></Pressable></View>}

@@ -36,7 +36,7 @@ function useProjectState<T>(epochRef: MutableRefObject<number>, epoch: number, i
   }];
 }
 
-export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository(), storyFlow?: { repository: "api" | "fixture"; projectId?: string }, localState: Pick<ChatInput, "localMediaPending" | "uploadFailuresAcknowledged"> = {}) {
+export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository(), storyFlow?: { repository: "api" | "fixture"; projectId?: string }, localState: Pick<ChatInput, "localMediaPending" | "uploadFailuresAcknowledged" | "localUpload"> = {}) {
   const projectIdentity = useRef(projectId);
   const projectEpoch = useRef(0);
   if (projectIdentity.current !== projectId) { projectIdentity.current = projectId; projectEpoch.current++; }
@@ -338,12 +338,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       occasionSaving.current = true;
       planFailed.current = false;
       setSaving(true); setError(null);
-      const storyText = storyTextOverride ?? answer ?? pendingInterpret?.text ?? (summary?.country ? `${summary.country} trip` : summary?.places[0] || "Our story");
+      const storyText = storyTextOverride ?? answer ?? pendingInterpret?.text ?? input.earlyOccasionAnswer ?? (summary?.country ? `${summary.country} trip` : summary?.places[0] || "Our story");
       try {
         const result = await repository.createPlan([storyText, ...input.notes].join("\n"), []);
         if (!isCurrentProject()) return;
         proposalId.current = result.planId;
-        setInput((current) => ({ ...current, intent: { text: answer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
+        setInput((current) => ({ ...current, earlyOccasionAnswer: undefined, earlyOccasionStoryText: undefined, intent: { text: answer ?? input.earlyOccasionAnswer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
         setPendingInterpret(null);
         await refresh();
       } catch (cause) { if (!isCurrentProject()) return; planFailed.current = true; reportFailure(cause); setError("I couldn't shape this one. Try again."); }
@@ -526,8 +526,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     },
     async send(text: string) {
       if (!text.trim()) return;
-      if (!canConfirmStory({ ...input, ...confirmationState }) && !input.intent) {
-        setInput((current) => ({ ...current, notes: [...current.notes, text.trim()] }));
+      if (!input.intent && (!canConfirmStory({ ...input, ...confirmationState }) || input.earlyOccasionAnswer)) {
+        setInput((current) => current.earlyOccasionAnswer
+          ? ({ ...current, notes: [...current.notes, text.trim()] })
+          : ({ ...current, earlyOccasionAnswer: text.trim() }));
         return;
       }
       if (!summary) return;
@@ -542,7 +544,15 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       } catch (cause) { setError(reportFailure(cause)); }
     },
     confirmInterpret() { if (pendingInterpret) void actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary); },
+    answerOccasion(text: string, storyText?: string) {
+      setInput((current) => ({ ...current, earlyOccasionAnswer: text, ...(storyText ? { earlyOccasionStoryText: storyText } : {}) }));
+      if (canConfirmStory({ ...input, ...confirmationState })) void actions.confirmOccasion(text, storyText);
+    },
     discardInterpret() { setPendingInterpret(null); },
   };
+  useEffect(() => {
+    if (!input.earlyOccasionAnswer || !canConfirmStory({ ...input, ...confirmationState }) || occasionSaving.current || input.intent) return;
+    void actions.confirmOccasion(input.earlyOccasionAnswer, input.earlyOccasionStoryText);
+  }, [input.earlyOccasionAnswer, input.earlyOccasionStoryText, input.summary, localState.localMediaPending, localState.uploadFailuresAcknowledged]);
   return { state, actions, error, retry: () => { setError(null); if (compositionRetryAvailable.current) { compositionRetryAvailable.current = false; void actions.shapeIt(); } else if (activeFilmId.current) void pollFilm(activeFilmId.current); else if (pendingDirectionOptions.current) void recoverDirectionOptions(pendingDirectionOptions.current); else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); }); }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection: { ...directionSelection, aspect: effectiveAspect }, people: input.people ?? [] };
 }

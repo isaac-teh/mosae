@@ -93,60 +93,28 @@ describe("Director chat", () => {
     expect(history!.style.flexGrow).toBe("1");
   });
 
-  it("shows the selected photo grid and preparation progress while the chat opens", async () => {
+  it("shows the compact upload card and occasion question while preparing", async () => {
     setup();
     setPendingMedia([new File(["photo"], "trip.jpg", { type: "image/jpeg" })]);
     setUploadPreparationProgress({ preparedFiles: 0, totalFiles: 1 });
     await renderScreen();
-    expect(hasText("Preparing 0 of 1")).toBe(true);
-    expect(hasText("Is that the story?")).toBe(false);
-    expect(host.querySelector('input[aria-label="Tell me anything about the story"]')).toBeTruthy();
-    expect(hasText("0 of 1")).toBe(true);
-    expect(host.querySelector('[alt="Selected photo 1"]')).toBeTruthy();
+    expect(hasText("I'm bringing in your 1 photo. Then I'll look through them.")).toBe(true);
+    expect(hasText("While they come in, tell me a little about them.")).toBe(true);
+    expect(hasText("Something else? Type it in the box below.")).toBe(true);
+    expect(host.querySelector('[aria-label="Uploading 0 of 1"]')).toBeTruthy();
+    expect(host.querySelector('[alt^="Selected photo"]')).toBeFalsy();
+    expect(host.querySelectorAll('[data-testid="upload-progress-segment"]')).toHaveLength(10);
   });
 
-  it("shows preparation and transfer progress inside one combined card", async () => {
+  it("shows upload counts without thumbnails or transferred megabytes", async () => {
     setup();
     setPendingMedia([new File(["photo"], "trip.jpg", { type: "image/jpeg" })]);
     setUploadPreparationProgress({ preparedFiles: 1, totalFiles: 50 });
     setUploadProgress({ totalFiles: 50, finishedFiles: 0, failedFiles: 0, bytesSent: 10, totalBytes: 100, assetStatuses: [] });
     await renderScreen();
-    expect(host.querySelectorAll('[aria-label="Preparing and uploading selected photos"]')).toHaveLength(1);
-    expect(host.querySelectorAll('[aria-label="Preparing selected photos"]')).toHaveLength(0);
-    expect(host.querySelectorAll('[aria-label="Uploading selected photos"]')).toHaveLength(0);
-    expect(hasText("Preparing 1 of 50")).toBe(true);
-    expect(hasText("0.0 of 0.0 MB transferred")).toBe(true);
-  });
-
-  it("keeps previews and thumbnail nodes stable when pending media arrays are replaced", async () => {
-    setup();
-    const photo = new File(["photo"], "trip.jpg", { type: "image/jpeg" });
-    setPendingMedia([photo], ["asset-1"], "project-1");
-    setUploadPreparationProgress({ preparedFiles: 0, totalFiles: 1 });
-    await renderScreen();
-    const initialImage = host.querySelector('[alt="Selected photo 1"]');
-    const initialSource = initialImage?.getAttribute("src");
-    expect(initialImage).toBeTruthy();
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
-
-    await act(async () => setPendingMedia([photo], ["asset-1"], "project-1"));
-    const updatedImage = host.querySelector('[alt="Selected photo 1"]');
-    expect(updatedImage).toBe(initialImage);
-    expect(updatedImage?.getAttribute("src")).toBe(initialSource);
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
-    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
-
-    await act(async () => setPendingMedia([], [], "project-1"));
-    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows an uploading status for locally registered photo thumbnails", async () => {
-    setup();
-    const photo = new File(["photo"], "trip.jpg", { type: "image/jpeg" });
-    setPendingMedia([photo], ["asset-1"], "project-1");
-    setUploadProgress({ totalFiles: 1, finishedFiles: 0, failedFiles: 0, bytesSent: 0, totalBytes: 5, assetStatuses: [{ assetId: "asset-1", status: "uploading" }] });
-    await renderScreen();
-    expect(host.querySelector('[alt="Photo 1, uploading"]')).toBeTruthy();
+    expect(host.querySelector('[aria-label="Uploading 0 of 50"]')).toBeTruthy();
+    expect(hasText("MB transferred")).toBe(false);
+    expect(host.querySelector('img[alt^="Photo "]')).toBeFalsy();
   });
 
   it("keeps terminal all-failed upload status visible in the chat", async () => {
@@ -162,15 +130,15 @@ describe("Director chat", () => {
     setUploadProgress({ totalFiles: 2, finishedFiles: 1, failedFiles: 1, bytesSent: 1, totalBytes: 1 });
     setUploadFailure("One file couldn't upload.");
     await renderScreen();
-    expect(hasText("Yes, our Japan trip")).toBe(false);
+    expect(mocks.repo.createPlan).not.toHaveBeenCalled();
     await click("Continue with uploaded files");
-    expect(hasText("Yes, our Japan trip")).toBe(true);
+    expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
     await act(async () => setUploadProgress({ totalFiles: 2, finishedFiles: 0, failedFiles: 2, bytesSent: 0, totalBytes: 0 }));
     expect(hasText("Continue with uploaded files")).toBe(false);
     expect(hasText("Retry uploads")).toBe(true);
   });
 
-  it("retains typed context during preparation without interpreting or planning", async () => {
+  it("accepts an early free-text story and plans automatically when preparation completes", async () => {
     setup(); setUploadPreparationProgress({ totalFiles: 1, preparedFiles: 0 });
     await renderScreen();
     const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
@@ -179,15 +147,19 @@ describe("Director chat", () => {
     expect(hasText("Mia's birthday")).toBe(true);
     expect(mocks.repo.interpret).not.toHaveBeenCalled();
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
-    await act(async () => setUploadPreparationProgress(null));
+    const followUp = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
+    await act(async () => { (followUp as HTMLInputElement).value = "The trip was sunny"; followUp.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("Send");
     expect(hasText("Mia's birthday")).toBe(true);
-    await click("Yes, our Japan trip");
-    expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip\nMia's birthday", []);
+    expect(hasText("The trip was sunny")).toBe(true);
+    await act(async () => setUploadPreparationProgress(null));
+    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Mia's birthday\nThe trip was sunny", []));
+    expect(hasText("Mia's birthday")).toBe(true);
   });
 
   it("guards rapid repeated confirmations before React rerenders", async () => {
     setup({ createPlan: () => new Promise(() => {}) }); await renderScreen();
-    const button = host.querySelector('button[aria-label="Yes, our Japan trip"]')!;
+    const button = host.querySelector('button[aria-label="A trip"]')!;
     await act(async () => { button.dispatchEvent(new MouseEvent("click", { bubbles: true })); button.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     expect(mocks.repo.createPlan).toHaveBeenCalledTimes(1);
   });
@@ -195,24 +167,28 @@ describe("Director chat", () => {
   it("scrolls the director history to the newest message after an occasion chip action", async () => {
     setup(); await renderScreen();
     scrollMock.scrollToEnd.mockClear();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(scrollMock.scrollToEnd).toHaveBeenCalled());
   });
 
   it("shows the ready summary and starts the story intent when the occasion reply is tapped", async () => {
     setup(); await renderScreen();
-    expect(hasText("I've looked through all 8")).toBe(true);
-    expect(host.textContent?.match(/Is that the story\?/g)).toHaveLength(1);
-    expect(host.querySelector('[data-from="mosae"]')?.textContent).toContain("Is that the story?");
-    await click("Yes, our Japan trip");
+    await waitFor(() => expect(hasText("Tell me a little about them. Is it a trip, a birthday celebration, or something else?")).toBe(true));
+    expect(hasText("Your 8 photos are uploaded.")).toBe(true);
+    expect(hasText("Uploaded your photos")).toBe(true);
+    expect(hasText("Looked through all of them")).toBe(true);
+    expect(hasText("I've looked through all 8")).toBe(false);
+    expect(hasText("While they come in, tell me a little about them.")).toBe(false);
+    expect(host.querySelectorAll('[data-testid="upload-progress-segment"]')).toHaveLength(10);
+    await click("A trip");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip", []));
-    expect(hasText("Yes, our Japan trip")).toBe(true);
+    expect(hasText("A trip")).toBe(true);
   });
 
   it("asks openly without a confirmation chip when the summary has no meaningful suggestion", async () => {
     setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), places: [], country: null, season: null }); await renderScreen();
-    expect(hasText("What were these 8 moments about?")).toBe(true);
-    expect(host.querySelector('button[aria-label="Yes, that\'s our story"]')).toBeFalsy();
+    await waitFor(() => expect(hasText("Tell me a little about them. Is it a trip, a birthday celebration, or something else?")).toBe(true));
+    expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
   });
 
   it("titles the chat from country and season, then falls back to place and Your film", async () => {
@@ -320,13 +296,13 @@ describe("Director chat", () => {
     setup();
     mocks.repo.getSummary.mockResolvedValue({ ...summary(), places: [] });
     await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip", []));
   });
 
   it("shows people processing and Skip for now while faces are still pending", async () => {
     setup({ faces: false }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     expect(hasText("Finding the faces in your trip")).toBe(true);
     expect(hasText("Skip for now")).toBe(true);
   });
@@ -336,7 +312,7 @@ describe("Director chat", () => {
     let reads = 0;
     mocks.repo.getPeople.mockImplementation(async () => reads++ === 0 ? null : people);
     await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(hasText("Who's this? They're in 212 of your moments.")).toBe(true));
     expect(host.querySelectorAll('[data-face-preview="true"]').length).toBeGreaterThan(0);
   });
@@ -344,7 +320,7 @@ describe("Director chat", () => {
   it("shows a plan failure and lets the user retry it", async () => {
     setup({ createPlan: vi.fn().mockRejectedValue(new Error("planner failed")) });
     await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(hasText("I couldn't shape this one. Try again")).toBe(true));
     const summaryReadsAtFailure = mocks.repo.getSummary.mock.calls.length;
     await act(async () => new Promise((resolve) => setTimeout(resolve, 3_100)));
@@ -355,7 +331,7 @@ describe("Director chat", () => {
 
   it("saves the selected role and name before asking about the next person", async () => {
     setup({ people: people.map((person) => ({ ...person, role: "other" })) }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await click("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", role: "child", name: "My daughter" })]) })));
     expect(hasText("Who's this? They're in 90 of your moments.")).toBe(true);
@@ -389,7 +365,7 @@ describe("Director chat", () => {
 
   it("does not revise a plan proposal until its asynchronous job has published it", async () => {
     setup({ people: [{ ...people[0], role: null }] }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await click("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
     expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.not.objectContaining({ proposalId: expect.any(String) }));
@@ -397,7 +373,7 @@ describe("Director chat", () => {
 
   it("uses the revised proposal returned by cast confirmation for direction options", async () => {
     setup({ readyPlan: true, people: [{ ...people[0], role: null }] }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await click("My daughter");
     for (let i = 0; i < 3 && !host.querySelector('button[aria-label="Looks fine"]'); i++) {
       if (host.querySelector('button[aria-label="No, that\'s everyone"]')) await click("No, that's everyone");
@@ -412,7 +388,7 @@ describe("Director chat", () => {
   it("uses each returned proposal ID for the next cast edit", async () => {
     setup({ readyPlan: true });
     mocks.confirmCast.mockResolvedValueOnce({ cast: { people: [] }, proposalId: "proposal-2" }).mockResolvedValueOnce({ cast: { people: [] }, proposalId: "proposal-3" });
-    await renderScreen(); await click("Yes, our Japan trip");
+    await renderScreen(); await click("A trip");
     await click("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(1));
     await click("My partner");
@@ -421,7 +397,7 @@ describe("Director chat", () => {
   });
 
   it("keeps self answers available and automatically merges the repeated answer", async () => {
-    setup({ people: [{ ...people[0], ageBand: "adult" }, { ...people[1], ageBand: "adult" }] }); await renderScreen(); await click("Yes, our Japan trip");
+    setup({ people: [{ ...people[0], ageBand: "adult" }, { ...people[1], ageBand: "adult" }] }); await renderScreen(); await click("A trip");
     expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy();
     await click("Me");
@@ -437,7 +413,7 @@ describe("Director chat", () => {
     setup({ readyPlan: true });
     let resolveCast!: (value: any) => void;
     mocks.confirmCast.mockImplementation(() => new Promise((resolve) => { resolveCast = resolve; }));
-    await renderScreen(); await click("Yes, our Japan trip");
+    await renderScreen(); await click("A trip");
     await click("My daughter");
     await click("Friend");
     expect(mocks.confirmCast).toHaveBeenCalledTimes(1);
@@ -445,7 +421,7 @@ describe("Director chat", () => {
   });
 
   it("shows face previews and only the inline Skip once the person question appears", async () => {
-    setup({ people: [{ ...people[0], momentCount: 12 }, { ...people[1], momentCount: 9 }] }); await renderScreen(); await click("Yes, our Japan trip");
+    setup({ people: [{ ...people[0], momentCount: 12 }, { ...people[1], momentCount: 9 }] }); await renderScreen(); await click("A trip");
     expect(host.querySelectorAll('img[alt^="Person photo "]')).toHaveLength(4);
     expect(hasText("4 of 12 shown · Day 1, 2 and 3")).toBe(true);
     expect(host.querySelectorAll('button[aria-label="Skip"]')).toHaveLength(1);
@@ -454,7 +430,7 @@ describe("Director chat", () => {
 
   it("Skip on the person question advances past the people step", async () => {
     setup(); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await click("Skip");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
     expect(hasText("Skip")).toBe(true);
@@ -462,7 +438,7 @@ describe("Director chat", () => {
   });
 
   it("shows the selected role chip label in the reply", async () => {
-    setup(); await renderScreen(); await click("Yes, our Japan trip"); await click("My daughter");
+    setup(); await renderScreen(); await click("A trip"); await click("My daughter");
     await waitFor(() => expect(hasText("My daughter")).toBe(true));
     expect(hasText("Family")).toBe(false);
   });
@@ -471,7 +447,7 @@ describe("Director chat", () => {
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
     const infoLog = vi.spyOn(console, "info").mockImplementation(() => {});
     setup({ createPlan: async () => { throw new Error("not_found"); } }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(hasText("I couldn't shape this one. Try again.")).toBe(true));
     expect(hasText("not_found")).toBe(false);
     expect(hasText("Try again")).toBe(true);
@@ -481,7 +457,7 @@ describe("Director chat", () => {
   });
 
   it("renders confirmation progress in the header only", async () => {
-    setup(); await renderScreen(); await click("Yes, our Japan trip");
+    setup(); await renderScreen(); await click("A trip");
     await waitFor(() => expect(hasText("1 of 4 confirmed")).toBe(true));
     expect(host.textContent?.match(/1 of 4 confirmed/g)).toHaveLength(1);
   });
@@ -500,7 +476,7 @@ describe("Director chat", () => {
     expect(hasText("Did I get that right?")).toBe(false);
     expect(hasText("Not quite")).toBe(true);
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
-    expect(host.querySelector('button[aria-label="Yes, our Japan trip"]')).toBeFalsy();
+    expect(host.querySelector('button[aria-label="A trip"]')).toBeFalsy();
     expect(host.textContent?.match(/0 of 4 confirmed/g) ?? []).toHaveLength(1);
     await click("Yes, that's right");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("our family trip", []));
@@ -515,19 +491,19 @@ describe("Director chat", () => {
     await click("Not quite");
     expect(hasText("I understood the Japan trip.")).toBe(false);
     expect(hasText("something different")).toBe(false);
-    expect(host.querySelector('button[aria-label="Yes, our Japan trip"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
   });
 
-  it("does not show an occasion answer bubble or progress until the answer is saved", async () => {
+  it("shows an early occasion answer immediately while plan creation continues", async () => {
     let finish!: (value: { planId: string }) => void;
     setup({ createPlan: () => new Promise((resolve) => { finish = resolve; }) }); await renderScreen();
-    await click("Yes, our Japan trip");
-    expect([...host.querySelectorAll('[data-from="you"]')].some((item) => item.textContent?.includes("Yes, our Japan trip"))).toBe(false);
-    expect(host.querySelector('button[aria-label="Yes, our Japan trip"]')).toBeFalsy();
-    expect(host.textContent?.match(/0 of 4 confirmed/g) ?? []).toHaveLength(1);
+    await click("A trip");
+    expect([...host.querySelectorAll('[data-from="you"]')].some((item) => item.textContent?.includes("A trip"))).toBe(true);
+    expect(host.querySelector('button[aria-label="A trip"]')).toBeFalsy();
+    expect(hasText("Looked through all of them")).toBe(true);
     await act(async () => finish({ planId: "proposal-1" }));
-    await waitFor(() => expect(host.querySelector('[data-from="you"]')?.textContent).toContain("Yes, our Japan trip"));
+    await waitFor(() => expect(host.querySelector('[data-from="you"]')?.textContent).toContain("A trip"));
   });
 
   it("shows the retry message when interpretation fails and keeps the occasion reply usable", async () => {
@@ -537,14 +513,14 @@ describe("Director chat", () => {
     await click("→");
     await waitFor(() => expect(hasText("I couldn't do that. Try again?")).toBe(true));
     expect(hasText("Try again")).toBe(true);
-    expect(hasText("Yes, our Japan trip")).toBe(true);
+    expect(hasText("A trip")).toBe(true);
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
   });
 
   it("shows Try again after a failed save and retries the save", async () => {
     let attempts = 0;
     setup({ createPlan: async () => { if (!attempts++) throw new Error("network"); return { planId: "proposal-1" }; } }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(hasText("Try again")).toBe(true));
     await click("Try again");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledTimes(2));
@@ -552,7 +528,7 @@ describe("Director chat", () => {
 
   async function openMoments(applyEdits?: (...args: any[]) => Promise<any>, getFilm?: (...args: any[]) => Promise<any>) {
     setup({ people: [], readyPlan: true, applyEdits, getFilm }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
   }
 
@@ -569,7 +545,7 @@ describe("Director chat", () => {
     const previous = planFixture.leftOut;
     planFixture.leftOut = [];
     try {
-      setup({ people: [], readyPlan: true }); await renderScreen(); await click("Yes, our Japan trip");
+      setup({ people: [], readyPlan: true }); await renderScreen(); await click("A trip");
       await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-1"));
       expect(host.querySelector('[aria-label="Filtered photos"]')).toBeNull();
       expect(hasText("Looks fine")).toBe(false);
@@ -653,7 +629,7 @@ describe("Director chat", () => {
 
   it("offers achievable direction lengths without a capacity message", async () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 60 }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
     await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
@@ -665,7 +641,7 @@ describe("Director chat", () => {
 
   it("reduces the selected length when a faster pace cannot support it", async () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 65, maximumDurationSecByCadence: { reflective: 65, playful: 45.5 } }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
     await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
@@ -678,7 +654,7 @@ describe("Director chat", () => {
 
   it("offers one preselected short length when three photos cannot reach a standard tier", async () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 12 }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
     await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
@@ -693,7 +669,7 @@ describe("Director chat", () => {
 
   it("caps the adaptive Short recommendation at twenty seconds", async () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 24 }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
     await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
@@ -705,7 +681,7 @@ describe("Director chat", () => {
 
   it("updates a selected short length when the user changes pace", async () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 15, maximumDurationSecByCadence: { reflective: 15, playful: 10 } }); await renderScreen();
-    await click("Yes, our Japan trip");
+    await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
     await click("Looks fine");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
@@ -822,7 +798,7 @@ it("waits for a fresh server snapshot after local transfer completes", async () 
   await renderScreen();
   mocks.repo.getSummary.mockImplementationOnce(() => new Promise(() => {}));
   await act(async () => setUploadProgress({ totalFiles: 2, finishedFiles: 2, failedFiles: 0, bytesSent: 2, totalBytes: 2 }));
-  expect(hasText("Yes, our Japan trip")).toBe(false);
+  expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
   expect(mocks.repo.createPlan).not.toHaveBeenCalled();
 });
 
@@ -836,9 +812,9 @@ it("discards an older upload-epoch refresh after a newer not-ready response", as
   await act(async () => setUploadPreparationProgress({ totalFiles: 1, preparedFiles: 0 }));
   mocks.repo.getSummary.mockResolvedValue({ ...summary(), ready: { ...summary().ready, story: false } });
   await act(async () => setUploadPreparationProgress(null));
-  expect(hasText("Yes, our Japan trip")).toBe(false);
+  expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
   await act(async () => oldSummary.resolve({ ...summary(), ready: { ...summary().ready, story: true } }));
-  expect(hasText("Yes, our Japan trip")).toBe(false);
+  expect(mocks.repo.createPlan).not.toHaveBeenCalled();
 });
 
 it("clears deferred story notes on project switch and rejects the old in-flight refresh", async () => {
@@ -854,7 +830,7 @@ it("clears deferred story notes on project switch and rejects the old in-flight 
   expect(hasText("Project A birthday")).toBe(false);
   await act(async () => oldSummary.resolve({ ...summary(), country: "France" }));
   expect(hasText("France")).toBe(false);
-  await click("Yes, our Japan trip");
+  await click("A trip");
   expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip", []);
 });
 
@@ -868,7 +844,7 @@ it("keeps the newest refresh within the same upload epoch", async () => {
   mocks.repo.getSummary.mockResolvedValue({ ...summary(), ready: { ...summary().ready, story: false } });
   await act(async () => chat.retry());
   await act(async () => older.resolve({ ...summary(), ready: { ...summary().ready, story: true } }));
-  expect(chat.state.items.some(item => item.kind === "occasion")).toBe(false);
+  expect(chat.state.items.some(item => item.kind === "occasion-question")).toBe(true);
 });
 
 it("accepts valid slow polling responses even when they exceed the polling interval", async () => {
@@ -880,9 +856,9 @@ it("accepts valid slow polling responses even when they exceed the polling inter
     function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
     await act(async () => root.render(<Harness />));
     await act(async () => vi.advanceTimersByTimeAsync(4000));
-    expect(chat.state.items.some(item => item.kind === "occasion")).toBe(true);
+    expect(chat.state.items.some(item => item.kind === "occasion-question")).toBe(true);
     await act(async () => vi.advanceTimersByTimeAsync(6000));
-    expect(chat.state.items.some(item => item.kind === "occasion")).toBe(true);
+    expect(chat.state.items.some(item => item.kind === "occasion-question")).toBe(true);
     expect(mocks.repo.getSummary).toHaveBeenCalledTimes(2);
     await act(async () => root.render(null));
   } finally { vi.useRealTimers(); }
