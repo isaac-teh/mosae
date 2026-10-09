@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { AccessibilityInfo, ActivityIndicator, Animated, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Asset } from "expo-asset";
 import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatPersonQuestion, ChatProposal, ChatSetAsideCard, ChatShaping, ChatTyping } from "@/components/chat";
@@ -18,6 +18,37 @@ import { directionFocus, contentTypeFor, getPendingMediaAssets, getPendingMediaP
 
 const previewSourceUri = (value: string) => value === "demo:film" ? Asset.fromModule(require("../assets/demo/film.mp4")).uri : value.startsWith("demo:") ? Asset.fromModule(demoImage(value.slice(5))).uri : value;
 
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then(value => { if (active) setReduced(value); });
+    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduced);
+    return () => { active = false; subscription.remove(); };
+  }, []);
+  return reduced;
+}
+
+function UploadSpinner({ reducedMotion }: { reducedMotion: boolean }) {
+  return reducedMotion
+    ? <Text accessibilityLabel="In progress" className="font-sans text-caption text-ink-muted">◌</Text>
+    : <ActivityIndicator size="small" color="#786f66" accessibilityLabel="In progress" />;
+}
+
+function PulsingSegment({ reducedMotion }: { reducedMotion: boolean }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (reducedMotion) { opacity.setValue(1); return; }
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(opacity, { toValue: 0.4, duration: 500, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [opacity, reducedMotion]);
+  return <Animated.View className="h-1.5 flex-1 rounded-pill bg-accent" style={{ opacity }} testID="upload-progress-segment" />;
+}
+
 function titleFromSummary(summary: { country: string | null; season: string | null; places: string[] } | null): string {
   if (!summary) return "Your film";
   const season = summary.season?.toLowerCase() ?? "";
@@ -33,6 +64,7 @@ function titleFromSummary(summary: { country: string | null; season: string | nu
 }
 
 export default function DirectorScreen() {
+  const reducedMotion = useReducedMotion();
   const params = useLocalSearchParams<{ projectId?: string; completedPersonId?: string; completedPersonName?: string; completedMomentCount?: string; completedIsMissed?: string; completedSampleUri?: string }>();
   const projectId = params.projectId ?? "";
   const story = useStoryFlow();
@@ -133,13 +165,18 @@ export default function DirectorScreen() {
           const overallProgress = uploadProgressValue * 0.45 + understoodProgressValue * 0.45 + (item.facesApplicable && item.facesComplete ? 0.1 : 0);
           const filledSegments = complete ? 10 : Math.floor(overallProgress * 10);
           const activeSegment = !complete && overallProgress < 1 ? filledSegments : -1;
-          const segmentRow = <View className="flex-row gap-1">{Array.from({ length: 10 }, (_, index) => <View key={index} testID="upload-progress-segment" className={`h-1.5 flex-1 rounded-pill ${index === activeSegment ? "bg-accent" : index < filledSegments ? "bg-ink-muted" : "bg-line"}`} />)}</View>;
+          const segmentRow = <View className="flex-row gap-1">{Array.from({ length: 10 }, (_, index) => index === activeSegment
+            ? <PulsingSegment key={index} reducedMotion={reducedMotion} />
+            : <View key={index} testID="upload-progress-segment" className={`h-1.5 flex-1 rounded-pill ${index < filledSegments ? "bg-ink-muted" : "bg-line"}`} />)}</View>;
+          const progressIcon = (done: boolean, active: boolean) => done
+            ? <Text className="font-sans text-caption text-ink-muted">✓</Text>
+            : active ? <UploadSpinner reducedMotion={reducedMotion} /> : <Text className="font-sans text-caption text-ink-muted">○</Text>;
           const subject = item.photos && item.clips ? "photos and clips" : item.photos ? `photo${item.photos === 1 ? "" : "s"}` : `clip${item.clips === 1 ? "" : "s"}`;
           return <View key={item.id} accessibilityRole="progressbar" aria-label={`Uploading ${item.uploadDone} of ${item.uploadTotal}`} className="gap-3 rounded-md bg-surface-sunken p-3">
             {segmentRow}
-            <View className="flex-row items-center gap-2"><Text className="font-sans text-caption text-ink-muted">{item.uploadComplete ? "✓" : "◷"}</Text><Text className="flex-1 font-sans text-caption text-ink">{item.uploadComplete ? `Uploaded your ${subject}` : `Uploading your ${subject}`}</Text><Text className="font-sans text-caption text-ink-muted">{item.uploadDone} of {item.uploadTotal}</Text></View>
-            <View className="flex-row items-center gap-2"><Text className="font-sans text-caption text-ink-muted">{item.understoodComplete ? "✓" : item.understandingActive ? "◷" : "○"}</Text><Text className="flex-1 font-sans text-caption text-ink">{item.understoodComplete ? "Looked through all of them" : "Looking through them"}</Text>{item.understandingActive && !item.understoodComplete && <Text className="font-sans text-caption text-ink-muted">{item.understood} of {item.understoodTotal}</Text>}</View>
-            {item.facesApplicable && <View className="flex-row items-center gap-2"><Text className="font-sans text-caption text-ink-muted">{item.facesComplete ? "✓" : item.understoodComplete ? "◷" : "○"}</Text><Text className="flex-1 font-sans text-caption text-ink">{item.facesComplete ? "Found the people in them" : "Finding the people in them"}</Text></View>}
+            <View className="flex-row items-center gap-2">{progressIcon(item.uploadComplete, !item.uploadComplete)}<Text className="flex-1 font-sans text-caption text-ink">{item.uploadComplete ? `Uploaded your ${subject}` : `Uploading your ${subject}`}</Text><Text className="font-sans text-caption text-ink-muted">{item.uploadDone} of {item.uploadTotal}</Text></View>
+            <View className="flex-row items-center gap-2">{progressIcon(item.understoodComplete, item.understandingActive && !item.understoodComplete)}<Text className="flex-1 font-sans text-caption text-ink">{item.understoodComplete ? "Looked through all of them" : "Looking through them"}</Text>{item.understandingActive && !item.understoodComplete && <Text className="font-sans text-caption text-ink-muted">{item.understood} of {item.understoodTotal}</Text>}</View>
+            {item.facesApplicable && <View className="flex-row items-center gap-2">{progressIcon(item.facesComplete, item.understoodComplete && !item.facesComplete)}<Text className="flex-1 font-sans text-caption text-ink">{item.facesComplete ? "Found the people in them" : "Finding the people in them"}</Text></View>}
           </View>;
         }
         if (item.kind === "late-video") return item.status === "added"

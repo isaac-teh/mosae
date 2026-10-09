@@ -115,8 +115,20 @@ export function deriveChat(input: ChatInput): ChatState {
   const understandingActive = Boolean(summary && (summary.processed.ingested > 0 || uploadComplete || summary.ready.summary));
   const understoodComplete = Boolean(uploadComplete && understoodTotal > 0 && understood + Math.max(failedCount, input.localUpload?.failed ?? 0) >= understoodTotal);
   const facesApplicable = photos > 0 || Boolean(input.localUpload && summary?.photos);
-  const facesComplete = Boolean(facesApplicable && summary?.ready.faces);
+  const facesComplete = Boolean(facesApplicable && understoodComplete && summary?.ready.faces);
   const addUploadStatus = () => add({ kind: "upload-status", id: "upload-status", photos, clips, uploadTotal, uploadDone: Math.min(uploadDone, uploadTotal), understood, understoodTotal, uploadComplete, understandingActive, understoodComplete, facesApplicable, facesComplete });
+  const noteStatus = () => {
+    if (facesApplicable && understoodComplete && !facesComplete) return "I'm finding the people in them now.";
+    return `${Math.min(uploadDone, uploadTotal)} of ${uploadTotal} uploaded and ${Math.min(understood, understoodTotal)} of ${understoodTotal} looked through.`;
+  };
+  const addNotes = () => input.notes.forEach((note, index) => {
+    add({ kind: "you", id: `note-${index + 1}`, text: note });
+    const questionLike = /\?|\bstill\b|\bprogress\b|\bhow long\b|\bwhen\b/i.test(note);
+    const reply = questionLike
+      ? `Still working on it — ${noteStatus()}${facesApplicable && understoodComplete && !facesComplete ? "" : " I'll ask you about the people next."}`
+      : `Got it, I'll keep that in mind for the film. ${noteStatus()}`;
+    add({ kind: "mosae", id: `note-reply-${index + 1}`, text: reply });
+  });
   const mediaLabel = photos > 0 && clips > 0 ? "photos and clips" : photos > 0 ? `photo${photos === 1 ? "" : "s"}` : `clip${clips === 1 ? "" : "s"}`;
   const mediaCount = uploadTotal || photos + clips;
   const addUploadIntro = () => add({ kind: "mosae", id: "upload-intro", text: uploadComplete ? `Your ${mediaCount} ${mediaLabel} ${mediaCount === 1 && photos + clips === 1 ? "is" : "are"} uploaded.` : `I'm bringing in your ${mediaCount} ${mediaLabel}. Then I'll look through them.` });
@@ -149,7 +161,7 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "mosae", id: "story-acknowledgement", text: acknowledgementText(input.earlyOccasionAnswer) });
       if (input.pendingResponse === "occasion") add({ kind: "typing", id: "occasion-save-wait", text: "Putting your story together" });
     } else addOccasionQuestion();
-    input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
+    addNotes();
     return { items, step, confirmed, placeholder };
   }
   addUploadIntro();
@@ -161,7 +173,7 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "you", id: "occasion-answer", text: input.earlyOccasionAnswer });
       add({ kind: "mosae", id: "story-acknowledgement", text: acknowledgementText(input.earlyOccasionAnswer) });
     } else addOccasionQuestion();
-    input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
+    addNotes();
     return { items, step, confirmed, placeholder };
   }
 
@@ -169,10 +181,10 @@ export function deriveChat(input: ChatInput): ChatState {
   add({ kind: "you", id: "occasion-answer", text: input.intent.text });
   add({ kind: "mosae", id: "story-acknowledgement", text: acknowledgementText(input.intent.text, input.storySummary, input.mentionedPeople) });
   addVideoFailures();
-  input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
+  addNotes();
   confirmed = 1;
 
-  const facesReady = input.summary.ready.faces;
+  const facesReady = facesComplete;
   const peopleResolved = input.peopleConfirmed || (facesReady && input.people?.length === 0);
   if (!peopleResolved) {
     step = "people";
