@@ -98,6 +98,6 @@ it.each([true, false])("continues with understood media after acknowledged proce
   expect(result).toMatchObject({ total: 1, photos: 1, days: 1, places: ["Tokyo"], upload: { failed: 1 }, processed: { ingested: 1, understood: 1, faces: 1 }, ready: { summary: true, faces: true, story: true } });
   expect(result.assetStatuses).toContainEqual({ assetId: "failed", kind: "photo", status: "failed" });
   const chat = deriveChat({ ...input, uploadFailuresAcknowledged: true });
-  expect(chat.items).toContainEqual({ kind: "occasion", id: "occasion" });
-  expect(chat.items.find(item => item.id === "occasion-message")).toMatchObject({ text: expect.stringContaining("all 1") });
+  expect(chat.items).toContainEqual(expect.objectContaining({ kind: "occasion-question", id: "occasion-question" }));
+  expect(chat.items.find(item => item.id === "occasion-question")).toBeDefined();
 });

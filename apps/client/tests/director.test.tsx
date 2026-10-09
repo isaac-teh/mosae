@@ -72,7 +72,7 @@ describe("Director chat", () => {
 
   it.each([[false, "16:9"], [true, "9:16"]] as const)("uses the YouTube suggestion until the user explicitly chooses TikTok style (%s)", async (choosePortrait, expectedAspect) => {
     setup({ readyPlan: true, orientation: { portrait: 1, landscape: 7, square: 0, suggested: "16:9" }, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
-    await renderScreen(); await waitFor(() => expect(hasText("Looks fine")).toBe(true)); await click("Looks fine");
+    await renderScreen(); await waitFor(() => expect(hasText("Looks good")).toBe(true)); await click("Looks good");
     await waitFor(() => expect(host.querySelector('button[aria-label="Yes, YouTube style"]')?.getAttribute("aria-pressed")).toBe("true"));
     if (choosePortrait) await click("TikTok style instead");
     await click("Sounds good");
@@ -375,13 +375,12 @@ describe("Director chat", () => {
     setup({ readyPlan: true, people: [{ ...people[0], role: null }] }); await renderScreen();
     await click("A trip");
     await click("My daughter");
-    for (let i = 0; i < 3 && !host.querySelector('button[aria-label="Looks fine"]'); i++) {
-      if (host.querySelector('button[aria-label="No, that\'s everyone"]')) await click("No, that's everyone");
-      else if (host.querySelector('button[aria-label="Skip"]')) await click("Skip");
-      await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
-    }
-    await waitFor(() => expect(hasText("Looks fine")).toBe(true));
-    await click("Looks fine");
+    await waitFor(() => expect(hasText("Did I miss anyone?")).toBe(true));
+    await click("That's everyone");
+    await click("Looks right");
+    for (let i = 0; i < 3 && !host.querySelector('button[aria-label="Looks good"]'); i++) await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    await waitFor(() => expect(hasText("Looks good")).toBe(true));
+    await click("Looks good");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-2"));
   });
 
@@ -537,7 +536,7 @@ describe("Director chat", () => {
     expect(hasText("I've set aside 1 blurry shot and 120 near-duplicates, keeping the best of each burst. Your originals are untouched.")).toBe(true);
     expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull();
     expect(host.querySelector('img[alt="Blurry photo"]')).not.toBeNull();
-    await click("Blurry 1");
+    await click("+116");
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/review-moments", params: { planId: "proposal-1", tab: "left-out" } });
   });
 
@@ -548,7 +547,7 @@ describe("Director chat", () => {
       setup({ people: [], readyPlan: true }); await renderScreen(); await click("A trip");
       await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-1"));
       expect(host.querySelector('[aria-label="Filtered photos"]')).toBeNull();
-      expect(hasText("Looks fine")).toBe(false);
+      expect(hasText("Looks good")).toBe(false);
       expect(hasText("Any moments that must be in the film")).toBe(false);
       expect(hasText("Choose from all")).toBe(false);
       expect(hasText("Done")).toBe(false);
@@ -558,9 +557,9 @@ describe("Director chat", () => {
     }
   });
 
-  it("does not write plan edits for the Looks fine reply", async () => {
+  it("does not write plan edits for the Looks good reply", async () => {
     await openMoments();
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-1"));
     expect(mocks.repo.applyEdits).not.toHaveBeenCalled();
   });
@@ -568,8 +567,8 @@ describe("Director chat", () => {
   it.each([["Mia", "child", "Mia"], [null, "parent", "Parent"], [null, "other", "This person"]])("selects the sole included person and submits their focus (%s)", async (name, role, label) => {
     setup({ people: [{ ...people[0], name, role }], readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
     await renderScreen();
-    await waitFor(() => expect(hasText("Looks fine")).toBe(true));
-    await click("Looks fine");
+    await waitFor(() => expect(hasText("Looks good")).toBe(true));
+    await click("Looks good");
     await waitFor(() => expect(host.querySelector(`button[aria-label="${label}"]`)?.getAttribute("aria-pressed")).toBe("true"));
     expect(host.querySelectorAll('button[aria-label="Sounds good"]')).toHaveLength(1);
     await click("Sounds good");
@@ -579,8 +578,8 @@ describe("Director chat", () => {
   it("defaults several people to Everyone and preserves an explicit person across length and pace changes", async () => {
     setup({ people: people.map((person, index) => ({ ...person, name: index ? "Ben" : "Mia", role: "other" })), readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
     await renderScreen();
-    await waitFor(() => expect(hasText("Looks fine")).toBe(true));
-    await click("Looks fine");
+    await waitFor(() => expect(hasText("Looks good")).toBe(true));
+    await click("Looks good");
     expect(host.querySelector('button[aria-label="Everyone"]')?.getAttribute("aria-pressed")).toBe("true");
     await click("Ben"); await click("Lively"); await click("1 min");
     expect(host.querySelector('button[aria-label="Ben"]')?.getAttribute("aria-pressed")).toBe("true");
@@ -590,7 +589,7 @@ describe("Director chat", () => {
 
   it("loads direction options, updates the explanation for the chosen length, and directs with the chosen settings", async () => {
     await openMoments();
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-1"));
     expect(hasText(directionOptions.recommendation)).toBe(true);
     expect(hasText("Warm, intimate story")).toBe(false);
@@ -606,7 +605,7 @@ describe("Director chat", () => {
 
   it("restores selected direction controls after generation creation fails and resubmits them", async () => {
     await openMoments();
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
     await click("4 min");
     await click("Lively");
@@ -631,7 +630,7 @@ describe("Director chat", () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 60 }); await renderScreen();
     await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
     expect(host.querySelector('button[aria-label="1 min"]')?.getAttribute("aria-pressed")).toBe("true");
     expect(host.querySelector('button[aria-label="2 min"]')).toBeNull();
@@ -643,7 +642,7 @@ describe("Director chat", () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 65, maximumDurationSecByCadence: { reflective: 65, playful: 45.5 } }); await renderScreen();
     await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
     expect(host.querySelector('button[aria-label="1 min"]')?.getAttribute("aria-pressed")).toBe("true");
     await click("Lively");
@@ -656,7 +655,7 @@ describe("Director chat", () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 12 }); await renderScreen();
     await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
     expect(host.querySelectorAll('button[aria-label="Short"]')).toHaveLength(1);
     expect(host.querySelector('button[aria-label="Short"]')?.getAttribute("aria-pressed")).toBe("true");
@@ -671,7 +670,7 @@ describe("Director chat", () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 24 }); await renderScreen();
     await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
 
     await waitFor(() => expect(hasText("About 20 seconds")).toBe(true));
@@ -683,7 +682,7 @@ describe("Director chat", () => {
     setup({ people: [], readyPlan: true, maximumDurationSec: 15, maximumDurationSecByCadence: { reflective: 15, playful: 10 } }); await renderScreen();
     await click("A trip");
     await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalled());
     expect(hasText("About 15 seconds")).toBe(true);
 
@@ -704,7 +703,7 @@ describe("Director chat", () => {
       .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
       .mockResolvedValueOnce(laterRender).mockResolvedValueOnce(regressedRender).mockResolvedValueOnce(filmFixture);
     await openMoments(undefined, getFilm);
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
     await waitFor(() => expect((host.querySelector('button[aria-label="Sounds good"]') as HTMLButtonElement).disabled).toBe(false));
     vi.useFakeTimers();
@@ -741,7 +740,7 @@ describe("Director chat", () => {
     const failed = Object.assign(new Error("short duration exceeds available material"), { code: "generation_failed" });
     const getFilm = vi.fn().mockRejectedValueOnce(failed).mockResolvedValue(filmFixture);
     await openMoments(undefined, getFilm);
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
     await click("Sounds good");
 
@@ -756,7 +755,7 @@ describe("Director chat", () => {
   it("shows the completed film with three direction notes and opens the editor", async () => {
     planFixture.chapters = Array.from({ length: 5 }, (_, index) => ({ id: `chapter-${index}`, title: `Chapter ${index + 1}`, momentIds: [] }));
     await openMoments();
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
     await click("Sounds good");
     await waitFor(() => expect(hasText("Japan, autumn")).toBe(true));
@@ -770,7 +769,7 @@ describe("Director chat", () => {
 
   it("saves the film and opens the chat saved screen", async () => {
     await openMoments();
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
     await click("Sounds good");
     await waitFor(() => expect(hasText("Save film")).toBe(true));
@@ -781,7 +780,7 @@ describe("Director chat", () => {
 
   it("sends Ask for a change to the editor with the request in the URL", async () => {
     await openMoments();
-    await click("Looks fine");
+    await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
     await click("Sounds good");
     await waitFor(() => expect(host.querySelector('input[aria-label="Ask for a change"]')).toBeTruthy());

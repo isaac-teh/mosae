@@ -109,6 +109,26 @@ describe("character picker routes", () => {
     }
   });
 
+  it("adds manual moment tags for a new person and removes a detected person from a shot", async () => {
+    const projectId = await seedProject();
+    await photo(projectId, "shot-1", [{ ...face("face-old"), characterId: "old" }]);
+    await photo(projectId, "shot-2", []);
+    await adminDb.doc(`projects/${projectId}/cast/current`).set({ people: [{ personId: "old", name: "Mia", role: "child", ageBand: "child", appearances: 1, subjectCount: 1, faceIds: ["face-old"], confidence: "high" }], core: ["old"], focus: ["old"], source: "embeddings" });
+    const { url, close } = await listen(await buildApp());
+    try {
+      const res = await fetch(`${url}/api/projects/${projectId}/cast`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ people: [
+        { personId: "old", name: "Mia", role: "child", removeShots: ["shot-1"] },
+        { personId: "p-manual-grandma", name: "Grandma", role: "other", addShots: ["shot-2"] },
+      ], focus: [] }) });
+      expect(res.status).toBe(200);
+      const body = await res.json() as { cast: { people: Array<{ personId: string; manualShots?: string[]; removedShots?: string[] }> } };
+      expect(body.cast.people.find((person) => person.personId === "p-manual-grandma")).toMatchObject({ manualShots: ["shot-2"], removedShots: [] });
+      expect(body.cast.people.find((person) => person.personId === "old")?.removedShots).toEqual(["shot-1"]);
+      const saved = await adminDb.doc(`projects/${projectId}/shots/shot-1`).get();
+      expect((saved.get("analysis") as PhotoAnalysis).faces?.[0]?.characterId).toBeUndefined();
+    } finally { await close(); }
+  });
+
   it("merges people by moving all face identities into the retained cast person", async () => {
     const projectId = await seedProject();
     await photo(projectId, "shot-1", [{ ...face("first-face"), characterId: "first" }, { ...face("second-face"), characterId: "second" }]);

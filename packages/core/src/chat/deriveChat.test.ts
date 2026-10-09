@@ -27,6 +27,22 @@ const base = (): ChatInput => ({
 const kinds = (items: ChatItem[]) => items.map((item) => item.kind);
 
 describe("deriveChat state table", () => {
+  it("offers missed-person tagging after the existing face questions finish", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
+    expect(state.placeholder).toBe("Type a name");
+    expect(state.items.some((item) => item.kind === "anyone-else")).toBe(true);
+    const tagging = deriveChat({ ...base(), people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, missedPeople: [{ personId: "p-missed-1", name: "Grandma", momentCount: 1 }], missedPersonTagging: { personId: "p-missed-2", name: "Uncle Tan" } });
+    expect(tagging.items.find((item) => item.kind === "mosae" && item.id === "missed-select-p-missed-2")).toMatchObject({ text: "Help me select 1 photo of Uncle Tan." });
+  });
+
+  it("summarizes the named cast and moment counts before continuing", () => {
+    const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false, people: [
+      { personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
+      { personId: "p2", name: null, role: "other", skipped: true, momentCount: 2, sampleShotIds: [], days: [] },
+    ] });
+    expect(state.items.find((item) => item.id === "people-summary-message")).toMatchObject({ text: "Thanks. I've tagged Mia in your moments." });
+    expect(state.items.find((item) => item.kind === "people-summary")).toMatchObject({ people: [{ personId: "p1", name: "Mia", momentCount: 3 }] });
+  });
   it("asks the story question while uploads are pending and preserves an early answer", () => {
     const early = deriveChat({ ...base(), summary: { ...summary, total: 4, photos: 3, clips: 1, processed: { ingested: 1, understood: 0, faces: 0 }, ready: { summary: false, faces: false, plan: false } }, intent: null, earlyOccasionAnswer: "A birthday celebration" });
     expect(early.items.find(item => item.kind === "upload-status")).toMatchObject({ photos: 3, clips: 1, uploadTotal: 4, uploadDone: 1, understood: 0 });

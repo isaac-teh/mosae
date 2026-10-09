@@ -250,9 +250,19 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
           ? ((shotDoc?.get("analysis") as Extract<ShotAnalysis, { kind: "photo" }>).keyMomentScore ?? 0) : 0,
       });
       const analysis = shotById.get(moment.shotId)?.analysis as ShotAnalysis | undefined;
-      if (analysis?.kind !== "photo") continue;
       const people = new Set<string>();
       const subjects = new Set<string>();
+      for (const person of storedCast?.people ?? []) {
+        if ((person.manualShots ?? []).includes(moment.shotId) && !(person.removedShots ?? []).includes(moment.shotId) && !person.excluded) {
+          people.add(person.personId);
+          subjects.add(person.personId);
+        }
+      }
+      if (analysis?.kind !== "photo") {
+        peopleByMoment.set(moment.id, people);
+        subjectsByMoment.set(moment.id, subjects);
+        continue;
+      }
       const faces = analysis.faces ?? [];
       const roles = photoRoles(faces.map((face) => face.bbox));
       const excluded = new Set((storedCast?.people ?? []).filter((person) => person.excluded).map((person) => person.personId));

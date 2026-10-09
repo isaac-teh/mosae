@@ -30,6 +30,9 @@ export type ChatInput = {
   storySummary?: string;
   people: { personId: string; name: string | null; role: string | null; ageBand?: PersonAgeBand; skipped: boolean; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;
   peopleConfirmed: boolean;
+  missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string }[];
+  missedPersonTagging?: { personId: string; name: string } | null;
+  peopleSummaryConfirmed?: boolean;
   dismissedPersonSuggestionIds?: string[];
   plan: StoryPlan | null;
   momentsConfirmed: boolean;
@@ -53,7 +56,9 @@ export type ChatItem =
   | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; questionText?: string }
   | { kind: "person-confirm"; id: string; personId: string; label: string; text: string; momentCount: number; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[] }
   | { kind: "merge-followup"; id: string; text: string; answer: string; photos: string[]; response?: "Yes, same person" | "No, another person" }
-  | { kind: "anyone-else"; id: string }
+  | { kind: "anyone-else"; id: string; text?: string }
+  | { kind: "missed-person"; id: string; personId: string; name: string }
+  | { kind: "people-summary"; id: string; people: { personId: string; name: string; momentCount: number; sampleUri?: string }[] }
   | { kind: "set-aside"; id: string; blurry: number; duplicates: number; blurryPhotos: { shotId: string; uri: string }[]; blurryMore: number; duplicatePhotos: { shotId: string; uri: string }[]; duplicateMore: number }
   | { kind: "moments"; id: string; suggestedShotIds: string[] }
   | { kind: "direction"; id: string; aspect: "9:16" | "16:9"; orientation?: NonNullable<ProjectSummary["orientation"]>; pace: string; lengthSec: number; focus: string; momentCount: number }

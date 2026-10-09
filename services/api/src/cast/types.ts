@@ -36,6 +36,10 @@ export type CastPerson = {
   confidence: "high" | "low";
   similarPersonId?: string;
   similarity?: number;
+  /** User-selected moments without a detected face. */
+  manualShots?: string[];
+  /** Detected shots the user explicitly removed this person from. */
+  removedShots?: string[];
 };
 
 export type Cast = {

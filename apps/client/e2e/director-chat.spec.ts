@@ -99,14 +99,14 @@ test("R1 replay: fresh demo reaches direction once and resumes after reload", as
   await expect(yes).toBeVisible({ timeout: 60_000 });
   await evidence(page, "fresh-demo-ready");
   await yes.click();
-  const everyone = page.getByRole("button", { name: "No, that's everyone" });
+  const everyone = page.getByRole("button", { name: "That's everyone" });
   for (let i = 0; i < 8; i++) {
     if (await everyone.isVisible()) { await everyone.click(); break; }
     const friend = page.getByRole("button", { name: "Friend", exact: true });
     if (await friend.isVisible()) { await friend.click(); await page.waitForTimeout(300); }
     else { await page.waitForTimeout(1000); }
   }
-  const looksFine = page.getByRole("button", { name: "Looks fine", exact: true });
+  const looksFine = page.getByRole("button", { name: "Looks good", exact: true });
   await expect.poll(async () => await looksFine.isVisible() || await page.getByRole("button", { name: "Sounds good", exact: true }).isVisible(), { timeout: 120_000 }).toBe(true);
   if (await looksFine.isVisible()) await looksFine.click();
   const confirm = page.getByRole("button", { name: "Sounds good", exact: true });
@@ -201,9 +201,9 @@ test("R1 synthetic portrait fixture: sole named focus, contextual recommendation
     await route.fulfill({ status: 503, json: { error: "Synthetic recoverable composition failure" } });
   });
   await page.goto(`/director?repository=api&projectId=${ref.id}`);
-  const everyone = page.getByRole("button", { name: "No, that's everyone" });
+  const everyone = page.getByRole("button", { name: "That's everyone" });
   if (await everyone.isVisible()) await everyone.click();
-  const fine = page.getByRole("button", { name: "Looks fine", exact: true });
+  const fine = page.getByRole("button", { name: "Looks good", exact: true });
   await expect.poll(async () => await fine.isVisible() || await page.getByRole("button", { name: "Sounds good", exact: true }).isVisible() || await everyone.isVisible()).toBe(true);
   if (await everyone.isVisible()) await everyone.click();
   if (await fine.isVisible()) await fine.click();

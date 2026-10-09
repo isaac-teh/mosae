@@ -418,10 +418,11 @@ export function createApiStoryRepository(
     interpret: async (id, req) => await deps.request("POST", `/api/projects/${encodeURIComponent(id)}/chat/interpret`, req) as { reply: string; change: { kind: string; [key: string]: unknown } },
     getPeople: async (id): Promise<DirectorPerson[] | null> => {
       const root = `projects/${id}`;
-      const [charactersValue, castValue, shotsValue, assetsValue, eventsValue] = await Promise.all([
+      const [charactersValue, castValue, shotsValue, assetsValue, eventsValue, momentsValue] = await Promise.all([
         deps.request("GET", `/api/projects/${encodeURIComponent(id)}/characters`),
         deps.request("GET", `/api/projects/${encodeURIComponent(id)}/cast`).catch(() => null),
         deps.listenCollection(`${root}/shots`), deps.listenCollection(`${root}/assets`), deps.listenCollection(`${root}/events`),
+        deps.request("GET", `/api/projects/${encodeURIComponent(id)}/moments`).catch(() => null),
       ]);
       const characters = record(charactersValue, "characters response");
       const cast = castValue ? record(castValue, "cast response").cast as RecordData | null | undefined : null;
@@ -433,6 +434,8 @@ export function createApiStoryRepository(
       const names = new Map(castPeople.map((person) => [String(person.personId), person]));
       const assets = new Map(assetsValue.map((value) => { const asset = record(value, "asset"); return [String(asset.id), asset] as const; }));
       const events = new Map(eventsValue.map((value) => { const event = record(value, "event"); return [String(event.id), event] as const; }));
+      const momentsRecord = momentsValue ? record(momentsValue, "moments response") : {};
+      const momentById = new Map((Array.isArray(momentsRecord.moments) ? momentsRecord.moments : []).map((value) => { const moment = record(value, "moment"); return [String(moment.shotId), moment] as const; }));
       const groups = new Map<string, { shots: Set<string>; samples: Map<string, { shotId: string; assetId: string; bbox: [number, number, number, number] }>; days: Set<number> }>();
       const shots = Array.isArray(characters.shots) ? characters.shots as RecordData[] : [];
       for (const shotValue of shots) {
@@ -454,13 +457,24 @@ export function createApiStoryRepository(
           groups.set(face.characterId, group);
         }
       }
+      for (const person of castPeople) {
+        const manualShots = Array.isArray(person.manualShots) ? person.manualShots.filter((shotId): shotId is string => typeof shotId === "string") : [];
+        for (const shotId of manualShots) {
+          const group = groups.get(String(person.personId)) ?? { shots: new Set<string>(), samples: new Map(), days: new Set<number>() };
+          group.shots.add(shotId);
+          const moment = momentById.get(shotId);
+          if (moment && typeof moment.assetId === "string" && !group.samples.has(shotId)) group.samples.set(shotId, { shotId, assetId: moment.assetId, bbox: [0, 0, 1, 1] });
+          if (typeof moment?.dayIndex === "number") group.days.add(moment.dayIndex);
+          groups.set(String(person.personId), group);
+        }
+      }
       const thumbnailUrls = new Map<string, Promise<string>>();
       const thumbnail = (assetId: string) => {
         let pending = thumbnailUrls.get(assetId);
         if (!pending) { pending = deps.getThumbnailUrl(id, assetId); thumbnailUrls.set(assetId, pending); }
         return pending;
       };
-      return (await Promise.all([...groups.entries()].filter(([, group]) => group.shots.size >= 2).map(async ([personId, group]) => {
+      return (await Promise.all([...groups.entries()].filter(([personId, group]) => group.shots.size >= 2 || (names.get(personId)?.manualShots as unknown[] | undefined)?.length).map(async ([personId, group]) => {
         const person = names.get(personId);
         const samples = await Promise.all([...group.samples.values()].slice(0, 4).map(async ({ shotId, assetId, bbox }) => {
           try { return { shotId, uri: await thumbnail(assetId), bbox }; }

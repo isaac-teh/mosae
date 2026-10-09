@@ -1,0 +1,21 @@
+import { ensureSignedIn, getCoreConfig } from "@mosae/core";
+import { confirmCast, getCast } from "./characters";
+
+export type ProjectMoment = { shotId: string; thumbnailUrl: string; kind: "photo" | "video"; durationSec: number | null; dayIndex: number; personIds: string[] };
+
+export async function getProjectMoments(projectId: string): Promise<ProjectMoment[]> {
+  const user = await ensureSignedIn();
+  const response = await fetch(`${getCoreConfig().apiBaseUrl}/api/projects/${encodeURIComponent(projectId)}/moments`, { headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "Unable to load your moments");
+  return body.moments as ProjectMoment[];
+}
+
+export async function savePersonMoments(projectId: string, personId: string, name: string, addShots: string[], removeShots: string[]): Promise<void> {
+  const cast = await getCast(projectId);
+  const current = cast ?? { people: [], core: [], focus: [], source: "none" as const };
+  const existing = current.people.find((person) => person.personId === personId);
+  const people = current.people.map((person) => ({ personId: person.personId, role: person.role, name: person.name, excluded: person.excluded }));
+  if (!existing) people.push({ personId, role: "other", name, excluded: false });
+  await confirmCast(projectId, { people: people.map((person) => person.personId === personId ? { ...person, name, addShots, removeShots } : person), focus: current.focus });
+}

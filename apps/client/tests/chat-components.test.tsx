@@ -78,14 +78,17 @@ describe("director chat components", () => {
 
   it("shows up to four real thumbnails per filtered-photo row and opens the existing review list", async () => {
     const onOpen = vi.fn();
-    await render(<ChatSetAsideCard blurryCount={7} blurryPhotos={Array.from({ length: 4 }, (_, index) => ({ shotId: `b${index}`, uri: `/blur-${index}.jpg` }))} blurryMore={3} duplicateCount={1} duplicatePhotos={[{ shotId: "d1", uri: "/duplicate.jpg" }]} duplicateMore={0} onOpen={onOpen} />);
+    const onPhotoOpen = vi.fn();
+    await render(<ChatSetAsideCard blurryCount={7} blurryPhotos={Array.from({ length: 4 }, (_, index) => ({ shotId: `b${index}`, uri: `/blur-${index}.jpg` }))} blurryMore={3} duplicateCount={1} duplicatePhotos={[{ shotId: "d1", uri: "/duplicate.jpg" }]} duplicateMore={0} onOpen={onOpen} onPhotoOpen={onPhotoOpen} />);
     expect(host.querySelectorAll("img")).toHaveLength(5);
     expect(host.querySelector('img[src="/blur-0.jpg"]')).not.toBeNull();
     expect(host.textContent).toContain("Blurry 7");
     expect(host.textContent).toContain("Near-duplicates 1");
     expect(host.textContent).toContain("+3");
-    await click("Blurry 7");
+    await click("+3");
     expect(onOpen).toHaveBeenCalledOnce();
+    await click("View blurry photo");
+    expect(onPhotoOpen).toHaveBeenCalledWith({ shotId: "b0", uri: "/blur-0.jpg" });
   });
 
   it("renders square people faces and toggles people in the picker", async () => {

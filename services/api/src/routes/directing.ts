@@ -446,6 +446,49 @@ export function directingRouter(deps: {
     }
   });
 
+  router.get("/:projectId/moments", async (req, res) => {
+    const { projectId } = req.params;
+    try {
+      if (!(await ownedProject(res.locals.userId, projectId))) { res.status(404).json({ error: "not_found" }); return; }
+      const project = deps.db.collection("projects").doc(projectId);
+      const [shotDocs, assetDocs, castSnap] = await Promise.all([
+        project.collection("shots").get(), project.collection("assets").get(),
+        project.collection("cast").doc("current").get(),
+      ]);
+      const assets = new Map(assetDocs.docs.map((doc) => [doc.id, doc.data()]));
+      const cast = castSnap.exists ? castSnap.data() as Cast : null;
+      const captures = shotDocs.docs.map((doc) => {
+        const assetId = doc.get("assetId") as string;
+        const asset = assets.get(assetId);
+        const day = typeof asset?.media?.localTime === "string" ? asset.media.localTime.slice(0, 10) : "undated";
+        return { doc, assetId, asset, day };
+      }).filter(({ asset, doc, assetId }) => {
+        const path = asset?.derivatives?.thumbPath;
+        const generation = typeof path === "string" ? path.split("/")[4] : undefined;
+        return asset && asset.generation === doc.get("assetGeneration") && Boolean(generation) && path === buildDerivativePath({ userId: res.locals.userId, projectId, assetId, generation: generation! }, "thumb.jpg");
+      });
+      const dayIndexes = new Map([...new Set(captures.map(({ day }) => day))].sort().map((day, index) => [day, index + 1]));
+      captures.sort((a, b) => (dayIndexes.get(a.day) ?? 1) - (dayIndexes.get(b.day) ?? 1) || Number(a.doc.get("index") ?? 0) - Number(b.doc.get("index") ?? 0));
+      const urlStore = deps.thumbnails ?? firebaseThumbnailUrlStore(getStorage(getAdminApp()).bucket());
+      const moments = await Promise.all(captures.map(async ({ doc, assetId, asset, day }) => {
+        const path = asset!.derivatives!.thumbPath as string;
+        const faceIds = ((doc.get("analysis") as PhotoAnalysis | undefined)?.faces ?? []).map((face) => face.characterId).filter((id): id is string => Boolean(id));
+        const people = new Set(faceIds);
+        for (const person of cast?.people ?? []) {
+          if ((person.removedShots ?? []).includes(doc.id)) people.delete(person.personId);
+          if ((person.manualShots ?? []).includes(doc.id) && !(person.removedShots ?? []).includes(doc.id)) people.add(person.personId);
+        }
+        return {
+          shotId: doc.id, thumbnailUrl: await urlStore.signedReadUrl(path, now() + 5 * 60 * 1000),
+          kind: doc.get("mediaType") === "video" ? "video" as const : "photo" as const,
+          durationSec: typeof asset!.media?.durationSec === "number" ? asset!.media.durationSec : null,
+          dayIndex: dayIndexes.get(day) ?? 1, personIds: [...people], assetId,
+        };
+      }));
+      res.json({ moments });
+    } catch (error) { handleError(res, error); }
+  });
+
   router.put("/:projectId/cast", async (req, res) => {
     const { projectId } = req.params;
     try {
@@ -456,6 +499,7 @@ export function directingRouter(deps: {
       const personSchema = z.strictObject({
         personId: z.string().min(1), name: z.string().optional(),
         role: z.enum(["parent", "child", "other"]), excluded: z.boolean().optional(),
+        addShots: z.array(z.string().min(1)).optional(), removeShots: z.array(z.string().min(1)).optional(),
       });
       const bodySchema = z.strictObject({
         people: z.array(personSchema), focus: z.array(z.string().min(1)),
@@ -468,8 +512,7 @@ export function directingRouter(deps: {
       if (!parsed.success) { res.status(400).json({ error: "invalid_cast" }); return; }
       const currentRef = deps.db.doc(`projects/${projectId}/cast/current`);
       const currentSnap = await currentRef.get();
-      if (!currentSnap.exists) { res.status(404).json({ error: "not_found" }); return; }
-      const current = currentSnap.data() as Cast;
+      const current = (currentSnap.exists ? currentSnap.data() : { people: [], core: [], focus: [], source: "none" }) as Cast;
       const validId = (id: string) => current.people.some((person) => person.personId === id) || id.startsWith("p-");
       const { people, moves = [], merges = [] } = parsed.data;
       let { focus } = parsed.data;
@@ -483,16 +526,28 @@ export function directingRouter(deps: {
       }
 
       const shots = await getProjectFaces(deps.db, projectId);
+      const allShotDocs = await deps.db.collection("projects").doc(projectId).collection("shots").get();
+      const validShotIds = new Set(allShotDocs.docs.map((doc) => doc.id));
+      if (people.some((person) => [...(person.addShots ?? []), ...(person.removeShots ?? [])].some((shotId) => !validShotIds.has(shotId)))) {
+        res.status(400).json({ error: "invalid_cast" }); return;
+      }
       const faceLookup = new Map<string, { shotIndex: number; faceIndex: number }>();
       shots.forEach((shot, shotIndex) => (shot.analysis?.faces ?? []).forEach((face, faceIndex) => faceLookup.set(face.faceId, { shotIndex, faceIndex })));
       if (moves.some((move) => !faceLookup.has(move.faceId))) { res.status(400).json({ error: "invalid_cast" }); return; }
       const moved = new Map(moves.map((move) => [move.faceId, move.personId]));
       const personInputs = new Map(people.map((person) => [person.personId, person]));
+      const removedShotOwners = new Map<string, Set<string>>();
+      for (const person of people) for (const shotId of person.removeShots ?? []) {
+        const owners = removedShotOwners.get(shotId) ?? new Set<string>();
+        owners.add(person.personId);
+        removedShotOwners.set(shotId, owners);
+      }
       const peopleById = new Map<string, CastPerson>();
       const subjectsByShot = shots.map((shot) => photoRoles((shot.analysis?.faces ?? []).map((face) => face.bbox)));
       const facesByShot: NonNullable<PhotoAnalysis["faces"]>[] = shots.map((shot, shotIndex) => (shot.analysis?.faces ?? []).map((face, faceIndex) => {
         const originalId = moved.get(face.faceId) ?? face.characterId;
-        const personId = originalId ? mergeTargets.get(originalId) ?? originalId : undefined;
+        const mappedPersonId = originalId ? mergeTargets.get(originalId) ?? originalId : undefined;
+        const personId = mappedPersonId && !removedShotOwners.get(shot.shotId)?.has(mappedPersonId) ? mappedPersonId : undefined;
         const { characterId: _characterId, name: _name, role: _role, ...faceFields } = face;
         const input = personId ? personInputs.get(personId) : undefined;
         if (personId && input) {
@@ -516,10 +571,22 @@ export function directingRouter(deps: {
         if (!analysis) return;
         batch.update(deps.db.doc(`projects/${projectId}/shots/${shot.shotId}`), { analysis: { ...analysis, faces: facesByShot[index] } });
       });
-      const nextPeople = people.map((person) => peopleById.get(person.personId) ?? {
-        ...current.people.find((old) => old.personId === person.personId), ...person,
-        excluded: person.excluded ?? false, appearances: 0, subjectCount: 0, faceIds: [],
-      } as CastPerson);
+      const nextPeople = people.map((person) => {
+        const base = current.people.find((old) => old.personId === person.personId);
+        const priorManual = new Set(base?.manualShots ?? []);
+        const removed = new Set(base?.removedShots ?? []);
+        for (const shotId of person.removeShots ?? []) { priorManual.delete(shotId); removed.add(shotId); }
+        for (const shotId of person.addShots ?? []) { priorManual.add(shotId); removed.delete(shotId); }
+        const manualShots = [...priorManual];
+        return {
+          ...(peopleById.get(person.personId) ?? base), ...person,
+          ageBand: peopleById.get(person.personId)?.ageBand ?? base?.ageBand ?? "adult",
+          confidence: peopleById.get(person.personId)?.confidence ?? base?.confidence ?? "low",
+          manualShots, removedShots: [...removed],
+          excluded: person.excluded ?? false, appearances: (peopleById.get(person.personId)?.appearances ?? 0) + manualShots.length,
+          subjectCount: (peopleById.get(person.personId)?.subjectCount ?? 0) + manualShots.length, faceIds: peopleById.get(person.personId)?.faceIds ?? [],
+        } as CastPerson;
+      });
       const core = nextPeople.map((person) => person.personId);
       focus = focus.map((id) => mergeTargets.get(id) ?? id).filter((id, index, all) => all.indexOf(id) === index);
       if (focus.length === 0) focus = chooseFocus(nextPeople, core);
@@ -546,6 +613,7 @@ export function directingRouter(deps: {
           blurry: qualityByAsset.get(shot.assetId)?.quality?.blurry ?? false,
           dupOf: qualityByAsset.get(shot.assetId)?.dupOf ?? null,
           faces: (facesByShot[index] ?? []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null, stranger: face.stranger ?? false })),
+          manualPersonIds: cast.people.filter((person) => (person.manualShots ?? []).includes(shot.shotId) && !(person.removedShots ?? []).includes(shot.shotId)).map((person) => person.personId),
         })),
         cast,
         source.constraints.hiddenShotIds ?? [],
