@@ -85,6 +85,13 @@ describe("deriveChat state table", () => {
     expect(looking.items.find(item => item.id === "story-acknowledgement")).toMatchObject({ text: "A trip — lovely! Now I'm finding the people in them." });
   });
 
+  it("keeps the occasion question wording the user saw before answering", () => {
+    const historical = deriveChat({ ...base(), intent: null, earlyOccasionQuestionUploadComplete: false, localUpload: { total: 4, settled: 4, failed: 0, photos: 4, clips: 0 } });
+    expect(historical.items.find(item => item.id === "occasion-question")).toMatchObject({ uploadComplete: false });
+    const afterAnswer = deriveChat({ ...base(), earlyOccasionQuestionUploadComplete: false, localUpload: { total: 4, settled: 4, failed: 0, photos: 4, clips: 0 } });
+    expect(afterAnswer.items.find(item => item.id === "occasion-message")).toMatchObject({ text: "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?" });
+  });
+
   it("gates occasion on local transfer, server story readiness and acknowledged failures", () => {
     const input = { ...base(), intent: null };
     for (const pending of [

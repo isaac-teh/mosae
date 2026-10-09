@@ -19,7 +19,7 @@ vi.mock("expo-router", async () => {
 });
 vi.mock("@/components/icons", () => ({ SettingsIcon: () => React.createElement("svg", { "data-settings-icon": "true" }), ChevronDownIcon: () => null, ArrowRightIcon: () => null, PlayIcon: () => null }));
 vi.mock("react-native", () => {
-  const element = (tag: string) => ({ children, onPress, ...props }: any) => React.createElement(tag, { ...props, onClick: onPress }, children);
+  const element = (tag: string) => ({ children, onPress, style, ...props }: any) => React.createElement(tag, { ...props, style: typeof style === "function" ? style({ pressed: false }) : style, onClick: onPress }, children);
   return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), Image: (props: any) => React.createElement("img", { src: props.source?.uri, alt: props.accessibilityLabel }) };
 });
 

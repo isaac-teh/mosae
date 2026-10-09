@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+html, body { touch-action: manipulation; }
+
 :root {
   --color-deep-tide: 20 40 58;
   --color-tide-tile: 111 139 166;

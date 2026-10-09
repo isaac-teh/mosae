@@ -11,7 +11,7 @@ vi.mock("react-native", () => {
     React.useImperativeHandle(ref, () => ({ scrollToEnd: scrollMock.scrollToEnd }), []);
     return React.createElement("div", { ...props, "aria-label": accessibilityLabel }, children);
   });
-  const node = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, editable, testID, ...props }: any) => React.createElement(tag, { ...props, "data-testid": testID, "aria-label": props["aria-label"] ?? accessibilityLabel, disabled: props.disabled ?? (editable === false ? true : undefined), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
+  const node = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, editable, testID, style, ...props }: any) => React.createElement(tag, { ...props, style: typeof style === "function" ? style({ pressed: false }) : style, "data-testid": testID, "aria-label": props["aria-label"] ?? accessibilityLabel, disabled: props.disabled ?? (editable === false ? true : undefined), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
   return { View: node("div"), ScrollView, Text: node("span"), Pressable: node("button"), TextInput: node("input"), Image: ({ source, accessibilityLabel, ...props }: any) => React.createElement("img", { ...props, src: source?.uri, alt: accessibilityLabel }) };
 });
 
@@ -324,6 +324,7 @@ describe("Director chat", () => {
     await renderScreen();
     await click("A trip");
     await waitFor(() => expect(hasText("I couldn't shape this one. Try again")).toBe(true));
+    expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
     const summaryReadsAtFailure = mocks.repo.getSummary.mock.calls.length;
     await act(async () => new Promise((resolve) => setTimeout(resolve, 3_100)));
     expect(mocks.repo.getSummary).toHaveBeenCalledTimes(summaryReadsAtFailure);
@@ -416,9 +417,38 @@ describe("Director chat", () => {
     mocks.confirmCast.mockImplementation(() => new Promise((resolve) => { resolveCast = resolve; }));
     await renderScreen(); await click("A trip");
     await click("My daughter");
-    await click("Friend");
     expect(mocks.confirmCast).toHaveBeenCalledTimes(1);
-    resolveCast({ cast: { people: [] }, proposalId: "proposal-2" });
+    expect(hasText("Saving your answer")).toBe(true);
+    expect(host.querySelector('button[aria-label="Friend"]')).toBeNull();
+    await act(async () => resolveCast({ cast: { people: [] }, proposalId: "proposal-2" }));
+  });
+
+  it("shows a person answer immediately and ignores a same-frame double tap", async () => {
+    setup({ readyPlan: true });
+    let resolveCast!: (value: any) => void;
+    mocks.confirmCast.mockImplementation(() => new Promise((resolve) => { resolveCast = resolve; }));
+    await renderScreen(); await click("A trip");
+    await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
+    const chip = host.querySelector('button[aria-label="My daughter"]')!;
+    await act(async () => {
+      chip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      chip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(mocks.confirmCast).toHaveBeenCalledTimes(1);
+    expect([...host.querySelectorAll('[data-from="you"]')].some((bubble) => bubble.textContent?.includes("My daughter"))).toBe(true);
+    expect(hasText("Saving your answer")).toBe(true);
+    expect(host.querySelector('button[aria-label="My daughter"]')).toBeFalsy();
+    await act(async () => resolveCast({ cast: { people: [] }, proposalId: "proposal-2" }));
+  });
+
+  it("restores person choices when saving the answer fails", async () => {
+    setup({ readyPlan: true });
+    mocks.confirmCast.mockRejectedValueOnce(new Error("offline"));
+    await renderScreen(); await click("A trip");
+    await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
+    await click("My daughter");
+    await waitFor(() => expect(hasText("I couldn't do that. Try again?")).toBe(true));
+    expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
   });
 
   it("shows face previews and only the inline Skip once the person question appears", async () => {

@@ -3,8 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-native", () => {
-  const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityRole, accessibilityLabel, accessibilityState, accessibilityValue, accessibilityLiveRegion, accessibilityHint, editable, resizeMode, textAlignVertical, ...props }: any) =>
-    React.createElement(tag, { ...props, role: props.role ?? accessibilityRole, "aria-label": props["aria-label"] ?? accessibilityLabel, "aria-disabled": accessibilityState?.disabled, "aria-pressed": accessibilityState?.selected, "aria-valuemin": accessibilityValue?.min, "aria-valuemax": accessibilityValue?.max, disabled: props.disabled ?? (editable === false ? true : undefined), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
+  const element = (tag: string) => ({ children, onPress, onChangeText, accessibilityRole, accessibilityLabel, accessibilityState, accessibilityValue, accessibilityLiveRegion, accessibilityHint, editable, resizeMode, textAlignVertical, style, ...props }: any) =>
+    React.createElement(tag, { ...props, style: typeof style === "function" ? style({ pressed: false }) : style, role: props.role ?? accessibilityRole, "aria-label": props["aria-label"] ?? accessibilityLabel, "aria-disabled": accessibilityState?.disabled, "aria-pressed": accessibilityState?.selected, "aria-valuemin": accessibilityValue?.min, "aria-valuemax": accessibilityValue?.max, disabled: props.disabled ?? (editable === false ? true : undefined), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
   return { View: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("input"), Image: ({ source, accessibilityLabel, resizeMode, onLoad, ...props }: any) => React.createElement("img", { ...props, onLoad: onLoad ? () => onLoad({ nativeEvent: { source: { width: 400, height: 200 } } }) : undefined, src: source?.uri, alt: accessibilityLabel }) };
 });
 
@@ -74,6 +74,22 @@ describe("director chat components", () => {
     expect((host.firstElementChild as HTMLElement).className).not.toContain("bg-surface-raised");
     await click("Shorter");
     expect(onReply).toHaveBeenCalledWith("shorter");
+  });
+
+  it("shows a proposal answer and locks its replies until the action resolves", async () => {
+    let finish!: () => void;
+    const onReply = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    await render(<ChatProposal replies={[{ id: "yes", label: "Looks right" }, { id: "no", label: "Go back" }]} onReply={onReply} />);
+    const choice = host.querySelector('button[aria-label="Looks right"]')!;
+    await act(async () => {
+      choice.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      choice.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onReply).toHaveBeenCalledTimes(1);
+    expect([...host.querySelectorAll('[data-from="you"]')].some((bubble) => bubble.textContent?.includes("Looks right"))).toBe(true);
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull();
+    expect(host.textContent).toContain("One moment…");
+    await act(async () => finish());
   });
 
   it("shows up to four real thumbnails per filtered-photo row and opens the existing review list", async () => {

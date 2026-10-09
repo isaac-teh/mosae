@@ -23,6 +23,8 @@ export type ChatInput = {
   localUpload?: { total: number; settled: number; failed: number; photos: number; clips: number };
   earlyOccasionAnswer?: string;
   earlyOccasionStoryText?: string;
+  earlyOccasionQuestionUploadComplete?: boolean;
+  pendingResponse?: "occasion" | "person";
   uploadFailuresAcknowledged?: boolean;
   summary: ProjectSummary | null;
   intent: { text: string } | null;
