@@ -9,6 +9,11 @@ function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string 
   return person.name ?? "";
 }
 
+function summaryPersonLabel(name: string): string {
+  const role = /^My\s+(son|daughter|wife|husband|mum|mom|mother|dad|father|partner)$/i.exec(name.trim())?.[1];
+  return role ? `${role[0]!.toLocaleUpperCase()}${role.slice(1).toLocaleLowerCase()}` : name;
+}
+
 function storyAcknowledgement(text: string, storySummary?: string, mentionedPeople?: string[]): string {
   let cleaned = (storySummary?.trim() || text.trim()).replace(/\s+/g, " ").replace(/children\s+day/gi, "Children's Day");
   const relation = mentionedPerson(text, [], mentionedPeople);
@@ -184,8 +189,28 @@ export function deriveChat(input: ChatInput): ChatState {
         add({ kind: "person-confirm", id: `person-confirm-${unanswered.personId}`, personId: unanswered.personId, label: mention.label, text: `Is this ${mention.phrase}?`, momentCount: unanswered.momentCount, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 2) });
       } else add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days, questionText: `Who's this? They're in ${unanswered.momentCount} of your moments.` });
     } else {
-      add({ kind: "anyone-else", id: "anyone-else" });
+      placeholder = "Type a name";
+      for (const person of input.missedPeople ?? []) {
+        add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
+        add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name });
+      }
+      if (input.missedPersonTagging) {
+        add({ kind: "mosae", id: `missed-select-${input.missedPersonTagging.personId}`, text: `Help me select 1 photo of ${input.missedPersonTagging.name}.` });
+        add({ kind: "missed-person", id: `missed-tag-${input.missedPersonTagging.personId}`, ...input.missedPersonTagging });
+      } else {
+        add({ kind: "anyone-else", id: "anyone-else", text: (input.missedPeople ?? []).length ? "Did I miss anyone else? Type the names of who were missed in the box below." : "Did I miss anyone? Type the names of who were missed in the box below." });
+      }
     }
+    return { items, step, confirmed, placeholder };
+  }
+
+  if (input.peopleConfirmed && input.peopleSummaryConfirmed === false) {
+    step = "people";
+    const named = (input.people ?? []).filter((person) => !person.skipped && person.name).map((person) => ({ personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri }));
+    const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    if (named.length === 1) add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged ${named[0]!.name} in your moments.` });
+    else add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged all ${words[named.length] ?? named.length} in your moments.` });
+    add({ kind: "people-summary", id: "people-summary", people: named });
     return { items, step, confirmed, placeholder };
   }
 
@@ -227,7 +252,7 @@ export function deriveChat(input: ChatInput): ChatState {
 
   if (hasPhotosToReview) {
     add({ kind: "mosae", id: "set-aside-message", text: `I've set aside ${setAside.blurry} blurry ${setAside.blurry === 1 ? "shot" : "shots"} and ${setAside.duplicates} near-duplicate${setAside.duplicates === 1 ? "" : "s"}, keeping the best of each burst. Your originals are untouched.` });
-    add({ kind: "you", id: "moments-answer", text: "Looks fine" });
+    add({ kind: "you", id: "moments-answer", text: "Looks good" });
   }
   confirmed = 3;
   if (!input.direction) {

@@ -2,7 +2,7 @@ import { photoRoles, type BBox } from "./prominence.js";
 import type { Cast } from "./types.js";
 
 /** `stranger` marks a face known not to be family; an unrecognised face is just unknown. */
-export type LeaveOutShot = { shotId: string; blurry?: boolean; dupOf?: string | null; faces: { bbox: BBox; personId: string | null; stranger?: boolean }[] };
+export type LeaveOutShot = { shotId: string; blurry?: boolean; dupOf?: string | null; faces: { bbox: BBox; personId: string | null; stranger?: boolean }[]; manualPersonIds?: string[] };
 export type LeftOut = { shotId: string; reason: string };
 
 /** Returns hidden, low-quality, duplicate, and cast-excluded photos for review. */
@@ -15,6 +15,10 @@ export function leaveOutShots(shots: LeaveOutShot[], cast: Cast, hiddenShotIds: 
     if (hidden.has(shot.shotId)) { out.push({ shotId: shot.shotId, reason: "Hidden by you." }); continue; }
     if (shot.blurry) { out.push({ shotId: shot.shotId, reason: "Blurry photo" }); continue; }
     if (shot.dupOf) { out.push({ shotId: shot.shotId, reason: "Similar photo — best one kept" }); continue; }
+    const manualPeople = new Set(shot.manualPersonIds ?? []);
+    const excludedManual = [...manualPeople].find((personId) => excluded.has(personId));
+    if (excludedManual) { out.push({ shotId: shot.shotId, reason: `Left out: ${excluded.get(excludedManual)} is the main subject.` }); continue; }
+    const manualCastSubject = [...manualPeople].some((personId) => inCast.has(personId) && !excluded.has(personId));
     if (shot.faces.length === 0) continue;
     const roles = photoRoles(shot.faces.map((face) => face.bbox));
     const subjects = shot.faces.filter((_, index) => roles[index] === "subject");
@@ -30,7 +34,7 @@ export function leaveOutShots(shots: LeaveOutShot[], cast: Cast, hiddenShotIds: 
     if (!strangerSubject) continue;
     // A stranger as prominent as the family spoils the photo even with the
     // family in it; only a small background stranger (a photobomber) is kept.
-    out.push({ shotId: shot.shotId, reason: castSubject
+    out.push({ shotId: shot.shotId, reason: castSubject || manualCastSubject
       ? "Left out: someone outside the family is as prominent as the family."
       : "Left out: someone outside the family is the main subject." });
   }

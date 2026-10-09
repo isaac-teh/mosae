@@ -147,6 +147,9 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
         // every face as a stranger and left out every family photo.
         const ensured = await ensureCast(db, task.projectId, { storageBucket: config.storageBucket });
         const { shots, assets } = await loadCatalog(db, task.projectId);
+        for (const shot of shots) {
+          shot.manualPersonIds = ensured.cast.people.filter((person) => (person.manualShots ?? []).includes(shot.id) && !(person.removedShots ?? []).includes(shot.id)).map((person) => person.personId);
+        }
         const parent = acquired.parentProposalId
           ? await project.collection("storyProposals").doc(acquired.parentProposalId).get()
           : null;
@@ -160,6 +163,7 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
             blurry: assets.get(shot.assetId)?.quality?.blurry ?? false,
             dupOf: shot.dupOf,
             faces: (shot.analysis?.kind === "photo" ? (shot.analysis as PhotoAnalysis).faces ?? [] : []).map((face) => ({ bbox: face.bbox, personId: face.characterId ?? null, stranger: face.stranger ?? false })),
+            manualPersonIds: shot.manualPersonIds,
           })),
           ensured.cast,
           (constraints as typeof constraints & { hiddenShotIds?: string[] }).hiddenShotIds ?? [],

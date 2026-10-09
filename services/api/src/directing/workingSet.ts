@@ -20,6 +20,8 @@ export type WorkingShot = {
   analysis: ShotAnalysis | null;
   /** A moment id is normally the shot id, but assembly may provide an explicit mapping. */
   momentId?: string;
+  /** People explicitly tagged by the user on this moment. */
+  manualPersonIds?: string[];
 };
 
 export type WorkingSetOptions = {
@@ -99,9 +101,8 @@ export function resolveFocusShots(shots: WorkingShot[], focusCharacterIds: strin
   const wanted = new Set(focusCharacterIds);
   const shotIds = new Set<string>();
   for (const shot of shots) {
-    const faces = shot.analysis?.kind === "photo" ? shot.analysis.faces : undefined;
-    if (!faces) continue;
-    if (faces.some((face) => face.characterId && wanted.has(face.characterId))) {
+    const faces = shot.analysis?.kind === "photo" ? shot.analysis.faces ?? [] : [];
+    if (faces.some((face) => face.characterId && wanted.has(face.characterId)) || (shot.manualPersonIds ?? []).some((id) => wanted.has(id))) {
       shotIds.add(shot.id);
     }
   }

@@ -134,6 +134,10 @@ describe("resolveFocusShots", () => {
 });
 
 describe("buildWorkingSet — focus join", () => {
+  it("includes a manually tagged moment in the selected person's focus set", () => {
+    const shots = [shot("best", "e1", photoAnalysis(5)), shot("tagged", "e1", photoAnalysis(1), { manualPersonIds: ["grandma"] })];
+    expect(buildWorkingSet(shots, { cap: 1, focusCharacterIds: ["grandma"] }).shots.map((item) => item.id)).toEqual(["best", "tagged"]);
+  });
   it("folds a focus character's shot into mustInclude so it outranks ranking", () => {
     const shots = [
       shot("best", "e1", photoAnalysis(5)),

@@ -95,6 +95,8 @@ export type CastPerson = {
   appearances: number;
   subjectCount: number;
   faceIds: string[];
+  manualShots?: string[];
+  removedShots?: string[];
 };
 
 export type Cast = { people: CastPerson[]; core: string[]; focus: string[]; confirmed?: boolean };

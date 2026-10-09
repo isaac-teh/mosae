@@ -421,8 +421,48 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const revisedPlan = result.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
         if (result.proposalId) proposalId.current = result.proposalId;
-        setInput((current) => ({ ...current, people, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: true })); setError(null);
+        setInput((current) => ({ ...current, people, peopleSummaryConfirmed: false, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: true })); setError(null);
       } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't save this. Please try again."); }
+      finally { if (isCurrentProject()) personSaving.current = false; }
+    },
+    async completeMissedPerson(personId: string, name: string, momentCount: number, sampleUri?: string) {
+      setInput((current) => {
+        const people = current.people ?? [];
+        const sampleFaces = sampleUri ? [{ shotId: "manual-sample", uri: sampleUri, bbox: [0, 0, 1, 1] as [number, number, number, number] }] : undefined;
+        const updatedPeople = people.some((person) => person.personId === personId) ? people.map((person) => person.personId === personId ? { ...person, momentCount, ...(sampleFaces ? { sampleFaces } : {}) } : person) : [...people, { personId, name, role: "other", skipped: false, momentCount, sampleShotIds: [], days: [], ...(sampleFaces ? { sampleFaces } : {}) }];
+        const missedPeople = (current.missedPeople ?? []).map((person) => person.personId === personId ? { ...person, momentCount } : person);
+        const next = missedPeople.find((person) => person.momentCount === 0 && person.personId !== personId);
+        return { ...current, people: updatedPeople, missedPeople, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null };
+      });
+    },
+    updatePersonTagCount(personId: string, momentCount: number) {
+      setInput((current) => ({ ...current, people: (current.people ?? []).map((person) => person.personId === personId ? { ...person, momentCount } : person) }));
+    },
+    beginMissedPersonTagging(personId: string, name: string) { setInput((current) => ({ ...current, missedPersonTagging: { personId, name } })); },
+    async confirmPeopleSummary() {
+      if (personSaving.current) return;
+      personSaving.current = true;
+      try {
+        const people = input.people ?? [];
+        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: people.filter((person) => !person.personId.startsWith("p-missed-") || (input.missedPeople ?? []).some((missed) => missed.personId === person.personId)).map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+        if (!isCurrentProject()) return;
+        if (result?.proposalId) proposalId.current = result.proposalId;
+        setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}) }));
+      } catch (cause) { setError(reportFailure(cause)); }
+      finally { if (isCurrentProject()) personSaving.current = false; }
+    },
+    async confirmPeople() {
+      if (personSaving.current) return;
+      personSaving.current = true;
+      try {
+        const people = input.people ?? [];
+        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: people.map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+        if (!isCurrentProject()) return;
+        if (result?.proposalId) proposalId.current = result.proposalId;
+        setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: false, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}) }));
+      } catch (cause) { setError(reportFailure(cause)); }
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
     async confirmMoments() {
@@ -526,6 +566,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     },
     async send(text: string) {
       if (!text.trim()) return;
+      if (state.step === "people" && state.items.some((item) => item.kind === "anyone-else")) {
+        const names = text.split(/\s*(?:,|\band\b)\s*/i).map((name) => name.trim()).filter(Boolean);
+        const added = names.map((name, index) => ({ personId: `p-missed-${Date.now()}-${index}`, name, momentCount: 0 }));
+        if (added.length) setInput((current) => ({ ...current, missedPeople: [...(current.missedPeople ?? []), ...added], missedPersonTagging: added[0]! }));
+        return;
+      }
       if (!input.intent && (!canConfirmStory({ ...input, ...confirmationState }) || input.earlyOccasionAnswer)) {
         setInput((current) => current.earlyOccasionAnswer
           ? ({ ...current, notes: [...current.notes, text.trim()] })

@@ -33,7 +33,7 @@ function titleFromSummary(summary: { country: string | null; season: string | nu
 }
 
 export default function DirectorScreen() {
-  const params = useLocalSearchParams<{ projectId?: string }>();
+  const params = useLocalSearchParams<{ projectId?: string; completedPersonId?: string; completedPersonName?: string; completedMomentCount?: string; completedIsMissed?: string; completedSampleUri?: string }>();
   const projectId = params.projectId ?? "";
   const story = useStoryFlow();
   const router = useRouter();
@@ -62,6 +62,12 @@ export default function DirectorScreen() {
   const localMediaPending = Boolean(preparationProgress) || Boolean(uploadProgress && (uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles || uploadProgress.finishedFiles === 0)) || Boolean((uploadFailure || uploadProgress?.failedFiles) && !uploadFailuresAcknowledged);
   const localUpload = uploadProgress || preparationProgress ? { total: uploadProgress?.totalFiles ?? preparationProgress!.totalFiles, settled: uploadProgress?.finishedFiles ?? 0, failed: uploadProgress?.failedFiles ?? 0, photos: pendingPhotos.length, clips: (ownsPendingMedia ? pendingMedia : []).length - pendingPhotos.length } : undefined;
   const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged, ...(localUpload ? { localUpload } : {}) });
+  useEffect(() => {
+    if (!params.completedPersonId || !params.completedPersonName) return;
+    if (params.completedIsMissed === "true") void actions.completeMissedPerson(params.completedPersonId, params.completedPersonName, Number(params.completedMomentCount ?? 0), params.completedSampleUri);
+    else actions.updatePersonTagCount(params.completedPersonId, Number(params.completedMomentCount ?? 0));
+    router.setParams({ completedPersonId: undefined, completedPersonName: undefined, completedMomentCount: undefined, completedIsMissed: undefined, completedSampleUri: undefined });
+  }, [params.completedPersonId, params.completedPersonName, params.completedMomentCount, params.completedIsMissed, params.completedSampleUri]);
   useEffect(() => { setUploadFailuresAcknowledged(false); }, [uploadProgress?.failedFiles, preparationProgress?.totalFiles]);
   useEffect(() => { previewUrls.current!.retain(pendingPhotos.map(({ file }) => file)); });
   useEffect(() => {
@@ -150,8 +156,9 @@ export default function DirectorScreen() {
           const message = `I've set aside ${blurryLabel} and ${duplicateLabel}, keeping the best of each burst. Your originals are untouched.`;
           return <View key={item.id} className="gap-3">
             <ChatMessage from="mosae" text={message} />
-            <ChatSetAsideCard blurryCount={item.blurry} blurryPhotos={item.blurryPhotos} blurryMore={item.blurryMore} duplicateCount={item.duplicates} duplicatePhotos={item.duplicatePhotos} duplicateMore={item.duplicateMore} onOpen={() => scrollAfterAction(actions.seeSetAside)} />
-            <ChatProposal replies={[{ id: "confirm", label: "Looks fine" }]} onReply={() => scrollAfterAction(actions.confirmMoments)} />
+            <Text className="font-sans text-caption text-ink-muted">Tap on the photos to view.</Text>
+            <ChatSetAsideCard blurryCount={item.blurry} blurryPhotos={item.blurryPhotos} blurryMore={item.blurryMore} duplicateCount={item.duplicates} duplicatePhotos={item.duplicatePhotos} duplicateMore={item.duplicateMore} onOpen={() => scrollAfterAction(actions.seeSetAside)} onPhotoOpen={(photo) => scrollAfterAction(() => router.push({ pathname: "/photo-viewer", params: { uri: photo.uri } } as any))} />
+            <ChatProposal replies={[{ id: "confirm", label: "Looks good" }]} onReply={() => scrollAfterAction(actions.confirmMoments)} />
           </View>;
         }
         if (item.kind === "direction") {
@@ -200,7 +207,16 @@ export default function DirectorScreen() {
             ? <ChatMessage from="you" text={item.response === "No, another person" ? `No, another ${item.text.replace(/^Same | as before\?$/g, "")}` : item.response} />
             : <ChatProposal question={item.answer} replies={[{ id: "same", label: "Yes, same person" }, { id: "different", label: `No, another ${item.text.replace(/^Same | as before\?$/g, "")}` }]} onReply={(choice) => scrollAfterAction(() => actions.resolvePersonMerge(item.id, choice === "same"))} />}
         </View>;
-        if (item.kind === "anyone-else") return <View key={item.id} className="gap-3"><ChatProposal question="Anyone else?" replies={[{ id: "no", label: "No, that's everyone" }]} onReply={() => scrollAfterAction(actions.skipPeople)} /></View>;
+        if (item.kind === "anyone-else") return <View key={item.id} className="gap-3"><ChatMessage from="mosae" text={item.text ?? "Did I miss anyone? Type the names of who were missed in the box below."} /><ChatProposal replies={[{ id: "no", label: "That's everyone" }]} onReply={() => scrollAfterAction(actions.confirmPeople)} /></View>;
+        if (item.kind === "missed-person") return <View key={item.id} className="gap-2"><Button label="Tap to select" variant="secondary" onPress={() => scrollAfterAction(() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: item.personId, name: item.name, source: "missed" } } as any))} /></View>;
+        if (item.kind === "people-summary") return <View key={item.id} className="gap-3">
+          <View className="overflow-hidden rounded-md border border-line bg-surface-raised">{item.people.map((person) => <Pressable key={person.personId} role="button" accessibilityLabel={`Review ${person.name}`} onPress={() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: person.personId, name: person.name } } as any)} className="flex-row items-center gap-3 border-b border-line p-3">
+            {person.sampleUri ? <StableUriImage uri={person.sampleUri} accessibilityLabel={`${person.name} face`} className="size-12 rounded-full" /> : <View className="size-12 rounded-full bg-surface-sunken" />}
+            <View className="flex-1"><Text className="font-sans-semibold text-label text-ink">{person.name}</Text><Text className="font-sans text-caption text-ink-muted">Tagged in {person.momentCount} {person.momentCount === 1 ? "moment" : "moments"}</Text></View><Text className="text-heading text-ink-muted">›</Text>
+          </Pressable>)}</View>
+          <Text className="font-sans text-caption text-ink-muted">Tap a person to check their moments.</Text>
+          <ChatProposal replies={[{ id: "right", label: "Looks right" }]} onReply={() => scrollAfterAction(actions.confirmPeopleSummary)} />
+        </View>;
         return null;
       })}
       {state.step === "people" && !state.items.some((item) => item.kind === "person" || item.kind === "anyone-else") && <Button label="Skip for now" variant="quiet" onPress={() => scrollAfterAction(actions.skipPeople)} />}

@@ -35,6 +35,12 @@ export function castSummary(
         set.add(personId);
       }
     }
+    for (const person of people) for (const shotId of person.manualShots ?? []) {
+      if ((person.removedShots ?? []).includes(shotId)) continue;
+      let set = shotPeople.get(shotId);
+      if (!set) { set = new Set<string>(); shotPeople.set(shotId, set); }
+      set.add(person.personId);
+    }
 
     for (const personSet of shotPeople.values()) {
       if (cast.core.every((coreId) => personSet.has(coreId))) {

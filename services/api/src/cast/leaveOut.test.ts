@@ -32,6 +32,9 @@ describe("leaveOutShots", () => {
   it("never leaves out a photo with no faces", () => {
     expect(leaveOutShots([{ shotId: "scenery", faces: [] }], cast(), [])).toEqual([]);
   });
+  it("honours a manual cast tag on a photo without detected faces", () => {
+    expect(leaveOutShots([{ shotId: "manual", faces: [], manualPersonIds: ["kid"] }], cast(["kid"]), [])).toEqual([{ shotId: "manual", reason: "Left out: someone you left out is the main subject." }]);
+  });
   it("leaves out an excluded person's subject photos but keeps their background ones", () => {
     const out = leaveOutShots([
       { shotId: "dadSolo", faces: [{ bbox: BIG, personId: "dad" }] },
