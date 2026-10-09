@@ -103,6 +103,7 @@ describe("Director chat", () => {
     expect(hasText("Something else? Type it in the box below.")).toBe(true);
     expect(host.querySelector('[aria-label="Uploading 0 of 1"]')).toBeTruthy();
     expect(host.querySelector('[alt^="Selected photo"]')).toBeFalsy();
+    expect(host.querySelectorAll('[data-testid="upload-progress-segment"]')).toHaveLength(10);
   });
 
   it("shows upload counts without thumbnails or transferred megabytes", async () => {
@@ -146,8 +147,13 @@ describe("Director chat", () => {
     expect(hasText("Mia's birthday")).toBe(true);
     expect(mocks.repo.interpret).not.toHaveBeenCalled();
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+    const followUp = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
+    await act(async () => { (followUp as HTMLInputElement).value = "The trip was sunny"; followUp.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("Send");
+    expect(hasText("Mia's birthday")).toBe(true);
+    expect(hasText("The trip was sunny")).toBe(true);
     await act(async () => setUploadPreparationProgress(null));
-    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Mia's birthday", []));
+    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Mia's birthday\nThe trip was sunny", []));
     expect(hasText("Mia's birthday")).toBe(true);
   });
 
@@ -167,9 +173,13 @@ describe("Director chat", () => {
 
   it("shows the ready summary and starts the story intent when the occasion reply is tapped", async () => {
     setup(); await renderScreen();
-    await waitFor(() => expect(hasText("While they come in, tell me a little about them.")).toBe(true));
+    await waitFor(() => expect(hasText("Tell me a little about them. Is it a trip, a birthday celebration, or something else?")).toBe(true));
+    expect(hasText("Your 8 photos are uploaded.")).toBe(true);
+    expect(hasText("Uploaded your photos")).toBe(true);
+    expect(hasText("Looked through all of them")).toBe(true);
     expect(hasText("I've looked through all 8")).toBe(false);
-    expect(host.textContent?.match(/Is it a trip/g)).toHaveLength(1);
+    expect(hasText("While they come in, tell me a little about them.")).toBe(false);
+    expect(host.querySelectorAll('[data-testid="upload-progress-segment"]')).toHaveLength(10);
     await click("A trip");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Japan trip", []));
     expect(hasText("A trip")).toBe(true);
@@ -177,7 +187,7 @@ describe("Director chat", () => {
 
   it("asks openly without a confirmation chip when the summary has no meaningful suggestion", async () => {
     setup(); mocks.repo.getSummary.mockResolvedValue({ ...summary(), places: [], country: null, season: null }); await renderScreen();
-    await waitFor(() => expect(hasText("While they come in, tell me a little about them.")).toBe(true));
+    await waitFor(() => expect(hasText("Tell me a little about them. Is it a trip, a birthday celebration, or something else?")).toBe(true));
     expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
   });
 
@@ -491,7 +501,7 @@ describe("Director chat", () => {
     await click("A trip");
     expect([...host.querySelectorAll('[data-from="you"]')].some((item) => item.textContent?.includes("A trip"))).toBe(true);
     expect(host.querySelector('button[aria-label="A trip"]')).toBeFalsy();
-    expect(hasText("Looking through them")).toBe(true);
+    expect(hasText("Looked through all of them")).toBe(true);
     await act(async () => finish({ planId: "proposal-1" }));
     await waitFor(() => expect(host.querySelector('[data-from="you"]')?.textContent).toContain("A trip"));
   });

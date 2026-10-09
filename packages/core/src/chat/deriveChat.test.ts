@@ -41,6 +41,13 @@ describe("deriveChat state table", () => {
     expect(reopened.items.find(item => item.kind === "occasion-question")).toBeTruthy();
   });
 
+  it("switches the intro and occasion prompt to their uploaded wording when transfer is complete", () => {
+    const complete = deriveChat({ ...base(), intent: null, summary: { ...summary, total: 1, photos: 1, clips: 0, upload: { expected: 1, settled: 1, failed: 0, cancelled: 0, closed: true }, processed: { ingested: 1, understood: 1, faces: 0 }, ready: { summary: true, faces: false, plan: false } } });
+    expect(complete.items.find(item => item.id === "upload-intro")).toMatchObject({ text: "Your 1 photo is uploaded." });
+    expect(complete.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadComplete: true, understoodComplete: true });
+    expect(complete.items.find(item => item.kind === "occasion-question")).toMatchObject({ uploadComplete: true });
+  });
+
   it("gates occasion on local transfer, server story readiness and acknowledged failures", () => {
     const input = { ...base(), intent: null };
     for (const pending of [
@@ -65,7 +72,8 @@ describe("deriveChat state table", () => {
     const state = deriveChat({ ...base(), filmWait: { elapsedSec: 4, videoCount: 2 }, summary: { ...summary, videoStatuses: [
       { assetId: "v1", status: "ready", progress: 1 }, { assetId: "v2", status: "processing", progress: 0.5 },
     ] } });
-    expect(state.items).toEqual([{ kind: "preparing-videos", id: "preparing-videos", text: "Preparing 2 videos…", progress: 0.75 }]);
+    expect(state.items.slice(-1)).toEqual([{ kind: "preparing-videos", id: "preparing-videos", text: "Preparing 2 videos…", progress: 0.75 }]);
+    expect(state.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadComplete: true, understoodComplete: true });
   });
 
   it("shows failed videos as unreadable chat notes", () => {

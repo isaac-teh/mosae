@@ -526,8 +526,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     },
     async send(text: string) {
       if (!text.trim()) return;
-      if (!canConfirmStory({ ...input, ...confirmationState }) && !input.intent) {
-        setInput((current) => ({ ...current, earlyOccasionAnswer: text.trim() }));
+      if (!input.intent && (!canConfirmStory({ ...input, ...confirmationState }) || input.earlyOccasionAnswer)) {
+        setInput((current) => current.earlyOccasionAnswer
+          ? ({ ...current, notes: [...current.notes, text.trim()] })
+          : ({ ...current, earlyOccasionAnswer: text.trim() }));
         return;
       }
       if (!summary) return;

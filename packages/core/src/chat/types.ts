@@ -45,7 +45,7 @@ export type ChatInput = {
 
 export type ChatItem =
   | { kind: "upload-status"; id: string; photos: number; clips: number; uploadTotal: number; uploadDone: number; understood: number; understoodTotal: number; uploadComplete: boolean; understandingActive: boolean; understoodComplete: boolean }
-  | { kind: "occasion-question"; id: string }
+  | { kind: "occasion-question"; id: string; uploadComplete: boolean }
   | { kind: "mosae"; id: string; text: string; facts?: string[]; photos?: string[] }
   | { kind: "you"; id: string; text: string }
   | { kind: "typing"; id: string; text: string }

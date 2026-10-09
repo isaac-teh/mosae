@@ -108,10 +108,12 @@ export function deriveChat(input: ChatInput): ChatState {
   const uploadComplete = uploadTotal > 0 && (input.localUpload ? uploadDone >= uploadTotal : summary?.upload ? summary.upload.closed && uploadDone >= summary.upload.expected : Boolean(summary && summary.processed.ingested >= uploadTotal));
   const failedCount = summary?.upload?.failed ?? 0;
   const understandingActive = Boolean(summary && (summary.processed.ingested > 0 || uploadComplete || summary.ready.summary));
-  const understoodComplete = Boolean(summary && (summary.ready.story === true || (summary.ready.summary && understood + failedCount >= understoodTotal)));
+  const understoodComplete = Boolean(summary && (summary.ready.story === true || (understoodTotal > 0 && understood + failedCount >= understoodTotal)));
   const addUploadStatus = () => add({ kind: "upload-status", id: "upload-status", photos, clips, uploadTotal, uploadDone: Math.min(uploadDone, uploadTotal), understood, understoodTotal, uploadComplete, understandingActive, understoodComplete });
-  const addUploadIntro = () => add({ kind: "mosae", id: "upload-intro", text: `I'm bringing in your ${uploadTotal || photos + clips} ${photos > 0 && clips > 0 ? "photos and clips" : photos > 0 ? `photo${photos === 1 ? "" : "s"}` : `clip${clips === 1 ? "" : "s"}`}. Then I'll look through them.` });
-  const addOccasionQuestion = () => add({ kind: "occasion-question", id: "occasion-question" });
+  const mediaLabel = photos > 0 && clips > 0 ? "photos and clips" : photos > 0 ? `photo${photos === 1 ? "" : "s"}` : `clip${clips === 1 ? "" : "s"}`;
+  const mediaCount = uploadTotal || photos + clips;
+  const addUploadIntro = () => add({ kind: "mosae", id: "upload-intro", text: uploadComplete ? `Your ${mediaCount} ${mediaLabel} ${mediaCount === 1 && photos + clips === 1 ? "is" : "are"} uploaded.` : `I'm bringing in your ${mediaCount} ${mediaLabel}. Then I'll look through them.` });
+  const addOccasionQuestion = () => add({ kind: "occasion-question", id: "occasion-question", uploadComplete });
   const addVideoFailures = () => (input.summary?.videoStatuses ?? []).filter((video) => video.status === "failed")
     .forEach((video) => add({ kind: "mosae", id: `video-failed-${video.assetId}`, text: "Couldn't read this video" }));
   if (input.filmWait) {
@@ -146,7 +148,7 @@ export function deriveChat(input: ChatInput): ChatState {
     return { items, step, confirmed, placeholder };
   }
 
-  add({ kind: "mosae", id: "occasion-message", text: "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?" });
+  add({ kind: "mosae", id: "occasion-message", text: uploadComplete ? "Tell me a little about them. Is it a trip, a birthday celebration, or something else?" : "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?" });
   add({ kind: "you", id: "occasion-answer", text: input.intent.text });
   add({ kind: "mosae", id: "story-acknowledgement", text: storyAcknowledgement(input.intent.text, input.storySummary, input.mentionedPeople) });
   addVideoFailures();
