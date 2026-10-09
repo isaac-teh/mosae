@@ -36,8 +36,8 @@ vi.mock("@/lib/downloadFilm", () => ({ downloadFilm: boundary.downloadFilm, prep
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "film.mp4" }) } }));
 vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null, Circle: () => null, Rect: () => null }));
 vi.mock("react-native", () => {
-  const element = (tag: string) => ({ children, onPress, onChangeText, numberOfLines, accessibilityLabel, source, resizeMode, keyboardShouldPersistTaps, placeholderTextColor, contentContainerClassName, multiline, textAlignVertical, horizontal, showsHorizontalScrollIndicator, showsVerticalScrollIndicator, ...props }: any) =>
-    React.createElement(tag, { ...props, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined, ...(tag === "img" ? { src: source?.uri, alt: accessibilityLabel } : {}) }, children);
+  const element = (tag: string) => ({ children, onPress, onChangeText, numberOfLines, accessibilityLabel, source, resizeMode, keyboardShouldPersistTaps, placeholderTextColor, contentContainerClassName, multiline, textAlignVertical, horizontal, showsHorizontalScrollIndicator, showsVerticalScrollIndicator, style, ...props }: any) =>
+    React.createElement(tag, { ...props, style: typeof style === "function" ? style({ pressed: false }) : style, ...(accessibilityLabel ? { "aria-label": accessibilityLabel } : {}), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined, ...(tag === "img" ? { src: source?.uri, alt: accessibilityLabel } : {}) }, children);
   return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), Image: element("img"), TextInput: element("input"), Share: { share: (...args: unknown[]) => boundary.share(...args) } };
 });
 

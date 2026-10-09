@@ -37,7 +37,8 @@ export function MomentTile({ label, reason, source, state = "default", selected,
         aria-disabled={disabled}
         disabled={disabled}
         onPress={onPress}
-        className={`relative aspect-square min-h-11 overflow-hidden rounded-md bg-surface-sunken ${active ? "border-[3px] border-surface" : "border-0"} ${peak ? "ring-[3px] ring-accent" : ""} ${excluded ? "opacity-[0.55]" : ""}`}
+        style={({ pressed }) => ({ opacity: pressed && !disabled ? 0.84 : undefined, transform: [{ scale: pressed && !disabled ? 0.97 : 1 }] })}
+        className={`relative aspect-square min-h-11 overflow-hidden rounded-md bg-surface-sunken active:bg-action-pressed active:scale-[0.97] ${active ? "border-[3px] border-surface" : "border-0"} ${peak ? "ring-[3px] ring-accent" : ""} ${excluded ? "opacity-[0.55]" : ""}`}
       >
         {source ? <StableUriImage uri={source.uri} accessibilityLabel={label} resizeMode="cover" className="absolute inset-0 h-full w-full" /> : <View className="absolute inset-0 bg-tile/30" />}
         {children}

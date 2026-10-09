@@ -27,8 +27,8 @@ vi.mock("@/lib/useStepBack", () => ({ useStepBack: () => vi.fn() }));
 vi.mock("@/components/StepHeader", () => ({ StepHeader: () => null }));
 vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null }));
 vi.mock("react-native", () => {
-  const element = (tag: string) => ({ children, onPress, onChangeText, autoFocus, placeholder, placeholderTextColor, multiline, textAlignVertical, role, ariaChecked, ...props }: any) =>
-    React.createElement(tag, { ...props, onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined, role, ariaChecked }, children);
+  const element = (tag: string) => ({ children, onPress, onChangeText, autoFocus, placeholder, placeholderTextColor, multiline, textAlignVertical, role, ariaChecked, style, ...props }: any) =>
+    React.createElement(tag, { ...props, style: typeof style === "function" ? style({ pressed: false }) : style, onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined, role, ariaChecked }, children);
     // react-native-web turns `source={{ uri }}` into an <img src>; mirror that
   // so a crop asserts on the URL the screen actually resolved.
   const image = ({ source, accessibilityIgnoresInvertColors, ...props }: any) =>

@@ -5,7 +5,7 @@ type ChatHeaderProps = { title: string; confirmed: number; ready: boolean; onBac
 export function ChatHeader({ title, confirmed, ready, onBack }: ChatHeaderProps) {
   const progress = Math.max(0, Math.min(4, confirmed));
   return <View className="w-full flex-row items-center gap-3 border-b border-line bg-surface px-4 py-3">
-    <Pressable accessibilityRole="button" accessibilityLabel="Back" role="button" aria-label="Back" onPress={onBack} className="min-h-11 min-w-11 items-center justify-center"><Text className="text-heading font-sans text-ink">‹</Text></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel="Back" role="button" aria-label="Back" onPress={onBack} style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })} className="active:scale-[0.97] active:bg-surface-sunken min-h-11 min-w-11 items-center justify-center"><Text className="text-heading font-sans text-ink">‹</Text></Pressable>
     <View className="flex-1 flex-col gap-1">
       <Text className="text-heading font-title text-ink">{title}</Text>
       {ready ? <Text className="text-caption font-sans-medium text-positive">✓ Film ready</Text> : <View className="flex-row items-center gap-2">

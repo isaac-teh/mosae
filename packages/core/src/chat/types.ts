@@ -23,6 +23,8 @@ export type ChatInput = {
   localUpload?: { total: number; settled: number; failed: number; photos: number; clips: number };
   earlyOccasionAnswer?: string;
   earlyOccasionStoryText?: string;
+  earlyOccasionQuestionUploadComplete?: boolean;
+  pendingResponse?: "occasion" | "person";
   uploadFailuresAcknowledged?: boolean;
   summary: ProjectSummary | null;
   intent: { text: string } | null;
@@ -47,7 +49,7 @@ export type ChatInput = {
 };
 
 export type ChatItem =
-  | { kind: "upload-status"; id: string; photos: number; clips: number; uploadTotal: number; uploadDone: number; understood: number; understoodTotal: number; uploadComplete: boolean; understandingActive: boolean; understoodComplete: boolean }
+  | { kind: "upload-status"; id: string; photos: number; clips: number; uploadTotal: number; uploadDone: number; understood: number; understoodTotal: number; uploadComplete: boolean; understandingActive: boolean; understoodComplete: boolean; facesApplicable: boolean; facesComplete: boolean }
   | { kind: "occasion-question"; id: string; uploadComplete: boolean }
   | { kind: "mosae"; id: string; text: string; facts?: string[]; photos?: string[] }
   | { kind: "you"; id: string; text: string }

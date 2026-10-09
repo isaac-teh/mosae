@@ -108,17 +108,28 @@ export function deriveChat(input: ChatInput): ChatState {
   const uploadDone = input.localUpload ? input.localUpload.settled + input.localUpload.failed : summary?.upload?.settled ?? summary?.processed.ingested ?? 0;
   const photos = input.localUpload?.photos ?? summary?.photos ?? 0;
   const clips = input.localUpload?.clips ?? summary?.clips ?? 0;
-  const understoodTotal = summary?.total ?? uploadTotal;
+  const understoodTotal = uploadTotal;
   const understood = summary?.processed.understood ?? 0;
   const uploadComplete = uploadTotal > 0 && (input.localUpload ? uploadDone >= uploadTotal : summary?.upload ? summary.upload.closed && uploadDone >= summary.upload.expected : Boolean(summary && summary.processed.ingested >= uploadTotal));
   const failedCount = summary?.upload?.failed ?? 0;
   const understandingActive = Boolean(summary && (summary.processed.ingested > 0 || uploadComplete || summary.ready.summary));
-  const understoodComplete = Boolean(summary && (summary.ready.story === true || (understoodTotal > 0 && understood + failedCount >= understoodTotal)));
-  const addUploadStatus = () => add({ kind: "upload-status", id: "upload-status", photos, clips, uploadTotal, uploadDone: Math.min(uploadDone, uploadTotal), understood, understoodTotal, uploadComplete, understandingActive, understoodComplete });
+  const understoodComplete = Boolean(uploadComplete && understoodTotal > 0 && understood + Math.max(failedCount, input.localUpload?.failed ?? 0) >= understoodTotal);
+  const facesApplicable = photos > 0 || Boolean(input.localUpload && summary?.photos);
+  const facesComplete = Boolean(facesApplicable && summary?.ready.faces);
+  const addUploadStatus = () => add({ kind: "upload-status", id: "upload-status", photos, clips, uploadTotal, uploadDone: Math.min(uploadDone, uploadTotal), understood, understoodTotal, uploadComplete, understandingActive, understoodComplete, facesApplicable, facesComplete });
   const mediaLabel = photos > 0 && clips > 0 ? "photos and clips" : photos > 0 ? `photo${photos === 1 ? "" : "s"}` : `clip${clips === 1 ? "" : "s"}`;
   const mediaCount = uploadTotal || photos + clips;
   const addUploadIntro = () => add({ kind: "mosae", id: "upload-intro", text: uploadComplete ? `Your ${mediaCount} ${mediaLabel} ${mediaCount === 1 && photos + clips === 1 ? "is" : "are"} uploaded.` : `I'm bringing in your ${mediaCount} ${mediaLabel}. Then I'll look through them.` });
-  const addOccasionQuestion = () => add({ kind: "occasion-question", id: "occasion-question", uploadComplete });
+  const questionUploadComplete = input.earlyOccasionQuestionUploadComplete ?? uploadComplete;
+  const addOccasionQuestion = () => add({ kind: "occasion-question", id: "occasion-question", uploadComplete: questionUploadComplete });
+  const acknowledgementText = (text: string, storySummary?: string, mentionedPeople?: string[]) => {
+    const acknowledgement = storyAcknowledgement(text, storySummary, mentionedPeople);
+    const waiting = !uploadComplete ? ` I'm still bringing in your ${mediaLabel} — hang on a moment.`
+      : !understoodComplete ? " I'm looking through them now — almost there."
+      : facesApplicable && !facesComplete ? " Now I'm finding the people in them."
+      : "";
+    return `${acknowledgement}${waiting}`;
+  };
   const addVideoFailures = () => (input.summary?.videoStatuses ?? []).filter((video) => video.status === "failed")
     .forEach((video) => add({ kind: "mosae", id: `video-failed-${video.assetId}`, text: "Couldn't read this video" }));
   if (input.filmWait) {
@@ -135,7 +146,8 @@ export function deriveChat(input: ChatInput): ChatState {
     addUploadStatus();
     if (input.earlyOccasionAnswer) {
       add({ kind: "you", id: "occasion-answer", text: input.earlyOccasionAnswer });
-      add({ kind: "mosae", id: "story-acknowledgement", text: storyAcknowledgement(input.earlyOccasionAnswer) });
+      add({ kind: "mosae", id: "story-acknowledgement", text: acknowledgementText(input.earlyOccasionAnswer) });
+      if (input.pendingResponse === "occasion") add({ kind: "typing", id: "occasion-save-wait", text: "Putting your story together" });
     } else addOccasionQuestion();
     input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
     return { items, step, confirmed, placeholder };
@@ -147,15 +159,15 @@ export function deriveChat(input: ChatInput): ChatState {
     addVideoFailures();
     if (input.earlyOccasionAnswer) {
       add({ kind: "you", id: "occasion-answer", text: input.earlyOccasionAnswer });
-      add({ kind: "mosae", id: "story-acknowledgement", text: storyAcknowledgement(input.earlyOccasionAnswer) });
+      add({ kind: "mosae", id: "story-acknowledgement", text: acknowledgementText(input.earlyOccasionAnswer) });
     } else addOccasionQuestion();
     input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
     return { items, step, confirmed, placeholder };
   }
 
-  add({ kind: "mosae", id: "occasion-message", text: uploadComplete ? "Tell me a little about them. Is it a trip, a birthday celebration, or something else?" : "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?" });
+  add({ kind: "mosae", id: "occasion-message", text: questionUploadComplete ? "Tell me a little about them. Is it a trip, a birthday celebration, or something else?" : "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?" });
   add({ kind: "you", id: "occasion-answer", text: input.intent.text });
-  add({ kind: "mosae", id: "story-acknowledgement", text: storyAcknowledgement(input.intent.text, input.storySummary, input.mentionedPeople) });
+  add({ kind: "mosae", id: "story-acknowledgement", text: acknowledgementText(input.intent.text, input.storySummary, input.mentionedPeople) });
   addVideoFailures();
   input.notes.forEach((note, index) => add({ kind: "you", id: `note-${index + 1}`, text: note }));
   confirmed = 1;
@@ -182,6 +194,10 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "mosae", id: `person-question-${event.personId}`, text: `Who's this? They're in ${event.momentCount} of your moments.`, photos: (event.questionFaces ?? event.sampleFaces).slice(0, 2) });
       add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
       if (!event.automatic) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), response: event.response });
+    }
+    if (input.pendingResponse === "person") {
+      add({ kind: "typing", id: "person-save-wait", text: "Saving your answer" });
+      return { items, step, confirmed, placeholder };
     }
     if (unanswered) {
       const mention = people[0]?.personId === unanswered.personId ? mentionedPerson(input.intent.text, people, input.mentionedPeople) : null;

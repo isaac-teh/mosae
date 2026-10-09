@@ -21,8 +21,8 @@ vi.mock("@/lib/useProjectProgress", () => ({ useProjectProgress: () => boundary.
 vi.mock("@/components/StepHeader", () => ({ StepHeader: () => null }));
 vi.mock("@/components/icons", () => ({ ChipCheckIcon: () => null, MicIcon: () => null, ShieldIcon: () => null, SparklesIcon: () => null }));
 vi.mock("react-native", () => {
-  const element = (tag: string) => ({ children, onPress, onChangeText, multiline, textAlignVertical, stickyHeaderIndices, keyboardShouldPersistTaps, placeholderTextColor, ...props }: any) =>
-    React.createElement(tag, { ...props, onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
+  const element = (tag: string) => ({ children, onPress, onChangeText, multiline, textAlignVertical, stickyHeaderIndices, keyboardShouldPersistTaps, placeholderTextColor, style, ...props }: any) =>
+    React.createElement(tag, { ...props, style: typeof style === "function" ? style({ pressed: false }) : style, onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
   return { View: element("div"), ScrollView: element("div"), Text: element("span"), Pressable: element("button"), TextInput: element("textarea") };
 });
 import TellStoryScreen from "../app/tell-story";
