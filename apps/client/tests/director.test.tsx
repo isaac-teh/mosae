@@ -101,6 +101,7 @@ describe("Director chat", () => {
     expect(hasText("I'm bringing in your 1 photo. Then I'll look through them.")).toBe(true);
     expect(hasText("While they come in, tell me a little about them.")).toBe(true);
     expect(hasText("Something else? Type it in the box below.")).toBe(true);
+    await waitFor(() => expect(hasText("Found the people in them")).toBe(true));
     expect(host.querySelector('[aria-label="Uploading 0 of 1"]')).toBeTruthy();
     expect(host.querySelector('[alt^="Selected photo"]')).toBeFalsy();
     expect(host.querySelectorAll('[data-testid="upload-progress-segment"]')).toHaveLength(10);
@@ -177,6 +178,7 @@ describe("Director chat", () => {
     expect(hasText("Your 8 photos are uploaded.")).toBe(true);
     expect(hasText("Uploaded your photos")).toBe(true);
     expect(hasText("Looked through all of them")).toBe(true);
+    expect(hasText("Found the people in them")).toBe(true);
     expect(hasText("I've looked through all 8")).toBe(false);
     expect(hasText("While they come in, tell me a little about them.")).toBe(false);
     expect(host.querySelectorAll('[data-testid="upload-progress-segment"]')).toHaveLength(10);

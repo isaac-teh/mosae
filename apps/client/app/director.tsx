@@ -128,9 +128,9 @@ export default function DirectorScreen() {
         if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} photos={item.photos} />;
         if (item.kind === "upload-status") {
           const uploadProgressValue = item.uploadTotal ? item.uploadDone / item.uploadTotal : 0;
-          const understoodProgressValue = item.understoodTotal ? item.understood / item.understoodTotal : 0;
-          const complete = item.uploadComplete && item.understoodComplete;
-          const overallProgress = uploadProgressValue * 0.5 + understoodProgressValue * 0.5;
+          const understoodProgressValue = item.understoodTotal ? Math.min(item.understood, item.understoodTotal) / item.understoodTotal : 0;
+          const complete = item.uploadComplete && item.understoodComplete && (!item.facesApplicable || item.facesComplete);
+          const overallProgress = uploadProgressValue * 0.45 + understoodProgressValue * 0.45 + (item.facesApplicable && item.facesComplete ? 0.1 : 0);
           const filledSegments = complete ? 10 : Math.floor(overallProgress * 10);
           const activeSegment = !complete && overallProgress < 1 ? filledSegments : -1;
           const segmentRow = <View className="flex-row gap-1">{Array.from({ length: 10 }, (_, index) => <View key={index} testID="upload-progress-segment" className={`h-1.5 flex-1 rounded-pill ${index === activeSegment ? "bg-accent" : index < filledSegments ? "bg-ink-muted" : "bg-line"}`} />)}</View>;
@@ -139,6 +139,7 @@ export default function DirectorScreen() {
             {segmentRow}
             <View className="flex-row items-center gap-2"><Text className="font-sans text-caption text-ink-muted">{item.uploadComplete ? "✓" : "◷"}</Text><Text className="flex-1 font-sans text-caption text-ink">{item.uploadComplete ? `Uploaded your ${subject}` : `Uploading your ${subject}`}</Text><Text className="font-sans text-caption text-ink-muted">{item.uploadDone} of {item.uploadTotal}</Text></View>
             <View className="flex-row items-center gap-2"><Text className="font-sans text-caption text-ink-muted">{item.understoodComplete ? "✓" : item.understandingActive ? "◷" : "○"}</Text><Text className="flex-1 font-sans text-caption text-ink">{item.understoodComplete ? "Looked through all of them" : "Looking through them"}</Text>{item.understandingActive && !item.understoodComplete && <Text className="font-sans text-caption text-ink-muted">{item.understood} of {item.understoodTotal}</Text>}</View>
+            {item.facesApplicable && <View className="flex-row items-center gap-2"><Text className="font-sans text-caption text-ink-muted">{item.facesComplete ? "✓" : item.understoodComplete ? "◷" : "○"}</Text><Text className="flex-1 font-sans text-caption text-ink">{item.facesComplete ? "Found the people in them" : "Finding the people in them"}</Text></View>}
           </View>;
         }
         if (item.kind === "late-video") return item.status === "added"

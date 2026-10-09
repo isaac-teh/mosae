@@ -48,7 +48,7 @@ describe("deriveChat state table", () => {
     expect(early.items.find(item => item.kind === "upload-status")).toMatchObject({ photos: 3, clips: 1, uploadTotal: 4, uploadDone: 1, understood: 0 });
     expect(early.items.find(item => item.id === "upload-intro")).toMatchObject({ text: "I'm bringing in your 4 photos and clips. Then I'll look through them." });
     expect(early.items.find(item => item.id === "occasion-answer")).toMatchObject({ kind: "you", text: "A birthday celebration" });
-    expect(early.items.find(item => item.id === "story-acknowledgement")).toMatchObject({ kind: "mosae", text: "A birthday celebration — lovely!" });
+    expect(early.items.find(item => item.id === "story-acknowledgement")).toMatchObject({ kind: "mosae", text: "A birthday celebration — lovely! I'm still bringing in your photos and clips — hang on a moment." });
   });
 
   it("uses server upload and understanding counts for a reopened project", () => {
@@ -62,6 +62,27 @@ describe("deriveChat state table", () => {
     expect(complete.items.find(item => item.id === "upload-intro")).toMatchObject({ text: "Your 1 photo is uploaded." });
     expect(complete.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadComplete: true, understoodComplete: true });
     expect(complete.items.find(item => item.kind === "occasion-question")).toMatchObject({ uploadComplete: true });
+  });
+
+  it("does not complete look-through from a partial server summary while the local upload continues", () => {
+    const partial = deriveChat({ ...base(), localUpload: { total: 16, settled: 12, failed: 0, photos: 16, clips: 0 }, summary: { ...summary, total: 12, photos: 12, processed: { ingested: 12, understood: 12, faces: 0 }, ready: { summary: true, faces: false, plan: false } } });
+    expect(partial.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadDone: 12, uploadTotal: 16, uploadComplete: false, understood: 12, understoodTotal: 16, understoodComplete: false, facesApplicable: true, facesComplete: false });
+  });
+
+  it("shows face progress after look-through and skips the face step for videos only", () => {
+    const facePending = deriveChat({ ...base(), summary: { ...summary, ready: { ...summary.ready, faces: false } } });
+    expect(facePending.items.find(item => item.kind === "upload-status")).toMatchObject({ understoodComplete: true, facesApplicable: true, facesComplete: false });
+    const videos = deriveChat({ ...base(), summary: { ...summary, photos: 0, clips: 10, ready: { ...summary.ready, faces: false } } });
+    expect(videos.items.find(item => item.kind === "upload-status")).toMatchObject({ facesApplicable: false, facesComplete: false });
+  });
+
+  it("updates the early answer acknowledgement with the current preparation step", () => {
+    const uploading = deriveChat({ ...base(), intent: null, earlyOccasionAnswer: "A trip", localUpload: { total: 16, settled: 12, failed: 0, photos: 16, clips: 0 }, summary: { ...summary, total: 12, photos: 12, processed: { ingested: 12, understood: 12, faces: 0 }, ready: { summary: true, faces: false, plan: false } } });
+    expect(uploading.items.find(item => item.id === "story-acknowledgement")).toMatchObject({ text: "A trip — lovely! I'm still bringing in your photos — hang on a moment." });
+    const lookingThrough = deriveChat({ ...base(), intent: null, earlyOccasionAnswer: "A trip", summary: { ...summary, processed: { ...summary.processed, understood: 4 }, ready: { ...summary.ready, faces: false } } });
+    expect(lookingThrough.items.find(item => item.id === "story-acknowledgement")).toMatchObject({ text: "A trip — lovely! I'm looking through them now — almost there." });
+    const looking = deriveChat({ ...base(), intent: null, earlyOccasionAnswer: "A trip", summary: { ...summary, ready: { ...summary.ready, faces: false } } });
+    expect(looking.items.find(item => item.id === "story-acknowledgement")).toMatchObject({ text: "A trip — lovely! Now I'm finding the people in them." });
   });
 
   it("gates occasion on local transfer, server story readiness and acknowledged failures", () => {
