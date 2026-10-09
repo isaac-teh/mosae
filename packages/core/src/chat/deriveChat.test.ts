@@ -76,6 +76,30 @@ describe("deriveChat state table", () => {
     expect(videos.items.find(item => item.kind === "upload-status")).toMatchObject({ facesApplicable: false, facesComplete: false });
   });
 
+  it("never marks face finding complete before all uploaded items have been looked through", () => {
+    const state = deriveChat({
+      ...base(), intent: null, earlyOccasionAnswer: "A trip",
+      localUpload: { total: 16, settled: 15, failed: 0, photos: 16, clips: 0 },
+      summary: { ...summary, total: 15, processed: { ingested: 15, understood: 3, faces: 15 }, ready: { summary: true, faces: true, plan: false } },
+    });
+    expect(state.items.find(item => item.kind === "upload-status")).toMatchObject({
+      uploadComplete: false, understoodComplete: false, facesApplicable: true, facesComplete: false,
+    });
+  });
+
+  it("replies once to each early note with deterministic live preparation status", () => {
+    const state = deriveChat({
+      ...base(), intent: null, earlyOccasionAnswer: "A trip", notes: ["Still in progress?", "Remember the picnic"],
+      localUpload: { total: 16, settled: 15, failed: 0, photos: 16, clips: 0 },
+      summary: { ...summary, total: 15, processed: { ingested: 15, understood: 3, faces: 0 }, ready: { summary: false, faces: false, plan: false } },
+    });
+    expect(state.items.filter(item => item.kind === "you" && item.id.startsWith("note-")).length).toBe(2);
+    expect(state.items.filter(item => item.kind === "mosae" && item.id.startsWith("note-reply-")).map(item => item.kind === "mosae" ? item.text : "")).toEqual([
+      "Still working on it — 15 of 16 uploaded and 3 of 16 looked through. I'll ask you about the people next.",
+      "Got it, I'll keep that in mind for the film. 15 of 16 uploaded and 3 of 16 looked through.",
+    ]);
+  });
+
   it("updates the early answer acknowledgement with the current preparation step", () => {
     const uploading = deriveChat({ ...base(), intent: null, earlyOccasionAnswer: "A trip", localUpload: { total: 16, settled: 12, failed: 0, photos: 16, clips: 0 }, summary: { ...summary, total: 12, photos: 12, processed: { ingested: 12, understood: 12, faces: 0 }, ready: { summary: true, faces: false, plan: false } } });
     expect(uploading.items.find(item => item.id === "story-acknowledgement")).toMatchObject({ text: "A trip — lovely! I'm still bringing in your photos — hang on a moment." });

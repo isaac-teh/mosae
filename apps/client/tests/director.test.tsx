@@ -12,7 +12,16 @@ vi.mock("react-native", () => {
     return React.createElement("div", { ...props, "aria-label": accessibilityLabel }, children);
   });
   const node = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, editable, testID, style, ...props }: any) => React.createElement(tag, { ...props, style: typeof style === "function" ? style({ pressed: false }) : style, "data-testid": testID, "aria-label": props["aria-label"] ?? accessibilityLabel, disabled: props.disabled ?? (editable === false ? true : undefined), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
-  return { View: node("div"), ScrollView, Text: node("span"), Pressable: node("button"), TextInput: node("input"), Image: ({ source, accessibilityLabel, ...props }: any) => React.createElement("img", { ...props, src: source?.uri, alt: accessibilityLabel }) };
+  const AnimatedView = node("div");
+  class Value { setValue() {} }
+  const animation = { start() {}, stop() {} };
+  return {
+    View: node("div"), ScrollView, Text: node("span"), Pressable: node("button"), TextInput: node("input"),
+    Image: ({ source, accessibilityLabel, ...props }: any) => React.createElement("img", { ...props, src: source?.uri, alt: accessibilityLabel }),
+    ActivityIndicator: ({ accessibilityLabel }: any) => React.createElement("span", { "aria-label": accessibilityLabel }),
+    AccessibilityInfo: { isReduceMotionEnabled: async () => false, addEventListener: () => ({ remove() {} }) },
+    Animated: { View: AnimatedView, Value, loop: () => animation, sequence: () => animation, timing: () => animation },
+  };
 });
 
 const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, confirmCast: vi.fn(), push: vi.fn(), projectId: "project-1" }));
@@ -101,7 +110,7 @@ describe("Director chat", () => {
     expect(hasText("I'm bringing in your 1 photo. Then I'll look through them.")).toBe(true);
     expect(hasText("While they come in, tell me a little about them.")).toBe(true);
     expect(hasText("Something else? Type it in the box below.")).toBe(true);
-    await waitFor(() => expect(hasText("Found the people in them")).toBe(true));
+    await waitFor(() => expect(hasText("Finding the people in them")).toBe(true));
     expect(host.querySelector('[aria-label="Uploading 0 of 1"]')).toBeTruthy();
     expect(host.querySelector('[alt^="Selected photo"]')).toBeFalsy();
     expect(host.querySelectorAll('[data-testid="upload-progress-segment"]')).toHaveLength(10);
