@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { type Href, useFocusEffect, useRouter } from "expo-router";
-import { isMedia, setPendingMediaRetry, setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress as setSharedUploadProgress, uploadMedia, type FilmListItem, type UploadPreparationProgress, type UploadProgress } from "@mosae/core";
+import { createUploadRecoveryOwner, isMedia, setPendingMediaRetry, setPendingMedia, setUploadRecoveryOwner, setUploadFailure, setUploadPreparationProgress, setUploadProgress as setSharedUploadProgress, uploadMedia, type FilmListItem, type UploadPreparationProgress, type UploadProgress, type UploadRecoveryOwner } from "@mosae/core";
 import { Button, FilmCard } from "@/components/ds";
 import { SettingsIcon } from "@/components/icons";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
@@ -47,73 +47,87 @@ export default function Home() {
     setUploadError(null);
     let routed = false;
     let ownerProjectId: string | undefined;
-    let failedFiles: File[] = [];
-    let successfulFiles = 0;
     let registered = false;
     let assetIdsByFile: string[] = [];
-    let closeRetry: (() => Promise<void>) | null = null;
+    let sessionIdsByFile: string[] = [];
+    let recovery: UploadRecoveryOwner | null = null;
     const retryUpload = async () => {
-      if (!ownerProjectId) return;
-      if (closeRetry) {
-        try { await closeRetry(); closeRetry = null; }
+      if (!ownerProjectId || !recovery) return;
+      if (recovery.closeRetry) {
+        try { await recovery.closeRetry(); recovery.closeRetry = null; }
         catch { setUploadFailure("The upload session could not finish. Check your connection and try again."); return; }
       }
-      if (failedFiles.length === 0) { setUploadFailure(null); return; }
-      const retryFiles = failedFiles;
-      failedFiles = [];
-      let retryRegistered = false;
+      const retryEntries = recovery.entries.filter((entry) => entry.status === "failed");
+      if (retryEntries.length === 0) { setUploadFailure(null); return; }
+      const retryFiles = retryEntries.map((entry) => entry.file);
+      const replacesAssetIds = retryEntries.map((entry) => entry.assetId ?? "");
+      const replacesSessionIds = retryEntries.map((entry) => entry.sessionId ?? "");
       let retryFinished = 0;
+      const previous = { ...recovery.aggregate };
       setUploadFailure(null);
       setUploadPreparationProgress({ totalFiles: retryFiles.length, preparedFiles: 0 });
       try {
         const result = await uploadMedia(retryFiles, {
           mode: "memory", projectId: ownerProjectId,
+          replacesAssetIds, replacesSessionIds,
           onPreparationProgress: (progress) => { setPreparationProgress(progress); setUploadPreparationProgress(progress); },
           onProgress: (progress) => {
             retryFinished = progress.finishedFiles;
-            setSharedUploadProgress({ ...progress, totalFiles: successfulFiles + progress.totalFiles, finishedFiles: successfulFiles + progress.finishedFiles });
+            recovery!.aggregate = { ...previous, uploadedFiles: previous.uploadedFiles + progress.finishedFiles, failedFiles: Math.max(0, previous.failedFiles - retryEntries.length) + progress.failedFiles, bytesSent: previous.bytesSent + progress.bytesSent, totalBytes: Math.max(previous.totalBytes, previous.bytesSent + progress.totalBytes) };
+            for (const status of progress.assetStatuses ?? []) { const candidate = retryEntries.find((entry) => entry.assetId === status.assetId); if (candidate) candidate.status = status.status === "uploaded" ? "uploaded" : status.status === "failed" ? "failed" : "pending"; }
+            setSharedUploadProgress({ ...progress, totalFiles: previous.totalFiles, finishedFiles: recovery!.aggregate.uploadedFiles, failedFiles: recovery!.aggregate.failedFiles, bytesSent: recovery!.aggregate.bytesSent, totalBytes: recovery!.aggregate.totalBytes });
           },
-          onCloseFailure: retry => { closeRetry = retry; },
-          onFileFailed: (file) => failedFiles.push(file),
-          onEntryRegistered: ({ file, assetId }) => {
-            const index = media.indexOf(file);
-            if (index >= 0) assetIdsByFile[index] = assetId;
-            setPendingMedia(media, assetIdsByFile, ownerProjectId);
+          onCloseFailure: retry => { recovery!.closeRetry = retry; },
+          onFileFailed: (file) => { const candidate = retryEntries.find((entry) => entry.file === file); if (candidate) candidate.status = "failed"; },
+          onEntryRegistered: ({ fileIndex, assetId, sessionId }) => {
+            const candidate = retryEntries[fileIndex];
+            if (candidate) { candidate.status = "pending"; candidate.assetId = assetId; candidate.sessionId = sessionId; }
+            const index = media.indexOf(retryEntries[fileIndex]!.file);
+            if (index >= 0) { assetIdsByFile[index] = assetId; sessionIdsByFile[index] = sessionId; }
+            setPendingMedia(media, assetIdsByFile, ownerProjectId, sessionIdsByFile);
           },
           onReady: () => {
-            retryRegistered = true;
-            setPendingMedia(media, assetIdsByFile, ownerProjectId);
+            setPendingMedia(media, assetIdsByFile, ownerProjectId, sessionIdsByFile);
             setPreparationProgress(null); setUploadPreparationProgress(null);
           },
         });
-        successfulFiles += result.finished;
         if (result.failed) setUploadFailure(`${result.failed} files couldn't upload. Try again or continue with uploaded files.`);
-      } catch { successfulFiles += retryFinished; if (!retryRegistered) failedFiles = retryFiles; setUploadFailure("These photos couldn't upload. Check your connection and try again."); }
+      } catch { if (recovery) { recovery.aggregate.uploadedFiles = previous.uploadedFiles + retryFinished; retryEntries.filter((entry) => entry.status !== "uploaded").forEach((entry) => { entry.status = "failed"; }); recovery.aggregate.failedFiles = Math.max(0, previous.failedFiles - retryEntries.length) + retryEntries.filter((entry) => entry.status === "failed").length; } setUploadFailure("These photos couldn't upload. Check your connection and try again."); }
       finally { setPreparationProgress(null); setUploadPreparationProgress(null); }
     };
     try {
       const result = await uploadMedia(media, {
         mode: "memory",
-        onCloseFailure: retry => { closeRetry = retry; },
-        onFileFailed: (file) => failedFiles.push(file),
-        onProgress: (progress) => { setUploadProgress(progress); successfulFiles = progress.finishedFiles; setSharedUploadProgress(progress); },
+        onCloseFailure: retry => { if (recovery) recovery.closeRetry = retry; },
+        onFileFailed: (file) => { const index = media.indexOf(file); if (recovery && index >= 0) recovery.entries[index]!.status = "failed"; },
+        onProgress: (progress) => {
+          setUploadProgress(progress);
+          if (recovery) {
+            recovery.aggregate = { totalFiles: progress.totalFiles, uploadedFiles: progress.finishedFiles, failedFiles: progress.failedFiles, bytesSent: progress.bytesSent, totalBytes: progress.totalBytes };
+            for (const status of progress.assetStatuses ?? []) { const candidate = recovery.entries.find((entry) => entry.assetId === status.assetId); if (candidate) candidate.status = status.status === "uploaded" ? "uploaded" : status.status === "failed" ? "failed" : "pending"; }
+          }
+          setSharedUploadProgress(progress);
+        },
         onPreparationProgress: (progress) => { setPreparationProgress(progress); setUploadPreparationProgress(progress); },
         onProjectReady: (projectId) => {
           routed = true;
           ownerProjectId = projectId;
+          recovery = createUploadRecoveryOwner(projectId, { totalFiles: media.length, uploadedFiles: 0, failedFiles: 0, bytesSent: 0, totalBytes: 0 }, media);
+          recovery.initialUploadInFlight = true;
+          setUploadRecoveryOwner(recovery);
           setPendingMediaRetry(projectId, retryUpload);
           setPendingMedia(media, [], projectId);
           router.push({ pathname: "/director", params: { projectId, live: "1" } } as unknown as Href);
         },
-        onEntryRegistered: ({ file, assetId }) => {
-          const index = media.indexOf(file);
-          if (index >= 0) assetIdsByFile[index] = assetId;
-          setPendingMedia(media, assetIdsByFile, ownerProjectId ?? null);
+        onEntryRegistered: ({ fileIndex, assetId, sessionId }) => {
+          assetIdsByFile[fileIndex] = assetId; sessionIdsByFile[fileIndex] = sessionId;
+          if (recovery?.entries[fileIndex]) { recovery.entries[fileIndex]!.assetId = assetId; recovery.entries[fileIndex]!.sessionId = sessionId; }
+          setPendingMedia(media, assetIdsByFile, ownerProjectId ?? null, sessionIdsByFile);
         },
         onReady: ({ projectId }) => {
           routed = true;
           registered = true;
-          setPendingMedia(media, assetIdsByFile, projectId);
+          setPendingMedia(media, assetIdsByFile, projectId, sessionIdsByFile);
           setPreparationProgress(null); setUploadPreparationProgress(null);
         },
       });
@@ -127,8 +141,10 @@ export default function Home() {
     } catch (error) {
       console.error("upload failed", error);
       if (!routed) setUploadError("Upload failed. Please try again.");
-      else { if (!registered) failedFiles = media; setPreparationProgress(null); setUploadPreparationProgress(null); setUploadFailure("These photos couldn't be prepared or uploaded. Check your connection and try again."); }
+      else { if (!registered && recovery) { const owner = recovery as UploadRecoveryOwner; owner.entries.filter((entry) => entry.status !== "uploaded").forEach((entry) => { entry.status = "failed"; }); owner.aggregate.failedFiles = owner.entries.filter((entry) => entry.status === "failed").length; } setPreparationProgress(null); setUploadPreparationProgress(null); setUploadFailure("These photos couldn't be prepared or uploaded. Check your connection and try again."); }
     } finally {
+      if (recovery) (recovery as UploadRecoveryOwner).initialUploadInFlight = false;
+      setUploadPreparationProgress(null);
       setUploading(false);
     }
   }

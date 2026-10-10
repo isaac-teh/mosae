@@ -9,7 +9,7 @@ export function shouldUseResumableUpload(sizeBytes: number): boolean {
   return sizeBytes >= SINGLE_REQUEST_UPLOAD_LIMIT;
 }
 
-export type UploadFileProgress = { assetId: string; status: "uploading" | "uploaded" | "failed" };
+export type UploadFileProgress = { assetId: string; sessionId?: string; status: "uploading" | "uploaded" | "failed" };
 export type UploadProgress = {
   totalFiles: number;
   finishedFiles: number;
@@ -38,6 +38,11 @@ export function contentTypeFor(file: File): string {
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
   return TYPE_BY_EXTENSION[extension] ?? "";
 }
+
+const PERMANENT_UPLOAD_ERRORS = new Set(["storage/unauthorized", "storage/unauthenticated", "storage/invalid-argument", "storage/invalid-checksum", "storage/object-not-found"]);
+const TRANSIENT_RETRIES = 3;
+const RETRY_BACKOFF_MS = [250, 750, 1_500];
+const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 async function defaultDeps(): Promise<UploadDeps> {
   const [{ apiPost }, { getStorageClient }] = await Promise.all([import("./apiClient"), import("./firebase")]);
@@ -70,7 +75,9 @@ export async function uploadMedia(
     onCloseFailure?: (retry: () => Promise<void>) => void;
     onPreparationProgress?: (p: UploadPreparationProgress) => void;
     onProjectReady?: (projectId: string) => void;
-    onEntryRegistered?: (entry: { fileIndex: number; file: File; assetId: string }) => void;
+    onEntryRegistered?: (entry: { fileIndex: number; file: File; assetId: string; sessionId: string }) => void;
+    replacesAssetIds?: string[];
+    replacesSessionIds?: string[];
     onReady?: (ready: { projectId: string; assetIds: string[] }) => void;
     concurrency?: number;
   },
@@ -125,13 +132,13 @@ export async function uploadMedia(
     finally { activeUploads--; uploadWaiters.shift()?.(); }
   };
 
-  const toInput = (file: File) => ({ fileName: file.name, contentType: contentTypeFor(file), sizeBytes: file.size });
+  const toInput = (file: File, index: number) => ({ fileName: file.name, contentType: contentTypeFor(file), sizeBytes: file.size, ...(options.replacesAssetIds?.[index] ? { replacesAssetId: options.replacesAssetIds[index], ...(options.replacesSessionIds?.[index] ? { replacesSessionId: options.replacesSessionIds[index] } : {}) } : {}) });
   const flushRegistrations = async () => {
     if (flushing) return flushing;
     flushing = (async () => {
       while (pending.length > 0) {
         const batch = pending.splice(0, ENTRY_BATCH);
-        const body = { entries: batch.map(({ file }) => toInput(file)) };
+        const body = { entries: batch.map(({ file, index }) => toInput(file, index)) };
         try {
           let registered: RegisteredEntry[];
           if (sessionPath) {
@@ -146,7 +153,8 @@ export async function uploadMedia(
             const entry = registered[i]!;
             entries[item.index] = entry;
             item.resolve(entry);
-            options.onEntryRegistered?.({ fileIndex: item.index, file: item.file, assetId: entry.assetId });
+            const sessionId = sessionPath!.split("/").at(-1)!;
+            options.onEntryRegistered?.({ fileIndex: item.index, file: item.file, assetId: entry.assetId, sessionId });
           });
           if (!readySent && entries.filter(Boolean).length === entries.length) {
             readySent = true;
@@ -200,25 +208,46 @@ export async function uploadMedia(
       progress.totalBytes += file.size - acceptedOriginal[index]!.size;
       report();
       const entry = await registerPrepared(index, file);
-      statuses[index] = { assetId: entry.assetId, status: "uploading" };
+      const sessionId = sessionPath!.split("/").at(-1)!;
+      statuses[index] = { assetId: entry.assetId, sessionId, status: "uploading" };
       report();
       const task = withUploadSlot(async () => {
         const uploadStarted = performance.now();
+        let transferAttempts = 0;
         try {
-          const generation = await putFile(entry.storagePath, file, (bytes) => { sent[index] = bytes; report(); });
+          let generation: string | void;
+          for (let attempt = 0; ; attempt++) {
+            transferAttempts++;
+            try {
+              generation = await putFile(entry.storagePath, file, (bytes) => { sent[index] = bytes; report(); });
+              break;
+            } catch (error) {
+              const uploadError = error as { code?: string; status?: unknown; httpStatus?: unknown };
+              const code = uploadError.code ?? "";
+              const statusValue = uploadError.httpStatus ?? uploadError.status;
+              const httpStatus = typeof statusValue === "number" ? statusValue : undefined;
+              if (PERMANENT_UPLOAD_ERRORS.has(code) || attempt >= TRANSIENT_RETRIES) throw error;
+              console.info("upload_retry", { assetId: entry.assetId, attempt: attempt + 1, code: code || "unknown", ...(httpStatus ? { httpStatus } : {}) });
+              sent[index] = 0;
+              await delay(RETRY_BACKOFF_MS[attempt]!);
+            }
+          }
           if (generation) {
             await post(`${sessionPath}/entries/${entry.assetId}/uploaded`, { generation }).catch(() => undefined);
           }
           sent[index] = file.size;
           progress.finishedFiles++;
-          statuses[index] = { assetId: entry.assetId, status: "uploaded" };
+          statuses[index] = { assetId: entry.assetId, sessionId, status: "uploaded" };
         } catch (error) {
-          progress.totalBytes -= file.size;
           sent[index] = 0;
           progress.failedFiles++;
-          statuses[index] = { assetId: entry.assetId, status: "failed" };
+          statuses[index] = { assetId: entry.assetId, sessionId, status: "failed" };
           options.onFileFailed?.(acceptedOriginal[index]!);
-          const reason = (error as { code?: string }).code ?? "upload_error";
+          const uploadError = error as { code?: string; status?: unknown; httpStatus?: unknown };
+          const reason = uploadError.code ?? "upload_error";
+          const statusValue = uploadError.httpStatus ?? uploadError.status;
+          const httpStatus = typeof statusValue === "number" ? statusValue : undefined;
+          console.info("upload_failed", { assetId: entry.assetId, reason, attempts: transferAttempts, ...(httpStatus ? { httpStatus } : {}) });
           const outcome = { kind: "failed" as const, reason };
           outcomes.set(entry.assetId, outcome);
           if (sessionPath) await post(`${sessionPath}/entries/${entry.assetId}/outcome`, outcome).then(() => outcomes.delete(entry.assetId)).catch(() => undefined);

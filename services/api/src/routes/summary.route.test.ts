@@ -26,7 +26,7 @@ describe("summary route asset progress", () => {
     app.use("/api/projects", (await import("./summary.js")).summaryRouter({ db, auth: auth as RequestHandler }));
     const response = await request(await listeningServer(app)).get("/api/projects/project-a/summary");
     expect(response.status).toBe(200);
-    expect(response.body.upload).toEqual({ expected: 0, settled: 0, failed: 0, cancelled: 0, closed: true });
+    expect(response.body.upload).toEqual({ expected: 0, settled: 0, uploaded: 0, failed: 0, failedAssetIds: [], failedEntries: [], pendingEntries: [], processingFailed: 0, cancelled: 0, closed: true });
     expect(response.body.ready.story).toBe(false);
     expect(response.body.assetStatuses).toEqual([
       { assetId: "photo-a", kind: "photo", status: "understood" },

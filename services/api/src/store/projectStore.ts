@@ -1,4 +1,4 @@
-import type { Firestore } from "firebase-admin/firestore";
+import type { Firestore, Transaction } from "firebase-admin/firestore";
 import {
   applyEntryEvent,
   canAddEntries,
@@ -18,10 +18,10 @@ export type Project = {
   createdAt: number;
 };
 
-export type NewEntryInput = { fileName: string; contentType: string; sizeBytes: number };
+export type NewEntryInput = { fileName: string; contentType: string; sizeBytes: number; replacesAssetId?: string; replacesSessionId?: string };
 
 export class StoreError extends Error {
-  constructor(public code: "not_found" | "session_closed" | "invalid_entry" | "too_many_entries") {
+  constructor(public code: "not_found" | "session_closed" | "invalid_entry" | "too_many_entries" | "invalid_replacement" | "replacement_conflict") {
     super(code);
   }
 }
@@ -46,12 +46,14 @@ export async function getOwnedProject(db: Firestore, userId: string, projectId: 
   return snap.data() as Project;
 }
 
-function buildEntries(db: Firestore, inputs: NewEntryInput[]): ManifestEntry[] {
+function buildEntries(db: Firestore, projectId: string, sessionId: string, inputs: NewEntryInput[]): ManifestEntry[] {
   if (inputs.length === 0 || inputs.length > MAX_ENTRIES_PER_REQUEST) throw new StoreError("too_many_entries");
   return inputs.map((input) => {
     if (validateNewEntry(input)) throw new StoreError("invalid_entry");
+    const assetId = db.collection("_ids").doc().id;
+    if (Boolean(input.replacesAssetId) !== Boolean(input.replacesSessionId)) throw new StoreError("invalid_replacement");
     return {
-      assetId: db.collection("_ids").doc().id,
+      assetId, projectId, sessionId, logicalAssetId: assetId,
       fileName: input.fileName,
       contentType: input.contentType,
       sizeBytes: input.sizeBytes,
@@ -60,6 +62,39 @@ function buildEntries(db: Firestore, inputs: NewEntryInput[]): ManifestEntry[] {
       failureReason: null,
     };
   });
+}
+
+function replacementTargetRef(db: Firestore, projectId: string, entry: NewEntryInput) {
+  if (!entry.replacesAssetId || !entry.replacesSessionId) throw new StoreError("invalid_replacement");
+  return sessionRef(db, projectId, entry.replacesSessionId).collection("entries").doc(entry.replacesAssetId);
+}
+
+async function claimReplacements(tx: Transaction, db: Firestore, projectId: string, entries: ManifestEntry[], inputs: NewEntryInput[]) {
+  const replacementIndexes = inputs.flatMap((input, index) => input.replacesAssetId ? [index] : []);
+  const refs = replacementIndexes.map((index) => replacementTargetRef(db, projectId, inputs[index]!));
+  const targets = await Promise.all(refs.map((ref) => tx.get(ref)));
+  const sessionRefs = replacementIndexes.map((index) => sessionRef(db, projectId, inputs[index]!.replacesSessionId!));
+  const sessions = await Promise.all(sessionRefs.map((ref) => tx.get(ref)));
+  const seen = new Set<string>();
+  for (let targetIndex = 0; targetIndex < replacementIndexes.length; targetIndex++) {
+    const entryIndex = replacementIndexes[targetIndex]!;
+    const targetSnap = targets[targetIndex]!;
+    if (!targetSnap.exists) throw new StoreError("invalid_replacement");
+    const target = targetSnap.data() as ManifestEntry;
+    const identity = `${inputs[entryIndex]!.replacesSessionId}/${target.assetId}`;
+    if (seen.has(identity) || (target.projectId && target.projectId !== projectId) || target.assetId !== inputs[entryIndex]!.replacesAssetId || (target.sessionId && target.sessionId !== inputs[entryIndex]!.replacesSessionId)) throw new StoreError("invalid_replacement");
+    seen.add(identity);
+    const session = sessions[targetIndex];
+    const terminal = target.outcome === "failed" || target.outcome === "cancelled";
+    const abandonedPending = target.outcome === "pending" && session?.exists && session.get("closed") === true;
+    if (!terminal && !abandonedPending) throw new StoreError("invalid_replacement");
+    if (target.replacementSuccessorId) throw new StoreError("replacement_conflict");
+    entries[entryIndex] = { ...entries[entryIndex]!, logicalAssetId: target.logicalAssetId || target.assetId, replacementOf: target.assetId };
+  }
+  replacementIndexes.forEach((entryIndex, targetIndex) => tx.update(refs[targetIndex]!, {
+    ...(targets[targetIndex]!.get("outcome") === "pending" ? { outcome: "cancelled", failureReason: "replaced_after_closed_session" } : {}),
+    replacementSuccessorId: entries[entryIndex]!.assetId,
+  }));
 }
 
 async function requireOwner(db: Firestore, userId: string, projectId: string): Promise<void> {
@@ -71,9 +106,18 @@ export async function openSession(
   input: { userId: string; projectId: string; entries: NewEntryInput[]; now: number },
 ): Promise<{ session: UploadSession; entries: ManifestEntry[] }> {
   await requireOwner(db, input.userId, input.projectId);
-  const entries = buildEntries(db, input.entries);
   const ref = projectRef(db, input.projectId).collection("uploadSessions").doc();
+  const entries = buildEntries(db, input.projectId, ref.id, input.entries);
   const session: UploadSession = { id: ref.id, projectId: input.projectId, userId: input.userId, closed: false, createdAt: input.now };
+
+  if (input.entries.some((entry) => entry.replacesAssetId)) {
+    await db.runTransaction(async (tx) => {
+      await claimReplacements(tx, db, input.projectId, entries, input.entries);
+      tx.create(ref, session);
+      for (const entry of entries) tx.create(ref.collection("entries").doc(entry.assetId), entry);
+    });
+    return { session, entries };
+  }
 
   const batch = db.batch();
   batch.set(ref, session);
@@ -87,13 +131,14 @@ export async function addEntries(
   input: { userId: string; projectId: string; sessionId: string; entries: NewEntryInput[] },
 ): Promise<ManifestEntry[]> {
   await requireOwner(db, input.userId, input.projectId);
-  const entries = buildEntries(db, input.entries);
   const ref = sessionRef(db, input.projectId, input.sessionId);
+  const entries = buildEntries(db, input.projectId, input.sessionId, input.entries);
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new StoreError("not_found");
     if (!canAddEntries(snap.data() as UploadSession)) throw new StoreError("session_closed");
+    await claimReplacements(tx, db, input.projectId, entries, input.entries);
     for (const entry of entries) tx.create(ref.collection("entries").doc(entry.assetId), entry);
   });
   return entries;

@@ -23,6 +23,8 @@ const STATUS: Record<StoreError["code"], number> = {
   not_found: 404,
   session_closed: 409,
   invalid_entry: 400,
+  invalid_replacement: 400,
+  replacement_conflict: 409,
   too_many_entries: 400,
 };
 
@@ -42,13 +44,18 @@ function parseEntries(body: unknown): NewEntryInput[] | null {
     (e) =>
       typeof e?.fileName === "string" &&
       typeof e?.contentType === "string" &&
-      typeof e?.sizeBytes === "number",
+      typeof e?.sizeBytes === "number" &&
+      (e?.replacesAssetId === undefined || (typeof e.replacesAssetId === "string" && isValidId(e.replacesAssetId))) &&
+      (e?.replacesSessionId === undefined || (typeof e.replacesSessionId === "string" && isValidId(e.replacesSessionId))) &&
+      Boolean(e?.replacesAssetId) === Boolean(e?.replacesSessionId),
   );
   return ok
     ? entries.map((e) => ({
         fileName: e.fileName,
         contentType: e.contentType,
         sizeBytes: e.sizeBytes,
+        ...(e.replacesAssetId ? { replacesAssetId: e.replacesAssetId } : {}),
+        ...(e.replacesSessionId ? { replacesSessionId: e.replacesSessionId } : {}),
       }))
     : null;
 }

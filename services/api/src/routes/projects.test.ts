@@ -118,10 +118,11 @@ describe("projects routes", () => {
       .post("/api/projects/p1/upload-sessions")
       .send({
         entries: [
-          { fileName: "a.jpg", contentType: "image/jpeg", sizeBytes: 5 },
+          { fileName: "a.jpg", contentType: "image/jpeg", sizeBytes: 5, replacesAssetId: "old-asset", replacesSessionId: "old-session" },
         ],
       });
     expect(res.status).toBe(201);
+    expect(store.openSession).toHaveBeenCalledWith(db, expect.objectContaining({ entries: [{ fileName: "a.jpg", contentType: "image/jpeg", sizeBytes: 5, replacesAssetId: "old-asset", replacesSessionId: "old-session" }] }));
     expect(res.body.entries[0].storagePath).toBe(
       "uploads/user-1/p1/s1/a1/original",
     );

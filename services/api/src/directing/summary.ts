@@ -15,7 +15,7 @@ export type ProjectSummary = {
   days: number; dateRange: { from: string; to: string } | null;
   places: string[]; country: string | null; season: string | null;
   processed: { ingested: number; understood: number; faces: number };
-  upload: { expected: number; settled: number; failed: number; cancelled: number; closed: boolean };
+  upload: { expected: number; settled: number; uploaded?: number; failed: number; failedAssetIds?: string[]; failedEntries?: { assetId: string; sessionId: string }[]; pendingEntries?: { assetId: string; sessionId: string }[]; processingFailed?: number; cancelled: number; closed: boolean };
   ready: { summary: boolean; faces: boolean; plan: boolean; story: boolean; film: boolean };
   assetStatuses: { assetId: string; kind: "photo" | "video"; status: AssetStatus }[];
   videoStatuses: { assetId: string; status: "processing" | "ready" | "failed"; progress: number }[];

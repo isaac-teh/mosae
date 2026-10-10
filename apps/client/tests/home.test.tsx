@@ -2,13 +2,13 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ films: [] as any[], listFilms: vi.fn(), uploadMedia: vi.fn(), setPendingMedia: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any, flow: { repository: "api" as const, projectId: "" } }));
+const state = vi.hoisted(() => ({ films: [] as any[], pickerFiles: null as File[] | null, listFilms: vi.fn(), uploadMedia: vi.fn(), setPendingMedia: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any, flow: { repository: "api" as const, projectId: "" } }));
 vi.mock("@/lib/startDemoTrip", () => ({ startDemoTrip: vi.fn(async () => {}) }));
 vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms }), uploadMedia: state.uploadMedia, setPendingMedia: state.setPendingMedia }));
 vi.mock("@/components/MediaPicker", async () => {
   const ReactModule = await import("react");
   return { MediaPicker: ReactModule.forwardRef(({ onFiles }: { onFiles: (files: File[]) => void }, ref) => {
-    ReactModule.useImperativeHandle(ref, () => ({ open: () => onFiles([new File(["photo"], "trip.jpg", { type: "image/jpeg" })]) }), [onFiles]);
+    ReactModule.useImperativeHandle(ref, () => ({ open: () => onFiles(state.pickerFiles ?? [new File(["photo"], "trip.jpg", { type: "image/jpeg" })]) }), [onFiles]);
     return null;
   }) };
 });
@@ -33,12 +33,13 @@ beforeEach(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
   state.films = [];
+  state.pickerFiles = null;
   state.focusEffect = null;
   state.listFilms.mockImplementation(async () => state.films);
   state.uploadMedia.mockImplementation(async (_files: File[], options: any) => {
     options.onProjectReady?.("uploaded-project");
     options.onPreparationProgress?.({ totalFiles: 1, preparedFiles: 0 });
-    options.onEntryRegistered?.({ fileIndex: 0, file: _files[0], assetId: "asset-1" });
+    options.onEntryRegistered?.({ fileIndex: 0, file: _files[0], assetId: "asset-1", sessionId: "session-1" });
     options.onReady?.({ projectId: "uploaded-project", assetIds: ["asset-1"] });
     options.onProgress?.({ totalFiles: 1, finishedFiles: 0, failedFiles: 0, bytesSent: 0, totalBytes: 5 });
     return { projectId: "uploaded-project", finished: 1, failed: 0, assetIds: ["asset-1"] };
@@ -56,7 +57,7 @@ describe("Home", () => {
     await act(async () => button!.click());
     await act(async () => await Promise.resolve());
     expect(state.uploadMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), expect.objectContaining({ mode: "memory", onProjectReady: expect.any(Function), onPreparationProgress: expect.any(Function), onReady: expect.any(Function), onProgress: expect.any(Function) }));
-    expect(state.setPendingMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), ["asset-1"], "uploaded-project");
+    expect(state.setPendingMedia).toHaveBeenCalledWith(expect.arrayContaining([expect.any(File)]), ["asset-1"], "uploaded-project", expect.any(Array));
     expect(state.push).toHaveBeenCalledWith({ pathname: "/director", params: { projectId: "uploaded-project", live: "1" } });
     expect(state.push).not.toHaveBeenCalledWith("/pick-memory");
   });
@@ -145,26 +146,40 @@ describe("Home", () => {
 
 });
 
-it("retries only failed files in the original project without losing completed progress", async () => {
-  let failedFile: File;
+it("retries the latest failed successor until success without changing the logical total", async () => {
+  const originalFile = new File(["good"], "good.jpg", { type: "image/jpeg" });
+  const failedFile = new File(["retry me"], "failed.jpg", { type: "image/jpeg" });
+  const attempts: { files: File[]; options: any }[] = [];
+  state.pickerFiles = [originalFile, failedFile];
   state.uploadMedia.mockImplementationOnce(async (files: File[], options: any) => {
-    failedFile = files[0]!;
     options.onProjectReady("uploaded-project");
-    options.onReady({ projectId: "uploaded-project", assetIds: ["old-failed"] });
-    options.onProgress({ totalFiles: 2, finishedFiles: 1, failedFiles: 1, bytesSent: 5, totalBytes: 5 });
+    options.onEntryRegistered({ fileIndex: 0, file: originalFile, assetId: "asset-good", sessionId: "session-original" });
+    options.onEntryRegistered({ fileIndex: 1, file: failedFile, assetId: "asset-failed-0", sessionId: "session-original" });
+    options.onReady({ projectId: "uploaded-project", assetIds: ["asset-good", "asset-failed-0"] });
+    options.onProgress({ totalFiles: 2, finishedFiles: 1, failedFiles: 1, bytesSent: originalFile.size, totalBytes: originalFile.size + failedFile.size, assetStatuses: [{ assetId: "asset-good", sessionId: "session-original", status: "uploaded" }, { assetId: "asset-failed-0", sessionId: "session-original", status: "failed" }] });
     options.onFileFailed(failedFile);
-    return { projectId: "uploaded-project", finished: 1, failed: 1, assetIds: ["old-failed"] };
+    return { projectId: "uploaded-project", finished: 1, failed: 1, assetIds: ["asset-good", "asset-failed-0"] };
   });
   await render();
   await act(async () => [...host.querySelectorAll("button")].find(button => button.textContent?.includes("Create a new film"))!.click());
-  state.uploadMedia.mockImplementationOnce(async (files: File[], options: any) => {
-    expect(files).toEqual([failedFile]);
-    expect(options.projectId).toBe("uploaded-project");
-    options.onReady({ projectId: "uploaded-project", assetIds: ["new-success"] });
-    options.onProgress({ totalFiles: 1, finishedFiles: 1, failedFiles: 0, bytesSent: 5, totalBytes: 5 });
-    return { projectId: "uploaded-project", finished: 1, failed: 0, assetIds: ["new-success"] };
-  });
-  await act(async () => retryPendingMedia("uploaded-project"));
-  expect(getUploadProgress()).toMatchObject({ totalFiles: 2, finishedFiles: 2, failedFiles: 0 });
+  for (const [assetId, sessionId, succeeds] of [["asset-failed-1", "session-retry-1", false], ["asset-failed-2", "session-retry-2", false], ["asset-failed-3", "session-retry-3", true]] as const) {
+    state.uploadMedia.mockImplementationOnce(async (files: File[], options: any) => {
+      attempts.push({ files, options });
+      expect(files).toEqual([failedFile]);
+      expect(options.projectId).toBe("uploaded-project");
+      options.onEntryRegistered({ fileIndex: 0, file: failedFile, assetId, sessionId });
+      options.onReady({ projectId: "uploaded-project", assetIds: [assetId] });
+      options.onProgress({ totalFiles: 1, finishedFiles: succeeds ? 1 : 0, failedFiles: succeeds ? 0 : 1, bytesSent: succeeds ? failedFile.size : 0, totalBytes: failedFile.size, assetStatuses: [{ assetId, sessionId, status: succeeds ? "uploaded" : "failed" }] });
+      if (!succeeds) options.onFileFailed(failedFile);
+      return { projectId: "uploaded-project", finished: succeeds ? 1 : 0, failed: succeeds ? 0 : 1, assetIds: [assetId] };
+    });
+    await act(async () => { await retryPendingMedia("uploaded-project"); });
+    expect(getUploadProgress()).toMatchObject({ totalFiles: 2, finishedFiles: succeeds ? 2 : 1, failedFiles: succeeds ? 0 : 1 });
+  }
+  expect(attempts.map(({ options }) => [options.replacesAssetIds, options.replacesSessionIds])).toEqual([
+    [["asset-failed-0"], ["session-original"]],
+    [["asset-failed-1"], ["session-retry-1"]],
+    [["asset-failed-2"], ["session-retry-2"]],
+  ]);
   expect(state.push).toHaveBeenCalledTimes(1);
 });

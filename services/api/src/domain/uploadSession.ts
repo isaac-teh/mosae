@@ -4,12 +4,19 @@ export type EntryOutcome = "pending" | "finalized" | "cancelled" | "failed";
 
 export type ManifestEntry = {
   assetId: string;
+  projectId?: string;
+  sessionId?: string;
+  logicalAssetId?: string;
+  /** Previous clients used a non-transactional replacement hint. */
+  replacesAssetId?: string;
   fileName: string;
   contentType: string;
   sizeBytes: number;
   outcome: EntryOutcome;
   generation: string | null;
   failureReason: string | null;
+  replacementOf?: string;
+  replacementSuccessorId?: string;
 };
 
 export type UploadSession = { id: string; projectId: string; userId: string; closed: boolean; createdAt: number };

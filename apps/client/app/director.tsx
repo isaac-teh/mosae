@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, ActivityIndicator, Animated, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Asset } from "expo-asset";
@@ -14,7 +14,8 @@ import { demoImage } from "@/lib/demoAssets";
 import { PendingPreviewUrls } from "@/lib/pendingPreviewUrls";
 import { StableUriImage } from "@/components/StableUriImage";
 import type { Timeline } from "@mosae/contracts";
-import { directionFocus, contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, personAnswerChips, subscribeUploadProgress, retryPendingMedia } from "@mosae/core";
+import { createUploadRecoveryOwner, directionFocus, contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, getUploadRecoveryOwner, personAnswerChips, subscribeUploadProgress, retryPendingMedia, hasPendingMediaRetry, setPendingMedia, setPendingMediaRetry, setUploadFailure, setUploadProgress, setUploadRecoveryOwner, uploadMedia, runUploadRecovery, type UploadRecoveryEntry } from "@mosae/core";
+import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
 
 const previewSourceUri = (value: string) => value === "demo:film" ? Asset.fromModule(require("../assets/demo/film.mp4")).uri : value.startsWith("demo:") ? Asset.fromModule(demoImage(value.slice(5))).uri : value;
 
@@ -69,6 +70,7 @@ export default function DirectorScreen() {
   const projectId = params.projectId ?? "";
   const story = useStoryFlow();
   const router = useRouter();
+  const mediaPicker = useRef<MediaPickerHandle>(null);
   const [name, setName] = useState("");
   const [namingPerson, setNamingPerson] = useState<string | null>(null);
   const [filmTimeline, setFilmTimeline] = useState<{ filmId: string; timeline: Timeline; sources: Record<string, string> } | null>(null);
@@ -129,6 +131,118 @@ export default function DirectorScreen() {
     });
     return result;
   }, []);
+  const replaceMissingMedia = useCallback(async (files: File[]) => {
+    if (!files.length) return;
+    const replacementFiles = files.filter((file) => Boolean(contentTypeFor(file)));
+    if (!replacementFiles.length) return;
+    let owner = getUploadRecoveryOwner(projectId);
+    if (!owner || owner.projectId !== projectId) {
+      let recoverySummary = projectSummary;
+      if (!recoverySummary) {
+        try { recoverySummary = await story.repository.getSummary(projectId); }
+        catch { setUploadFailure("Couldn't load the missing uploads. Check your connection and pick the files again."); return; }
+      }
+      // Another picker callback may have started while the summary was loading.
+      owner = getUploadRecoveryOwner(projectId);
+      if (owner) return;
+      const legacyFailedIds = recoverySummary.upload?.failedAssetIds ?? [];
+      const terminalTargets = recoverySummary.upload?.failedEntries ?? legacyFailedIds.map((assetId) => ({ assetId, sessionId: "" }));
+      const pendingTargets = recoverySummary.upload?.closed ? recoverySummary.upload.pendingEntries?.map((entry) => ({ ...entry, pending: true })) ?? [] : [];
+      const pendingCount = pendingTargets.length;
+      const targets: { assetId: string; sessionId: string; pending?: boolean }[] = [...terminalTargets, ...pendingTargets];
+      const transferFailed = recoverySummary.upload?.failed ?? terminalTargets.length;
+      const uploaded = recoverySummary.upload?.uploaded ?? Math.max(0, (recoverySummary.upload?.settled ?? 0) - transferFailed - (recoverySummary.upload?.cancelled ?? 0));
+      owner = createUploadRecoveryOwner(projectId, {
+        totalFiles: recoverySummary.upload?.expected ?? recoverySummary.total ?? targets.length,
+        uploadedFiles: uploaded,
+        failedFiles: transferFailed + (recoverySummary.upload?.cancelled ?? 0),
+        bytesSent: 0,
+        totalBytes: 0,
+      });
+      owner.failedTargets = targets.map((target) => ({ assetId: target.assetId, sessionId: target.sessionId, ...(target.pending ? { pending: true } : {}) }));
+      if (pendingCount > 0) setUploadFailure(`${pendingCount} uploads are still pending from a closed session. Pick those files again to resume them.`);
+      setUploadRecoveryOwner(owner);
+    }
+    if (owner.retryInFlight) return;
+    const retryTargets = owner.failedTargets.slice(0, replacementFiles.length);
+    const additions = replacementFiles.slice(Math.min(owner.failedTargets.length, replacementFiles.length));
+    const addedEntries: UploadRecoveryEntry[] = replacementFiles.map((file, index) => ({
+      file,
+      assetId: null,
+      sessionId: null,
+      status: "pending",
+      ...(retryTargets[index] ? { replacesAssetId: retryTargets[index]!.assetId, replacesPending: Boolean(retryTargets[index]!.pending), ...(retryTargets[index]!.sessionId ? { replacesSessionId: retryTargets[index]!.sessionId } : {}) } : {}),
+    }));
+    owner.entries = owner.entries.filter((entry) => !retryTargets.some((target) => target.assetId === (entry.assetId ?? entry.replacesAssetId)));
+    owner.entries.push(...addedEntries);
+    owner.aggregate.totalFiles += additions.length;
+    const recoveryOwner = owner;
+    setPendingMedia(owner.entries.map((entry) => entry.file), owner.entries.map((entry) => entry.assetId ?? ""), projectId, owner.entries.map((entry) => entry.sessionId ?? ""));
+    const runRecovery = async (selectedFiles: File[], entries: UploadRecoveryEntry[]) => {
+      if (recoveryOwner.closeRetry) {
+        try { await recoveryOwner.closeRetry(); recoveryOwner.closeRetry = null; }
+        catch { setUploadFailure("The upload session couldn't close. Retry closing it before sending more files."); return; }
+      }
+      if (!entries.length) { setUploadFailure(null); return; }
+      const previous = { ...recoveryOwner.aggregate };
+      const replacingFailures = entries.filter((entry) => entry.status === "failed" || (entry.replacesAssetId && !entry.replacesPending)).length;
+      const recoveryBaseFailed = Math.max(0, previous.failedFiles - replacingFailures);
+      const replacesAssetIds = entries.map((entry) => entry.replacesAssetId ?? "");
+      const replacesSessionIds = entries.map((entry) => entry.replacesSessionId ?? "");
+      try {
+        const result = await uploadMedia(selectedFiles, {
+          mode: "memory",
+          projectId,
+          replacesAssetIds,
+          replacesSessionIds,
+          onEntryRegistered: ({ fileIndex, assetId, sessionId }) => {
+            const entry = entries[fileIndex]!;
+            entry.assetId = assetId;
+            entry.sessionId = sessionId;
+            entry.status = "pending";
+            // A later retry must claim this successor, rather than its predecessor.
+            entry.replacesAssetId = assetId;
+            entry.replacesSessionId = sessionId;
+            entry.replacesPending = false;
+            recoveryOwner.failedTargets = recoveryOwner.failedTargets.filter((target) => target.assetId !== replacesAssetIds[fileIndex]);
+            setPendingMedia(recoveryOwner.entries.map((item) => item.file), recoveryOwner.entries.map((item) => item.assetId ?? ""), projectId, recoveryOwner.entries.map((item) => item.sessionId ?? ""));
+          },
+          onProgress: (progress) => {
+            progress.assetStatuses?.forEach((status) => {
+              const entry = entries.find((item) => item.assetId === status.assetId);
+              if (entry) entry.status = status.status === "uploaded" ? "uploaded" : status.status === "failed" ? "failed" : "pending";
+            });
+            const currentFailed = recoveryBaseFailed + progress.failedFiles;
+            const currentUploaded = previous.uploadedFiles + progress.finishedFiles;
+            recoveryOwner.aggregate = { ...previous, uploadedFiles: currentUploaded, failedFiles: currentFailed, bytesSent: previous.bytesSent + progress.bytesSent, totalBytes: Math.max(previous.totalBytes, previous.bytesSent + progress.totalBytes) };
+            setUploadProgress({ ...progress, totalFiles: previous.totalFiles, finishedFiles: currentUploaded, failedFiles: currentFailed, bytesSent: recoveryOwner.aggregate.bytesSent, totalBytes: recoveryOwner.aggregate.totalBytes, assetStatuses: [...recoveryOwner.entries.filter((entry) => entry.status === "uploaded" && entry.assetId && !entries.includes(entry)).map((entry) => ({ assetId: entry.assetId!, sessionId: entry.sessionId ?? undefined, status: "uploaded" as const })), ...(progress.assetStatuses ?? [])] });
+          },
+          onCloseFailure: (retry) => { recoveryOwner.closeRetry = retry; setUploadFailure("The upload session couldn't close. Your transferred files are saved; retry closing the session."); },
+          onReady: () => setPendingMedia(recoveryOwner.entries.map((item) => item.file), recoveryOwner.entries.map((item) => item.assetId ?? ""), projectId, recoveryOwner.entries.map((item) => item.sessionId ?? "")),
+        });
+        recoveryOwner.aggregate.uploadedFiles = previous.uploadedFiles + result.finished;
+        recoveryOwner.aggregate.failedFiles = recoveryBaseFailed + result.failed;
+        const freshFailures = entries.filter((entry) => entry.status === "failed" && entry.assetId && entry.sessionId).map((entry) => ({ assetId: entry.assetId!, sessionId: entry.sessionId! }));
+        for (const target of freshFailures) if (!recoveryOwner.failedTargets.some((existing) => existing.assetId === target.assetId)) recoveryOwner.failedTargets.push(target);
+        // Keep failed files and their newest successor receipts available for another retry.
+        if (!recoveryOwner.closeRetry) setUploadFailure(recoveryOwner.failedTargets.length ? `${recoveryOwner.failedTargets.length} files still need to upload. Retry or pick the missing files again.` : null);
+      } catch {
+        entries.filter((entry) => entry.status !== "uploaded").forEach((entry) => { entry.status = "failed"; });
+        recoveryOwner.aggregate.failedFiles = recoveryBaseFailed + entries.filter((entry) => entry.status === "failed").length;
+        setUploadFailure("These files couldn't upload. Pick the missing files again to retry.");
+      }
+    };
+    const guarded = () => runUploadRecovery(recoveryOwner, () => runRecovery(replacementFiles, addedEntries));
+    setPendingMediaRetry(projectId, async () => {
+      const failedEntries = recoveryOwner.entries.filter((entry) => entry.status !== "uploaded");
+      await runRecovery(failedEntries.map((entry) => entry.file), failedEntries);
+    });
+    setUploadFailure(null);
+    void guarded().finally(() => {
+      const progress = getUploadProgress();
+      if (getPendingMediaProjectId() === projectId && progress) setUploadProgress({ ...progress });
+    });
+  }, [projectId, projectSummary, story.repository]);
   useEffect(() => {
     if (!shouldAutoScrollAfterAction(actionPendingScroll.current, userScrolledUp.current)) return;
     requestAnimationFrame(() => {
@@ -145,16 +259,23 @@ export default function DirectorScreen() {
     }).catch(() => { if (active) setFilmPlayerFailed(true); });
     return () => { active = false; };
   }, [film?.filmId, projectId, story.repository]);
+  const recoveryOwner = getUploadRecoveryOwner(projectId);
+  const missingPending = !uploadProgress && projectSummary?.upload?.closed ? projectSummary.upload.pendingEntries?.length ?? 0 : 0;
+  const failedUploads = uploadProgress ? uploadProgress.failedFiles : (projectSummary?.upload?.failed ?? 0) + (projectSummary?.upload?.cancelled ?? 0);
+  const hasUploadFailure = Boolean(uploadFailure || failedUploads > 0 || missingPending > 0);
+  const canRetryLocal = hasPendingMediaRetry(projectId) && (!recoveryOwner || Boolean(recoveryOwner.closeRetry) || recoveryOwner.entries.some((entry) => entry.status !== "uploaded"));
+  const uploadBusy = Boolean(preparationProgress || recoveryOwner?.initialUploadInFlight || recoveryOwner?.retryInFlight || (!recoveryOwner && uploadProgress && uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles));
+  const uploadFailureAlert = hasUploadFailure ? <View key="upload-failure-alert" accessibilityRole="alert" className="gap-2 rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure ?? (missingPending ? `${failedUploads} files failed and ${missingPending} still need to upload.` : `${failedUploads} files could not upload.`)}</Text>
+    <Button label={canRetryLocal ? "Retry uploads" : "Pick the missing files again"} variant="secondary" disabled={uploadBusy} onPress={() => { if (canRetryLocal) { setUploadFailuresAcknowledged(false); void retryPendingMedia(projectId); } else mediaPicker.current?.open(); }} />
+    {Boolean(uploadProgress ? uploadProgress.finishedFiles : projectSummary && projectSummary.total > 0 && projectSummary.processed.understood > 0) && !uploadFailuresAcknowledged && <Button label="Continue with uploaded files" onPress={() => setUploadFailuresAcknowledged(true)} />}
+  </View> : null;
   return <View className="flex-1 bg-surface">
+    <MediaPicker ref={mediaPicker} onFiles={(files) => { void replaceMissingMedia(files); }} />
     <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} />
     <ScrollView ref={chatScroll} accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 py-6" contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { userScrolledUp.current = false; }} onScroll={(event: any) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       if (contentOffset && contentSize && layoutMeasurement) userScrolledUp.current = contentOffset.y + layoutMeasurement.height < contentSize.height - 32;
     }} scrollEventThrottle={16} style={{ flex: 1, minHeight: 0 }}>
-      {(uploadFailure || (projectSummary?.upload?.failed ?? 0) + (projectSummary?.upload?.cancelled ?? 0) > 0) && <View accessibilityRole="alert" className="gap-2 rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure ?? `${(projectSummary?.upload?.failed ?? 0) + (projectSummary?.upload?.cancelled ?? 0)} files could not upload.`}</Text>
-        <Button label="Retry uploads" variant="secondary" disabled={Boolean(preparationProgress) || Boolean(uploadProgress && uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles)} onPress={() => { setUploadFailuresAcknowledged(false); void retryPendingMedia(projectId).then((retried) => { if (!retried) router.push("/"); }); }} />
-        {Boolean(uploadProgress ? uploadProgress.finishedFiles : projectSummary && projectSummary.total > 0 && projectSummary.processed.understood > 0) && !uploadFailuresAcknowledged && <Button label="Continue with uploaded files" onPress={() => setUploadFailuresAcknowledged(true)} />}
-      </View>}
       {state.items.map((item) => {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveConflict(choice as "keep" | "leave"))} />;
         if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} photos={item.photos} />;
@@ -172,12 +293,12 @@ export default function DirectorScreen() {
             ? <Text className="font-sans text-caption text-ink-muted">✓</Text>
             : active ? <UploadSpinner reducedMotion={reducedMotion} /> : <Text className="font-sans text-caption text-ink-muted">○</Text>;
           const subject = item.photos && item.clips ? "photos and clips" : item.photos ? `photo${item.photos === 1 ? "" : "s"}` : `clip${item.clips === 1 ? "" : "s"}`;
-          return <View key={item.id} accessibilityRole="progressbar" aria-label={`Uploading ${item.uploadDone} of ${item.uploadTotal}`} className="gap-3 rounded-md bg-surface-sunken p-3">
+          return <Fragment key={item.id}><View accessibilityRole="progressbar" aria-label={`Uploading ${item.uploadDone} of ${item.uploadTotal}`} className="gap-3 rounded-md bg-surface-sunken p-3">
             {segmentRow}
-            <View className="flex-row items-center gap-2">{progressIcon(item.uploadComplete, !item.uploadComplete)}<Text className="flex-1 font-sans text-caption text-ink">{item.uploadComplete ? `Uploaded your ${subject}` : `Uploading your ${subject}`}</Text><Text className="font-sans text-caption text-ink-muted">{item.uploadDone} of {item.uploadTotal}</Text></View>
+            <View className="flex-row items-center gap-2">{progressIcon(item.uploadComplete, !item.uploadComplete)}<Text className="flex-1 font-sans text-caption text-ink">{item.uploadComplete ? item.uploadFailed ? `Uploaded ${item.uploadDone} of your ${subject}` : `Uploaded your ${subject}` : `Uploading your ${subject}`}</Text><Text className="font-sans text-caption text-ink-muted">{item.uploadDone} of {item.uploadTotal}{item.uploadFailed ? ` · ${item.uploadFailed} failed` : ""}</Text></View>
             <View className="flex-row items-center gap-2">{progressIcon(item.understoodComplete, item.understandingActive && !item.understoodComplete)}<Text className="flex-1 font-sans text-caption text-ink">{item.understoodComplete ? "Looked through all of them" : "Looking through them"}</Text>{item.understandingActive && !item.understoodComplete && <Text className="font-sans text-caption text-ink-muted">{item.understood} of {item.understoodTotal}</Text>}</View>
             {item.facesApplicable && <View className="flex-row items-center gap-2">{progressIcon(item.facesComplete, item.understoodComplete && !item.facesComplete)}<Text className="flex-1 font-sans text-caption text-ink">{item.facesComplete ? "Found the people in them" : "Finding the people in them"}</Text></View>}
-          </View>;
+          </View>{uploadFailureAlert}</Fragment>;
         }
         if (item.kind === "late-video") return item.status === "added"
           ? <View key={item.id} className="gap-2"><ChatMessage from="mosae" text={item.text} /><Button label="Undo" variant="quiet" onPress={() => scrollAfterAction(() => actions.resolveLateVideo(item.assetId, "undo"))} /></View>
@@ -257,6 +378,7 @@ export default function DirectorScreen() {
         </View>;
         return null;
       })}
+      {!state.items.some((item) => item.kind === "upload-status") && uploadFailureAlert}
       {state.step === "people" && !state.items.some((item) => item.kind === "person" || item.kind === "anyone-else") && <Button label="Skip for now" variant="quiet" onPress={() => scrollAfterAction(actions.skipPeople)} />}
       {pendingInterpret && !localMediaPending && <View className="gap-3"><ChatMessage from="you" text={pendingInterpret.text} /><ChatMessage from="mosae" text={pendingInterpret.reply} /><ChatProposal replies={[{ id: "confirm", label: "Yes, that's right" }, { id: "discard", label: "Not quite" }]} onReply={(choice) => scrollAfterAction(() => choice === "confirm" ? actions.confirmInterpret() : actions.discardInterpret())} /></View>}
       {error && <View className="gap-2"><ChatMessage from="mosae" text={error} /><Pressable role="button" onPress={() => scrollAfterAction(() => { retry(); if (state.step === "occasion") return actions.confirmOccasion(); })} style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })} className="active:scale-[0.97] active:bg-surface-sunken min-h-11 self-start justify-center"><Text className="font-sans-semibold text-action">Try again</Text></Pressable></View>}

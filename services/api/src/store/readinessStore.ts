@@ -1,4 +1,4 @@
-import { sessionSettled, type ManifestEntry, type UploadSession } from "../domain/uploadSession.js";
+import type { ManifestEntry } from "../domain/uploadSession.js";
 import type { Firestore } from "firebase-admin/firestore";
 import { newOutboxTask } from "../domain/outbox.js";
 import { READY_STATUS, readinessOf, type ProjectFacts, type ProjectOutcome } from "../domain/readiness.js";
@@ -16,11 +16,10 @@ export async function gatherFacts(db: Firestore, projectId: string): Promise<Pro
   const sessions = await project.collection("uploadSessions").get();
 
   let openSessions = 0;
-  let pendingEntries = 0;
+  const pendingCounts = await Promise.all(sessions.docs.map((session) => session.ref.collection("entries").where("outcome", "==", "pending").count().get()));
+  const pendingEntries = pendingCounts.reduce((sum, count) => sum + count.data().count, 0);
   for (const session of sessions.docs) {
     if (!session.get("closed")) openSessions += 1;
-    const pending = await session.ref.collection("entries").where("outcome", "==", "pending").count().get();
-    pendingEntries += pending.data().count;
   }
 
   const assets = project.collection("assets");
@@ -86,24 +85,25 @@ export async function settleProject(
 export async function gatherSummaryUpload(db: Firestore, projectId: string, assets: { id?: string; status: string; media?: { kind?: string }; facts?: { kind?: string } }[]) {
   const sessions = await db.collection("projects").doc(projectId).collection("uploadSessions").get();
   const byId = new Map(assets.map((asset) => [asset.id, asset]));
-  const upload = { expected: 0, settled: 0, failed: assets.filter((asset) => asset.status === "failed").length, cancelled: 0, closed: true };
-  const excludedAssetIds: string[] = [];
-  let manifestReady = true;
-  for (const session of sessions.docs) {
-    const entries = await session.ref.collection("entries").get();
-    const manifest = entries.docs.map((entry) => ({ ...entry.data(), assetId: entry.id })) as ManifestEntry[];
-    upload.closed &&= session.get("closed") === true;
-    manifestReady &&= sessionSettled({ closed: session.get("closed") === true } as UploadSession, manifest);
-    for (const entry of manifest) {
+  const manifests = await Promise.all(sessions.docs.map(async (session) => ({ session, entries: (await session.ref.collection("entries").get()).docs.map((entry) => ({ ...entry.data(), assetId: entry.id, projectId, sessionId: session.id, logicalAssetId: entry.get("logicalAssetId") ?? entry.id }) as ManifestEntry) })));
+  const allEntries = manifests.flatMap(({ entries }) => entries);
+  const legacyReplaced = allEntries.flatMap((entry) => entry.outcome === "finalized" && entry.replacesAssetId ? [entry.replacesAssetId] : []);
+  const superseded = new Set([...allEntries.flatMap((entry) => entry.replacementSuccessorId ? [entry.assetId] : []), ...legacyReplaced]);
+  const effectiveEntries = allEntries.filter((entry) => !superseded.has(entry.assetId));
+  const upload = { expected: effectiveEntries.length, settled: 0, uploaded: 0, failed: 0, failedAssetIds: [] as string[], failedEntries: [] as { assetId: string; sessionId: string }[], pendingEntries: [] as { assetId: string; sessionId: string }[], processingFailed: assets.filter((asset) => asset.status === "failed").length, cancelled: 0, closed: sessions.docs.every((session) => session.get("closed") === true) };
+  const excludedAssetIds: string[] = allEntries.filter((entry) => superseded.has(entry.assetId)).map((entry) => entry.assetId);
+  let manifestReady = upload.closed && effectiveEntries.every((entry) => entry.outcome !== "pending");
+  for (const entry of effectiveEntries) {
       if (entry.outcome === "failed" || entry.outcome === "cancelled") excludedAssetIds.push(entry.assetId);
-      upload.expected += 1;
       if (entry.outcome !== "pending") upload.settled += 1;
+      if (entry.outcome === "finalized") upload.uploaded += 1;
       if (entry.outcome === "cancelled") upload.cancelled += 1;
-      if (entry.outcome === "failed" && byId.get(entry.assetId)?.status !== "failed") upload.failed += 1;
+      if (entry.outcome === "failed") { upload.failed += 1; upload.failedAssetIds.push(entry.assetId); upload.failedEntries.push({ assetId: entry.assetId, sessionId: entry.sessionId! }); }
+      if (entry.outcome === "cancelled") upload.failedEntries.push({ assetId: entry.assetId, sessionId: entry.sessionId! });
+      if (entry.outcome === "pending") upload.pendingEntries.push({ assetId: entry.assetId, sessionId: entry.sessionId! });
       const asset = byId.get(entry.assetId);
       const isVideo = (asset?.media ?? asset?.facts)?.kind === "video";
       if (!isVideo && entry.outcome === "finalized" && !["understood", "failed"].includes(asset?.status ?? "")) manifestReady = false;
-    }
   }
   return { upload, manifestReady, excludedAssetIds };
 }

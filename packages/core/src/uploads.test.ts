@@ -61,7 +61,7 @@ describe("uploadMedia", () => {
         { fileName: "b.mov", contentType: "video/quicktime", sizeBytes: 20 },
       ],
     });
-    expect(progress.at(-1)).toEqual({ totalFiles: 2, finishedFiles: 2, failedFiles: 0, bytesSent: 30, totalBytes: 30, assetStatuses: [{ assetId: "a1", status: "uploaded" }, { assetId: "a2", status: "uploaded" }] });
+    expect(progress.at(-1)).toEqual({ totalFiles: 2, finishedFiles: 2, failedFiles: 0, bytesSent: 30, totalBytes: 30, assetStatuses: [{ assetId: "a1", sessionId: "s1", status: "uploaded" }, { assetId: "a2", sessionId: "s1", status: "uploaded" }] });
     expect(progress.some((p) => p.assetStatuses?.some((asset) => asset.status === "uploading"))).toBe(true);
   });
 
@@ -89,6 +89,18 @@ describe("uploadMedia", () => {
       putFile: async (_path, value, onBytes) => { onBytes(value.size); return "1712345678901"; },
     });
     expect(calls).toContainEqual({ path: "/api/projects/p1/upload-sessions/s1/entries/a1/uploaded", body: { generation: "1712345678901" } });
+  });
+
+  it("registers a replacement relationship for an existing failed project entry", async () => {
+    const { deps, calls } = fakeDeps();
+    await uploadMedia([file("photo.jpg", 10)], { mode: "memory", projectId: "p1", replacesAssetIds: ["old-asset"] }, deps);
+    expect(calls.find((call) => call.path === "/api/projects/p1/upload-sessions")?.body).toEqual({ entries: [{ fileName: "photo.jpg", contentType: "image/jpeg", sizeBytes: 10, replacesAssetId: "old-asset" }] });
+  });
+
+  it("passes the original session receipt with a replacement", async () => {
+    const { deps, calls } = fakeDeps();
+    await uploadMedia([file("photo.jpg", 10)], { mode: "memory", projectId: "p1", replacesAssetIds: ["old-asset"], replacesSessionIds: ["old-session"] }, deps);
+    expect(calls.find((call) => call.path === "/api/projects/p1/upload-sessions")?.body).toEqual({ entries: [{ fileName: "photo.jpg", contentType: "image/jpeg", sizeBytes: 10, replacesAssetId: "old-asset", replacesSessionId: "old-session" }] });
   });
 
   it("starts uploading each file before preparation has finished for the whole selection", async () => {
@@ -188,6 +200,44 @@ describe("uploadMedia", () => {
       body: { kind: "failed", reason: "storage/unauthorized" },
     });
     expect(calls.some((call) => call.path === "/api/projects/p1/upload-sessions/s1/close")).toBe(true);
+  });
+
+  it("retries transient transfer failures up to three times without duplicating the entry", async () => {
+    const { deps, calls } = fakeDeps();
+    let attempts = 0;
+    const result = await uploadMedia([file("a.jpg", 10)], { mode: "memory" }, {
+      ...deps,
+      putFile: async (_path, value, onBytes) => {
+        attempts++;
+        if (attempts < 3) throw Object.assign(new Error("offline"), { code: "storage/retry-limit-exceeded" });
+        onBytes(value.size);
+      },
+    });
+    expect(result).toMatchObject({ finished: 1, failed: 0, assetIds: ["a1"] });
+    expect(attempts).toBe(3);
+    expect(calls.filter(call => call.path.endsWith("/entries")).length).toBe(0);
+  });
+
+  it("does not retry a permission failure", async () => {
+    const { deps } = fakeDeps();
+    let attempts = 0;
+    const result = await uploadMedia([file("a.jpg", 10)], { mode: "memory" }, {
+      ...deps,
+      putFile: async () => { attempts++; throw Object.assign(new Error("denied"), { code: "storage/unauthorized" }); },
+    });
+    expect(result.failed).toBe(1);
+    expect(attempts).toBe(1);
+  });
+
+  it("stops after four total attempts and records storage/unknown once", async () => {
+    const { deps, calls } = fakeDeps();
+    let attempts = 0;
+    await uploadMedia([file("a.jpg", 10)], { mode: "memory" }, {
+      ...deps,
+      putFile: async () => { attempts++; throw Object.assign(new Error("unknown"), { code: "storage/unknown" }); },
+    });
+    expect(attempts).toBe(4);
+    expect(calls.filter(call => call.path.endsWith("/outcome"))).toHaveLength(1);
   });
 
   it("derives an empty MIME type and excludes unknown files before registration", async () => {
