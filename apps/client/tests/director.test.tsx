@@ -24,20 +24,24 @@ vi.mock("react-native", () => {
   };
 });
 
-const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, confirmCast: vi.fn(), push: vi.fn(), projectId: "project-1" }));
+const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, confirmCast: vi.fn(), push: vi.fn(), openPicker: vi.fn(), selectFiles: ((_: File[]) => {}) as (files: File[]) => void, uploadMedia: vi.fn(), projectId: "project-1" }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: mocks.projectId }), useRouter: () => ({ back: vi.fn(), push: mocks.push }) }));
-vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typeof import("@mosae/core")>()), getStoryRepository: () => mocks.repo }));
+vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typeof import("@mosae/core")>()), getStoryRepository: () => mocks.repo, uploadMedia: (...args: any[]) => mocks.uploadMedia(...args) }));
 vi.mock("@/lib/characters", () => ({ confirmCast: (...args: any[]) => mocks.confirmCast(...args) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flowRepo, flow: { repository: "api", projectId: "project-1" } }) }));
+vi.mock("@/components/MediaPicker", async () => {
+  const ReactModule = await import("react");
+  return { MediaPicker: ReactModule.forwardRef((props: any, ref: any) => { ReactModule.useImperativeHandle(ref, () => ({ open: () => { mocks.openPicker(); } }), []); mocks.selectFiles = (files: File[]) => props.onFiles(files); return null; }) };
+});
 vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: ({ source, aspect }: any) => React.createElement("div", { "data-testid": "film-player", "data-source": source, "data-aspect": aspect }) }));
 vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ onPlayingChange }: any) => React.createElement("div", { "data-testid": "film-ready-preview" }, React.createElement("button", { "aria-label": "Mock preview playing", onClick: () => onPlayingChange?.(true) }), React.createElement("button", { "aria-label": "Mock preview paused", onClick: () => onPlayingChange?.(false) })) }));
 import DirectorScreen from "../app/director";
 import { useDirectorChat } from "../lib/useDirectorChat";
-import { setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress } from "@mosae/core";
+import { getUploadProgress, setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress } from "@mosae/core";
 
 let root: Root;
 let host: HTMLDivElement;
-beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; mocks.projectId = "project-1"; URL.createObjectURL = vi.fn(() => "blob:test-photo"); URL.revokeObjectURL = vi.fn(); setPendingMedia([]); setUploadProgress(null); setUploadPreparationProgress(null); setUploadFailure(null); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
+beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; mocks.projectId = "project-1"; URL.createObjectURL = vi.fn(() => "blob:test-photo"); URL.revokeObjectURL = vi.fn(); setPendingMedia([]); setUploadProgress(null); setUploadPreparationProgress(null); setUploadFailure(null); mocks.uploadMedia.mockReset(); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
 afterEach(async () => { await act(async () => root.unmount()); setPendingMedia([]); setUploadProgress(null); setUploadPreparationProgress(null); setUploadFailure(null); host.remove(); });
 async function renderScreen() { await act(async () => root.render(<DirectorScreen />)); }
 async function click(label: string) { const button = host.querySelector(`button[aria-label="${label}"]`) ?? host.querySelector(`button[aria-label^="${label},"]`) ?? [...host.querySelectorAll("button")].find((item) => item.textContent?.trim() === label); expect(button).toBeTruthy(); await act(async () => button!.dispatchEvent(new MouseEvent("click", { bubbles: true }))); }
@@ -78,6 +82,9 @@ function setup(options: { faces?: boolean; orientation?: { portrait: number; lan
 
 describe("Director chat", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  let recoveryProjectSequence = 0;
+  const useFreshRecoveryProject = () => { mocks.projectId = `recovery-project-${++recoveryProjectSequence}`; };
 
   it.each([[false, "16:9"], [true, "9:16"]] as const)("uses the YouTube suggestion until the user explicitly chooses TikTok style (%s)", async (choosePortrait, expectedAspect) => {
     setup({ readyPlan: true, orientation: { portrait: 1, landscape: 7, square: 0, suggested: "16:9" }, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
@@ -145,7 +152,164 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
     await act(async () => setUploadProgress({ totalFiles: 2, finishedFiles: 0, failedFiles: 2, bytesSent: 0, totalBytes: 0 }));
     expect(hasText("Continue with uploaded files")).toBe(false);
-    expect(hasText("Retry uploads")).toBe(true);
+    expect(hasText("Pick the missing files again")).toBe(true);
+  });
+
+  it("keeps the project open and offers file reselection when retry ownership is missing", async () => {
+    useFreshRecoveryProject();
+    setup();
+    mocks.push.mockClear();
+    mocks.openPicker.mockClear();
+    setUploadProgress({ totalFiles: 2, finishedFiles: 1, failedFiles: 1, bytesSent: 1, totalBytes: 2 });
+    setUploadFailure("One file couldn't upload.");
+    await renderScreen();
+    expect(hasText("Pick the missing files again")).toBe(true);
+    const uploadCard = host.querySelector('[aria-label^="Uploading"]');
+    const alert = host.querySelector('[role="alert"], [accessibilityrole="alert"]');
+    expect(uploadCard && alert && Boolean(uploadCard.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    await click("Pick the missing files again");
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(mocks.openPicker).toHaveBeenCalledTimes(1);
+    expect(mocks.repo.getSummary).toHaveBeenCalled();
+  });
+
+  it("uploads picker selections into the same project and records replacement targets", async () => {
+    useFreshRecoveryProject();
+    setup();
+    mocks.push.mockClear();
+    mocks.openPicker.mockClear();
+    mocks.repo.getSummary.mockResolvedValue({ ...summary(), total: 2, upload: { expected: 2, settled: 2, uploaded: 1, failed: 1, failedAssetIds: ["failed-1"], failedEntries: [{ assetId: "failed-1", sessionId: "session-1" }], processingFailed: 0, cancelled: 0, closed: true } });
+    await renderScreen();
+    await click("Pick the missing files again");
+    const selected = new File(["new photo"], "replacement.jpg", { type: "image/jpeg" });
+    mocks.uploadMedia.mockImplementation(async (files: File[], options: any) => {
+      expect(files).toEqual([selected]);
+      expect(options.projectId).toBe(mocks.projectId);
+      options.onEntryRegistered({ fileIndex: 0, file: selected, assetId: "replacement-1", sessionId: "replacement-session" });
+      options.onProgress({ totalFiles: 1, finishedFiles: 1, failedFiles: 0, bytesSent: selected.size, totalBytes: selected.size, assetStatuses: [{ assetId: "replacement-1", sessionId: "replacement-session", status: "uploaded" }] });
+      options.onReady({ projectId: mocks.projectId, assetIds: ["replacement-1"] });
+      return { projectId: mocks.projectId, finished: 1, failed: 0, assetIds: ["replacement-1"] };
+    });
+    await act(async () => mocks.selectFiles([selected]));
+    await waitFor(() => expect(mocks.uploadMedia).toHaveBeenCalledTimes(1));
+    expect(mocks.uploadMedia.mock.calls[0]?.[1]).toMatchObject({ projectId: mocks.projectId, replacesAssetIds: ["failed-1"], replacesSessionIds: ["session-1"] });
+    expect(mocks.uploadMedia).toHaveBeenCalledTimes(1);
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(mocks.openPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps unselected transfer failures available and retries the newest failed successor", async () => {
+    useFreshRecoveryProject();
+    const projectId = mocks.projectId;
+    setup();
+    mocks.projectId = projectId;
+    mocks.repo.getSummary.mockResolvedValue({ ...summary(), total: 4, upload: { expected: 4, settled: 3, uploaded: 1, failed: 2, failedAssetIds: ["failed-a", "failed-b"], failedEntries: [{ assetId: "failed-a", sessionId: "session-a" }, { assetId: "failed-b", sessionId: "session-b" }], pendingEntries: [{ assetId: "pending-c", sessionId: "session-c" }], processingFailed: 0, cancelled: 0, closed: true } });
+    setUploadProgress({ totalFiles: 4, finishedFiles: 1, failedFiles: 2, bytesSent: 5, totalBytes: 20, assetStatuses: [{ assetId: "success", status: "uploaded" }, { assetId: "failed-a", sessionId: "session-a", status: "failed" }, { assetId: "failed-b", sessionId: "session-b", status: "failed" }] });
+    setUploadFailure("Two files couldn't upload.");
+    await renderScreen();
+    await waitFor(() => expect(hasText("Pick the missing files again")).toBe(true));
+    const selectedA = new File(["replacement a"], "replacement-a.jpg", { type: "image/jpeg" });
+    const firstCalls: any[] = [];
+    mocks.uploadMedia.mockImplementation(async (files: File[], options: any) => {
+      firstCalls.push({ files, options });
+      const failed = false;
+      const assetId = `successor-${firstCalls.length}`;
+      const sessionId = `new-session-${firstCalls.length}`;
+      options.onEntryRegistered({ fileIndex: 0, file: files[0], assetId, sessionId });
+      options.onProgress({ totalFiles: files.length, finishedFiles: failed ? 0 : 1, failedFiles: failed ? 1 : 0, bytesSent: failed ? 0 : files[0]!.size, totalBytes: files[0]!.size, assetStatuses: [{ assetId, sessionId, status: failed ? "failed" : "uploaded" }] });
+      if (failed) return { projectId: "project-1", finished: 0, failed: 1, assetIds: [assetId] };
+      return { projectId: "project-1", finished: 1, failed: 0, assetIds: [assetId] };
+    });
+    await click("Pick the missing files again");
+    await act(async () => mocks.selectFiles([selectedA]));
+    await waitFor(() => expect(mocks.uploadMedia).toHaveBeenCalledTimes(1));
+    expect(firstCalls[0]!.options).toMatchObject({ projectId, replacesAssetIds: ["failed-a"], replacesSessionIds: ["session-a"] });
+    expect(hasText("Pick the missing files again")).toBe(true);
+    expect(getUploadProgress()).toMatchObject({ totalFiles: 4, finishedFiles: 2, failedFiles: 1 });
+
+    await click("Pick the missing files again");
+    await act(async () => mocks.selectFiles([selectedA]));
+    await waitFor(() => expect(mocks.uploadMedia).toHaveBeenCalledTimes(2));
+    expect(firstCalls[1]!.options).toMatchObject({ projectId, replacesAssetIds: ["failed-b"], replacesSessionIds: ["session-b"] });
+    expect(getUploadProgress()).toMatchObject({ totalFiles: 4 });
+    await click("Pick the missing files again");
+    await act(async () => mocks.selectFiles([selectedA]));
+    await waitFor(() => expect(mocks.uploadMedia).toHaveBeenCalledTimes(3));
+    expect(firstCalls[2]!.options).toMatchObject({ projectId, replacesAssetIds: ["pending-c"], replacesSessionIds: ["session-c"] });
+    expect(getUploadProgress()).toMatchObject({ totalFiles: 4, finishedFiles: 4, failedFiles: 0 });
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("retries a picker replacement against each newest failed successor", async () => {
+    useFreshRecoveryProject();
+    const projectId = mocks.projectId;
+    setup();
+    mocks.repo.getSummary.mockResolvedValue({ ...summary(), total: 2, upload: { expected: 2, settled: 2, uploaded: 1, failed: 1, failedAssetIds: ["failed-original"], failedEntries: [{ assetId: "failed-original", sessionId: "session-original" }], processingFailed: 0, cancelled: 0, closed: true } });
+    setPendingMedia([], [], projectId);
+    setUploadProgress({ totalFiles: 2, finishedFiles: 1, failedFiles: 1, bytesSent: 5, totalBytes: 20, assetStatuses: [{ assetId: "success", status: "uploaded" }, { assetId: "failed-original", sessionId: "session-original", status: "failed" }] });
+    setUploadFailure("One file couldn't upload.");
+    await renderScreen();
+    const selected = new File(["retry"], "retry.jpg", { type: "image/jpeg" });
+    const calls: any[] = [];
+    mocks.uploadMedia.mockImplementation(async (files: File[], options: any) => {
+      calls.push({ files, options });
+      const attempt = calls.length;
+      const assetId = `successor-${attempt}`;
+      const sessionId = `session-${attempt}`;
+      options.onEntryRegistered({ fileIndex: 0, file: files[0], assetId, sessionId });
+      options.onProgress({ totalFiles: 1, finishedFiles: attempt === 3 ? 1 : 0, failedFiles: attempt === 3 ? 0 : 1, bytesSent: attempt === 3 ? selected.size : 0, totalBytes: selected.size, assetStatuses: [{ assetId, sessionId, status: attempt === 3 ? "uploaded" : "failed" }] });
+      return { projectId, finished: attempt === 3 ? 1 : 0, failed: attempt === 3 ? 0 : 1, assetIds: [assetId] };
+    });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt === 0) {
+        await click("Pick the missing files again");
+        await act(async () => mocks.selectFiles([selected]));
+      } else {
+        await waitFor(() => expect(host.querySelector('button[aria-label="Retry uploads"]')?.hasAttribute("disabled")).toBe(false));
+        await click("Retry uploads");
+      }
+      await waitFor(() => expect(mocks.uploadMedia).toHaveBeenCalledTimes(attempt + 1));
+      expect(getUploadProgress()).toMatchObject({ totalFiles: 2, finishedFiles: 1 + (attempt === 2 ? 1 : 0), failedFiles: attempt === 2 ? 0 : 1 });
+    }
+    expect(calls.map(({ options }) => [options.replacesAssetIds, options.replacesSessionIds])).toEqual([
+      [["failed-original"], ["session-original"]],
+      [["successor-1"], ["session-1"]],
+      [["successor-2"], ["session-2"]],
+    ]);
+    expect(calls.every(({ options }) => options.projectId === projectId)).toBe(true);
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("does not upload, navigate, or clear failure when the opened picker is cancelled", async () => {
+    useFreshRecoveryProject();
+    setup();
+    setPendingMedia([new File(["a"], "a.jpg", { type: "image/jpeg" }), new File(["b"], "b.jpg", { type: "image/jpeg" })], [], mocks.projectId);
+    setUploadProgress({ totalFiles: 2, finishedFiles: 0, failedFiles: 2, bytesSent: 0, totalBytes: 20 });
+    setUploadFailure("Two files couldn't upload.");
+    await renderScreen();
+    await waitFor(() => expect(hasText("Pick the missing files again")).toBe(true));
+    await click("Pick the missing files again");
+    expect(mocks.openPicker).toHaveBeenCalledTimes(1);
+    expect(mocks.uploadMedia).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(hasText("Two files couldn't upload.")).toBe(true);
+  });
+
+  it("locks rapid duplicate picker selections before the first upload settles", async () => {
+    useFreshRecoveryProject();
+    setup();
+    setPendingMedia([new File(["missing"], "missing.jpg", { type: "image/jpeg" })], [], mocks.projectId);
+    setUploadProgress({ totalFiles: 1, finishedFiles: 0, failedFiles: 1, bytesSent: 0, totalBytes: 10 });
+    setUploadFailure("One file couldn't upload.");
+    let complete!: () => void;
+    mocks.uploadMedia.mockImplementation(() => new Promise((resolve) => { complete = () => resolve({ projectId: "project-1", finished: 1, failed: 0, assetIds: ["new-a"] }); }));
+    await renderScreen();
+    await waitFor(() => expect(hasText("Pick the missing files again")).toBe(true));
+    const selected = new File(["same"], "same.jpg", { type: "image/jpeg" });
+    await click("Pick the missing files again");
+    await act(async () => { mocks.selectFiles([selected]); mocks.selectFiles([selected]); });
+    expect(mocks.uploadMedia).toHaveBeenCalledTimes(1);
+    complete();
   });
 
   it("accepts an early free-text story and plans automatically when preparation completes", async () => {
@@ -830,6 +994,18 @@ describe("Director chat", () => {
     await click("Send");
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", planId: "proposal-1", generationId: "film-1", request: "Make it shorter", repository: "api" } });
     expect(mocks.repo.interpret).not.toHaveBeenCalled();
+  });
+
+  it("answers a mid-flow question inline during the automated understand phase without disrupting the flow", async () => {
+    setup({ interpret: async () => ({ reply: "Your photos are uploading — one moment.", change: { kind: "note" } }) });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.retry());
+    await act(async () => chat.actions.send("how long will this take?"));
+    expect(chat.state.items.some(item => item.kind === "you" && item.id === "interp-question-1" && item.text === "how long will this take?")).toBe(true);
+    expect(chat.state.items.some(item => item.kind === "mosae" && item.id === "interp-reply" && item.text === "Your photos are uploading — one moment.")).toBe(true);
+    expect(mocks.repo.createPlan).not.toHaveBeenCalled();
   });
 });
 

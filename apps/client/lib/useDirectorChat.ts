@@ -586,10 +586,45 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (added.length) setInput((current) => ({ ...current, missedPeople: [...(current.missedPeople ?? []), ...added], missedPersonTagging: added[0]! }));
         return;
       }
-      if (!input.intent && (!canConfirmStory({ ...input, ...confirmationState }) || input.earlyOccasionAnswer)) {
-        setInput((current) => current.earlyOccasionAnswer
-          ? ({ ...current, notes: [...current.notes, text.trim()] })
-          : ({ ...current, earlyOccasionAnswer: text.trim() }));
+      if (!input.intent) {
+        // Upload phase (localMediaPending): the user is answering the occasion question — capture directly.
+        // Understand/faces phase (upload done, understood > 0): answer mid-flow questions inline.
+        const flowStarted = !localState.localMediaPending && Boolean(input.summary?.processed && input.summary.processed.understood > 0);
+        if (!flowStarted) {
+          // Pre-upload "answer the occasion question" flow: keep capturing directly.
+          setInput((current) => current.earlyOccasionAnswer
+            ? ({ ...current, notes: [...current.notes, text.trim()] })
+            : ({ ...current, earlyOccasionAnswer: text.trim() }));
+          return;
+        }
+        // Automated phase (understand/faces): the model decides whether this is an occasion
+        // answer (wait for explicit confirmation) or a mid-flow question (answer inline).
+        if (!summary) return;
+        try {
+          const step = state.step === "people" || state.step === "moments" || state.step === "direction" ? state.step : "occasion";
+          const result = await repository.interpret(projectId, { step, text, context: { summary, people: (input.people ?? []).map(({ personId, name, role }) => ({ personId, name, role })) } });
+          if (canConfirmStory({ ...input, ...confirmationState }) && result.change.kind === "occasion") {
+            // Ready to confirm: an occasion answer waits for explicit confirmation.
+            if (result.change.kind === "unclear") { setPendingInterpret({ reply: result.reply || UNCLEAR, text }); return; }
+            const interpretedPeople = Array.isArray(result.change.mentionedPeople)
+              ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
+            const storySummary = typeof result.change.storyText === "string" ? result.change.storyText : undefined;
+            setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
+            return;
+          }
+          // Mid-flow question: answer inline, don't disrupt the flow.
+          const reply = result.change.kind === "unclear" ? (result.reply || UNCLEAR) : result.reply;
+          setInput((current) => ({ ...current, interpQuestions: [...(current.interpQuestions ?? []), text.trim()], interpReplying: true }));
+          if (result.change.kind === "occasion") {
+            // User answered the occasion question mid-flow — capture it; confirmOccasion
+            // proceeds once a plan can be confirmed. Do not force a step change.
+            setInput((current) => ({ ...current, interpReplying: false, interpReply: { text: reply }, earlyOccasionAnswer: text.trim(), ...(typeof result.change.storyText === "string" ? { earlyOccasionStoryText: result.change.storyText } : {}) }));
+          } else {
+            setInput((current) => ({ ...current, interpReplying: false, interpReply: { text: reply } }));
+          }
+        } catch (cause) {
+          setError(reportFailure(cause));
+        }
         return;
       }
       if (!summary) return;
