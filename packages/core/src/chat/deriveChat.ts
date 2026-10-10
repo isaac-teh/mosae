@@ -105,18 +105,19 @@ export function deriveChat(input: ChatInput): ChatState {
   const add = (item: ChatItem) => items.push(item);
   const summary = input.summary;
   const uploadTotal = input.localUpload?.total ?? summary?.upload?.expected ?? summary?.total ?? 0;
-  const uploadDone = input.localUpload ? input.localUpload.settled + input.localUpload.failed : summary?.upload?.settled ?? summary?.processed.ingested ?? 0;
+  const uploadDone = input.localUpload ? input.localUpload.settled : summary?.upload ? summary.upload.uploaded ?? Math.max(0, summary.upload.settled - summary.upload.failed - summary.upload.cancelled) : summary?.processed.ingested ?? 0;
+  const uploadSettled = input.localUpload ? input.localUpload.settled + input.localUpload.failed : summary?.upload?.settled ?? uploadDone;
   const photos = input.localUpload?.photos ?? summary?.photos ?? 0;
   const clips = input.localUpload?.clips ?? summary?.clips ?? 0;
   const understoodTotal = uploadTotal;
   const understood = summary?.processed.understood ?? 0;
-  const uploadComplete = uploadTotal > 0 && (input.localUpload ? uploadDone >= uploadTotal : summary?.upload ? summary.upload.closed && uploadDone >= summary.upload.expected : Boolean(summary && summary.processed.ingested >= uploadTotal));
-  const failedCount = summary?.upload?.failed ?? 0;
+  const uploadComplete = uploadTotal > 0 && (input.localUpload ? uploadSettled >= uploadTotal : summary?.upload ? summary.upload.closed && uploadSettled >= summary.upload.expected : Boolean(summary && summary.processed.ingested >= uploadTotal));
+  const failedCount = input.localUpload?.failed ?? (summary?.upload ? summary.upload.failed + summary.upload.cancelled : 0);
   const understandingActive = Boolean(summary && (summary.processed.ingested > 0 || uploadComplete || summary.ready.summary));
-  const understoodComplete = Boolean(uploadComplete && understoodTotal > 0 && understood + Math.max(failedCount, input.localUpload?.failed ?? 0) >= understoodTotal);
+  const understoodComplete = Boolean(uploadComplete && understoodTotal > 0 && understood + failedCount + (summary?.upload?.processingFailed ?? 0) >= understoodTotal);
   const facesApplicable = photos > 0 || Boolean(input.localUpload && summary?.photos);
   const facesComplete = Boolean(facesApplicable && understoodComplete && summary?.ready.faces);
-  const addUploadStatus = () => add({ kind: "upload-status", id: "upload-status", photos, clips, uploadTotal, uploadDone: Math.min(uploadDone, uploadTotal), understood, understoodTotal, uploadComplete, understandingActive, understoodComplete, facesApplicable, facesComplete });
+  const addUploadStatus = () => add({ kind: "upload-status", id: "upload-status", photos, clips, uploadTotal, uploadDone: Math.min(uploadDone, uploadTotal), uploadFailed: failedCount, understood, understoodTotal, uploadComplete, understandingActive, understoodComplete, facesApplicable, facesComplete });
   const noteStatus = () => {
     if (facesApplicable && understoodComplete && !facesComplete) return "I'm finding the people in them now.";
     return `${Math.min(uploadDone, uploadTotal)} of ${uploadTotal} uploaded and ${Math.min(understood, understoodTotal)} of ${understoodTotal} looked through.`;
@@ -131,7 +132,7 @@ export function deriveChat(input: ChatInput): ChatState {
   });
   const mediaLabel = photos > 0 && clips > 0 ? "photos and clips" : photos > 0 ? `photo${photos === 1 ? "" : "s"}` : `clip${clips === 1 ? "" : "s"}`;
   const mediaCount = uploadTotal || photos + clips;
-  const addUploadIntro = () => add({ kind: "mosae", id: "upload-intro", text: uploadComplete ? `Your ${mediaCount} ${mediaLabel} ${mediaCount === 1 && photos + clips === 1 ? "is" : "are"} uploaded.` : `I'm bringing in your ${mediaCount} ${mediaLabel}. Then I'll look through them.` });
+  const addUploadIntro = () => add({ kind: "mosae", id: "upload-intro", text: uploadComplete && failedCount > 0 ? `I uploaded ${Math.min(uploadDone, uploadTotal)} of your ${mediaCount} ${mediaLabel}; ${failedCount} couldn't upload.` : uploadComplete ? `Your ${mediaCount} ${mediaLabel} ${mediaCount === 1 && photos + clips === 1 ? "is" : "are"} uploaded.` : `I'm bringing in your ${mediaCount} ${mediaLabel}. Then I'll look through them.` });
   const questionUploadComplete = input.earlyOccasionQuestionUploadComplete ?? uploadComplete;
   const addOccasionQuestion = () => add({ kind: "occasion-question", id: "occasion-question", uploadComplete: questionUploadComplete });
   const acknowledgementText = (text: string, storySummary?: string, mentionedPeople?: string[]) => {
@@ -144,6 +145,21 @@ export function deriveChat(input: ChatInput): ChatState {
   };
   const addVideoFailures = () => (input.summary?.videoStatuses ?? []).filter((video) => video.status === "failed")
     .forEach((video) => add({ kind: "mosae", id: `video-failed-${video.assetId}`, text: "Couldn't read this video" }));
+  // Mid-flow questions the user asks during the automated upload/understand/faces phases render
+  // inline (their question, then a "Thinking" bubble or the model's reply) without changing step.
+  // Rendered in both !input.intent branches so questions answer during faces/confirm too.
+  const addInterp = () => {
+    if (input.interpQuestions) {
+      input.interpQuestions.forEach((q, i) => {
+        add({ kind: "you", id: `interp-question-${i + 1}`, text: q });
+      });
+    }
+    if (input.interpReplying) {
+      add({ kind: "typing", id: "interp-typing", text: "Thinking" });
+    } else if (input.interpReply) {
+      add({ kind: "mosae", id: "interp-reply", text: input.interpReply.text });
+    }
+  };
   if (input.filmWait) {
     const statuses = input.summary?.videoStatuses ?? [];
     const progress = statuses.length ? statuses.reduce((sum, video) => sum + video.progress, 0) / statuses.length : 0;
@@ -162,6 +178,7 @@ export function deriveChat(input: ChatInput): ChatState {
       if (input.pendingResponse === "occasion") add({ kind: "typing", id: "occasion-save-wait", text: "Putting your story together" });
     } else addOccasionQuestion();
     addNotes();
+    addInterp();
     return { items, step, confirmed, placeholder };
   }
   addUploadIntro();
@@ -174,6 +191,7 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "mosae", id: "story-acknowledgement", text: acknowledgementText(input.earlyOccasionAnswer) });
     } else addOccasionQuestion();
     addNotes();
+    addInterp();
     return { items, step, confirmed, placeholder };
   }
 

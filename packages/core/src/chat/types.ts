@@ -12,7 +12,7 @@ export type ProjectSummary = {
   season: string | null;
   processed: { ingested: number; understood: number; faces: number };
   orientation?: { portrait: number; landscape: number; square: number; suggested: "9:16" | "16:9" | null };
-  upload?: { expected: number; settled: number; failed: number; cancelled: number; closed: boolean };
+  upload?: { expected: number; settled: number; uploaded?: number; failed: number; failedAssetIds?: string[]; failedEntries?: { assetId: string; sessionId: string }[]; pendingEntries?: { assetId: string; sessionId: string }[]; processingFailed?: number; cancelled: number; closed: boolean };
   ready: { summary: boolean; faces: boolean; plan: boolean; story?: boolean; film?: boolean };
   assetStatuses?: { assetId: string; kind: "photo" | "video"; status: "uploaded" | "ingested" | "understood" | "failed" }[];
   videoStatuses?: { assetId: string; status: "processing" | "ready" | "failed"; progress: number }[];
@@ -24,6 +24,9 @@ export type ChatInput = {
   earlyOccasionAnswer?: string;
   earlyOccasionStoryText?: string;
   earlyOccasionQuestionUploadComplete?: boolean;
+  interpQuestions?: string[];
+  interpReplying?: boolean;
+  interpReply?: { text: string } | null;
   pendingResponse?: "occasion" | "person";
   uploadFailuresAcknowledged?: boolean;
   summary: ProjectSummary | null;
@@ -49,7 +52,7 @@ export type ChatInput = {
 };
 
 export type ChatItem =
-  | { kind: "upload-status"; id: string; photos: number; clips: number; uploadTotal: number; uploadDone: number; understood: number; understoodTotal: number; uploadComplete: boolean; understandingActive: boolean; understoodComplete: boolean; facesApplicable: boolean; facesComplete: boolean }
+  | { kind: "upload-status"; id: string; photos: number; clips: number; uploadTotal: number; uploadDone: number; uploadFailed: number; understood: number; understoodTotal: number; uploadComplete: boolean; understandingActive: boolean; understoodComplete: boolean; facesApplicable: boolean; facesComplete: boolean }
   | { kind: "occasion-question"; id: string; uploadComplete: boolean }
   | { kind: "mosae"; id: string; text: string; facts?: string[]; photos?: string[] }
   | { kind: "you"; id: string; text: string }

@@ -57,6 +57,18 @@ describe("deriveChat state table", () => {
     expect(reopened.items.find(item => item.kind === "occasion-question")).toBeTruthy();
   });
 
+  it("counts finalized processing failures as uploaded transfers without reporting transfer failure", () => {
+    const processedFailure = deriveChat({ ...base(), intent: null, summary: { ...summary, total: 1, photos: 1, clips: 0, upload: { expected: 1, settled: 1, uploaded: 1, failed: 0, processingFailed: 1, cancelled: 0, closed: true }, processed: { ingested: 1, understood: 0, faces: 0 }, ready: { summary: true, faces: false, plan: false } } });
+    expect(processedFailure.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadDone: 1, uploadFailed: 0, uploadTotal: 1, uploadComplete: true, understoodComplete: true });
+    expect(processedFailure.items.find(item => item.id === "upload-intro")).toMatchObject({ text: "Your 1 photo is uploaded." });
+  });
+
+  it("keeps failed files out of uploaded progress while showing the failed count", () => {
+    const state = deriveChat({ ...base(), intent: null, localUpload: { total: 16, settled: 11, failed: 5, photos: 16, clips: 0 } });
+    expect(state.items.find(item => item.kind === "upload-status")).toMatchObject({ uploadDone: 11, uploadFailed: 5, uploadTotal: 16 });
+    expect(state.items.find(item => item.id === "upload-intro")).toMatchObject({ text: "I uploaded 11 of your 16 photos; 5 couldn't upload." });
+  });
+
   it("switches the intro and occasion prompt to their uploaded wording when transfer is complete", () => {
     const complete = deriveChat({ ...base(), intent: null, summary: { ...summary, total: 1, photos: 1, clips: 0, upload: { expected: 1, settled: 1, failed: 0, cancelled: 0, closed: true }, processed: { ingested: 1, understood: 1, faces: 0 }, ready: { summary: true, faces: false, plan: false } } });
     expect(complete.items.find(item => item.id === "upload-intro")).toMatchObject({ text: "Your 1 photo is uploaded." });
