@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Timeline } from "@mosae/contracts";
-import { audioTrimFrames, gainToVolume, timelineMetadata } from "./timelineMetadata.js";
+import { audioTrimFrames, audioVolumeAt, gainToVolume, timelineMetadata } from "./timelineMetadata.js";
 
 const timeline = (overrides: Partial<Timeline> = {}): Timeline => ({
   schemaVersion: 1,
@@ -64,5 +64,14 @@ describe("audioTrimFrames", () => {
     const trim = audioTrimFrames({ sourceInSec: 0.05, sourceOutSec: 1 }, 30);
     expect(trim.trimBeforeFrames).toBe(2);
     expect(trim.trimAfterFrames).toBeGreaterThan(trim.trimBeforeFrames);
+  });
+});
+
+describe("audioVolumeAt", () => {
+  it("applies fades at the same frames for preview and render", () => {
+    expect(audioVolumeAt(-6, 0, 300, 30, 30)).toBe(0);
+    expect(audioVolumeAt(-6, 15, 300, 30, 30)).toBeCloseTo(gainToVolume(-6) / 2);
+    expect(audioVolumeAt(-6, 285, 300, 30, 30)).toBeCloseTo(gainToVolume(-6) / 2);
+    expect(audioVolumeAt(-6, 299, 300, 30, 30)).toBeCloseTo(gainToVolume(-6) / 30);
   });
 });

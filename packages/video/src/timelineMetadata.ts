@@ -51,3 +51,11 @@ export function audioTrimFrames(
     trimAfterFrames: Math.round(source.sourceOutSec * fps),
   };
 }
+
+/** Apply timeline fades with frame based volume so previews and renders agree. */
+export function audioVolumeAt(gainDb: number, frame: number, durationFrames: number, fadeInFrames: number, fadeOutFrames: number): number {
+  const fadeIn = fadeInFrames > 0 ? Math.min(1, Math.max(0, frame / fadeInFrames)) : 1;
+  const remaining = durationFrames - frame;
+  const fadeOut = fadeOutFrames > 0 ? Math.min(1, Math.max(0, remaining / fadeOutFrames)) : 1;
+  return gainToVolume(gainDb) * Math.min(fadeIn, fadeOut);
+}

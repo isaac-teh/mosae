@@ -88,9 +88,16 @@ function buildTimeline(firstCut: Timeline, work: WorkClip[], soundtrackId?: stri
     const endSec = videoClips[index].startSec + Math.min(caption.offsetEnd, item.clip.durationSec);
     return endSec > startSec ? [{ text: caption.text, startSec, endSec }] : [];
   }));
+  let soundtrackReplacementWritten = false;
   const audioClips: AudioClip[] = firstCut.audioClips.flatMap((track) => {
+    if (track.source.kind === "soundtrack" && track.role === "music" && soundtrackId !== undefined) {
+      if (soundtrackReplacementWritten) return [];
+      soundtrackReplacementWritten = true;
+    }
     const refit = track.source.kind === "soundtrack" && track.role === "music"
-      ? { ...track, startSec: 0, gainDb: musicGains.get(track.id) ?? track.gainDb, source: { ...track.source, soundtrackId: soundtrackId ?? track.source.soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, fadeOutSec: Math.min(track.fadeOutSec, durationSec) }
+      ? soundtrackId !== undefined
+        ? { ...track, startSec: 0, gainDb: musicGains.get(track.id) ?? track.gainDb, source: { ...track.source, soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, fadeOutSec: Math.min(track.fadeOutSec, durationSec) }
+        : { ...track, gainDb: musicGains.get(track.id) ?? track.gainDb }
       : track;
     const available = durationSec - refit.startSec;
     if (available <= 0) return [];

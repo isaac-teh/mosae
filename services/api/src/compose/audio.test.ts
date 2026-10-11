@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildAudioClips, type AudioClip } from "./audio.js";
 import type { AssembledClip } from "./assemble.js";
+import { loadLibrary } from "../music/library.js";
 
 const holds = { base: 3.5, min: 2, max: 6 };
 
@@ -122,6 +123,17 @@ describe("buildAudioClips — music track", () => {
     expect(music).toBeDefined();
     expect(music!.gain).toBeLessThan(0.6); // reduced from base 0.6
     expect(music!.gain).toBeGreaterThanOrEqual(0.2); // not muted
+  });
+
+  it("jumps into the analysed outro and ends the soundtrack at the film ending", () => {
+    const result = buildAudioClips([makePhotoClip("photo1", "mute")], "lyria-tender", 30).filter((clip) => clip.kind === "music");
+    expect(result).toHaveLength(2);
+    expect(result[0]!.endSec).toBe(result[1]!.startSec + 0.5);
+    expect(result[1]!.endSec).toBe(30);
+    const trackDuration = loadLibrary().find((track) => track.id === "lyria-tender")!.analysis!.durationSec;
+    expect(result[1]!.sourceOutSec).toBe(trackDuration);
+    expect(result[1]!.endSec - result[1]!.startSec).toBe(result[1]!.sourceOutSec! - result[1]!.sourceInSec!);
+    expect(result[1]!.fadeOutSec).toBe(1);
   });
 
   it("ambient clips are offset correctly alongside music", () => {
