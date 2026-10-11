@@ -53,7 +53,7 @@ describe("MosaeTimeline", () => {
         startSec: 0,
         durationSec: 2,
         transitionIn: { kind: "cut" as const, durationSec: 0 },
-        motion: { kind: "slow-zoom" as const, from: 1, to: 1.1 },
+        motion: { kind: "slow-zoom" as const, from: 1, to: 1.1, center: { cx: 0.2, cy: 0.35 } },
       }],
     };
     const html = renderToStaticMarkup(<MosaeTimeline timeline={timeline} sources={{ portrait: "/portrait.jpg" }} />);
@@ -69,6 +69,7 @@ describe("MosaeTimeline", () => {
     expect(foreground).toContain("position:absolute;inset:0;z-index:1");
     expect(foreground).toContain("object-fit:contain");
     expect(foreground).toContain("transform:scale(1.0233333333333334) rotate(0deg)");
+    expect(foreground).toContain("transform-origin:20% 35%");
     expect(foreground).not.toContain("scale(1.15)");
   });
 

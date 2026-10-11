@@ -15,6 +15,7 @@ import { photoRoles } from "../cast/prominence.js";
 import type { Cast, FaceRef } from "../cast/types.js";
 import type { ClipTime } from "./chronology.js";
 import { addSourceDimensions } from "./resolveSources.js";
+import { aspectRatio, collageCellAspect, focalCrop, type FramingFace } from "./focalCrop.js";
 
 export type ComposeTask = {
   projectId: string;
@@ -147,7 +148,6 @@ async function buildFocusCenterMap(
   proposal: StoryProposal,
 ): Promise<Map<string, { cx: number; cy: number }>> {
   const focusIds = new Set(proposal.constraints.focusCharacterIds ?? []);
-  if (focusIds.size === 0) return new Map();
 
   const project = db.collection("projects").doc(projectId);
   const shotSnaps = await project.collection("shots").get();
@@ -159,13 +159,14 @@ async function buildFocusCenterMap(
     const analysis = shots.get(moment.shotId);
     if (!analysis || analysis.kind !== "photo" || !analysis.faces) continue;
 
-    // Prefer the highest-confidence focus face so a crowded frame anchors on the
-    // clearest one, but any matching face is enough to drive motion.
-    const matches = analysis.faces.filter((face) => face.characterId && focusIds.has(face.characterId));
-    if (matches.length === 0) continue;
-
-    const face = matches.reduce((best, next) => (next.confidence > best.confidence ? next : best));
-    const [ymin, xmin, ymax, xmax] = face.bbox;
+    const visible = analysis.faces.filter((face) => face.faceVisible !== false && face.prominence !== "background");
+    if (!visible.length) continue;
+    const focus = visible.filter((face) => face.characterId && focusIds.has(face.characterId));
+    const targets = focus.length ? focus : visible;
+    const [ymin, xmin, ymax, xmax] = [
+      Math.min(...targets.map((face) => face.bbox[0])), Math.min(...targets.map((face) => face.bbox[1])),
+      Math.max(...targets.map((face) => face.bbox[2])), Math.max(...targets.map((face) => face.bbox[3])),
+    ];
     map.set(moment.id, { cx: (xmin + xmax) / 2, cy: (ymin + ymax) / 2 });
   }
 
@@ -339,7 +340,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
 
     // Timeline sources refer to shots, while dimensions live on the backing
     // asset. Resolve through the shot record before persisting the timeline.
-    const timeline = await addSourceDimensions(result.timeline, async (projectId, shotId) => {
+    const timelineWithDimensions = await addSourceDimensions(result.timeline, async (projectId, shotId) => {
       const shot = await db.collection("projects").doc(projectId).collection("shots").doc(shotId).get();
       if (!shot.exists) return null;
       const asset = await db.collection("projects").doc(projectId).collection("assets").doc(shot.get("assetId") as string).get();
@@ -351,6 +352,35 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
         ...(typeof media?.height === "number" ? { height: media.height } : {}),
       };
     }, task.projectId);
+
+    // Face boxes are persisted on each shot's analysis by understand/analyze.
+    // Keep any crop already present in the timeline: it may be an editor choice.
+    const timeline = {
+      ...timelineWithDimensions,
+      videoClips: timelineWithDimensions.videoClips.map((clip) => {
+        if ("source" in clip) {
+          if (clip.source.kind !== "photo" || clip.source.crop) return clip;
+          const shot = shotById.get(clip.source.shotId);
+          const analysis = shot?.analysis as ShotAnalysis | undefined;
+          const faces = analysis?.kind === "photo" ? analysis.faces ?? [] : [];
+          const sourceAspect = clip.source.width && clip.source.height ? clip.source.width / clip.source.height : undefined;
+          const crop = focalCrop(faces as FramingFace[], sourceAspect, aspectRatio(settings.settings.aspect), new Set(proposal.proposal.constraints.focusCharacterIds ?? []));
+          return crop ? { ...clip, source: { ...clip.source, crop } } : clip;
+        }
+        const frameAspect = aspectRatio(settings.settings.aspect);
+        const slots = clip.spec.slots.map((slot, index) => {
+          if (!slot.shotId || slot.crop) return slot;
+          const sourceAspect = slot.width && slot.height ? slot.width / slot.height : undefined;
+          const targetAspect = frameAspect === undefined ? undefined : collageCellAspect(clip.spec.layoutId, clip.spec.slots.length, index, frameAspect);
+          const shot = shotById.get(slot.shotId);
+          const analysis = shot?.analysis as ShotAnalysis | undefined;
+          const faces = analysis?.kind === "photo" ? analysis.faces ?? [] : [];
+          const crop = focalCrop(faces as FramingFace[], sourceAspect, targetAspect, new Set(proposal.proposal.constraints.focusCharacterIds ?? []));
+          return crop ? { ...slot, crop } : slot;
+        });
+        return { ...clip, spec: { ...clip.spec, slots } };
+      }),
+    };
 
     await publishGeneration(db, {
       userId,
