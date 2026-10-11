@@ -65,7 +65,7 @@ describe("manifest story readiness (emulator)", () => {
     await adminDb.doc(`projects/${id}/assets/bad`).set({ status: "failed", media: { kind: "photo" } });
     const server = await listeningServer(await buildApp("partial-owner"));
     const summary = async () => (await request(server).get(`/api/projects/${id}/summary`)).body;
-    expect(await summary()).toMatchObject({ upload: { expected: 4, settled: 4, failed: 2, cancelled: 1, closed: true }, processed: { ingested: 1, understood: 1 }, ready: { story: true } });
+    expect(await summary()).toMatchObject({ upload: { expected: 4, settled: 4, failed: 1, processingFailed: 1, cancelled: 1, uploaded: 2, closed: true }, processed: { ingested: 1, understood: 1 }, ready: { story: true } });
     await adminDb.doc(`projects/${id}/assets/good`).update({ status: "failed" });
     expect(await summary()).toMatchObject({ ready: { story: false } });
   });
