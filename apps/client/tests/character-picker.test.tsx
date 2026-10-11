@@ -1,6 +1,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { FlowAction } from "@mosae/contracts";
 import type { ProjectCharacters } from "../lib/characters";
 
 const boundary = vi.hoisted(() => ({
@@ -10,7 +11,7 @@ const boundary = vi.hoisted(() => ({
   getCast: vi.fn(async () => null as any),
   confirmCast: vi.fn(async () => ({ cast: {}, proposalId: "plan-2" }) as any),
   getAssetThumbnailUrl: vi.fn(async () => "https://signed.example/thumb.jpg"),
-  mutateProjectFlow: vi.fn(async () => ({ revision: 1 })),
+  mutateProjectFlow: vi.fn(async (_projectId: string, _action: FlowAction) => ({ revision: 1 })),
 }));
 
 // Type the mocks so test bodies can pass typed payloads without `as any` noise.
