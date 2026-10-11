@@ -16,6 +16,14 @@ function reportFailure(cause: unknown): string {
   return REQUEST_FAILURE;
 }
 
+function mergeSummary(current: ProjectSummary | null, next: ProjectSummary): ProjectSummary {
+  if (!current) return next;
+  return { ...current, ...next,
+    processed: { ingested: Math.max(current.processed.ingested, next.processed.ingested), understood: Math.max(current.processed.understood, next.processed.understood), faces: Math.max(current.processed.faces, next.processed.faces) },
+    ready: { ...next.ready, summary: current.ready.summary || next.ready.summary, faces: current.ready.faces || next.ready.faces, story: current.ready.story || next.ready.story, plan: current.ready.plan || next.ready.plan, film: current.ready.film || next.ready.film },
+  };
+}
+
 export function durationsForCadence(options: DirectionOptions, cadenceId: string): DurationChoice[] {
   const maximum = options.maximumDurationSecByCadence?.[cadenceId] ?? options.maximumDurationSec ?? Infinity;
   const standard = options.durations.filter(({ id, seconds }) => id !== "short" && seconds <= maximum);
@@ -44,6 +52,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const isCurrentProject = () => projectEpoch.current === currentProjectEpoch && projectIdentity.current === projectId;
   const [input, setInput] = useProjectState<ChatInput>(projectEpoch, currentProjectEpoch, EMPTY_INPUT);
   const [summary, setSummary] = useProjectState<ProjectSummary | null>(projectEpoch, currentProjectEpoch, null);
+  const summaryRef = useRef(summary);
+  summaryRef.current = summary;
   const [error, setError] = useProjectState<string | null>(projectEpoch, currentProjectEpoch, null);
   const [pendingInterpret, setPendingInterpret] = useProjectState<{ reply: string; text: string; mentionedPeople?: string[]; storySummary?: string } | null>(projectEpoch, currentProjectEpoch, null);
   const [saving, setSaving] = useProjectState(projectEpoch, currentProjectEpoch, false);
@@ -164,7 +174,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     if (!result || !stillValid()) return;
     const [nextSummary, people] = result;
     if (!startedWhilePending && !previousLocalPending.current && refreshEpoch === uploadEpoch.current) acceptedSummaryEpoch.current = refreshEpoch;
-    setSummary(nextSummary);
+    const mergedSummary = mergeSummary(summaryRef.current, nextSummary);
+    summaryRef.current = mergedSummary;
+    setSummary(mergedSummary);
     if (activeFilmId.current) pollFilmRef.current(activeFilmId.current);
     const mapped = people?.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
@@ -194,9 +206,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           : null;
         setInput((current) => ({
           ...current,
-          summary: nextSummary,
+          summary: mergedSummary,
           intent: resume.proposalId || hasGeneration ? { text: confirmedStory } : current.intent,
-          people: nextSummary.ready.faces ? mapped : null,
+          people: mergedSummary.ready.faces ? mapped?.map((person) => {
+            const local = current.people?.find((item) => item.personId === person.personId);
+            return local?.name || local?.skipped ? { ...person, ...local } : person;
+          }) ?? null : current.people,
           peopleConfirmed: Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)),
           plan,
           directionNote: plan?.directionRecommendation ?? "For these moments, I’d suggest this.",
@@ -214,7 +229,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       }
       return;
     }
-    setInput((current) => ({ ...current, summary: nextSummary, people: nextSummary.ready.faces ? mapped : null, peopleConfirmed: current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) }));
+    setInput((current) => ({ ...current, summary: mergedSummary, people: mergedSummary.ready.faces ? mapped?.map((person) => {
+      const local = current.people?.find((item) => item.personId === person.personId);
+      return local?.name || local?.skipped ? { ...person, ...local } : person;
+    }) ?? null : current.people, peopleConfirmed: current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) }));
     if (proposalId.current && nextSummary.ready.plan && !planLoad.current && !currentPlan.current) {
       planLoad.current = true;
       try {
@@ -341,17 +359,18 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       planFailed.current = false;
       setSaving(true); setError(null);
       const storyText = storyTextOverride ?? answer ?? pendingInterpret?.text ?? input.earlyOccasionAnswer ?? (summary?.country ? `${summary.country} trip` : summary?.places[0] || "Our story");
+      setInput((current) => ({ ...current, intent: current.intent ?? { text: answer ?? input.earlyOccasionAnswer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
       try {
         const result = await repository.createPlan([storyText, ...input.notes].join("\n"), []);
         if (!isCurrentProject()) return;
         proposalId.current = result.planId;
-        setInput((current) => ({ ...current, pendingResponse: undefined, earlyOccasionAnswer: undefined, earlyOccasionStoryText: undefined, intent: { text: answer ?? input.earlyOccasionAnswer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
+        setInput((current) => ({ ...current, pendingResponse: undefined, earlyOccasionAnswer: undefined, earlyOccasionStoryText: undefined, intent: current.intent ?? { text: answer ?? input.earlyOccasionAnswer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
         setPendingInterpret(null);
-        await refresh();
+        void refresh().catch((refreshCause) => { if (isCurrentProject()) setError(reportFailure(refreshCause)); });
       } catch (cause) {
         if (!isCurrentProject()) return;
         planFailed.current = true; reportFailure(cause);
-        setInput((current) => ({ ...current, pendingResponse: undefined, ...(!current.intent && current.earlyOccasionAnswer ? { earlyOccasionAnswer: undefined, earlyOccasionStoryText: undefined } : {}) }));
+        setInput((current) => ({ ...current, pendingResponse: undefined }));
         setError("I couldn't shape this one. Try again.");
       }
       finally { if (isCurrentProject()) { occasionSaving.current = false; setSaving(false); } }
@@ -547,6 +566,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
             try {
               latestSummary = await repository.getSummary(projectId);
               if (!isCurrentProject()) return;
+              latestSummary = mergeSummary(summaryRef.current, latestSummary);
+              summaryRef.current = latestSummary;
               setSummary(latestSummary);
               setInput((current) => ({ ...current, summary: latestSummary }));
             } catch { /* Existing summary polling will recover a transient read failure. */ }
@@ -656,5 +677,25 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     if (!input.earlyOccasionAnswer || !canConfirmStory({ ...input, ...confirmationState }) || occasionSaving.current || input.intent) return;
     void actions.confirmOccasion(input.earlyOccasionAnswer, input.earlyOccasionStoryText);
   }, [input.earlyOccasionAnswer, input.earlyOccasionStoryText, input.summary, localState.localMediaPending, localState.uploadFailuresAcknowledged]);
-  return { state, actions, error, retry: () => { setError(null); if (compositionRetryAvailable.current) { compositionRetryAvailable.current = false; void actions.shapeIt(); } else if (activeFilmId.current) void pollFilm(activeFilmId.current); else if (pendingDirectionOptions.current) void recoverDirectionOptions(pendingDirectionOptions.current); else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); }); }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection: { ...directionSelection, aspect: effectiveAspect }, people: input.people ?? [] };
+  return { state, actions, error, retry: () => {
+    setError(null);
+    if (planFailed.current && input.intent) {
+      planFailed.current = false;
+      void repository.createPlan([input.intent.text, ...input.notes].join("\n"), []).then((result) => {
+        if (!isCurrentProject()) return;
+        proposalId.current = result.planId;
+        setInput((current) => ({ ...current, pendingResponse: undefined }));
+        void refresh().catch((cause) => { if (isCurrentProject()) setError(reportFailure(cause)); });
+      }).catch((cause) => {
+        if (!isCurrentProject()) return;
+        planFailed.current = true;
+        setInput((current) => ({ ...current, pendingResponse: undefined }));
+        setError("I couldn't shape this one. Try again.");
+        reportFailure(cause);
+      });
+    } else if (compositionRetryAvailable.current) { compositionRetryAvailable.current = false; void actions.shapeIt(); }
+    else if (activeFilmId.current) void pollFilm(activeFilmId.current);
+    else if (pendingDirectionOptions.current) void recoverDirectionOptions(pendingDirectionOptions.current);
+    else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); });
+  }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection: { ...directionSelection, aspect: effectiveAspect }, people: input.people ?? [] };
 }

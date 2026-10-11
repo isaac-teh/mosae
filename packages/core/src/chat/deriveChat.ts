@@ -233,7 +233,7 @@ export function deriveChat(input: ChatInput): ChatState {
       } else add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days, questionText: `Who's this? They're in ${unanswered.momentCount} of your moments.` });
     } else {
       placeholder = "Type a name";
-      for (const person of input.missedPeople ?? []) {
+      for (const person of (input.missedPeople ?? []).filter((person) => person.momentCount === 0 && person.personId !== input.missedPersonTagging?.personId && !people.some((known) => known.personId === person.personId))) {
         add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
         add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name });
       }
