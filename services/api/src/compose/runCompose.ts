@@ -18,6 +18,7 @@ import { loadCollageReview, placeCollages, type CollageReview, type CollageSourc
 import { collageCountRange, DIRECTING_RULES, budgetSlotCount, fadeOutSec, momentScore, requestedCollageCount } from "./directingRules.js";
 import { MODELS } from "../gemini/pricing.js";
 import { findSpeechBoundaryViolations, repairSpeechBoundaries } from "./speechBoundaries.js";
+import { styleRecipeForCadence } from "./styleRecipe.js";
 
 export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
   if (!momentOrder?.length) return clips;
@@ -40,6 +41,7 @@ export function isAutomaticDayLabel(text: string): boolean {
 export type ComposeResult = {
   ok: true;
   timeline: Timeline;
+  styleId: "memory";
   /** Picks the drop rules rejected. Not failures — kept on the generation for debugging. */
   droppedPicks: string[];
   /** What duration fitting had to do. Empty when the film landed on target. */
@@ -149,6 +151,7 @@ export async function runCompose(
   deps: ComposeDeps,
 ): Promise<ComposeResult> {
   let targetSec = job.durationId === "short" ? job.durationSec ?? 0 : job.durationId === null ? 60 : DURATION_SECONDS[job.durationId] ?? 60;
+  const styleRecipe = styleRecipeForCadence(job.cadenceId);
   if (targetSec < 3 || targetSec > 30 && job.durationId === "short") return { ok: false, reasons: ["invalid short duration"] };
 
   // `buildCandidates` keys its catalog by moment id, because that is what the
@@ -265,7 +268,7 @@ export async function runCompose(
     assembledClips.push({
       ...candidate,
       order: assembledClips.length + 1,
-      transition: "cut",
+      transition: styleRecipe.transitions.default,
       audio: candidate.kind === "photo" || !candidate.hasSpeech ? "mute" : "keep",
       ...(candidate.kind === "photo"
         ? { holdSec: holdsFor(job.cadenceId).base }
@@ -378,7 +381,7 @@ export async function runCompose(
   const lockedIds = new Set([openerCandidate?.itemId, peakCandidate?.itemId, closerCandidate?.itemId].filter((id): id is string => !!id));
   for (const candidate of [openerCandidate, peakCandidate, closerCandidate]) {
     if (!candidate || uniqueAssembledClips.some((clip) => clip.itemId === candidate.itemId)) continue;
-    uniqueAssembledClips.push({ ...candidate, order: uniqueAssembledClips.length + 1, transition: "cut", audio: "mute",
+    uniqueAssembledClips.push({ ...candidate, order: uniqueAssembledClips.length + 1, transition: styleRecipe.transitions.default, audio: "mute",
       ...(candidate.kind === "photo" ? { holdSec: holdsFor(job.cadenceId).base } : { sourceInSec: candidate.inSec, sourceOutSec: candidate.outSec, hasSpeech: candidate.hasSpeech }) });
   }
 
@@ -410,7 +413,7 @@ export async function runCompose(
     return {
       ...candidate,
       order: index + 1,
-      transition: "cut",
+      transition: styleRecipe.transitions.default,
       audio: candidate.kind === "photo" || !candidate.hasSpeech ? "mute" : "keep",
       ...(candidate.kind === "photo"
         ? { holdSec: holds.base }
@@ -461,12 +464,16 @@ export async function runCompose(
     chronological.forEach((clip, index) => {
       if (clip.kind !== "photo" || lockedIds.has(clip.itemId)) return;
       const progress = Math.min(1, index / Math.max(1, peakIndex));
-      clip.holdSec = Number((holdsFor(job.cadenceId).base * (1 - DIRECTING_RULES.buildTightening * progress)).toFixed(2));
+      clip.holdSec = Number((holdsFor(job.cadenceId).base * (1 - styleRecipe.buildTightening * progress)).toFixed(2));
     });
   }
   if (closerCandidate?.kind === "photo") {
     const closerClip = chronological.find((clip) => clip.itemId === closerCandidate.itemId);
-    if (closerClip?.holdSec != null) closerClip.holdSec = Math.min(DIRECTING_RULES.singlePhotoMaxSec, Number((storyPhotoMax * (1 + DIRECTING_RULES.closerHoldBoost)).toFixed(2)));
+    if (closerClip?.holdSec != null) closerClip.holdSec = Math.min(DIRECTING_RULES.singlePhotoMaxSec, Number((storyPhotoMax * (1 + styleRecipe.closerHoldBoost)).toFixed(2)));
+  }
+  if (peakCandidate) {
+    const peak = chronological.find((clip) => clip.itemId === peakCandidate.itemId);
+    if (peak) peak.transition = styleRecipe.transitions.peak;
   }
   const arc = applyArc(chronological, timeOf);
   let selectedClips = arc.clips;
@@ -476,7 +483,7 @@ export async function runCompose(
     const lockedBaseline = selectedClips.filter((clip) => storyLockIds.has(clip.itemId));
     const pickedItems = new Set(durationCompleteClips.map((clip) => clip.itemId));
     const unused: AssembledClip[] = eligibleCandidates.filter((candidate) => candidate.kind === "photo" && !pickedItems.has(candidate.itemId)).map((candidate) => ({
-      ...candidate, order: -1, transition: "crossfade", audio: "mute", holdSec: holds.base,
+      ...candidate, order: -1, transition: styleRecipe.transitions.default, audio: "mute", holdSec: holds.base,
     }));
     const guarded = applyCastGuards({
       clips: selectedClips, unused, core: job.cast.core, focus: job.cast.focus,
@@ -677,6 +684,7 @@ export async function runCompose(
   // Stage 7: Assemble the Timeline and validate
   const timeline: Timeline = {
     schemaVersion: 1,
+    styleId: styleRecipe.id,
     projectId: job.projectId,
     mode: job.mode,
     aspect: job.aspect,
@@ -702,7 +710,7 @@ export async function runCompose(
           startSec: reflowClip.startSec,
           durationSec: reflowClip.durationSec,
           transitionIn: transitionFor(fitted.transition),
-          ...(focus ? { motion: { kind: "slow-zoom" as const, from: 1.0, to: 1.15, center: focus } } : {}),
+          ...(styleRecipe.photoMotion === "gentle-kenburns" ? { motion: { kind: "slow-zoom" as const, from: 1.0, to: 1.15, ...(focus ? { center: focus } : {}) } } : {}),
         };
       }
     }),
@@ -832,6 +840,7 @@ export async function runCompose(
   return {
     ok: true,
     timeline: parsedResult.timeline,
+    styleId: styleRecipe.id,
     droppedPicks,
     notes: fitNotes,
     reasons: castReasons,

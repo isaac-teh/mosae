@@ -19,7 +19,7 @@ describe("holdsFor", () => {
   it("keeps each cadence inside its Memory or Lively hold range", () => {
     for (const { id } of CADENCES) {
       const h = holdsFor(id);
-      const range = id === "playful" || id === "energetic" ? [1.5, 2.2] : [2.2, 3.2];
+      const range = id === "playful" || id === "energetic" || id === "celebratory" ? [1.5, 2.2] : [2.2, 3.2];
       expect(h.min).toBe(range[0]);
       expect(h.max).toBe(range[1]);
       expect(h.base).toBeGreaterThanOrEqual(h.min);
@@ -49,6 +49,8 @@ describe("craftBrief", () => {
     expect(brief).toContain("2.70s");
     expect(brief).toContain("2.20–3.20s");
     expect(brief).toContain("60s");
+    expect(brief).toContain("Default to a crossfade (0.4s); cut into the peak.");
+    expect(brief).toContain("Prefer soundtrack moods: tender, reflective, warm, nostalgic. Cut on the bar.");
   });
 
   it("includes rhythm section with correct hold values for energetic", () => {

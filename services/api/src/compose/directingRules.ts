@@ -1,12 +1,8 @@
 import type { CadenceId } from "@mosae/contracts";
+import { styleRecipeForCadence } from "./styleRecipe.js";
 
 /** Deterministic first-cut rules shared by prompting, fitting and collage placement. */
 export const DIRECTING_RULES = {
-  // Stage 1 directing constants. Kept together for the later StyleRecipe extraction.
-  photoHolds: { memory: [2.2, 3.2], lively: [1.5, 2.2] } as const,
-  buildTightening: 0.15,
-  closerHoldBoost: 0.30,
-  averagePhotoHoldSec: 2.7,
   momentWeights: { quality: 0.35, emotion: 0.25, energy: 0.20, people: 0.10, intent: 0.10 } as const,
   peakMedianMargin: 0.08,
   basePhotoSec: 1,
@@ -77,7 +73,7 @@ export function momentScore(input: { quality?: number; emotion?: number; energy?
     + w.people * clamp(input.peopleRelevance) + w.intent * clamp(input.intentMatch);
 }
 
-export function budgetSlotCount(lengthSec: number, averageHoldSec: number = DIRECTING_RULES.averagePhotoHoldSec): number {
+export function budgetSlotCount(lengthSec: number, averageHoldSec = styleRecipeForCadence("tender").photoHold.reduce((sum, hold) => sum + hold, 0) / 2): number {
   return Math.max(0, Math.floor(lengthSec / averageHoldSec));
 }
 

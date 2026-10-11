@@ -1,5 +1,6 @@
 import type { Candidate } from "./buildCandidates.js";
 import { DIRECTING_RULES } from "./directingRules.js";
+import { styleRecipeForCadence } from "./styleRecipe.js";
 
 export type BudgetAllocation = { selected: Candidate[]; leftOut: Candidate[] };
 
@@ -8,7 +9,7 @@ export function allocateBudget(
   candidates: Candidate[],
   scoreByMoment: ReadonlyMap<string, number>,
   lengthSec: number,
-  averagePhotoHoldSec: number = DIRECTING_RULES.averagePhotoHoldSec,
+  averagePhotoHoldSec = styleRecipeForCadence("tender").photoHold.reduce((sum, hold) => sum + hold, 0) / 2,
   lockedMomentIds: ReadonlySet<string> = new Set(),
 ): BudgetAllocation {
   const rank = (a: Candidate, b: Candidate) => (scoreByMoment.get(b.itemId) ?? 0) - (scoreByMoment.get(a.itemId) ?? 0) || a.itemId.localeCompare(b.itemId) || a.candidateId.localeCompare(b.candidateId);

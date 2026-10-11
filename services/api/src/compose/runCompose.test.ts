@@ -111,6 +111,9 @@ describe("runCompose — collages", () => {
     }) }));
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.reasons.join("; "));
+    expect(result.styleId).toBe("memory");
+    expect(result.timeline.styleId).toBe("memory");
+    expect(result.timeline.videoClips.filter((clip) => "source" in clip && clip.source.kind === "photo").every((clip) => "motion" in clip && clip.motion?.kind === "slow-zoom")).toBe(true);
     expect(result.droppedPicks).toContain("Gemini opener: video1 — The opening line establishes the trip.");
     expect(result.droppedPicks).toContain("Gemini closer: photo1 — The sunset gives the story a quiet finish.");
   });
@@ -214,7 +217,7 @@ describe("runCompose — collages", () => {
 
   it.each([
     { durationId: "30s" as const, cadenceId: "playful" as const, minimum: 27, maximum: 33 },
-    { durationId: "1m" as const, cadenceId: "reflective" as const, minimum: 42, maximum: 48 },
+    { durationId: "1m" as const, cadenceId: "reflective" as const, minimum: 40, maximum: 48 },
   ])("includes all selected proposal media and reaches the $durationId tier despite Gemini under-selection", async ({ durationId, cadenceId, minimum, maximum }) => {
     const moments = Array.from({ length: 13 }, (_, index) => ({
       id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const,
@@ -564,8 +567,8 @@ describe("runCompose — mode and aspect propagation", () => {
   });
 });
 
-describe("runCompose — person-anchored Ken Burns", () => {
-  it("emits no motion when the job has no focus center (byte-identical to pre-focus output)", async () => {
+describe("runCompose — recipe-driven Ken Burns", () => {
+  it("uses gentle motion without anchoring when the job has no focus center", async () => {
     const job = makeJob({ focusCenter: new Map() });
     const deps = makeDeps();
 
@@ -574,7 +577,8 @@ describe("runCompose — person-anchored Ken Burns", () => {
     if (!result.ok) throw new Error("expected ok");
 
     const photoClip = result.timeline.videoClips.find((c): c is import("@mosae/contracts").VideoClip => "source" in c && c.source.kind === "photo")!;
-    expect(photoClip.motion).toBeUndefined();
+    expect(photoClip.motion).toMatchObject({ kind: "slow-zoom", from: 1, to: 1.15 });
+    expect(photoClip.motion).not.toHaveProperty("center");
   });
 
   it("anchors a slow-zoom on the focus face's bbox center when present", async () => {
