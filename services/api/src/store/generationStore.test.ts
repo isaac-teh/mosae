@@ -93,6 +93,24 @@ describe("generationStore (emulator)", () => {
     expect(published.status).toBe("playable");
   });
 
+  it("writes length overflow reasons onto the proposal leftOut list", async () => {
+    const project = await newProject();
+    const proposalId = `proposal-${crypto.randomUUID()}`;
+    await adminDb.collection("projects").doc(project.id).collection("storyProposals").doc(proposalId).set({
+      leftOut: [{ shotId: "blur-1", reason: "Blurry" }, { shotId: "old-overflow", reason: "didn't fit the length" }],
+    });
+    const gen = await createGeneration(adminDb, {
+      userId: project.userId, projectId: project.id, proposalId, parentGenerationId: null,
+      settings: makeSettings(), seed: "seed-123", now: Date.now(),
+    });
+    await publishGeneration(adminDb, {
+      userId: project.userId, projectId: project.id, generationId: gen.id, timeline: null,
+      droppedPicks: [], leftOut: [{ shotId: "photo-too-many", reason: "didn't fit the length" }], now: Date.now(),
+    });
+    const leftOut = (await adminDb.collection("projects").doc(project.id).collection("storyProposals").doc(proposalId).get()).get("leftOut");
+    expect(leftOut).toEqual([{ shotId: "blur-1", reason: "Blurry" }, { shotId: "photo-too-many", reason: "didn't fit the length" }]);
+  });
+
   it("fails a generation permanently", async () => {
     const project = await newProject();
     const gen = await createGeneration(adminDb, {

@@ -156,7 +156,7 @@ describe("golden composition", () => {
       if (!result.ok) throw new Error(result.reasons.join("; "));
       const collage = result.timeline.videoClips.find((clip) => "kind" in clip);
       if (!collage || !("kind" in collage)) throw new Error("expected collage in tierless golden run");
-      expect(collage.spec.slots).toHaveLength(4);
+      expect(collage.spec.slots).toHaveLength(3);
       expect(collage.durationSec).toBeGreaterThanOrEqual(photoBaseDuration(4, "playful"));
       expect(collage.durationSec).toBeLessThanOrEqual(photoBaseDuration(4, "playful") * DIRECTING_RULES.tierlessPhotoStretchMultiplier);
       expect(collage.spec.durationSec).toBe(collage.durationSec);
@@ -195,18 +195,18 @@ describe("golden composition", () => {
     if (!("source" in talking) || talking.source.kind !== "video") throw new Error("talking clip missing video source");
     expect(talking.source).toMatchObject({ sourceInSec: 2.9, sourceOutSec: 8.1 });
     expect(water.transitionIn?.kind).toBe("cut");
-    expect(boundary(dusk, water)).toBeCloseTo(0);
+    expect(boundary(talking, water)).toBeCloseTo(0);
   });
 
   it("allows a share-cap overage when preserving complete speech requires it", async () => {
     const timeline = await composeOrThrow();
     // Minimum video coverage can exceed the share cap; both source clips remain.
-    expect(timeline.durationSec).toBeCloseTo(17.2);
+    expect(timeline.durationSec).toBeCloseTo(18.7);
   });
 
   it("burns in the model's text overlay and ducks the music under speech or loud peaks", async () => {
     const timeline = await composeOrThrow();
-    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 13.2, endSec: 17.2 }]);
+    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 9.2, endSec: 15.2 }]);
 
     const music = timeline.audioClips.find((clip) => clip.role === "music");
     const ambient = timeline.audioClips.find((clip) => clip.role === "ambient");

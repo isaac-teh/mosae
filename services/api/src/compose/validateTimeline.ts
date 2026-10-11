@@ -35,6 +35,8 @@ export interface ValidationContext {
   targetSec: number;
   /** Frame rate the repair re-flows at. Defaults to the timeline's own. */
   fps?: number;
+  /** Clip ids whose selected story holds are fixed before this repair pass. */
+  lockedClipIds?: Set<string>;
 }
 
 const TEN_PERCENT = 0.1;
@@ -192,13 +194,13 @@ export function repairOnce(
     adjusted.videoClips = adjusted.videoClips.filter((clip) => {
       if (!("source" in clip) || clip.source.kind !== "video") return true;
       const candidate = ctx.candidates.get(clip.id);
-      return !candidate || !(clip.source.sourceInSec < (candidate.inSec ?? 0) - 0.01 || clip.source.sourceOutSec > (candidate.outSec ?? Infinity) + 0.01);
+      return ctx.lockedClipIds?.has(clip.id) || !candidate || !(clip.source.sourceInSec < (candidate.inSec ?? 0) - 0.01 || clip.source.sourceOutSec > (candidate.outSec ?? Infinity) + 0.01);
     });
     if (!adjusted.videoClips.length) return { ok: false, reasons: ["repair dropped every clip — no film left"] };
     adjusted.videoClips.forEach((clip) => {
       if (!("source" in clip) || clip.source.kind !== "photo") return;
       const candidate = ctx.candidates.get(clip.id);
-      if (candidate?.minHoldSec != null && candidate.maxHoldSec != null) {
+      if (!ctx.lockedClipIds?.has(clip.id) && candidate?.minHoldSec != null && candidate.maxHoldSec != null) {
         clip.durationSec = Math.max(candidate.minHoldSec, Math.min(candidate.maxHoldSec, clip.durationSec));
       }
     });
@@ -220,7 +222,7 @@ export function repairOnce(
 
   // Fix 1: Clamp photo holds to cadence bounds
   for (const clip of repairedVideoClips) {
-    if (clip.source.kind === "photo") {
+      if (clip.source.kind === "photo" && !ctx.lockedClipIds?.has(clip.id)) {
       const candidate = ctx.candidates.get(clip.id);
       if (!candidate || candidate.minHoldSec == null || candidate.maxHoldSec == null) continue;
 
@@ -239,7 +241,7 @@ export function repairOnce(
 
     const inSec = clip.source.sourceInSec;
     const outSec = clip.source.sourceOutSec;
-    return !(inSec < (candidate.inSec ?? 0) - 0.01 || outSec > (candidate.outSec ?? Infinity) + 0.01);
+    return ctx.lockedClipIds?.has(clip.id) || !(inSec < (candidate.inSec ?? 0) - 0.01 || outSec > (candidate.outSec ?? Infinity) + 0.01);
   });
 
   if (repairedVideoClips.length === 0) {
@@ -257,8 +259,8 @@ export function repairOnce(
         durationSec: clip.durationSec,
         transitionIn: clip.transitionIn,
         strength: 0,
-        minHoldSec: candidate?.minHoldSec ?? 0,
-        maxHoldSec: candidate?.maxHoldSec ?? Infinity,
+        minHoldSec: ctx.lockedClipIds?.has(clip.id) ? clip.durationSec : candidate?.minHoldSec ?? 0,
+        maxHoldSec: ctx.lockedClipIds?.has(clip.id) ? clip.durationSec : candidate?.maxHoldSec ?? Infinity,
       };
     }),
     // Chapter starts are recomputed below from the moment each surviving clip

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetSlotCount, collageCountRange, collagePlacementOptions, deterministicPlacement, DIRECTING_RULES, fadeOutSec, momentScore, photoBaseDuration, photoHoldRange, requestedCollageCount, videoTargetLength } from "./directingRules.js";
+import { budgetSlotCount, collageCountRange, collagePlacementOptions, deterministicPlacement, DIRECTING_RULES, fadeOutSec, leftOutLengthHint, momentScore, photoBaseDuration, photoHoldRange, requestedCollageCount, videoTargetLength } from "./directingRules.js";
 
 describe("deterministic directing rules", () => {
   it.each([1, 2, 3, 4, 5, 6])("uses photo-count base pace for %i photos", (n) => expect(photoBaseDuration(n, "playful")).toBeCloseTo(1 + 0.2 * n));
@@ -34,6 +34,10 @@ describe("deterministic directing rules", () => {
     expect(momentScore({ quality: 1, emotion: 1, energy: 1, peopleRelevance: 1, intentMatch: 1 })).toBeCloseTo(1);
     expect(DIRECTING_RULES.photoHolds.memory).toEqual([2.2, 3.2]);
     expect(DIRECTING_RULES.photoHolds.lively).toEqual([1.5, 2.2]);
+  });
+  it("suggests the next length only when more than 40 percent of good moments overflow", () => {
+    expect(leftOutLengthHint({ durationSec: 30, nextDurationSec: 60, goodMomentCount: 15, photoCount: 15, videoSec: 0, lockedPhotoCount: 3 })).toBeUndefined();
+    expect(leftOutLengthHint({ durationSec: 30, nextDurationSec: 60, goodMomentCount: 40, photoCount: 40, videoSec: 0, lockedPhotoCount: 3 })).toEqual({ fromDurationSec: 30, nextDurationSec: 60 });
   });
   it("limits collage photo capacity and minimum hold stretching", () => {
     expect(DIRECTING_RULES.collageMaxPhotos).toBe(6);

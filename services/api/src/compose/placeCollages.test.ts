@@ -80,6 +80,14 @@ describe("placeCollages", () => {
     ]);
   });
 
+  it("keeps a locked opener outside collages and at position zero", () => {
+    const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "burst", "burst", "tail"]);
+    const result = placeCollages(timeline, sources, "locked-opener", review, { lockedClipIds: ["clip-0"] }, 8);
+    expect("kind" in result.videoClips[0]!).toBe(false);
+    expect("source" in result.videoClips[0]! && result.videoClips[0]!.source.shotId).toBe("shot-0");
+    expect(result.videoClips.some((clip) => "kind" in clip && clip.spec.slots.some((slot) => slot.shotId === "shot-0"))).toBe(false);
+  });
+
   it("composes a burst with no generated day or date caption", () => {
     const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "e4", "e5", "e6"]);
     for (const [id, source] of sources) sources.set(id, { ...source, localTime: null });

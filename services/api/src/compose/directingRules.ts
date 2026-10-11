@@ -77,8 +77,19 @@ export function momentScore(input: { quality?: number; emotion?: number; energy?
     + w.people * clamp(input.peopleRelevance) + w.intent * clamp(input.intentMatch);
 }
 
-export function budgetSlotCount(lengthSec: number, averageHoldSec = DIRECTING_RULES.averagePhotoHoldSec): number {
+export function budgetSlotCount(lengthSec: number, averageHoldSec: number = DIRECTING_RULES.averagePhotoHoldSec): number {
   return Math.max(0, Math.floor(lengthSec / averageHoldSec));
+}
+
+export function leftOutLengthHint(input: { durationSec: number; nextDurationSec?: number; goodMomentCount: number; photoCount: number; videoSec: number; lockedPhotoCount?: number }): { fromDurationSec: number; nextDurationSec: number } | undefined {
+  if (!input.nextDurationSec || input.goodMomentCount <= 0) return undefined;
+  const photoSlots = budgetSlotCount(Math.max(0, input.durationSec - input.videoSec));
+  const lockedPhotos = Math.min(input.photoCount, input.lockedPhotoCount ?? 3);
+  const includedPhotos = Math.max(lockedPhotos, Math.min(input.photoCount, photoSlots));
+  const leftOutCount = Math.max(0, input.goodMomentCount - (input.goodMomentCount - input.photoCount) - includedPhotos);
+  return leftOutCount / input.goodMomentCount > 0.4
+    ? { fromDurationSec: input.durationSec, nextDurationSec: input.nextDurationSec }
+    : undefined;
 }
 
 export function deterministicPlacement(clipCount: number, collageCount: number, seed: string): number[] {

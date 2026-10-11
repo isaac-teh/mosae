@@ -1,6 +1,7 @@
 import { reflow, safeParseTimeline, type ClipPlan } from "@mosae/contracts";
 import { DURATION_SECONDS } from "@mosae/contracts";
 import { buildCandidates } from "./buildCandidates.js";
+import { allocateBudget } from "./budget.js";
 import { composeCall, validateComposeResponse } from "./composeCall.js";
 import { assemble, isEmptyResult } from "./assemble.js";
 import { fitDuration } from "./fitDuration.js";
@@ -12,9 +13,9 @@ import { applyCastGuards } from "./castGuards.js";
 import type { AssembledClip } from "./assemble.js";
 import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
-import { applyArc, orderByChronology, spreadVideoClips, type ClipTime } from "./chronology.js";
+import { applyArc, orderByChronology, type ClipTime } from "./chronology.js";
 import { loadCollageReview, placeCollages, type CollageReview, type CollageSource } from "./placeCollages.js";
-import { DIRECTING_RULES, budgetSlotCount, fadeOutSec, momentScore } from "./directingRules.js";
+import { collageCountRange, DIRECTING_RULES, budgetSlotCount, fadeOutSec, momentScore, requestedCollageCount } from "./directingRules.js";
 import { MODELS } from "../gemini/pricing.js";
 import { findSpeechBoundaryViolations, repairSpeechBoundaries } from "./speechBoundaries.js";
 
@@ -44,6 +45,7 @@ export type ComposeResult = {
   /** What duration fitting had to do. Empty when the film landed on target. */
   notes: string[];
   reasons: string[];
+  leftOut: { shotId: string; reason: string }[];
   /** Automatically selected Short tier when a tierless film cannot reach 20s. */
   durationSelection?: { id: "short"; durationSec: number };
 } | {
@@ -103,81 +105,37 @@ export interface ComposeJob {
   timeOf?: Map<string, ClipTime>;
 }
 
-function maximumClipDuration(clip: AssembledClip, maxHoldSec: number): number {
-  if (clip.holdSec != null) return maxHoldSec;
-  if (clip.sourceInSec != null && clip.sourceOutSec != null) return clip.sourceOutSec - clip.sourceInSec;
-  return 0;
-}
-
 function fittedFilmLength(clips: AssembledClip[]): number {
   return Math.max(0, clips.reduce((total, clip, index) => total + (clip.holdSec ?? (clip.sourceOutSec ?? 0) - (clip.sourceInSec ?? 0)) - (index ? overlapSec(clip.transition) : 0), 0));
 }
 
-/** Add proposal media only when the model's edit cannot reach the requested duration. */
-function completeDurationMaterial(
-  selected: AssembledClip[],
-  candidates: Candidate[],
-  shotIdByMoment: Map<string, string>,
-  hiddenShotIds: Set<string>,
-  deselectedMomentIds: Set<string>,
-  excludedShotIds: Set<string>,
-  mustIncludeMomentIds: string[],
-  targetSec: number,
-  maxHoldSec: number,
-  baseHoldSec: number,
-): AssembledClip[] {
-  const output = [...selected];
-  const usedPhotos = new Set(output.filter((clip) => clip.kind === "photo").map((clip) => clip.itemId));
-  const usedVideos = new Set(output.filter((clip) => clip.kind === "video").map((clip) => clip.itemId));
-  const usedCandidates = new Set(output.map((clip) => clip.candidateId));
-
-  const projectedMaxSec = () => Math.max(0, output.reduce((sum, clip, index) =>
-    sum + maximumClipDuration(clip, maxHoldSec) - (index ? overlapSec(clip.transition) : 0), 0));
-
-  const available = candidates.filter((candidate) => {
-    const shotId = shotIdByMoment.get(candidate.itemId);
-    return Boolean(shotId) && !usedCandidates.has(candidate.candidateId) && (candidate.kind === "video" || !usedPhotos.has(candidate.itemId)) && !deselectedMomentIds.has(candidate.itemId) && !hiddenShotIds.has(shotId!) && !excludedShotIds.has(shotId!);
-  });
-  const add = (candidate: Candidate) => {
-    if (usedCandidates.has(candidate.candidateId) || candidate.kind === "video" && usedVideos.has(candidate.itemId) || candidate.kind === "photo" && usedPhotos.has(candidate.itemId)) return;
-    const shotId = shotIdByMoment.get(candidate.itemId)!;
-    if (candidate.kind === "photo") usedPhotos.add(candidate.itemId); else usedVideos.add(candidate.itemId);
-    usedCandidates.add(candidate.candidateId);
-    const isPhoto = candidate.kind === "photo";
-    output.push({
-      ...candidate,
-      order: output.length + 1,
-      transition: "cut",
-      audio: isPhoto || !candidate.hasSpeech ? "mute" : "keep",
-      ...(isPhoto ? { holdSec: baseHoldSec } : { sourceInSec: candidate.inSec, sourceOutSec: candidate.outSec, hasSpeech: candidate.hasSpeech }),
-    });
-  };
-
-  // Coverage is the first constraint: represent every video source before
-  // using photos to fill the requested length.
-  const primaryVideos = available.filter((candidate) => candidate.kind === "video" && !candidate.isExtraMoment)
-    .sort((a, b) => (b.windowScore ?? 0) - (a.windowScore ?? 0) || a.itemId.localeCompare(b.itemId));
-  for (const candidate of primaryVideos) add(candidate);
-
-  const mustIncludePhotos = available.filter((candidate) => candidate.kind === "photo" && mustIncludeMomentIds.includes(candidate.itemId));
-  const otherPhotos = available.filter((candidate) => candidate.kind === "photo" && !mustIncludeMomentIds.includes(candidate.itemId));
-  for (const candidate of [...mustIncludePhotos, ...otherPhotos]) {
-    if (projectedMaxSec() >= targetSec * 0.9) break;
-    add(candidate);
+function overflowCollageGroups(candidates: Candidate[], assets: Map<string, Asset>, chapterOf: Map<string, number>, maxGroups: number, mediaCount: number): Candidate[][] {
+  const range = collageCountRange(mediaCount);
+  const minimum = range.minPhotos;
+  const maximum = range.maxPhotos;
+  const buckets = new Map<string, Candidate[]>();
+  for (const candidate of candidates.filter((entry) => entry.kind === "photo")) {
+    const asset = assets.get(candidate.itemId);
+    const day = asset?.localTime?.slice(0, 10) ?? "";
+    const bucketKey = asset?.eventId ? `event:${asset.eventId}` : day ? `day:${day}` : "";
+    if (!bucketKey) continue;
+    const key = `${chapterOf.get(candidate.itemId) ?? candidate.chapterIndex}:${bucketKey}`;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(candidate);
+    buckets.set(key, bucket);
   }
-
-  // Extra moments are optional: include them only after source coverage and
-  // still-photo fill leave the film short.
-  const extras = available.filter((candidate) => candidate.kind === "video" && candidate.isExtraMoment)
-    .sort((a, b) => (b.windowScore ?? 0) - (a.windowScore ?? 0) || a.itemId.localeCompare(b.itemId));
-  for (const candidate of extras) {
-    if (projectedMaxSec() >= targetSec * 0.9) break;
-    const currentVideoSec = output.filter((clip) => clip.kind === "video").reduce((sum, clip) => sum + Math.max(0, (clip.sourceOutSec ?? 0) - (clip.sourceInSec ?? 0)), 0);
-    const addedVideoSec = candidate.lengthSec ?? 0;
-    if (currentVideoSec + addedVideoSec > (fittedFilmLength(output) + addedVideoSec) * 0.5 + 1e-6) continue;
-    add(candidate);
+  const groups: Candidate[][] = [];
+  for (const bucket of buckets.values()) {
+    bucket.sort((a, b) => (assets.get(a.itemId)?.localTime ?? "").localeCompare(assets.get(b.itemId)?.localTime ?? "") || a.itemId.localeCompare(b.itemId));
+    for (let index = 0; index + minimum <= bucket.length && groups.length < maxGroups;) {
+      const group = bucket.slice(index, Math.min(bucket.length, index + maximum));
+      if (group.length < minimum) break;
+      groups.push(group);
+      index += group.length;
+    }
+    if (groups.length >= maxGroups) break;
   }
-  return output;
+  return groups;
 }
 
 /**
@@ -242,7 +200,7 @@ export async function runCompose(
         ? holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier
         : candidate.lengthSec ?? 0;
       capacityByMoment.set(candidate.itemId, Math.max(capacityByMoment.get(candidate.itemId) ?? 0, capacity));
-      const standardCapacity = candidate.kind === "photo" ? holdsFor(job.cadenceId).max : candidate.lengthSec ?? 0;
+      const standardCapacity = candidate.kind === "photo" ? DIRECTING_RULES.singlePhotoMaxSec : candidate.lengthSec ?? 0;
       standardCapacityByMoment.set(candidate.itemId, Math.max(standardCapacityByMoment.get(candidate.itemId) ?? 0, standardCapacity));
     }
     const materialCapacitySec = [...capacityByMoment.values()].reduce((total, seconds) => total + seconds, 0);
@@ -357,22 +315,54 @@ export async function runCompose(
 
   // Choose boundary locks from existing analysis only. Emotion is inferred
   // from key-moment/mood proxies already folded into keyMomentScore; no new AI input.
-  const usablePhotos = eligibleCandidates.filter((candidate) => candidate.kind === "photo");
+  const timeOf = job.timeOf ?? new Map<string, ClipTime>();
+  const chapterOf = job.chapterOf ?? new Map<string, number>();
   const firstChapter = Math.min(...eligibleCandidates.map((candidate) => candidate.chapterIndex));
   const lastChapter = Math.max(...eligibleCandidates.map((candidate) => candidate.chapterIndex));
+  const intentText = [job.note, job.proposal.title, ...job.proposal.chapters.map((chapter) => chapter.summary), ...job.proposal.moments.flatMap((moment) => [moment.title, moment.description])]
+    .filter((value): value is string => typeof value === "string").join(" ").toLowerCase();
+  const isUsableBoundary = (candidate: Candidate | undefined) => {
+    if (!candidate) return false;
+    const shotId = shotIdByMoment.get(candidate.itemId);
+    return Boolean(shotId) && !hiddenShotIds.has(shotId!) && !excludedShotIds.has(shotId!) && !deselectedMomentIds.has(candidate.itemId);
+  };
   const rankMoment = (candidate: Candidate) => {
     const asset = deps.assets.get(candidate.itemId);
-    return momentScore({ quality: asset?.keyMomentScore, emotion: asset?.keyMomentScore,
-      energy: candidate.highlightScore ?? candidate.windowScore, peopleRelevance: 0,
-      intentMatch: candidate.description.toLowerCase().split(/\W+/).filter((word) => word.length > 3 && job.proposal.summary.toLowerCase().includes(word)).length ? 1 : 0 });
+    const storyPeople = job.cast?.peopleByMoment.get(candidate.itemId);
+    const peopleRelevance = storyPeople && [...storyPeople].some((id) => job.cast?.core.includes(id) || job.cast?.focus.includes(id)) ? 1 : 0;
+    const fallbackScore = Math.max(0, Math.min(1, (asset?.keyMomentScore ?? 0) / 5));
+    return momentScore({ quality: candidate.quality ?? fallbackScore, emotion: candidate.emotion ?? fallbackScore,
+      energy: candidate.energy ?? candidate.highlightScore ?? candidate.windowScore ?? fallbackScore, peopleRelevance,
+      intentMatch: candidate.description.toLowerCase().split(/\W+/).filter((word) => word.length > 3 && intentText.includes(word)).length ? 1 : 0 });
   };
-  const openerCandidate = eligibleCandidates.filter((candidate) => candidate.chapterIndex === firstChapter)
-    .sort((a, b) => Number(b.kind === "video" && (b.highlightScore ?? 0) >= DIRECTING_RULES.videoHighlightBoundaryMin) - Number(a.kind === "video" && (a.highlightScore ?? 0) >= DIRECTING_RULES.videoHighlightBoundaryMin) || rankMoment(b) - rankMoment(a) || a.itemId.localeCompare(b.itemId))[0];
-  const closerCandidate = eligibleCandidates.filter((candidate) => candidate.chapterIndex === lastChapter)
-    .sort((a, b) => rankMoment(b) - rankMoment(a) || a.itemId.localeCompare(b.itemId))[0];
-  const scored = eligibleCandidates.map((candidate) => ({ candidate, score: rankMoment(candidate) }));
+  const proposedOpener = eligibleCandidates.find((candidate) => candidate.itemId === uniqueAssembledClips[0]?.itemId);
+  const openerCandidate = proposedOpener && proposedOpener.chapterIndex === firstChapter && isUsableBoundary(proposedOpener)
+    ? proposedOpener
+    : eligibleCandidates.filter((candidate) => candidate.chapterIndex === firstChapter && isUsableBoundary(candidate))
+    .sort((a, b) => {
+      const openerPriority = (candidate: Candidate) => candidate.kind === "video" && (candidate.highlightScore ?? 0) >= DIRECTING_RULES.videoHighlightBoundaryMin
+        || /wide|establish|landscape|panorama/i.test(candidate.description) ? 1 : 0;
+      return openerPriority(b) - openerPriority(a) || rankMoment(b) - rankMoment(a) || a.itemId.localeCompare(b.itemId);
+    })[0];
+  const proposedCloser = eligibleCandidates.find((candidate) => candidate.itemId === uniqueAssembledClips.at(-1)?.itemId);
+  const closerPool = eligibleCandidates.filter((candidate) => candidate.chapterIndex === lastChapter && (candidate.itemId !== openerCandidate?.itemId || eligibleCandidates.length === 1) && isUsableBoundary(candidate));
+  const closerCandidate = proposedCloser && closerPool.some((candidate) => candidate.itemId === proposedCloser.itemId)
+    ? proposedCloser
+    : closerPool
+    .sort((a, b) => rankMoment(b) - rankMoment(a)
+      || String(timeOf.get(b.itemId)?.localTime ?? "").localeCompare(String(timeOf.get(a.itemId)?.localTime ?? ""))
+      || a.itemId.localeCompare(b.itemId))[0];
+  const peakScore = (candidate: Candidate) => {
+    const asset = deps.assets.get(candidate.itemId);
+    const fallbackEmotion = Math.max(0, Math.min(1, (asset?.keyMomentScore ?? 0) / 5));
+    const emotion = candidate.emotion ?? fallbackEmotion;
+    const energy = candidate.energy ?? candidate.highlightScore ?? candidate.windowScore ?? fallbackEmotion;
+    const intentMatch = candidate.description.toLowerCase().split(/\W+/).some((word) => word.length > 3 && intentText.includes(word)) ? 1 : 0;
+    return { score: emotion + energy + intentMatch, energy };
+  };
+  const scored = eligibleCandidates.map((candidate) => ({ candidate, ...peakScore(candidate) }));
   const median = [...scored].sort((a, b) => a.score - b.score)[Math.floor(scored.length / 2)]?.score ?? 0;
-  const peakCandidate = scored.filter(({ candidate, score }) => candidate !== openerCandidate && candidate !== closerCandidate && score >= median + DIRECTING_RULES.peakMedianMargin)
+  const peakCandidate = scored.filter(({ candidate, score, energy }) => candidate !== openerCandidate && candidate !== closerCandidate && energy >= 0.5 && score >= median + DIRECTING_RULES.peakMedianMargin)
     .sort((a, b) => b.score - a.score || a.candidate.itemId.localeCompare(b.candidate.itemId))[0]?.candidate;
   const lockedIds = new Set([openerCandidate?.itemId, peakCandidate?.itemId, closerCandidate?.itemId].filter((id): id is string => !!id));
   for (const candidate of [openerCandidate, peakCandidate, closerCandidate]) {
@@ -382,18 +372,47 @@ export async function runCompose(
   }
 
   const holds = holdsFor(job.cadenceId);
-  const durationCompleteClips = completeDurationMaterial(
-    uniqueAssembledClips,
-    eligibleCandidates,
-    shotIdByMoment,
-    hiddenShotIds,
-    new Set(job.proposal.constraints.deselectedMomentIds ?? []),
-    new Set(job.proposal.constraints.excludedShotIds ?? []),
-    [...new Set([...job.proposal.constraints.mustIncludeMomentIds, ...lockedIds])],
-    targetSec,
-    holds.max,
-    holds.base,
+  const storyLockIds = new Set(lockedIds);
+  const requiredMomentIds = new Set(job.proposal.constraints.mustIncludeMomentIds);
+  const scoreByMoment = new Map(eligibleCandidates.map((candidate) => [candidate.itemId, rankMoment(candidate)]));
+  const allowedCandidates = eligibleCandidates.filter((candidate) => {
+    const shotId = shotIdByMoment.get(candidate.itemId);
+    return Boolean(shotId) && !hiddenShotIds.has(shotId!) && !excludedShotIds.has(shotId!) && !deselectedMomentIds.has(candidate.itemId);
+  });
+  const budgetCandidates = allowedCandidates.filter((candidate) => !candidate.isExtraMoment);
+  const usableMediaCount = new Set(budgetCandidates.map((candidate) => candidate.itemId)).size;
+  const collageLimit = requestedCollageCount(usableMediaCount, job.collageAmount ?? "few");
+  const initialAllocation = allocateBudget(budgetCandidates, scoreByMoment, targetSec, holds.base, new Set([...storyLockIds, ...requiredMomentIds]));
+  const overflowGroups = overflowCollageGroups(
+    initialAllocation.leftOut.filter((candidate) => !storyLockIds.has(candidate.itemId) && !requiredMomentIds.has(candidate.itemId)),
+    deps.assets, chapterOf, collageLimit, usableMediaCount,
   );
+  const collageOverflowIds = new Set(overflowGroups.flatMap((group) => group.map((candidate) => candidate.itemId)));
+  const budgetAllocation = overflowGroups.length
+    ? allocateBudget(budgetCandidates, scoreByMoment, Math.max(0, targetSec - overflowGroups.length * holds.base), holds.base, new Set([...storyLockIds, ...requiredMomentIds]))
+    : initialAllocation;
+  const selectedBudgetCandidates = [...budgetAllocation.selected, ...overflowGroups.flat()];
+  const assembledByCandidateId = new Map(uniqueAssembledClips.map((clip) => [clip.candidateId, clip]));
+  const durationCompleteClips: AssembledClip[] = selectedBudgetCandidates.map((candidate, index) => {
+    const picked = assembledByCandidateId.get(candidate.candidateId);
+    if (picked) return { ...picked, sourceOutSec: candidate.outSec ?? picked.sourceOutSec };
+    return {
+      ...candidate,
+      order: index + 1,
+      transition: "cut",
+      audio: candidate.kind === "photo" || !candidate.hasSpeech ? "mute" : "keep",
+      ...(candidate.kind === "photo"
+        ? { holdSec: holds.base }
+        : { sourceInSec: candidate.inSec, sourceOutSec: candidate.outSec, hasSpeech: candidate.hasSpeech }),
+    };
+  });
+  const selectedPhotoCount = durationCompleteClips.filter((clip) => clip.kind === "photo").length;
+  const selectedVideoDuration = durationCompleteClips.filter((clip) => clip.kind === "video").reduce((sum, clip) => sum + (clip.lengthSec ?? 0), 0);
+  const shortageStretch = selectedPhotoCount > 0
+    && targetSec > selectedVideoDuration + selectedPhotoCount * holds.max
+    && targetSec <= selectedVideoDuration + selectedPhotoCount * DIRECTING_RULES.singlePhotoMaxSec;
+  const storyPhotoMax = shortageStretch ? DIRECTING_RULES.singlePhotoMaxSec : holds.max;
+  const lengthLeftOut = budgetAllocation.leftOut.filter((candidate) => !collageOverflowIds.has(candidate.itemId)).map((candidate) => ({ shotId: shotIdByMoment.get(candidate.itemId)!, reason: "didn't fit the length" }));
 
   const videoShareDrops: string[] = [];
 
@@ -401,18 +420,32 @@ export async function runCompose(
   // (coverage, focus, closing-in-last-chapter, opening-from-first-chapter)
   // → restore the arc after guard swaps, then re-pin only guard-selected
   // boundaries → fitDuration.
-  const timeOf = job.timeOf ?? new Map<string, ClipTime>();
-  const chapterOf = job.chapterOf ?? new Map<string, number>();
-  // Budget photos by comfortable holds; all usable primary videos get their
-  // one source slot first. Locked story moments are exempt from overflow.
-  const videoClipsForBudget = durationCompleteClips.filter((clip) => clip.kind === "video");
-  const photoClipsForBudget = durationCompleteClips.filter((clip) => clip.kind === "photo");
-  const photoSlots = Math.max(0, budgetSlotCount(targetSec - videoClipsForBudget.reduce((sum, clip) => sum + (clip.lengthSec ?? 0), 0), holdsFor(job.cadenceId).base));
-  const orderedPhotos = [...photoClipsForBudget].sort((a, b) => Number(lockedIds.has(b.itemId)) - Number(lockedIds.has(a.itemId)) || rankMoment(b) - rankMoment(a) || (timeOf.get(a.itemId)?.chapter ?? 0) - (timeOf.get(b.itemId)?.chapter ?? 0) || a.itemId.localeCompare(b.itemId));
-  const retainedPhotos = orderedPhotos.filter((clip, index) => lockedIds.has(clip.itemId) || index < photoSlots);
-  const budgeted = [...videoClipsForBudget, ...retainedPhotos];
-  const chronological = orderByChronology(budgeted, timeOf);
+  const chronological = orderByChronology(durationCompleteClips, timeOf);
+  for (const group of overflowGroups) {
+    const ids = new Set(group.map((candidate) => candidate.itemId));
+    const members = chronological.filter((clip) => ids.has(clip.itemId));
+    if (members.length < 2) continue;
+    const indices = chronological.flatMap((clip, index) => ids.has(clip.itemId) ? [index] : []);
+    const start = Math.min(...indices), end = Math.max(...indices);
+    if (chronological.slice(start, end + 1).some((clip) => storyLockIds.has(clip.itemId))) continue;
+    const moved = chronological.filter((clip) => !ids.has(clip.itemId));
+    moved.splice(Math.min(start, moved.length), 0, ...members);
+    chronological.splice(0, chronological.length, ...moved);
+  }
+  const openerClip = chronological.find((clip) => clip.itemId === openerCandidate?.itemId);
+  const closerClip = chronological.find((clip) => clip.itemId === closerCandidate?.itemId);
+  let storyOrdered = openerClip ? [openerClip, ...chronological.filter((clip) => clip !== openerClip)] : chronological;
+  if (closerClip && closerClip !== openerClip) storyOrdered = [...storyOrdered.filter((clip) => clip !== closerClip), closerClip];
+  chronological.splice(0, chronological.length, ...storyOrdered);
   const peakIndex = peakCandidate ? chronological.findIndex((clip) => clip.itemId === peakCandidate.itemId) : -1;
+  if (openerCandidate?.kind === "photo") {
+    const opener = chronological.find((clip) => clip.itemId === openerCandidate.itemId);
+    if (opener?.holdSec != null) opener.holdSec = storyPhotoMax;
+  }
+  if (peakCandidate?.kind === "photo") {
+    const peak = chronological.find((clip) => clip.itemId === peakCandidate.itemId);
+    if (peak?.holdSec != null) peak.holdSec = storyPhotoMax;
+  }
   if (peakIndex >= 0) {
     chronological.forEach((clip, index) => {
       if (clip.kind !== "photo" || lockedIds.has(clip.itemId)) return;
@@ -422,13 +455,14 @@ export async function runCompose(
   }
   if (closerCandidate?.kind === "photo") {
     const closerClip = chronological.find((clip) => clip.itemId === closerCandidate.itemId);
-    if (closerClip?.holdSec != null) closerClip.holdSec = Number((closerClip.holdSec * (1 + DIRECTING_RULES.closerHoldBoost)).toFixed(2));
+    if (closerClip?.holdSec != null) closerClip.holdSec = Math.min(DIRECTING_RULES.singlePhotoMaxSec, Number((storyPhotoMax * (1 + DIRECTING_RULES.closerHoldBoost)).toFixed(2)));
   }
   const arc = applyArc(chronological, timeOf);
   let selectedClips = arc.clips;
   let castReasons: string[] = arc.reasons;
   const guardPinned = new Set<string>();
   if (job.cast) {
+    const lockedBaseline = selectedClips.filter((clip) => storyLockIds.has(clip.itemId));
     const pickedItems = new Set(durationCompleteClips.map((clip) => clip.itemId));
     const unused: AssembledClip[] = eligibleCandidates.filter((candidate) => candidate.kind === "photo" && !pickedItems.has(candidate.itemId)).map((candidate) => ({
       ...candidate, order: -1, transition: "crossfade", audio: "mute", holdSec: holds.base,
@@ -452,6 +486,17 @@ export async function runCompose(
     selectedClips = restoredArc.filter((clip) => clip !== opener && clip !== closer);
     if (opener) selectedClips.unshift(opener);
     if (closer && closer !== opener) selectedClips.push(closer);
+    for (const itemId of storyLockIds) guardPinned.add(itemId);
+    for (const locked of lockedBaseline) {
+      const currentIndex = selectedClips.findIndex((entry) => entry.itemId === locked.itemId);
+      if (currentIndex >= 0) selectedClips[currentIndex] = locked;
+      else selectedClips.push(locked);
+    }
+    selectedClips = orderByChronology(selectedClips, timeOf);
+    const lockedOpener = selectedClips.find((clip) => clip.itemId === openerCandidate?.itemId);
+    const lockedCloser = selectedClips.find((clip) => clip.itemId === closerCandidate?.itemId);
+    if (lockedOpener) selectedClips = [lockedOpener, ...selectedClips.filter((clip) => clip !== lockedOpener)];
+    if (lockedCloser && lockedCloser !== lockedOpener) selectedClips = [...selectedClips.filter((clip) => clip !== lockedCloser), lockedCloser];
     castReasons = [...arc.reasons, ...guarded.reasons];
   }
 
@@ -469,25 +514,37 @@ export async function runCompose(
   // handled below without reordering this chronology.
 
   // Stage 5: fitDuration — adjust photo holds to target duration
+  const fitHolds = job.durationId === "short" && !tierlessShort
+    ? { ...holdsFor(job.cadenceId), min: Math.min(holdsFor(job.cadenceId).min, DIRECTING_RULES.shortTierMinSec), max: shortageStretch ? DIRECTING_RULES.singlePhotoMaxSec : Math.min(DIRECTING_RULES.singlePhotoMaxSec, holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier) }
+    : job.durationId !== null
+      ? { ...holdsFor(job.cadenceId), min: DIRECTING_RULES.shortTierMinSec, max: shortageStretch ? DIRECTING_RULES.singlePhotoMaxSec : Math.min(DIRECTING_RULES.singlePhotoMaxSec, holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier) }
+      : { ...holdsFor(job.cadenceId), ...(shortageStretch ? { max: DIRECTING_RULES.singlePhotoMaxSec } : {}) };
   const { clips: initiallyFittedClips, notes: fitNotes, targetSec: fittedTargetSec } = fitDuration(
     selectedClips,
     targetSec,
-    job.durationId === "short" && !tierlessShort
-      ? { ...holdsFor(job.cadenceId), min: Math.min(holdsFor(job.cadenceId).min, DIRECTING_RULES.shortTierMinSec), max: Math.min(DIRECTING_RULES.singlePhotoMaxSec, holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier) }
-      : job.durationId !== null
-        ? { ...holdsFor(job.cadenceId), min: DIRECTING_RULES.shortTierMinSec, max: Math.min(DIRECTING_RULES.singlePhotoMaxSec, holdsFor(job.cadenceId).base * DIRECTING_RULES.tierlessPhotoStretchMultiplier) }
-        : holdsFor(job.cadenceId),
-    job.proposal.constraints.mustIncludeMomentIds,
-    job.durationId === null || tierlessShort ? { minimumFilmSec: DIRECTING_RULES.minimumFilmSec, maximumStretchedPhotoMultiplier: DIRECTING_RULES.tierlessPhotoStretchMultiplier } : {},
+    fitHolds,
+    [...requiredMomentIds],
+    { ...(job.durationId === null || tierlessShort ? { minimumFilmSec: DIRECTING_RULES.minimumFilmSec, maximumStretchedPhotoMultiplier: DIRECTING_RULES.tierlessPhotoStretchMultiplier } : {}), lockedMomentIds: [...storyLockIds] },
   );
 
   // Enforce the cap against actual fitted run time, including crossfade overlaps.
   let fittedClips = initiallyFittedClips;
   const videoSeconds = () => fittedClips.filter(c => c.kind === "video").reduce((sum, c) => sum + Math.max(0, (c.sourceOutSec ?? 0) - (c.sourceInSec ?? 0)), 0);
   const paceMinimum = ({ tender: 4, reflective: 4, playful: 2, energetic: 2, celebratory: 3 } as const)[job.cadenceId];
-  if (videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6) {
+  const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]));
+  const minimumPrimaryVideoSeconds = () => fittedClips.filter((clip) => clip.kind === "video" && !candidateById.get(clip.candidateId)?.isExtraMoment)
+    .reduce((sum, clip) => {
+      const current = Math.max(0, (clip.sourceOutSec ?? 0) - (clip.sourceInSec ?? 0));
+      return sum + (storyLockIds.has(clip.itemId) || clip.hasSpeech ? current : Math.min(paceMinimum, current));
+    }, 0);
+  const coverageExceedsCap = () => minimumPrimaryVideoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6;
+  const trimmedFilmLength = () => fittedFilmLength(fittedClips) - fittedClips
+    .filter((clip) => clip.kind === "video" && !clip.hasSpeech && !storyLockIds.has(clip.itemId) && !candidateById.get(clip.candidateId)?.isExtraMoment)
+    .reduce((sum, clip) => sum + Math.max(0, (clip.sourceOutSec ?? 0) - (clip.sourceInSec ?? 0) - paceMinimum), 0);
+  const minimumCoverageAfterTrimExceedsCap = () => minimumPrimaryVideoSeconds() > trimmedFilmLength() * 0.5 + 1e-6;
+  if (videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6 && !minimumCoverageAfterTrimExceedsCap()) {
     fittedClips = fittedClips.map((clip) => {
-      if (clip.kind !== "video" || clip.hasSpeech) return clip;
+      if (clip.kind !== "video" || clip.hasSpeech || storyLockIds.has(clip.itemId)) return clip;
       const inSec = clip.sourceInSec ?? 0;
       const currentLength = (clip.sourceOutSec ?? inSec) - inSec;
       const minimum = Math.min(currentLength, paceMinimum);
@@ -496,29 +553,26 @@ export async function runCompose(
   }
   // If even one minimum-length primary clip per usable source exceeds half
   // the film, coverage takes priority. Extras never qualify for this exception.
-  const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]));
   const usablePrimarySources = new Set(primaryCandidates.filter((candidate) => candidate.kind === "video")
     .map((candidate) => deps.assets.get(candidate.itemId)?.assetId ?? candidate.itemId));
   const representedPrimarySources = new Set(fittedClips.filter((clip) => clip.kind === "video" && !candidateById.get(clip.candidateId)?.isExtraMoment)
     .map((clip) => deps.assets.get(clip.itemId)?.assetId ?? clip.itemId));
-  const coverageMinimumSeconds = fittedClips.filter((clip) => clip.kind === "video" && !candidateById.get(clip.candidateId)?.isExtraMoment)
-    .reduce((sum, clip) => sum + Math.min(paceMinimum, Math.max(0, (clip.sourceOutSec ?? 0) - (clip.sourceInSec ?? 0))), 0);
-  const coverageExceedsCap = usablePrimarySources.size > 0 && [...usablePrimarySources].every((source) => representedPrimarySources.has(source))
-    && coverageMinimumSeconds > fittedFilmLength(fittedClips) * 0.5 + 1e-6;
+  const coverageOverageRequired = usablePrimarySources.size > 0 && [...usablePrimarySources].every((source) => representedPrimarySources.has(source)) && coverageExceedsCap();
+  if (coverageOverageRequired) videoShareDrops.push("video share cap exceeded to preserve complete speech and primary source coverage");
   // Optional multi-moment clips are the first to go under cap pressure.
   if (videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6) {
     fittedClips = fittedClips.filter((clip) => {
-      const drop = clip.kind === "video" && candidateById.get(clip.candidateId)?.isExtraMoment;
+      const drop = clip.kind === "video" && !storyLockIds.has(clip.itemId) && candidateById.get(clip.candidateId)?.isExtraMoment;
       if (drop) videoShareDrops.push(`${clip.itemId}: optional extra dropped to preserve complete speech`);
       return !drop;
     });
   }
-  if (coverageExceedsCap) fittedClips = fittedClips.filter((clip) => clip.kind !== "video" || !candidateById.get(clip.candidateId)?.isExtraMoment);
+  if (coverageOverageRequired) fittedClips = fittedClips.filter((clip) => clip.kind !== "video" || !candidateById.get(clip.candidateId)?.isExtraMoment);
   while (fittedClips.some(c => c.kind === "video") && videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6) {
-    if (coverageExceedsCap) break;
+    if (coverageOverageRequired) break;
     // Silent picture can be removed; complete speech is never shortened or
     // discarded solely to satisfy a soft share cap.
-    const removable = fittedClips.filter(c => c.kind === "video" && !c.hasSpeech && candidateById.get(c.candidateId)?.isExtraMoment);
+    const removable = fittedClips.filter(c => c.kind === "video" && !storyLockIds.has(c.itemId) && !c.hasSpeech && candidateById.get(c.candidateId)?.isExtraMoment);
     if (!removable.length) {
       const overage = videoSeconds() - fittedFilmLength(fittedClips) * 0.5;
       videoShareDrops.push(`video share cap exceeded by ${overage.toFixed(2)}s to preserve complete speech`);
@@ -584,8 +638,8 @@ export async function runCompose(
     durationSec: clip.holdSec ?? (clip.sourceOutSec! - (clip.sourceInSec ?? 0)),
     transitionIn: transitionFor(clip.transition),
     strength: 0, // deferred: fitDuration does not yet rank by strength (I7)
-    minHoldSec: clip.minHoldSec ?? 0,
-    maxHoldSec: clip.maxHoldSec ?? Infinity,
+    minHoldSec: storyLockIds.has(clip.itemId) ? (clip.holdSec ?? (clip.sourceOutSec! - (clip.sourceInSec ?? 0))) : candidateMap.get(clip.candidateId)?.minHoldSec ?? clip.minHoldSec ?? 0,
+    maxHoldSec: storyLockIds.has(clip.itemId) ? (clip.holdSec ?? (clip.sourceOutSec! - (clip.sourceInSec ?? 0))) : candidateMap.get(clip.candidateId)?.maxHoldSec ?? clip.maxHoldSec ?? Infinity,
   }));
 
   const reflowChapters = job.proposal.chapters.map((ch) => ({
@@ -707,9 +761,15 @@ export async function runCompose(
   let withCollages: Timeline;
   try {
     const usableMediaCount = new Set(candidates.map((candidate) => candidate.itemId)).size;
-    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm", cadenceId: job.cadenceId, tierless: job.durationId === null || tierlessShort, ...(job.durationId !== null ? { stretchTargetSec: targetSec } : {}) }, usableMediaCount);
+    withCollages = placeCollages(timeline, collageSources, `${job.projectId}:${job.generationId}`, deps.collageReview ?? loadCollageReview(), { collageAmount: job.collageAmount ?? "few", motionFeel: job.motionFeel ?? "calm", cadenceId: job.cadenceId, tierless: job.durationId === null || tierlessShort, lockedClipIds: fittedClips.filter((clip) => storyLockIds.has(clip.itemId)).map((clip) => clip.candidateId), ...(job.durationId !== null ? { stretchTargetSec: targetSec } : {}) }, usableMediaCount);
   } catch (error) {
     return { ok: false, reasons: [`collage placement failed: ${error instanceof Error ? error.message : String(error)}`] };
+  }
+  // A collage can replace several fitted photo slots with one shorter clip.
+  // Keep the collage only when the final film remains inside the chosen band;
+  // the already fitted individual stills are the duration-safe fallback.
+  if (fittedTargetSec > 0 && (withCollages.durationSec < fittedTargetSec * 0.9 || withCollages.durationSec > fittedTargetSec * 1.1)) {
+    withCollages = timeline;
   }
 
   // Validate the assembled timeline
@@ -718,13 +778,11 @@ export async function runCompose(
     shotIds: new Set(job.proposal.moments.map((moment) => moment.shotId)),
     candidates: candidateMap,
     soundtrackIds: deps.soundtrackIds,
-    // The length the film is committed to after fitting — the requested target,
-    // or the shortened one when the media could not reach it.
-    // Collage placement replaces a run of stills with its own photo-count
-    // duration. Validate against the resulting committed film length, since
-    // the pre-collage fit target no longer describes that clip geometry.
-    targetSec: withCollages.durationSec,
+    // Validate the actual final geometry against the fitted target. Using the
+    // resulting duration here would make the ±10% check tautological.
+    targetSec: fittedTargetSec,
     fps: 30,
+    lockedClipIds: new Set(fittedClips.filter((clip) => storyLockIds.has(clip.itemId)).map((clip) => clip.candidateId)),
   };
 
   const droppedPicks = [...dropped.map((drop) => drop.reason), ...duplicateDropReasons, ...videoShareDrops, ...noWindowDrops];
@@ -766,6 +824,7 @@ export async function runCompose(
     droppedPicks,
     notes: fitNotes,
     reasons: castReasons,
+    leftOut: lengthLeftOut,
     ...(job.durationId === null && parsedResult.timeline.durationSec < 20
       ? { durationSelection: { id: "short" as const, durationSec: parsedResult.timeline.durationSec } }
       : {}),

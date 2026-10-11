@@ -5,7 +5,7 @@ import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
 import { normalizeDirectionRecommendation, CADENCES, DURATION_SECONDS, type CadenceId, type DurationId } from "@mosae/contracts";
 import { stripProposalEnvelope } from "../store/directingStore.js";
-import { DIRECTING_RULES, photoBaseDuration, requestedCollageCount } from "../compose/directingRules.js";
+import { DIRECTING_RULES, leftOutLengthHint, photoBaseDuration, requestedCollageCount } from "../compose/directingRules.js";
 
 const DURATION_LABELS: Record<DurationId, { label: string; caption: string }> = {
   "30s": { label: "30 sec", caption: "A quick share" },
@@ -132,6 +132,20 @@ export function directionOptionsRouter(deps: {
         .filter(([, seconds]) => seconds <= maximumDurationSec)
         .map(([id, seconds]) => ({ id, label: DURATION_LABELS[id].label, caption: DURATION_LABELS[id].caption, seconds }));
       durations.push({ id: "short", label: "Short", caption: `About ${shortSeconds} seconds`, seconds: shortSeconds });
+      const orderedDurations = [...durations].sort((a, b) => a.seconds - b.seconds);
+      const videoBudgetSec = videoClipCapacities.reduce((sum, video) => sum + Math.min(video.sourceLength, DIRECTING_RULES.videoMinClipSec), 0);
+      const lengthHints = orderedDurations.flatMap((duration) => {
+        const next = orderedDurations.find((choice) => choice.seconds > duration.seconds);
+        const hint = leftOutLengthHint({
+          durationSec: duration.seconds,
+          nextDurationSec: next?.seconds,
+          goodMomentCount: keptMoments.length,
+          photoCount,
+          videoSec: videoBudgetSec,
+          lockedPhotoCount: Math.min(3, photoCount),
+        });
+        return hint ? [hint] : [];
+      });
 
       const recommendation = normalizeDirectionRecommendation(proposalData.directionRecommendation);
       return res.json({
@@ -141,6 +155,7 @@ export function directionOptionsRouter(deps: {
         cadences: CADENCES.map(({ id, name, description }) => ({ id, name, description })),
         soundtracks: soundtrackCatalog(library, recommendedCadence),
         durations,
+        lengthHints,
         maximumDurationSec,
         maximumDurationSecByCadence,
         recommendedDuration,
