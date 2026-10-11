@@ -15,7 +15,7 @@ import { photoRoles } from "../cast/prominence.js";
 import type { Cast, FaceRef } from "../cast/types.js";
 import type { ClipTime } from "./chronology.js";
 import { addSourceDimensions } from "./resolveSources.js";
-import { focalCrop, type FramingFace } from "./focalCrop.js";
+import { aspectRatio, collageCellAspect, focalCrop, type FramingFace } from "./focalCrop.js";
 
 export type ComposeTask = {
   projectId: string;
@@ -363,15 +363,19 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
           const shot = shotById.get(clip.source.shotId);
           const analysis = shot?.analysis as ShotAnalysis | undefined;
           const faces = analysis?.kind === "photo" ? analysis.faces ?? [] : [];
-          const crop = focalCrop(faces as FramingFace[], (clip.source.width ?? 1) / (clip.source.height ?? 1), settings.settings.aspect === "9:16" ? 9 / 16 : 16 / 9, new Set(proposal.proposal.constraints.focusCharacterIds ?? []));
+          const sourceAspect = clip.source.width && clip.source.height ? clip.source.width / clip.source.height : undefined;
+          const crop = focalCrop(faces as FramingFace[], sourceAspect, aspectRatio(settings.settings.aspect), new Set(proposal.proposal.constraints.focusCharacterIds ?? []));
           return crop ? { ...clip, source: { ...clip.source, crop } } : clip;
         }
-        const slots = clip.spec.slots.map((slot) => {
+        const frameAspect = aspectRatio(settings.settings.aspect);
+        const slots = clip.spec.slots.map((slot, index) => {
           if (!slot.shotId || slot.crop) return slot;
+          const sourceAspect = slot.width && slot.height ? slot.width / slot.height : undefined;
+          const targetAspect = frameAspect === undefined ? undefined : collageCellAspect(clip.spec.layoutId, clip.spec.slots.length, index, frameAspect);
           const shot = shotById.get(slot.shotId);
           const analysis = shot?.analysis as ShotAnalysis | undefined;
           const faces = analysis?.kind === "photo" ? analysis.faces ?? [] : [];
-          const crop = focalCrop(faces as FramingFace[], (slot.width ?? 1) / (slot.height ?? 1), settings.settings.aspect === "9:16" ? 9 / 16 : 16 / 9, new Set(proposal.proposal.constraints.focusCharacterIds ?? []));
+          const crop = focalCrop(faces as FramingFace[], sourceAspect, targetAspect, new Set(proposal.proposal.constraints.focusCharacterIds ?? []));
           return crop ? { ...slot, crop } : slot;
         });
         return { ...clip, spec: { ...clip.spec, slots } };
