@@ -13,6 +13,8 @@ export type PhotoAnalysis = {
   aesthetics: number;
   keyMomentScore: number;
   tags: string[];
+  storyRole?: StoryRole;
+  emotionScore?: number;
   /** Per-face bounding boxes detected by Gemini Vision. Optional so analyses
    * produced before face tagging (and the many tests that build literals) keep
    * validating; new photos always carry it once deployed. */
@@ -51,9 +53,13 @@ export type VideoShotAnalysis = {
   quality: number;
   usable: boolean;
   reason: string;
+  storyRole?: StoryRole;
+  emotionScore?: number;
   /** Original-video timebase; absent on legacy analyses. */
   highlights?: { startSec: number; endSec: number; label: string; score: number }[];
 };
+
+export type StoryRole = "opener" | "peak" | "closer" | "normal";
 
 export type ShotAnalysis = PhotoAnalysis | VideoShotAnalysis;
 

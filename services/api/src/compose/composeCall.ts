@@ -60,6 +60,8 @@ export function composeCall(deps: ComposeCallDeps): {
     `You are choosing from clips that are already legal: every video range sits inside one shot and never cuts a sentence. Do not invent timestamps.`,
     "",
     "Rules:",
+    "- Also return openerId, peakId, and closerId as objects with candidateId and a one-line reason. Omit peakId when there is no clear peak.",
+    "- The opener belongs to the first chapter, the closer to the last, and a peak should be an energetic standout; these choices are checked after your response.",
     `- Pick candidateIds in the order they should play, following chapter order. A source item may appear up to 3 times, but only through different candidates.`,
     "- Every chapter must contribute at least one clip.",
     `- For photo candidates give holdSec between ${holds.min} and ${holds.max}. Video clip length is fixed by the candidate.`,
@@ -109,6 +111,9 @@ export function composeCall(deps: ComposeCallDeps): {
           required: ["atSec", "cue"],
         },
       },
+      openerId: { type: "object", properties: { candidateId: { type: "string" }, reason: { type: "string" } }, required: ["candidateId", "reason"] },
+      peakId: { type: "object", properties: { candidateId: { type: "string" }, reason: { type: "string" } }, required: ["candidateId", "reason"] },
+      closerId: { type: "object", properties: { candidateId: { type: "string" }, reason: { type: "string" } }, required: ["candidateId", "reason"] },
     },
     required: ["clips", "musicCues"],
   };

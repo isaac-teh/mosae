@@ -1,5 +1,5 @@
 export const PIPELINE_VERSION = 1;
-export const ANALYSIS_VERSION = 2;
+export const ANALYSIS_VERSION = 3;
 
 export type Stage = "ingest" | "understand" | "plan" | "compose" | "render" | "cluster";
 

@@ -335,34 +335,45 @@ export async function runCompose(
       energy: candidate.energy ?? candidate.highlightScore ?? candidate.windowScore ?? fallbackScore, peopleRelevance,
       intentMatch: candidate.description.toLowerCase().split(/\W+/).filter((word) => word.length > 3 && intentText.includes(word)).length ? 1 : 0 });
   };
-  const proposedOpener = eligibleCandidates.find((candidate) => candidate.itemId === uniqueAssembledClips[0]?.itemId);
-  const openerCandidate = proposedOpener && proposedOpener.chapterIndex === firstChapter && isUsableBoundary(proposedOpener)
+  const storyChoiceNotes: string[] = [];
+  const sharp = (candidate: Candidate) => candidate.quality == null || (candidate.quality <= 1 ? candidate.quality >= 0.4 : candidate.quality >= 3);
+  const modelChoice = (pick: { candidateId: string; reason: string } | undefined, name: string, valid: (candidate: Candidate) => boolean) => {
+    const candidate = pick && eligibleCandidates.find((entry) => entry.candidateId === pick.candidateId || entry.itemId === pick.candidateId);
+    if (candidate && valid(candidate)) { storyChoiceNotes.push(`Gemini ${name}: ${candidate.itemId} — ${pick.reason}`); return candidate; }
+    if (pick) storyChoiceNotes.push(`Gemini ${name} rejected (${pick.candidateId}): ${pick.reason}; deterministic rule used`);
+    return undefined;
+  };
+  const modelOpener = modelChoice(parsed.picks.openerId, "opener", (candidate) => candidate.chapterIndex === firstChapter && isUsableBoundary(candidate) && sharp(candidate));
+  const proposedOpener = modelOpener ?? eligibleCandidates.find((candidate) => candidate.itemId === uniqueAssembledClips[0]?.itemId);
+  const openerCandidate = modelOpener ?? (proposedOpener && proposedOpener.chapterIndex === firstChapter && isUsableBoundary(proposedOpener)
     ? proposedOpener
     : eligibleCandidates.filter((candidate) => candidate.chapterIndex === firstChapter && isUsableBoundary(candidate))
     .sort((a, b) => {
-      const openerPriority = (candidate: Candidate) => candidate.kind === "video" && (candidate.highlightScore ?? 0) >= DIRECTING_RULES.videoHighlightBoundaryMin
-        || /wide|establish|landscape|panorama/i.test(candidate.description) ? 1 : 0;
+      const openerPriority = (candidate: Candidate) => (candidate.storyRole === "opener" ? 2 : 0) + (candidate.kind === "video" && (candidate.highlightScore ?? 0) >= DIRECTING_RULES.videoHighlightBoundaryMin
+        || /wide|establish|landscape|panorama/i.test(candidate.description) ? 1 : 0);
       return openerPriority(b) - openerPriority(a) || rankMoment(b) - rankMoment(a) || a.itemId.localeCompare(b.itemId);
-    })[0];
+    })[0]);
   const proposedCloser = eligibleCandidates.find((candidate) => candidate.itemId === uniqueAssembledClips.at(-1)?.itemId);
   const closerPool = eligibleCandidates.filter((candidate) => candidate.chapterIndex === lastChapter && (candidate.itemId !== openerCandidate?.itemId || eligibleCandidates.length === 1) && isUsableBoundary(candidate));
-  const closerCandidate = proposedCloser && closerPool.some((candidate) => candidate.itemId === proposedCloser.itemId)
+  const modelCloser = modelChoice(parsed.picks.closerId, "closer", (candidate) => candidate.chapterIndex === lastChapter && closerPool.some((entry) => entry.candidateId === candidate.candidateId) && sharp(candidate));
+  const closerCandidate = modelCloser ?? (proposedCloser && closerPool.some((candidate) => candidate.itemId === proposedCloser.itemId)
     ? proposedCloser
     : closerPool
-    .sort((a, b) => rankMoment(b) - rankMoment(a)
+    .sort((a, b) => Number(b.storyRole === "closer") - Number(a.storyRole === "closer") || rankMoment(b) - rankMoment(a)
       || String(timeOf.get(b.itemId)?.localTime ?? "").localeCompare(String(timeOf.get(a.itemId)?.localTime ?? ""))
-      || a.itemId.localeCompare(b.itemId))[0];
+      || a.itemId.localeCompare(b.itemId))[0]);
   const peakScore = (candidate: Candidate) => {
     const asset = deps.assets.get(candidate.itemId);
     const fallbackEmotion = Math.max(0, Math.min(1, (asset?.keyMomentScore ?? 0) / 5));
     const emotion = candidate.emotion ?? fallbackEmotion;
     const energy = candidate.energy ?? candidate.highlightScore ?? candidate.windowScore ?? fallbackEmotion;
     const intentMatch = candidate.description.toLowerCase().split(/\W+/).some((word) => word.length > 3 && intentText.includes(word)) ? 1 : 0;
-    return { score: emotion + energy + intentMatch, energy };
+    return { score: emotion + energy + intentMatch + (candidate.storyRole === "peak" ? 0.2 : 0), energy };
   };
   const scored = eligibleCandidates.map((candidate) => ({ candidate, ...peakScore(candidate) }));
   const median = [...scored].sort((a, b) => a.score - b.score)[Math.floor(scored.length / 2)]?.score ?? 0;
-  const peakCandidate = scored.filter(({ candidate, score, energy }) => candidate !== openerCandidate && candidate !== closerCandidate && energy >= 0.5 && score >= median + DIRECTING_RULES.peakMedianMargin)
+  const modelPeak = modelChoice(parsed.picks.peakId, "peak", (candidate) => candidate !== openerCandidate && candidate !== closerCandidate && peakScore(candidate).energy >= 0.5 && scored.some((entry) => entry.candidate.candidateId === candidate.candidateId && entry.score >= median + DIRECTING_RULES.peakMedianMargin));
+  const peakCandidate = modelPeak ?? scored.filter(({ candidate, score, energy }) => candidate !== openerCandidate && candidate !== closerCandidate && energy >= 0.5 && score >= median + DIRECTING_RULES.peakMedianMargin)
     .sort((a, b) => b.score - a.score || a.candidate.itemId.localeCompare(b.candidate.itemId))[0]?.candidate;
   const lockedIds = new Set([openerCandidate?.itemId, peakCandidate?.itemId, closerCandidate?.itemId].filter((id): id is string => !!id));
   for (const candidate of [openerCandidate, peakCandidate, closerCandidate]) {
@@ -785,7 +796,7 @@ export async function runCompose(
     lockedClipIds: new Set(fittedClips.filter((clip) => storyLockIds.has(clip.itemId)).map((clip) => clip.candidateId)),
   };
 
-  const droppedPicks = [...dropped.map((drop) => drop.reason), ...duplicateDropReasons, ...videoShareDrops, ...noWindowDrops];
+  const droppedPicks = [...storyChoiceNotes, ...dropped.map((drop) => drop.reason), ...duplicateDropReasons, ...videoShareDrops, ...noWindowDrops];
   const transcriptByShot = new Map<string, import("./buildCandidates.js").TranscriptSegment[]>();
   for (const [itemId, asset] of deps.assets) {
     if (asset.kind === "video" && asset.analysis?.transcript) transcriptByShot.set(shotIdByMoment.get(itemId) ?? itemId, asset.analysis.transcript);

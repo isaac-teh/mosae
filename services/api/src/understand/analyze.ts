@@ -5,8 +5,8 @@ import { generateStructured, type GenerateDeps } from "../gemini/client.js";
 import { MODELS } from "../gemini/pricing.js";
 import { normalizeFaces } from "./faceDetect.js";
 
-const photoPrompt = "Analyze this photo for a family-memory shot catalog. Do not identify people by name, gender or relationship. Be concise and only describe visible evidence. Photo aesthetics and keyMomentScore are integers from 1 (poor) to 5 (excellent); use the same 1-to-5 scale as video quality. Any highlight score is from 0 to 1. Detect every human face; for each give bbox as [ymin, xmin, ymax, xmax] on a 0-1000 grid, confidence 0-1, ageBand (child, teen, adult or senior), appearance (clothing, hair and accessories only), prominence (primary, secondary or background), expression, lookingAtCamera, and faceVisible. Set faceVisible false when the face is hidden, turned away, or only the back of the head is visible. List interactions between faces as {from, to, kind} using face indices, e.g. carrying, holding hands, hugging.";
-const videoPrompt = (count: number, duration: number) => `Analyze this video, already split into exactly ${count} shots in order. Return one analysis object per shot, in the same order, plus a transcript of audible speech with timestamps. For each shot, quality is an integer from 1 (poor) to 5 (excellent). For each shot also return up to 3 highlights with startSec, endSec, label and highlight score from 0 to 1; use timestamps in the original video timebase. Keep every timestamp within duration ${duration.toFixed(2)} seconds. Do not identify people by name.`;
+const photoPrompt = "Analyze this photo for a family-memory shot catalog. Do not identify people by name, gender or relationship. Be concise and only describe visible evidence. Photo aesthetics and keyMomentScore are integers from 1 (poor) to 5 (excellent); use the same 1-to-5 scale as video quality. Return storyRole (opener, peak, closer, or normal) and emotionScore from 0 to 1. Any highlight score is from 0 to 1. Detect every human face; for each give bbox as [ymin, xmin, ymax, xmax] on a 0-1000 grid, confidence 0-1, ageBand (child, teen, adult or senior), appearance (clothing, hair and accessories only), prominence (primary, secondary or background), expression, lookingAtCamera, and faceVisible. Set faceVisible false when the face is hidden, turned away, or only the back of the head is visible. List interactions between faces as {from, to, kind} using face indices, e.g. carrying, holding hands, hugging.";
+const videoPrompt = (count: number, duration: number) => `Analyze this video, already split into exactly ${count} shots in order. Return one analysis object per shot, in the same order, plus a transcript of audible speech with timestamps. For each shot, quality is an integer from 1 (poor) to 5 (excellent); return storyRole (opener, peak, closer, or normal) and emotionScore from 0 to 1. For each shot also return up to 3 highlights with startSec, endSec, label and highlight score from 0 to 1; use timestamps in the original video timebase. Keep every timestamp within duration ${duration.toFixed(2)} seconds. Do not identify people by name.`;
 
 const VALID_AGE_BANDS = new Set(["child", "teen", "adult", "senior"]);
 const VALID_PROMINENCES = new Set(["primary", "secondary", "background"]);
@@ -38,6 +38,8 @@ const photoSchema = z.strictObject({
   aesthetics: z.number().int().min(1).max(5),
   keyMomentScore: z.number().int().min(1).max(5),
   tags: z.array(z.string()),
+  storyRole: z.enum(["opener", "peak", "closer", "normal"]),
+  emotionScore: z.number().finite().min(0).max(1),
   faces: z.array(photoFaceSchema).optional(),
   interactions: z.array(photoInteractionSchema).optional(),
 });
@@ -94,8 +96,12 @@ function normalisePhoto(raw: unknown): Record<string, unknown> {
     });
   }
 
+  const fallbackEmotion = /joy|happy|smil|laugh|love|warm|tender|celebrat/i.test(String(obj.mood ?? "")) ? 0.85 : /calm|peace|gentle|quiet/i.test(String(obj.mood ?? "")) ? 0.65 : 0.5;
+  const emotionScore = typeof obj.emotionScore === "number" && Number.isFinite(obj.emotionScore) ? Math.max(0, Math.min(1, obj.emotionScore)) : fallbackEmotion;
   return {
     ...obj,
+    storyRole: ["opener", "peak", "closer", "normal"].includes(String(obj.storyRole)) ? obj.storyRole : "normal",
+    emotionScore,
     subjects,
     ...(faces !== undefined ? { faces } : {}),
     ...(interactions !== undefined ? { interactions } : {}),
@@ -107,12 +113,17 @@ function isFlatBox(face: unknown): boolean {
   const bbox = (face as Record<string, unknown>).bbox;
   return Array.isArray(bbox) && bbox.length === 4 && bbox.every((value) => typeof value === "number" && Number.isFinite(value));
 }
-const videoShotSchema = z.strictObject({ description: z.string().min(1), camera: z.string().min(1), role: z.enum(["A_ROLL", "B_ROLL"]), subjects: z.array(z.string()), emotion: z.string().min(1), quality: z.number().min(1).max(5), usable: z.boolean(), reason: z.string().min(1), highlights: z.array(z.strictObject({ startSec: z.number().finite(), endSec: z.number().finite(), label: z.string().min(1), score: z.number().finite() })).optional() });
+const videoShotSchema = z.strictObject({ description: z.string().min(1), camera: z.string().min(1), role: z.enum(["A_ROLL", "B_ROLL"]), subjects: z.array(z.string()), emotion: z.string().min(1), quality: z.number().min(1).max(5), usable: z.boolean(), reason: z.string().min(1), storyRole: z.enum(["opener", "peak", "closer", "normal"]), emotionScore: z.number().finite().min(0).max(1), highlights: z.array(z.strictObject({ startSec: z.number().finite(), endSec: z.number().finite(), label: z.string().min(1), score: z.number().finite() })).optional() });
 const videoSchema = z.strictObject({ shots: z.array(videoShotSchema), transcript: z.array(z.strictObject({ startSec: z.number().min(0), endSec: z.number().min(0), text: z.string() })) });
 export function normaliseVideoQuality(raw: unknown): number {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return 3;
   const scaled = raw > 5 && raw <= 10 ? raw / 2 : raw > 0 && raw <= 1 ? 1 + raw * 4 : raw;
   return Math.max(1, Math.min(5, Math.round(scaled)));
+}
+function normaliseEmotionScore(raw: unknown, fallback: unknown): number {
+  const derived = /joy|happy|smil|laugh|love|warm|tender|celebrat/i.test(String(fallback ?? "")) ? 0.85 : /calm|peace|gentle|quiet/i.test(String(fallback ?? "")) ? 0.65 : 0.5;
+  const score = typeof raw === "number" && Number.isFinite(raw) ? raw : derived;
+  return Math.max(0, Math.min(1, score));
 }
 // responseJsonSchema CONSTRAINS the reply, it does not hint at it: an empty
 // `properties` makes Gemini return `{}` every time. Name the fields; the Zod
@@ -129,6 +140,8 @@ const photoResponseSchema = {
     aesthetics: { type: "integer", minimum: 1, maximum: 5 },
     keyMomentScore: { type: "integer", minimum: 1, maximum: 5 },
     tags: { type: "array" },
+    storyRole: { type: "string", enum: ["opener", "peak", "closer", "normal"] },
+    emotionScore: { type: "number", minimum: 0, maximum: 1 },
     faces: {
       type: "array",
       items: {
@@ -159,7 +172,7 @@ const photoResponseSchema = {
       },
     },
   },
-  required: ["caption", "subjects", "setting", "activities", "mood", "shotType", "aesthetics", "keyMomentScore", "tags"],
+    required: ["caption", "subjects", "setting", "activities", "mood", "shotType", "aesthetics", "keyMomentScore", "tags"],
 };
 const videoResponseSchema = {
   type: "object",
@@ -179,6 +192,8 @@ const videoResponseSchema = {
           quality: { type: "integer", minimum: 1, maximum: 5 },
           usable: { type: "boolean" },
           reason: { type: "string" },
+          storyRole: { type: "string", enum: ["opener", "peak", "closer", "normal"] },
+          emotionScore: { type: "number", minimum: 0, maximum: 1 },
           highlights: { type: "array", maxItems: 3, items: { type: "object", properties: { startSec: { type: "number" }, endSec: { type: "number" }, label: { type: "string" }, score: { type: "number", minimum: 0, maximum: 1 } }, required: ["startSec", "endSec", "label", "score"] } },
         },
         required: ["description", "camera", "role", "subjects", "emotion", "quality", "usable", "reason"],
@@ -237,13 +252,19 @@ export async function analyzePhoto(deps: GenerateDeps, input: { assetId: string;
     aesthetics: value.aesthetics,
     keyMomentScore: value.keyMomentScore,
     tags: value.tags,
+    storyRole: value.storyRole,
+    emotionScore: value.emotionScore,
     ...(faces.length ? { faces } : {}),
     ...(interactions.length ? { interactions } : {}),
   };
 }
 export type VideoFile = { uri: string; mimeType: string };
 export async function analyzeVideo(deps: GenerateDeps, input: { assetId: string; file: VideoFile; shotCount: number; durationSec: number; shotRanges?: { startSec: number | null; endSec: number | null }[] }): Promise<{ shots: VideoShotAnalysis[]; transcript: TranscriptLine[] }> {
-  const parsed = await generateStructured({ model: MODELS.analyze, stage: "understand.analyze", subjectId: input.assetId, contents: [{ text: videoPrompt(input.shotCount, input.durationSec) }, { fileData: { fileUri: input.file.uri, mimeType: input.file.mimeType } }], responseSchema: videoResponseSchema, validate: (value) => { const normalized = typeof value === "object" && value !== null && Array.isArray((value as Record<string, unknown>).shots) ? { ...(value as Record<string, unknown>), shots: ((value as { shots: unknown[] }).shots).map((shot) => typeof shot === "object" && shot !== null ? { ...(shot as Record<string, unknown>), quality: normaliseVideoQuality((shot as Record<string, unknown>).quality) } : shot) } : value; const result = videoSchema.parse(normalized); if (result.shots.length !== input.shotCount) throw new Error(`expected ${input.shotCount} shots, got ${result.shots.length}`); return result; }, thinking: "LOW" }, deps);
+  const parsed = await generateStructured({ model: MODELS.analyze, stage: "understand.analyze", subjectId: input.assetId, contents: [{ text: videoPrompt(input.shotCount, input.durationSec) }, { fileData: { fileUri: input.file.uri, mimeType: input.file.mimeType } }], responseSchema: videoResponseSchema, validate: (value) => { const normalized = typeof value === "object" && value !== null && Array.isArray((value as Record<string, unknown>).shots) ? { ...(value as Record<string, unknown>), shots: ((value as { shots: unknown[] }).shots).map((shot) => {
+    if (typeof shot !== "object" || shot === null) return shot;
+    const data = shot as Record<string, unknown>;
+    return { ...data, quality: normaliseVideoQuality(data.quality), storyRole: ["opener", "peak", "closer", "normal"].includes(String(data.storyRole)) ? data.storyRole : "normal", emotionScore: normaliseEmotionScore(data.emotionScore, data.emotion) };
+  }) } : value; const result = videoSchema.parse(normalized); if (result.shots.length !== input.shotCount) throw new Error(`expected ${input.shotCount} shots, got ${result.shots.length}`); return result; }, thinking: "LOW" }, deps);
   return { shots: parsed.shots.map((shot, i) => {
     const range = input.shotRanges?.[i];
     if (!shot.highlights) return { kind: "video" as const, ...shot };
