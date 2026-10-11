@@ -69,6 +69,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const proposalId = useRef<string | null>(null);
   const personSaving = useRef(false);
   const occasionSaving = useRef(false);
+  const interpretInFlight = useRef(false);
   const generationSaving = useRef(false);
   const compositionRetryAvailable = useRef(false);
   const planLoad = useRef(false);
@@ -580,6 +581,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     },
     async send(text: string) {
       if (!text.trim()) return;
+      if (interpretInFlight.current) return;
       if (state.step === "people" && state.items.some((item) => item.kind === "anyone-else")) {
         const names = text.split(/\s*(?:,|\band\b)\s*/i).map((name) => name.trim()).filter(Boolean);
         const added = names.map((name, index) => ({ personId: `p-missed-${Date.now()}-${index}`, name, momentCount: 0 }));
@@ -600,12 +602,14 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         // Automated phase (understand/faces): the model decides whether this is an occasion
         // answer (wait for explicit confirmation) or a mid-flow question (answer inline).
         if (!summary) return;
+        interpretInFlight.current = true;
+        setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { question: text.trim() }], interpReplying: true }));
         try {
           const step = state.step === "people" || state.step === "moments" || state.step === "direction" ? state.step : "occasion";
           const result = await repository.interpret(projectId, { step, text, context: { summary, people: (input.people ?? []).map(({ personId, name, role }) => ({ personId, name, role })) } });
           if (canConfirmStory({ ...input, ...confirmationState }) && result.change.kind === "occasion") {
             // Ready to confirm: an occasion answer waits for explicit confirmation.
-            if (result.change.kind === "unclear") { setPendingInterpret({ reply: result.reply || UNCLEAR, text }); return; }
+            setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).slice(0, -1), interpReplying: false }));
             const interpretedPeople = Array.isArray(result.change.mentionedPeople)
               ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
             const storySummary = typeof result.change.storyText === "string" ? result.change.storyText : undefined;
@@ -614,20 +618,20 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           }
           // Mid-flow question: answer inline, don't disrupt the flow.
           const reply = result.change.kind === "unclear" ? (result.reply || UNCLEAR) : result.reply;
-          setInput((current) => ({ ...current, interpQuestions: [...(current.interpQuestions ?? []), text.trim()], interpReplying: true }));
+          setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).map((turn, index, turns) => index === turns.length - 1 ? { ...turn, reply } : turn), interpReplying: false }));
           if (result.change.kind === "occasion") {
             // User answered the occasion question mid-flow — capture it; confirmOccasion
             // proceeds once a plan can be confirmed. Do not force a step change.
-            setInput((current) => ({ ...current, interpReplying: false, interpReply: { text: reply }, earlyOccasionAnswer: text.trim(), ...(typeof result.change.storyText === "string" ? { earlyOccasionStoryText: result.change.storyText } : {}) }));
-          } else {
-            setInput((current) => ({ ...current, interpReplying: false, interpReply: { text: reply } }));
+            setInput((current) => ({ ...current, earlyOccasionAnswer: text.trim(), ...(typeof result.change.storyText === "string" ? { earlyOccasionStoryText: result.change.storyText } : {}) }));
           }
         } catch (cause) {
+          setInput((current) => ({ ...current, interpReplying: false }));
           setError(reportFailure(cause));
-        }
+        } finally { interpretInFlight.current = false; }
         return;
       }
       if (!summary) return;
+      interpretInFlight.current = true;
       try {
         const step = state.step === "people" || state.step === "moments" || state.step === "direction" ? state.step : "occasion";
         const result = await repository.interpret(projectId, { step, text, context: { summary, people: (input.people ?? []).map(({ personId, name, role }) => ({ personId, name, role })) } });
@@ -637,6 +641,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const storySummary = result.change.kind === "occasion" && typeof result.change.storyText === "string" ? result.change.storyText : undefined;
         setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
       } catch (cause) { setError(reportFailure(cause)); }
+      finally { interpretInFlight.current = false; }
     },
     async confirmInterpret() { if (pendingInterpret) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary); },
     answerOccasion(text: string, storyText?: string) {

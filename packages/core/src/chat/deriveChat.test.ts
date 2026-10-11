@@ -27,6 +27,24 @@ const base = (): ChatInput => ({
 const kinds = (items: ChatItem[]) => items.map((item) => item.kind);
 
 describe("deriveChat state table", () => {
+  it("renders each mid-flow question with its own reply and only the latest pending turn as thinking", () => {
+    const state = deriveChat({
+      ...base(), intent: null,
+      summary: { ...summary, ready: { ...summary.ready, summary: false } },
+      interpTurns: [
+        { question: "What are you looking for?", reply: "I'm finding the people in your photos." },
+        { question: "How long will it take?" },
+      ],
+      interpReplying: true,
+    });
+    expect(state.items.filter((item) => item.id.startsWith("interp-")).map((item) => ({ kind: item.kind, id: item.id, text: "text" in item ? item.text : undefined }))).toEqual([
+      { kind: "you", id: "interp-question-1", text: "What are you looking for?" },
+      { kind: "mosae", id: "interp-reply-1", text: "I'm finding the people in your photos." },
+      { kind: "you", id: "interp-question-2", text: "How long will it take?" },
+      { kind: "typing", id: "interp-typing", text: "Thinking" },
+    ]);
+  });
+
   it("offers missed-person tagging after the existing face questions finish", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
     expect(state.placeholder).toBe("Type a name");

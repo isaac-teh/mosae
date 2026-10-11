@@ -24,9 +24,8 @@ export type ChatInput = {
   earlyOccasionAnswer?: string;
   earlyOccasionStoryText?: string;
   earlyOccasionQuestionUploadComplete?: boolean;
-  interpQuestions?: string[];
+  interpTurns?: { question: string; reply?: string }[];
   interpReplying?: boolean;
-  interpReply?: { text: string } | null;
   pendingResponse?: "occasion" | "person";
   uploadFailuresAcknowledged?: boolean;
   summary: ProjectSummary | null;

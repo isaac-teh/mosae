@@ -149,16 +149,13 @@ export function deriveChat(input: ChatInput): ChatState {
   // inline (their question, then a "Thinking" bubble or the model's reply) without changing step.
   // Rendered in both !input.intent branches so questions answer during faces/confirm too.
   const addInterp = () => {
-    if (input.interpQuestions) {
-      input.interpQuestions.forEach((q, i) => {
-        add({ kind: "you", id: `interp-question-${i + 1}`, text: q });
-      });
-    }
-    if (input.interpReplying) {
-      add({ kind: "typing", id: "interp-typing", text: "Thinking" });
-    } else if (input.interpReply) {
-      add({ kind: "mosae", id: "interp-reply", text: input.interpReply.text });
-    }
+    input.interpTurns?.forEach((turn, i) => {
+      add({ kind: "you", id: `interp-question-${i + 1}`, text: turn.question });
+      if (turn.reply) add({ kind: "mosae", id: `interp-reply-${i + 1}`, text: turn.reply });
+      else if (input.interpReplying && i === input.interpTurns!.length - 1) {
+        add({ kind: "typing", id: "interp-typing", text: "Thinking" });
+      }
+    });
   };
   if (input.filmWait) {
     const statuses = input.summary?.videoStatuses ?? [];
