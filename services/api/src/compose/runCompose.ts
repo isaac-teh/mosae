@@ -20,7 +20,7 @@ import { MODELS } from "../gemini/pricing.js";
 import { findSpeechBoundaryViolations, repairSpeechBoundaries } from "./speechBoundaries.js";
 import { styleRecipeForCadence } from "./styleRecipe.js";
 import { snapPhotoBoundaries, type CutMusic } from "./musicCuts.js";
-import { loadLibrary } from "../music/library.js";
+import { buildAlbumProfile, loadLibrary, recommendSoundtrack, selectModelSoundtrack, soundtrackShortlist, type AlbumEvidence, type SoundtrackShortlistItem } from "../music/library.js";
 import { reviewTimeline } from "./reviewTimeline.js";
 
 export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
@@ -52,6 +52,8 @@ export type ComposeResult = {
   /** Deterministic repairs applied by the final polish pass. */
   reviewNotes: string[];
   reasons: string[];
+  usedSoundtrackId: string | null;
+  soundtrackReason: string;
   leftOut: { shotId: string; reason: string }[];
   /** Automatically selected Short tier when a tierless film cannot reach 20s. */
   durationSelection?: { id: "short"; durationSec: number };
@@ -87,6 +89,10 @@ export interface ComposeJob {
   cadenceId: CadenceId;
   seed: string;
   soundtrackId: string | null;
+  soundtrackExplicit?: boolean;
+  recentSoundtrackIds?: string[];
+  projectSoundtrackId?: string | null;
+  storyIntent?: string;
   /**
    * The user's free text from the Review screen. The spec's whole revision
    * mechanism is this string reaching the model, so it is part of the job, not
@@ -157,6 +163,7 @@ export async function runCompose(
 ): Promise<ComposeResult> {
   let targetSec = job.durationId === "short" ? job.durationSec ?? 0 : job.durationId === null ? 60 : DURATION_SECONDS[job.durationId] ?? 60;
   const styleRecipe = styleRecipeForCadence(job.cadenceId);
+  const musicLibrary = loadLibrary();
   if (targetSec < 3 || targetSec > 30 && job.durationId === "short") return { ok: false, reasons: ["invalid short duration"] };
 
   // `buildCandidates` keys its catalog by moment id, because that is what the
@@ -225,6 +232,53 @@ export async function runCompose(
 
   // Stage 2: composeCall — build the brief and prompt for Gemini
   const brief = craftBrief(job.cadenceId, targetSec);
+  const albumEvidence: AlbumEvidence[] = job.proposal.moments.flatMap((moment) => {
+    const analysis = deps.assets.get(moment.id)?.analysis;
+    const candidatesForMoment = candidates.filter((candidate) => candidate.itemId === moment.id);
+    const role = candidatesForMoment.find(({ storyRole }) => storyRole)?.storyRole ?? analysis?.storyRole;
+    const energy = candidatesForMoment.flatMap((candidate) => [candidate.energy, candidate.highlightScore]
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value)));
+    const base: AlbumEvidence = {
+      ...(analysis?.mood ? { mood: analysis.mood } : {}),
+      ...(analysis?.activities ? { activities: analysis.activities } : {}),
+      ...(analysis?.setting ? { place: analysis.setting } : {}),
+      ...(typeof analysis?.emotionScore === "number" ? { energy: analysis.emotionScore } : {}),
+      ...(typeof analysis?.keyMomentScore === "number" ? { highlightScore: analysis.keyMomentScore } : {}),
+      ...(role ? { storyRole: role } : {}),
+      ...(energy.length ? { energy: Math.max(...energy) } : {}),
+      context: [moment.title, moment.description, ...candidatesForMoment.map(({ description }) => description)].filter(Boolean).join(" "),
+    };
+    const shotEvidence = (analysis?.shots ?? []).map((shot) => ({
+      ...(shot.emotion ? { emotion: shot.emotion } : {}),
+      ...(shot.storyRole ? { storyRole: shot.storyRole } : {}),
+      ...(shot.description ? { context: shot.description } : {}),
+      ...(typeof shot.emotionScore === "number" ? { energy: shot.emotionScore } : {}),
+      ...(shot.highlights?.length ? { highlightScore: Math.max(...shot.highlights.map(({ score }) => score)) } : {}),
+    }));
+    return [base, ...shotEvidence];
+  });
+  const albumProfile = buildAlbumProfile({
+    cadence: job.cadenceId,
+    intent: [job.storyIntent, job.note].filter(Boolean).join(" "),
+    occasion: [job.proposal.title, ...job.proposal.chapters.map(({ title }) => title)].join(" "),
+    evidence: albumEvidence,
+  });
+  const allowedTracks = [...deps.soundtrackIds].flatMap((id) => {
+    const track = musicLibrary.find((item) => item.id === id);
+    return track ? [track] : [];
+  });
+  const explicitSoundtrack = job.soundtrackExplicit ?? job.soundtrackId !== null;
+  const fallbackId = explicitSoundtrack
+    ? job.soundtrackId
+    : job.projectSoundtrackId ?? (job.soundtrackId && allowedTracks.some(({ id }) => id === job.soundtrackId)
+      ? job.soundtrackId
+      : recommendSoundtrack(allowedTracks, {
+        projectId: job.projectId, intent: albumProfile.summary, cadence: job.cadenceId, profile: albumProfile,
+        targetDurationSec: targetSec, recentTrackIds: job.recentSoundtrackIds,
+      }));
+  const recentForShortlist = (job.recentSoundtrackIds ?? []).filter((id) => id !== job.projectSoundtrackId);
+  const musicShortlist: SoundtrackShortlistItem[] = soundtrackShortlist(allowedTracks, albumProfile, targetSec, recentForShortlist, fallbackId);
+  const preserveProjectTrack = !explicitSoundtrack && !!job.projectSoundtrackId && allowedTracks.some(({ id }) => id === job.projectSoundtrackId);
   const { prompt, schema } = composeCall({
     candidates: primaryCandidates,
     proposal: job.proposal,
@@ -233,6 +287,9 @@ export async function runCompose(
     note: job.note,
     targetSec,
     cast: job.cast?.summary,
+    albumProfile,
+    soundtrackShortlist: musicShortlist,
+    soundtrackFallbackId: fallbackId,
   });
 
   // Call Gemini (mocked in tests)
@@ -255,6 +312,13 @@ export async function runCompose(
   if (!parsed.ok) {
     return { ok: false, reasons: [`model response invalid: ${parsed.errors.join("; ")}`] };
   }
+  const modelSoundtrack = selectModelSoundtrack(parsed.picks.soundtrackId, parsed.picks.soundtrackReason, musicShortlist, fallbackId);
+  const soundtrackChoice = explicitSoundtrack
+    ? { soundtrackId: job.soundtrackId, soundtrackReason: "Selected by you." }
+    : preserveProjectTrack
+      ? { soundtrackId: job.projectSoundtrackId!, soundtrackReason: "Kept this album's existing soundtrack for the remake." }
+      : modelSoundtrack;
+  const selectedSoundtrackId = soundtrackChoice.soundtrackId;
 
   // Stage 3: assemble — apply drop rules, build AssembledClip[]
   const candidateMap = new Map(candidates.map(c => [c.candidateId, c]));
@@ -651,7 +715,7 @@ export async function runCompose(
     };
   }
 
-  const soundtrack = job.soundtrackId ? loadLibrary().find((track) => track.id === job.soundtrackId) : undefined;
+  const soundtrack = selectedSoundtrackId ? musicLibrary.find((track) => track.id === selectedSoundtrackId) : undefined;
   const musicAnalysis: CutMusic | undefined = soundtrack?.analysis ?? (soundtrack ? { hasPulse: soundtrack.beatsSec.length >= 12, beatsSec: soundtrack.beatsSec, downbeatsSec: soundtrack.beatsSec.filter((_, index) => index % 4 === 0) } : undefined);
   if (musicAnalysis) {
     const snapped = snapPhotoBoundaries(fittedClips.map((clip) => ({ kind: clip.kind, holdSec: clip.holdSec ?? 0, minHoldSec: clip.minHoldSec ?? fitHolds.min, maxHoldSec: clip.maxHoldSec ?? fitHolds.max, hasSpeech: clip.hasSpeech, locked: storyLockIds.has(clip.itemId), peak: clip.itemId === peakCandidate?.itemId, transitionOverlapSec: clip.transition === "crossfade" ? TRANSITION_SECONDS.crossfade : 0 })), musicAnalysis, styleRecipe.cutOn);
@@ -691,7 +755,7 @@ export async function runCompose(
   );
 
   // Stage 6: buildAudioClips — speech/ambient/music tracks
-  const audioPlanClips = buildAudioClips(fittedClips, job.soundtrackId, result.durationSec);
+  const audioPlanClips = buildAudioClips(fittedClips, selectedSoundtrackId, result.durationSec);
 
   // Stage 7: Assemble the Timeline and validate
   const timeline: Timeline = {
@@ -737,8 +801,8 @@ export async function runCompose(
       const durationSec = picture?.durationSec ?? (ac.endSec - ac.startSec);
       return {
         id: `audio-${index + 1}`,
-        source: ac.kind === "music" && job.soundtrackId
-          ? { kind: "soundtrack" as const, soundtrackId: job.soundtrackId, sourceInSec: ac.sourceInSec ?? 0, sourceOutSec: ac.sourceOutSec ?? result.durationSec }
+        source: ac.kind === "music" && selectedSoundtrackId
+          ? { kind: "soundtrack" as const, soundtrackId: selectedSoundtrackId, sourceInSec: ac.sourceInSec ?? 0, sourceOutSec: ac.sourceOutSec ?? result.durationSec }
           : (() => {
               const candidate = candidateMap.get(ac.sourceCandidateId);
               // The renderer resolves a source id to a file; a moment id is not
@@ -876,6 +940,8 @@ export async function runCompose(
     notes: fitNotes,
     reviewNotes: reviewed.reviewNotes,
     reasons: castReasons,
+    usedSoundtrackId: selectedSoundtrackId,
+    soundtrackReason: soundtrackChoice.soundtrackReason,
     leftOut: [...lengthLeftOut, ...reviewed.leftOut],
     ...(job.durationId === null && parsedResult.timeline.durationSec < 20
       ? { durationSelection: { id: "short" as const, durationSec: parsedResult.timeline.durationSec } }

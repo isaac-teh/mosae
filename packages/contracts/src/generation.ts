@@ -15,6 +15,10 @@ export const GenerationSchema = z.strictObject({
   proposalId: z.string().min(1),
   parentGenerationId: z.string().min(1).nullable(),
   settings: DirectionSettingsSchema,
+  /** The soundtrack attached to the finished film, retained for history even if settings evolve. */
+  usedSoundtrackId: z.string().min(1).nullable().optional(),
+  /** A concise explanation from the existing compose call for the soundtrack choice. */
+  soundtrackReason: z.string().max(200).optional(),
   /** Chosen once at composition time. Unused until layout forms ship, stored so they need no migration. */
   seed: z.string().min(1),
   status: z.enum(["composing", "playable", "rendering", "saved", "failed"]),

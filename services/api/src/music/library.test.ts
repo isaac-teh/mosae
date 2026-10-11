@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ensureLibraryUploaded, libraryPath, loadLibrary, soundtrackCatalog, soundtrackPath } from "./library.js";
+import { buildAlbumProfile, ensureLibraryUploaded, libraryPath, loadLibrary, recommendSoundtrack, rankSoundtracks, selectModelSoundtrack, soundtrackCatalog, soundtrackPath } from "./library.js";
 
 describe("music library", () => {
   const tracks = loadLibrary();
@@ -39,6 +39,44 @@ describe("music library", () => {
 
   it("keeps library order when there is no suggestion", () => {
     expect(soundtrackCatalog(tracks, null).map((t) => t.id)).toEqual(tracks.map((t) => t.id));
+  });
+
+  it("varies stable seeded suggestions across projects with identical settings", () => {
+    const picks = new Set(Array.from({ length: 20 }, (_, index) => recommendSoundtrack(tracks, {
+      projectId: `project-${index}`, intent: "family vacation", cadence: "reflective", targetDurationSec: 120,
+    })));
+    expect(picks.size).toBeGreaterThan(1);
+    expect(recommendSoundtrack(tracks, { projectId: "same-project", intent: "family vacation", cadence: "reflective", targetDurationSec: 120 }))
+      .toBe(recommendSoundtrack(tracks, { projectId: "same-project", intent: "family vacation", cadence: "reflective", targetDurationSec: 120 }));
+  });
+
+  it("avoids recently used tracks and falls back when every match was recent", () => {
+    const options = tracks.filter((track) => track.cadence === "tender").slice(0, 2);
+    const pick = recommendSoundtrack(options, { projectId: "p", intent: "quiet", cadence: "tender", targetDurationSec: 100, recentTrackIds: [options[0]!.id] });
+    expect(pick).toBe(options[1]!.id);
+    expect(recommendSoundtrack(options.slice(0, 1), { projectId: "p", intent: "quiet", cadence: "tender", targetDurationSec: 100, recentTrackIds: [options[0]!.id] }))
+      .toBe(options[0]!.id);
+  });
+
+  it("puts its chosen track first and preserves the current project's soundtrack", () => {
+    const chosen = recommendSoundtrack(tracks, { projectId: "p", intent: "trip", cadence: "playful", currentProjectTrackId: "lyria-tender" });
+    expect(chosen).toBe("lyria-tender");
+    const catalog = soundtrackCatalog(tracks, "playful", 120, chosen);
+    expect(catalog[0]).toMatchObject({ id: chosen, suggested: true });
+    expect(catalog.filter(({ suggested }) => suggested)).toHaveLength(1);
+  });
+
+  it("scores a high-energy beach album differently from a gentle birthday album", () => {
+    const energetic = buildAlbumProfile({ cadence: "energetic", intent: "summer trip", occasion: "beach holiday", evidence: [{ mood: "excited", activities: ["swimming", "running"], place: "beach", energy: 0.9, storyRole: "peak" }] });
+    const gentle = buildAlbumProfile({ cadence: "tender", intent: "birthday with grandma", occasion: "birthday", evidence: [{ mood: "gentle", activities: ["cake", "hugging"], place: "home", energy: 0.2, emotion: "tender", storyRole: "closer" }] });
+    const beachFirst = rankSoundtracks(tracks, energetic, 120)[0]!.id;
+    const birthdayFirst = rankSoundtracks(tracks, gentle, 120)[0]!.id;
+    expect(beachFirst).not.toBe(birthdayFirst);
+  });
+
+  it("falls back to the seeded track when Gemini chooses outside the shortlist", () => {
+    const shortlist = tracks.slice(0, 4).map((track) => ({ id: track.id, name: track.name, description: track.description, mood: track.cadence, energy: 0.5 }));
+    expect(selectModelSoundtrack("not-in-shortlist", "wrong", shortlist, tracks[1]!.id)).toEqual({ soundtrackId: tracks[1]!.id, soundtrackReason: "Fits the album's mood and pacing." });
   });
 
   it("maps an id to its bucket path, and an unknown id to null", () => {

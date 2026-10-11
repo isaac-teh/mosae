@@ -34,6 +34,8 @@ export const DirectionSettingsSchema = z.strictObject({
   cadenceId: z.enum(cadenceIds),
   /** null means let the director choose a soundtrack. */
   soundtrackId: z.string().min(1).nullable(),
+  /** False marks the catalog's automatic suggestion; otherwise a supplied ID is an explicit choice. */
+  soundtrackExplicit: z.boolean().optional(),
   /** null means let the director choose a length. */
   durationId: z.enum(durationIds).nullable(),
   /** Explicit target for the adaptive short option; absent for legacy tiers. */

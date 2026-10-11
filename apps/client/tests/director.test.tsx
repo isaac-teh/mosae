@@ -36,7 +36,7 @@ vi.mock("@/components/MediaPicker", async () => {
 vi.mock("@/components/FilmPlayer", () => ({ FilmPlayer: ({ source, aspect }: any) => React.createElement("div", { "data-testid": "film-player", "data-source": source, "data-aspect": aspect }) }));
 vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ onPlayingChange }: any) => React.createElement("div", { "data-testid": "film-ready-preview" }, React.createElement("button", { "aria-label": "Mock preview playing", onClick: () => onPlayingChange?.(true) }), React.createElement("button", { "aria-label": "Mock preview paused", onClick: () => onPlayingChange?.(false) })) }));
 import DirectorScreen from "../app/director";
-import { useDirectorChat } from "../lib/useDirectorChat";
+import { defaultSoundtrackId, useDirectorChat } from "../lib/useDirectorChat";
 import { getUploadProgress, setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress } from "@mosae/core";
 
 let root: Root;
@@ -81,6 +81,12 @@ function setup(options: { faces?: boolean; orientation?: { portrait: number; lan
 }
 
 describe("Director chat", () => {
+  it("defaults to the suggested soundtrack but keeps an existing explicit pick", () => {
+    const options = [{ id: "first", name: "First", description: "" }, { id: "suggested", name: "Suggested", description: "", suggested: true }];
+    expect(defaultSoundtrackId(null, options)).toBe("suggested");
+    expect(defaultSoundtrackId("user-picked", options)).toBe("user-picked");
+    expect(defaultSoundtrackId(null, [])).toBeNull();
+  });
   beforeEach(() => vi.clearAllMocks());
 
   let recoveryProjectSequence = 0;

@@ -16,6 +16,7 @@ import type { Cast, FaceRef } from "../cast/types.js";
 import type { ClipTime } from "./chronology.js";
 import { addSourceDimensions } from "./resolveSources.js";
 import { aspectRatio, collageCellAspect, focalCrop, type FramingFace } from "./focalCrop.js";
+import { loadLibrary } from "../music/library.js";
 
 export type ComposeTask = {
   projectId: string;
@@ -208,6 +209,19 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
     if (proposal.proposal.state !== "accepted") {
       return fail([`proposal ${generation.proposalId} is not accepted`]);
     }
+    const storyIntentSnap = await project.collection("storyIntents").doc(proposal.proposal.storyIntentId).get();
+    const storyIntent = storyIntentSnap.exists && typeof storyIntentSnap.get("text") === "string" ? storyIntentSnap.get("text") as string : "";
+    const recentSoundtrackSnap = userId ? await db.collection("users").doc(userId).get() : null;
+    const recentSoundtrackIds = Array.isArray(recentSoundtrackSnap?.get("recentSoundtrackIds"))
+      ? (recentSoundtrackSnap!.get("recentSoundtrackIds") as unknown[]).filter((id): id is string => typeof id === "string")
+      : [];
+    const currentPlayableId = projectSnap.get("currentPlayableGenerationId");
+    let projectSoundtrackId: string | null = null;
+    if (typeof currentPlayableId === "string" && currentPlayableId !== task.generationId) {
+      const currentGeneration = await project.collection("generations").doc(currentPlayableId).get();
+      const currentSettings = currentGeneration.get("settings") as { soundtrackId?: unknown } | undefined;
+      projectSoundtrackId = typeof currentSettings?.soundtrackId === "string" ? currentSettings.soundtrackId : null;
+    }
 
     // A generation can choose a person or clear an earlier cast/proposal focus.
     // Apply it to the in-memory proposal so motion and composition use one focus.
@@ -312,6 +326,10 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       cadenceId: settings.settings.cadenceId as ComposeJob["cadenceId"],
       seed: generation.seed,
       soundtrackId: settings.settings.soundtrackId,
+      soundtrackExplicit: settings.settings.soundtrackExplicit,
+      recentSoundtrackIds: recentSoundtrackIds.filter((id) => id !== projectSoundtrackId),
+      projectSoundtrackId,
+      storyIntent,
       // The directing note is the whole of the spec's revision mechanism: a
       // recompose differs from its parent only by the settings, and this is the
       // field that carries what the user actually asked for.
@@ -332,7 +350,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
 
     const result = await runCompose(job, {
       generateStructured: call,
-      soundtrackIds: config.soundtrackIds ?? new Set(settings.settings.soundtrackId ? [settings.settings.soundtrackId] : []),
+      soundtrackIds: config.soundtrackIds ?? new Set(loadLibrary().map(({ id }) => id)),
       assets: catalog,
     });
 
@@ -390,9 +408,13 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       droppedPicks: result.droppedPicks,
       leftOut: result.leftOut,
       reasons: result.reasons,
-      ...(result.durationSelection ? {
-        settings: { ...settings.settings, durationId: result.durationSelection.id, durationSec: result.durationSelection.durationSec },
-      } : {}),
+      settings: {
+        ...settings.settings,
+        soundtrackId: result.usedSoundtrackId ?? settings.settings.soundtrackId,
+        ...(result.durationSelection ? { durationId: result.durationSelection.id, durationSec: result.durationSelection.durationSec } : {}),
+      },
+      usedSoundtrackId: result.usedSoundtrackId ?? settings.settings.soundtrackId,
+      soundtrackReason: result.soundtrackReason,
       now: Date.now(),
     });
 

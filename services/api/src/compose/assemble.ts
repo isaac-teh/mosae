@@ -28,6 +28,8 @@ export const ComposeResponseSchema = z.object({
   openerId: StoryChoiceSchema.optional(),
   peakId: StoryChoiceSchema.optional(),
   closerId: StoryChoiceSchema.optional(),
+  soundtrackId: z.string().optional(),
+  soundtrackReason: z.string().optional(),
 });
 
 export type ComposePicks = z.infer<typeof ComposeResponseSchema>;

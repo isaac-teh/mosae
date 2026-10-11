@@ -38,6 +38,27 @@ describe("generationStore (emulator)", () => {
     expect(gen.projectId).toBe(project.id);
   });
 
+  it("stores soundtrack history on the user across generated films", async () => {
+    const userId = `u-${crypto.randomUUID()}`;
+    const soundtrackIds = ["song-1", "song-2", "song-3", "song-4", "song-5", "song-6"];
+    let lastGenerationId = "";
+    let lastProjectId = "";
+    for (const [index, soundtrackId] of soundtrackIds.entries()) {
+      const project = await newProject(userId);
+      const generation = await createGeneration(adminDb, {
+        userId, projectId: project.id, proposalId: "proposal-1", parentGenerationId: null,
+        settings: makeSettings({ soundtrackId: `suggested-${index}`, soundtrackExplicit: false }), seed: `seed-${index}`, now: Date.now(),
+      });
+      lastGenerationId = generation.id;
+      lastProjectId = project.id;
+      await publishGeneration(adminDb, { userId, projectId: project.id, generationId: generation.id, timeline: null, droppedPicks: [], usedSoundtrackId: soundtrackId, soundtrackReason: `Chosen for album ${index}.`, now: Date.now() });
+    }
+    const user = await adminDb.collection("users").doc(userId).get();
+    expect(user.get("recentSoundtrackIds")).toEqual(["song-6", "song-5", "song-4", "song-3", "song-2"]);
+    expect((await getGeneration(adminDb, userId, lastProjectId, lastGenerationId))?.usedSoundtrackId).toBe("song-6");
+    expect((await getGeneration(adminDb, userId, lastProjectId, lastGenerationId))?.soundtrackReason).toBe("Chosen for album 5.");
+  });
+
   it("rejects creation for non-owner", async () => {
     const project = await newProject();
     await expect(

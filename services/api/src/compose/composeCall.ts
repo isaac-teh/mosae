@@ -2,6 +2,7 @@ import { ComposeResponseSchema, type ComposePicks } from "./assemble.js";
 import type { Candidate } from "./buildCandidates.js";
 import type { Holds } from "./brief.js";
 import type { StoryProposal } from "@mosae/contracts";
+import type { AlbumProfile, SoundtrackShortlistItem } from "../music/library.js";
 
 /**
  * Build the prompt for the composition model.
@@ -22,6 +23,9 @@ export interface ComposeCallDeps {
   /** The film's target length. `craftBrief` already states it; repeating it wrong is worse than not repeating it. */
   targetSec?: number;
   cast?: string;
+  albumProfile?: AlbumProfile;
+  soundtrackShortlist?: SoundtrackShortlistItem[];
+  soundtrackFallbackId?: string | null;
 }
 
 /**
@@ -32,7 +36,7 @@ export function composeCall(deps: ComposeCallDeps): {
   prompt: string;
   schema: object;
 } {
-  const { candidates, proposal, brief, holds, note, targetSec, cast } = deps;
+  const { candidates, proposal, brief, holds, note, targetSec, cast, albumProfile, soundtrackShortlist = [], soundtrackFallbackId } = deps;
 
   // Build candidate map by ID for quick lookup in the prompt
   const byId = new Map(candidates.map(c => [c.candidateId, c]));
@@ -79,6 +83,12 @@ export function composeCall(deps: ComposeCallDeps): {
       : []),
     ...(targetSec != null ? [`Target length: ${targetSec}s.`, ""] : []),
     ...(cast ? [`Cast: ${cast}. Keep every core family member on screen; end on the whole family together if possible.`, ""] : []),
+    ...(soundtrackShortlist.length ? [
+      `Album profile: ${albumProfile?.summary ?? "Use the media mood and occasion"}. Energy ${albumProfile?.energy.toFixed(2) ?? "unknown"}; cadence ${albumProfile?.cadence ?? "unspecified"}.`,
+      `Soundtrack shortlist: ${JSON.stringify(soundtrackShortlist)}. Choose one id from this list and give a one-line soundtrackReason tied to the album profile. The stable fallback is ${soundtrackFallbackId ?? "none"}.`,
+      "The soundtrack choice must come from the shortlist. Never invent a track ID.",
+      "",
+    ] : []),
     `Chapters: ${JSON.stringify(chapterInfo)}`,
     `Candidates: ${JSON.stringify(candidateList)}`,
   ].join("\n");
@@ -114,8 +124,9 @@ export function composeCall(deps: ComposeCallDeps): {
       openerId: { type: "object", properties: { candidateId: { type: "string" }, reason: { type: "string" } }, required: ["candidateId", "reason"] },
       peakId: { type: "object", properties: { candidateId: { type: "string" }, reason: { type: "string" } }, required: ["candidateId", "reason"] },
       closerId: { type: "object", properties: { candidateId: { type: "string" }, reason: { type: "string" } }, required: ["candidateId", "reason"] },
+      ...(soundtrackShortlist.length ? { soundtrackId: { type: "string" }, soundtrackReason: { type: "string" } } : {}),
     },
-    required: ["clips", "musicCues"],
+    required: ["clips", "musicCues", ...(soundtrackShortlist.length ? ["soundtrackId", "soundtrackReason"] : [])],
   };
 
   return { prompt, schema };

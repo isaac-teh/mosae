@@ -9,6 +9,10 @@ const EMPTY_INPUT: ChatInput = { summary: null, intent: null, people: null, peop
 const UNCLEAR = "I didn't catch that. Pick one below, or say it another way.";
 const REQUEST_FAILURE = "I couldn't do that. Try again?";
 
+export function defaultSoundtrackId(currentId: string | null, soundtracks: DirectionOptions["soundtracks"]): string | null {
+  return currentId ?? soundtracks.find(({ suggested }) => suggested)?.id ?? soundtracks[0]?.id ?? null;
+}
+
 function reportFailure(cause: unknown): string {
   const error = cause as { code?: unknown; message?: unknown };
   if (error?.code === "demo_limit_reached") return "Demo limit reached — try the options";
@@ -60,7 +64,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const [saving, setSaving] = useProjectState(projectEpoch, currentProjectEpoch, false);
   const [momentState, setMomentState] = useProjectState<Record<string, "keep" | "leave">>(projectEpoch, currentProjectEpoch, {});
   const [directionOptions, setDirectionOptions] = useProjectState<DirectionOptions | null>(projectEpoch, currentProjectEpoch, null);
-  const [directionSelection, setDirectionSelection] = useProjectState<{ cadenceId: string; durationId: Direction["durationId"]; durationSec?: number; soundtrackId: string | null; focus: string; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful"; aspect: "9:16" | "16:9" }>(projectEpoch, currentProjectEpoch, { cadenceId: "reflective", durationId: "2m", soundtrackId: null, focus: "family", collageAmount: "few", motionFeel: "calm", aspect: "9:16" });
+  const [directionSelection, setDirectionSelection] = useProjectState<{ cadenceId: string; durationId: Direction["durationId"]; durationSec?: number; soundtrackId: string | null; soundtrackExplicit: boolean; focus: string; collageAmount: "few" | "lots" | "none"; motionFeel: "calm" | "playful"; aspect: "9:16" | "16:9" }>(projectEpoch, currentProjectEpoch, { cadenceId: "reflective", durationId: "2m", soundtrackId: null, soundtrackExplicit: false, focus: "family", collageAmount: "few", motionFeel: "calm", aspect: "9:16" });
   const [aspectSelectedByUser, setAspectSelectedByUser] = useProjectState(projectEpoch, currentProjectEpoch, false);
   const effectiveAspect = aspectSelectedByUser ? directionSelection.aspect : summary?.orientation?.suggested ?? "9:16";
   const directionSelectionRef = useRef(directionSelection);
@@ -150,7 +154,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const durationId = duration?.id ?? options.recommendedDuration;
     const lengthSec = duration?.seconds ?? 120;
     const focus = directionFocus(peopleRef.current, focusChoiceRef.current.selected, focusChoiceRef.current.explicit).selected;
-    setDirectionSelection((current) => ({ ...current, focus, cadenceId, durationId, ...(durationId === "short" ? { durationSec: lengthSec } : { durationSec: undefined }), soundtrackId: current.soundtrackId ?? options.soundtracks[0]?.id ?? null, collageAmount: preserveSelection ? current.collageAmount : options.collageAmount ?? current.collageAmount, motionFeel: preserveSelection ? current.motionFeel : options.motionFeel ?? current.motionFeel }));
+    setDirectionSelection((current) => ({ ...current, focus, cadenceId, durationId, ...(durationId === "short" ? { durationSec: lengthSec } : { durationSec: undefined }), soundtrackId: defaultSoundtrackId(current.soundtrackId, options.soundtracks), collageAmount: preserveSelection ? current.collageAmount : options.collageAmount ?? current.collageAmount, motionFeel: preserveSelection ? current.motionFeel : options.motionFeel ?? current.motionFeel }));
     setInput((current) => ({ ...current, directionNote: options.recommendation ?? "For these moments, I’d suggest this.", direction: { confirmed: false, pace: /gentle|reflective/i.test(cadenceId) ? "gentle" : "lively", lengthSec, focus } }));
   }, [repository, projectId, currentProjectEpoch]);
 
@@ -579,7 +583,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       try {
         const focus = directionFocus(input.people, directionSelection.focus, focusExplicit);
         const focusLabel = focus.label;
-        const direction: Direction & { focus: string } = { note: `${directionOptions?.note ?? ""}${directionOptions?.note ? "\n" : ""}Focus: ${focusLabel}.`, cadenceId: directionSelection.cadenceId, soundtrackId: directionSelection.soundtrackId, durationId: directionSelection.durationId, ...(directionSelection.durationId === "short" ? { durationSec: directionSelection.durationSec } : {}), focus: focus.selected, collageAmount: directionSelection.collageAmount, motionFeel: directionSelection.motionFeel, aspect: effectiveAspect };
+        const direction: Direction & { focus: string } = { note: `${directionOptions?.note ?? ""}${directionOptions?.note ? "\n" : ""}Focus: ${focusLabel}.`, cadenceId: directionSelection.cadenceId, soundtrackId: directionSelection.soundtrackId, soundtrackExplicit: directionSelection.soundtrackExplicit, durationId: directionSelection.durationId, ...(directionSelection.durationId === "short" ? { durationSec: directionSelection.durationSec } : {}), focus: focus.selected, collageAmount: directionSelection.collageAmount, motionFeel: directionSelection.motionFeel, aspect: effectiveAspect };
         compositionStartedAt.current = Date.now();
         setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction }));
         let latestSummary = input.summary;
