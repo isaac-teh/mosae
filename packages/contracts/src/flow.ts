@@ -18,7 +18,7 @@ export const DirectorFlowSchema = z.strictObject({
   people: z.array(FlowPersonSchema),
 });
 
-export const FlowActionSchema = z.discriminatedUnion("type", [
+const AtomicFlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("story-answer"), answer: z.string().min(1).max(2000), storySummary: z.string().nullable().optional(), mentionedPeople: z.array(z.string()).optional() }),
   z.object({ type: z.literal("person"), personId: z.string().min(1), name: z.string().nullable().optional(), role: z.string().nullable().optional(), confirmed: z.boolean().optional(), skipped: z.boolean().optional() }),
   z.object({ type: z.literal("manual-shot"), personId: z.string().min(1), shotId: z.string().min(1), included: z.boolean() }),
@@ -27,6 +27,11 @@ export const FlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("undo") }),
 ]);
 
+export const FlowActionSchema = z.discriminatedUnion("type", [
+  ...AtomicFlowActionSchema.options,
+  z.object({ type: z.literal("batch"), actions: z.array(AtomicFlowActionSchema).min(1).max(200).refine((actions) => actions.every((action) => action.type !== "undo"), "Undo cannot be included in a batch") }),
+]);
+
 export const FlowMutationRequestSchema = z.strictObject({ actionId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), action: FlowActionSchema });
 export type DirectorFlow = z.infer<typeof DirectorFlowSchema>;
-export type FlowAction = z.infer<typeof FlowActionSchema>;
+export type FlowAction = z.infer<typeof AtomicFlowActionSchema> | { type: "batch"; actions: z.infer<typeof AtomicFlowActionSchema>[] };
