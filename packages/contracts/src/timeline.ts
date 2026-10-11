@@ -129,6 +129,7 @@ const TIMELINE_TOLERANCE_SEC = 1e-6;
 
 export const TimelineSchema = z.strictObject({
   schemaVersion: z.union([z.literal(1), z.literal(2)]),
+  styleId: z.literal("memory").optional(),
   projectId: z.string().min(1),
   mode: z.enum(["memory", "creator"]),
   aspect: z.enum(["16:9", "9:16"]),

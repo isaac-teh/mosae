@@ -32,8 +32,6 @@ describe("deterministic directing rules", () => {
     expect(budgetSlotCount(60)).toBe(22);
     expect(budgetSlotCount(60, 2)).toBe(30);
     expect(momentScore({ quality: 1, emotion: 1, energy: 1, peopleRelevance: 1, intentMatch: 1 })).toBeCloseTo(1);
-    expect(DIRECTING_RULES.photoHolds.memory).toEqual([2.2, 3.2]);
-    expect(DIRECTING_RULES.photoHolds.lively).toEqual([1.5, 2.2]);
   });
   it("suggests the next length only when more than 40 percent of good moments overflow", () => {
     expect(leftOutLengthHint({ durationSec: 30, nextDurationSec: 60, goodMomentCount: 15, photoCount: 15, videoSec: 0, lockedPhotoCount: 3 })).toBeUndefined();

@@ -1,5 +1,5 @@
 import { CADENCES, type CadenceId } from "@mosae/contracts";
-import { DIRECTING_RULES, photoHoldRange } from "./directingRules.js";
+import { styleRecipeForCadence } from "./styleRecipe.js";
 
 /** Hold lengths in seconds for a still or a quiet shot, chosen by the story's mood. */
 export interface Holds {
@@ -9,24 +9,12 @@ export interface Holds {
 }
 
 // Hold table keyed directly by CadenceId — no mapping, no substring matching.
-const HOLDS: Record<CadenceId, Holds> = Object.fromEntries(
-  (Object.keys({ tender: 1, reflective: 1, playful: 1, energetic: 1, celebratory: 1 }) as CadenceId[])
-    .map((cadence) => [cadence, photoHoldRange(1, cadence)]),
-) as Record<CadenceId, Holds>;
-
-for (const cadence of Object.keys(HOLDS) as CadenceId[]) {
-  const lively = cadence === "playful" || cadence === "energetic";
-  const [min, max] = lively ? DIRECTING_RULES.photoHolds.lively : DIRECTING_RULES.photoHolds.memory;
-  HOLDS[cadence] = { base: (min + max) / 2, min, max };
-}
-
-const DEFAULT_HOLDS: Holds = { base: 3, min: 1, max: 5 };
-
 /**
  * Look up holds for a cadence id. Total over CadenceId — the type system enforces exhaustiveness.
  */
 export function holdsFor(cadenceId: CadenceId): Holds {
-  return HOLDS[cadenceId] ?? DEFAULT_HOLDS;
+  const [min, max] = styleRecipeForCadence(cadenceId).photoHold;
+  return { base: (min + max) / 2, min, max };
 }
 
 /**
@@ -38,12 +26,13 @@ export function craftBrief(cadenceId: CadenceId, targetSec: number): string {
   const cadence = CADENCES.find(c => c.id === cadenceId);
   const moodName = cadence?.name ?? "unspecified";
   const h = holdsFor(cadenceId);
+  const recipe = styleRecipeForCadence(cadenceId);
 
   return [
     `You are cutting a short film from someone's own photos and videos. Judge it as film, not as a gallery.`,
     "",
     "Rhythm",
-    `- Mood "${moodName}": photo clips use ${h.base.toFixed(2)}s base pace for one photo, with ±20% variance (${h.min.toFixed(2)}–${h.max.toFixed(2)}s). Multi-photo collages scale as 1.0 + 0.2 × photos, then apply the cadence stretch.`,
+    `- Mood "${moodName}": photo clips hold ${h.min.toFixed(2)}–${h.max.toFixed(2)}s (base ${h.base.toFixed(2)}s).`,
     "- The strongest moment in each chapter gets the longest hold. Ordinary connective shots get the shortest.",
     "- Vary the holds. Three shots of identical length in a row reads as a slideshow, which is a failed edit.",
     `- Total length must land within 10% of ${targetSec}s. Shorten ordinary shots first, never the strongest ones.`,
@@ -63,7 +52,8 @@ export function craftBrief(cadenceId: CadenceId, targetSec: number): string {
     "- Alternate scale where you can: a wide establishing shot, then something closer and human.",
     "",
     "Transitions",
-    '- Use hard cuts for most of the film, a crossfade between shots that belong to the same feeling or mark time passing, and a dip only at a real break.',
+    `- Default to a ${recipe.transitions.default} (${recipe.transitions.crossfadeSec.toFixed(1)}s); cut into the peak. Use a dip only at a real break.`,
+    `- Prefer soundtrack moods: ${recipe.musicMood.join(", ")}. Cut on the ${recipe.cutOn}.`,
     "- Nothing else. No wipes, slides, or spins.",
     "",
     "Text",

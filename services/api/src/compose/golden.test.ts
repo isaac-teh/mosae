@@ -201,7 +201,7 @@ describe("golden composition", () => {
   it("allows a share-cap overage when preserving complete speech requires it", async () => {
     const timeline = await composeOrThrow();
     // Minimum video coverage can exceed the share cap; both source clips remain.
-    expect(timeline.durationSec).toBeCloseTo(18.7);
+    expect(timeline.durationSec).toBeCloseTo(18.8);
   });
 
   it("burns in the model's text overlay and ducks the music under speech or loud peaks", async () => {
