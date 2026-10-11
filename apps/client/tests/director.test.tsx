@@ -1004,8 +1004,24 @@ describe("Director chat", () => {
     await act(async () => chat.retry());
     await act(async () => chat.actions.send("how long will this take?"));
     expect(chat.state.items.some(item => item.kind === "you" && item.id === "interp-question-1" && item.text === "how long will this take?")).toBe(true);
-    expect(chat.state.items.some(item => item.kind === "mosae" && item.id === "interp-reply" && item.text === "Your photos are uploading — one moment.")).toBe(true);
+    expect(chat.state.items.some(item => item.kind === "mosae" && item.id === "interp-reply-1" && item.text === "Your photos are uploading — one moment.")).toBe(true);
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+  });
+
+  it("shows Thinking before interpretation resolves and ignores overlapping sends", async () => {
+    let resolveInterpret!: (value: any) => void;
+    setup({ interpret: () => new Promise((resolve) => { resolveInterpret = resolve; }) });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.retry());
+    let pending!: Promise<void>;
+    await act(async () => { pending = chat.actions.send("how long will this take?"); });
+    expect(chat.state.items.some(item => item.kind === "typing" && item.id === "interp-typing" && item.text === "Thinking")).toBe(true);
+    await act(async () => chat.actions.send("another question"));
+    expect(mocks.repo.interpret).toHaveBeenCalledTimes(1);
+    await act(async () => { resolveInterpret({ reply: "Almost there.", change: { kind: "note" } }); await pending; });
+    expect(chat.state.items.some(item => item.kind === "mosae" && item.id === "interp-reply-1" && item.text === "Almost there.")).toBe(true);
   });
 });
 
