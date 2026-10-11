@@ -710,6 +710,18 @@ describe("Director chat", () => {
     await waitFor(() => expect(host.querySelector('[data-from="you"]')?.textContent).toContain("A trip"));
   });
 
+  it("shows ready people while the story plan request is still pending", async () => {
+    let finish!: (value: { planId: string }) => void;
+    setup({ createPlan: () => new Promise((resolve) => { finish = resolve; }) }); await renderScreen();
+    const startedAt = performance.now();
+    await click("A trip");
+    const elapsedMs = performance.now() - startedAt;
+    expect(host.querySelector('[data-from="you"]')?.textContent).toContain("A trip");
+    expect(hasText("Who's this? They're in 212 of your moments.")).toBe(true);
+    expect(elapsedMs).toBeLessThan(300);
+    await act(async () => finish({ planId: "proposal-1" }));
+  });
+
   it("shows the retry message when interpretation fails and keeps the occasion reply usable", async () => {
     setup({ interpret: async () => { throw new Error("offline"); } }); await renderScreen();
     const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
