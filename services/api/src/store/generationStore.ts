@@ -27,12 +27,6 @@ export async function createGeneration(
     now: number;
   },
 ): Promise<Generation> {
-  // Verify ownership
-  const projectSnap = await db.collection("projects").doc(input.projectId).get();
-  if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) {
-    throw new StoreError("forbidden");
-  }
-
   // `.doc("")` is not an auto id — it is an invalid path. `.doc()` is.
   const ref = generationsRef(db, input.projectId).doc();
   const id = ref.id;
@@ -43,6 +37,7 @@ export async function createGeneration(
     proposalId: input.proposalId,
     parentGenerationId: input.parentGenerationId,
     settings: input.settings,
+    usedSoundtrackId: input.settings.soundtrackId,
     seed: input.seed,
     status: "composing",
     timeline: null,
@@ -52,12 +47,23 @@ export async function createGeneration(
     renderProgress: 0,
   };
 
-  const batch = db.batch();
-  batch.set(ref, generation);
-  // The request pointer moves the moment a generation is asked for, whatever
-  // becomes of it; the playable and saved pointers only move on success.
-  batch.update(db.collection("projects").doc(input.projectId), { latestRequestedGenerationId: id });
-  await batch.commit();
+  const projectRef = db.collection("projects").doc(input.projectId);
+  const userRef = db.collection("users").doc(input.userId);
+  await db.runTransaction(async (tx) => {
+    const projectSnap = await tx.get(projectRef);
+    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) throw new StoreError("forbidden");
+    const userSnap = input.settings.soundtrackId && input.settings.soundtrackExplicit !== false ? await tx.get(userRef) : null;
+    tx.set(ref, generation);
+    // The request pointer moves the moment a generation is asked for, whatever
+    // becomes of it; the playable and saved pointers only move on success.
+    tx.update(projectRef, { latestRequestedGenerationId: id });
+    if (input.settings.soundtrackId && input.settings.soundtrackExplicit !== false && userSnap) {
+      const recent = Array.isArray(userSnap.get("recentSoundtrackIds"))
+        ? (userSnap.get("recentSoundtrackIds") as unknown[]).filter((trackId): trackId is string => typeof trackId === "string")
+        : [];
+      tx.set(userRef, { recentSoundtrackIds: [input.settings.soundtrackId, ...recent.filter((trackId) => trackId !== input.settings.soundtrackId)].slice(0, 5) }, { merge: true });
+    }
+  });
   return generation;
 }
 
@@ -92,6 +98,8 @@ export async function publishGeneration(
     leftOut?: { shotId: string; reason: string }[];
     reasons?: string[];
     settings?: Generation["settings"];
+    usedSoundtrackId?: string | null;
+    soundtrackReason?: string;
     now: number;
   },
 ): Promise<Generation> {
@@ -112,9 +120,12 @@ export async function publishGeneration(
     const editsSnap = await tx.get(editsRef);
 
     const existing = genSnap.data() as Generation;
-
     const proposalRef = db.collection("projects").doc(input.projectId).collection("storyProposals").doc(existing.proposalId);
     const proposalSnap = input.leftOut === undefined ? null : await tx.get(proposalRef);
+    const updatedSettings = input.settings ?? existing.settings;
+    const soundtrackId = input.usedSoundtrackId ?? updatedSettings.soundtrackId;
+    const userRef = db.collection("users").doc(input.userId);
+    const userSnap = soundtrackId ? await tx.get(userRef) : null;
 
     // Only allow publishing from composing state
     if (existing.status !== "composing") {
@@ -122,7 +133,8 @@ export async function publishGeneration(
     }
 
     // Validate timeline against schema
-    const parsed = GenerationSchema.safeParse({ ...existing, settings: input.settings ?? existing.settings, timeline: input.timeline, droppedPicks: input.droppedPicks, reasons: input.reasons, status: "playable" });
+    const finalSettings = { ...updatedSettings, soundtrackId };
+    const parsed = GenerationSchema.safeParse({ ...existing, settings: finalSettings, usedSoundtrackId: soundtrackId, soundtrackReason: input.soundtrackReason, timeline: input.timeline, droppedPicks: input.droppedPicks, reasons: input.reasons, status: "playable" });
     if (!parsed.success) {
       throw new Error(`generation validation failed: ${parsed.error.issues.map(i => i.message).join("; ")}`);
     }
@@ -130,7 +142,9 @@ export async function publishGeneration(
     // Update generation
     const updated: Generation = {
       ...existing,
-      settings: input.settings ?? existing.settings,
+      settings: finalSettings,
+      usedSoundtrackId: soundtrackId,
+      ...(input.soundtrackReason ? { soundtrackReason: input.soundtrackReason } : {}),
       // Admin Firestore rejects undefined nested values; omit them after
       // schema validation so optional generated fields stay optional.
       timeline: stripUndefined(input.timeline),
@@ -140,6 +154,12 @@ export async function publishGeneration(
       composedEditRevision: Number(editsSnap.get("revision") ?? 0),
     };
     tx.set(genRef, updated);
+    if (soundtrackId && userSnap) {
+      const recent = Array.isArray(userSnap.get("recentSoundtrackIds"))
+        ? (userSnap.get("recentSoundtrackIds") as unknown[]).filter((trackId): trackId is string => typeof trackId === "string")
+        : [];
+      tx.set(userRef, { recentSoundtrackIds: [soundtrackId, ...recent.filter((trackId) => trackId !== soundtrackId)].slice(0, 5) }, { merge: true });
+    }
     if (proposalSnap?.exists && input.leftOut !== undefined) {
       const prior = proposalSnap.get("leftOut");
       const retained = Array.isArray(prior) ? prior.filter((entry): entry is { shotId: string; reason: string } =>

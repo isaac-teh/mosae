@@ -461,6 +461,21 @@ describe("runCompose — happy path", () => {
     const musicClips = result.timeline.audioClips.filter(a => a.role === "music");
     expect(musicClips.length).toBe(0);
   });
+
+  it("falls back to the stable seeded soundtrack when Gemini returns an unknown id", async () => {
+    const result = await runCompose(makeJob({ soundtrackId: "lyria-tender", soundtrackExplicit: false }), makeDeps({
+      soundtrackIds: new Set(["lyria-tender", "lyria-playful", "lyria-energetic", "lyria-reflective"]),
+      generateStructured: async () => ({
+        clips: [{ candidateId: "video1#s0@0.15c0", transition: "cut", audio: "keep" }, { candidateId: "photo1#still@c1", transition: "crossfade", audio: "duck", holdSec: 4 }],
+        musicCues: [], soundtrackId: "not-in-shortlist", soundtrackReason: "invented track",
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    expect(result.usedSoundtrackId).toBe("lyria-tender");
+    expect(result.soundtrackReason).toBe("Fits the album's mood and pacing.");
+    expect(result.timeline.audioClips.filter(({ role }) => role === "music")[0]?.source).toMatchObject({ kind: "soundtrack", soundtrackId: "lyria-tender" });
+  });
 });
 
 describe("runCompose — failure modes", () => {

@@ -175,6 +175,10 @@ describe("generationsRouter", () => {
       (dbMock as any).batch = vi.fn(() => ({
         set: vi.fn(), update: vi.fn(), commit: vi.fn().mockResolvedValue(undefined),
       }));
+      (dbMock as any).runTransaction = vi.fn(async (run: (tx: any) => unknown) => run({
+        get: (ref: { get: () => Promise<unknown> }) => ref.get(),
+        set: vi.fn(), update: vi.fn(),
+      }));
 
       const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore })))
         .post("/api/projects/p1/generations")

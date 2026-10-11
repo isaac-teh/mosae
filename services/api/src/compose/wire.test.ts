@@ -71,11 +71,14 @@ function composeFirestore(proposalData: StoryProposal, focus?: string, excluded 
     collection: (name: string) => {
       if (name === "generations") return { doc: () => ({ get: async () => generationSnap }) };
       if (name === "storyProposals") return { doc: () => ({ get: async () => proposalSnap }) };
+      if (name === "storyIntents") return { doc: () => ({ get: async () => ({ exists: true, get: () => "Family beach trip" }) }) };
       if (name === "cast") return { doc: () => ({ get: async () => ({ exists: true, data: () => ({ confirmed: true, source: "none", core: [], focus: ["old-focus"], people: [{ personId: "person-1", name: "Mum", role: "parent", ageBand: "adult", appearances: 1, faceIds: [], confidence: "high", excluded }, { personId: "child", name: "Mia", role: "child", ageBand: "child", appearances: 1, faceIds: [], confidence: "high" }] }) }) }) };
       return emptyCollection;
     },
   };
-  return { collection: () => ({ doc: () => projectRef }) } as unknown as Firestore;
+  return { collection: (name: string) => name === "users"
+    ? { doc: () => ({ get: async () => ({ exists: true, get: () => [] }) }) }
+    : { doc: () => projectRef } } as unknown as Firestore;
 }
 
 describe("loadComposeCatalog review edits", () => {

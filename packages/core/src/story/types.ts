@@ -117,7 +117,7 @@ export type DirectionOptions = {
   motionFeel?: "calm" | "playful";
 };
 
-export type Direction = { aspect?: "9:16" | "16:9"; focus?: string; note: string; cadenceId: string; soundtrackId: string | null; durationId: DurationChoice["id"] | null; durationSec?: number; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
+export type Direction = { aspect?: "9:16" | "16:9"; focus?: string; note: string; cadenceId: string; soundtrackId: string | null; soundtrackExplicit?: boolean; durationId: DurationChoice["id"] | null; durationSec?: number; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" };
 
 export type Film = {
   lateVideoEvents?: { assetId: string; shotId: string; label: string; status: "added" | "offered" | "dismissed"; sourceInSec: number; sourceOutSec: number; afterClipId: string | null; previousOps?: EditOp[] }[];

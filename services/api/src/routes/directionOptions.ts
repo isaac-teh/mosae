@@ -1,11 +1,12 @@
 import { Router, type RequestHandler } from "express";
-import { loadLibrary, soundtrackCatalog } from "../music/library.js";
+import { buildAlbumProfile, loadLibrary, recommendSoundtrack, soundtrackCatalog } from "../music/library.js";
 import type { Firestore } from "firebase-admin/firestore";
 import { requireUser } from "../auth/requireUser.js";
 import { isValidId } from "../domain/ids.js";
 import { normalizeDirectionRecommendation, CADENCES, DURATION_SECONDS, type CadenceId, type DurationId } from "@mosae/contracts";
 import { stripProposalEnvelope } from "../store/directingStore.js";
 import { DIRECTING_RULES, leftOutLengthHint, photoBaseDuration, requestedCollageCount } from "../compose/directingRules.js";
+import { styleRecipeForCadence } from "../compose/styleRecipe.js";
 
 const DURATION_LABELS: Record<DurationId, { label: string; caption: string }> = {
   "30s": { label: "30 sec", caption: "A quick share" },
@@ -60,6 +61,20 @@ export function directionOptionsRouter(deps: {
 
       const proposalData = stripProposalEnvelope(proposalSnap.data()) as Record<string, unknown>;
 
+      const userSnap = await deps.db.collection("users").doc(userId).get();
+      const recentTrackIds = Array.isArray(userSnap.get("recentSoundtrackIds"))
+        ? (userSnap.get("recentSoundtrackIds") as unknown[]).filter((id): id is string => typeof id === "string")
+        : [];
+      const currentGenerationId = projectSnap.get("currentPlayableGenerationId");
+      let currentProjectTrackId: string | null = null;
+      if (typeof currentGenerationId === "string") {
+        const currentGeneration = await deps.db.collection("projects").doc(projectId).collection("generations").doc(currentGenerationId).get();
+        if (typeof currentGeneration.get === "function") {
+          const settings = currentGeneration.get("settings") as Record<string, unknown> | undefined;
+          currentProjectTrackId = typeof settings?.soundtrackId === "string" ? settings.soundtrackId : null;
+        }
+      }
+
       // Count only moments still in the user's accepted selection.
       const moments = Array.isArray(proposalData.moments) ? proposalData.moments as Array<Record<string, unknown>> : [];
       const constraints = proposalData.constraints && typeof proposalData.constraints === "object" ? proposalData.constraints as Record<string, unknown> : {};
@@ -101,28 +116,53 @@ export function directionOptionsRouter(deps: {
         typeof proposalData.recommendedCadence === "string"
           ? proposalData.recommendedCadence as CadenceId
           : "reflective";
+      const storyIntentId = typeof proposalData.storyIntentId === "string" ? proposalData.storyIntentId : null;
+      const intentText = storyIntentId
+        ? await deps.db.collection("projects").doc(projectId).collection("storyIntents").doc(storyIntentId).get().then((snap) => snap.get("text"))
+        : "";
+      const intent = typeof intentText === "string" ? intentText : "";
+      const momentEnergy = moments.flatMap((moment) => {
+        const energy = typeof moment.energy === "number" ? moment.energy : typeof moment.highlightScore === "number" ? moment.highlightScore : null;
+        if (energy !== null) return [Math.max(0, Math.min(1, energy))];
+        const activityText = [moment.mood, ...(Array.isArray(moment.activities) ? moment.activities : [])].filter((value): value is string => typeof value === "string").join(" ").toLowerCase();
+        if (/dance|run|jump|play|splash|race|cheer|laugh|celebrat|energetic|excited/.test(activityText)) return [0.8];
+        if (/calm|peace|gentle|quiet|sleep|rest/.test(activityText)) return [0.25];
+        return [];
+      });
+      const targetEnergy = momentEnergy.length
+        ? momentEnergy.reduce((sum, value) => sum + value, 0) / momentEnergy.length
+        : undefined;
+      const albumProfile = buildAlbumProfile({
+        cadence: recommendedCadence,
+        intent,
+        occasion: [proposalData.title, proposalData.occasion].filter((value): value is string => typeof value === "string").join(" "),
+        evidence: moments.map((moment) => ({
+          ...(typeof moment.mood === "string" ? { mood: moment.mood } : {}),
+          ...(typeof moment.emotion === "string" ? { emotion: moment.emotion } : {}),
+          ...(typeof moment.storyRole === "string" ? { storyRole: moment.storyRole } : {}),
+          ...(typeof moment.setting === "string" || typeof moment.place === "string" ? { place: String(moment.setting ?? moment.place) } : {}),
+          ...(Array.isArray(moment.activities) ? { activities: moment.activities.filter((value): value is string => typeof value === "string") } : {}),
+          ...(typeof moment.energy === "number" ? { energy: moment.energy } : {}),
+          ...(typeof moment.highlightScore === "number" ? { highlightScore: moment.highlightScore } : {}),
+          context: [moment.title, moment.description].filter((value): value is string => typeof value === "string").join(" "),
+        })),
+      });
       const recommendedCapacity = maximumDurationSecByCadence[recommendedCadence];
       const shortSeconds = Math.min(DIRECTING_RULES.minimumFilmSec, recommendedCapacity);
       const recommendedDuration: DurationId | "short" =
         (Object.entries(DURATION_SECONDS) as [DurationId, number][])
           .sort((a, b) => a[1] - b[1])
           .find(([, seconds]) => seconds <= recommendedCapacity)?.[0] ?? "short";
+      const suggestedTrackId = recommendSoundtrack(library, {
+        projectId, intent, cadence: recommendedCadence,
+        targetDurationSec: recommendedDuration === "short" ? shortSeconds : DURATION_SECONDS[recommendedDuration],
+        recentTrackIds: recentTrackIds.filter((id) => id !== currentProjectTrackId),
+        currentProjectTrackId, targetEnergy: targetEnergy ?? albumProfile.energy, profile: albumProfile,
+        musicMood: styleRecipeForCadence(recommendedCadence).musicMood,
+      });
 
       // Read the story intent for the note text
-      const storyIntentId = typeof proposalData.storyIntentId === "string" ? proposalData.storyIntentId : null;
-      let note = "";
-      if (storyIntentId) {
-        const intentSnap = await deps.db
-          .collection("projects")
-          .doc(projectId)
-          .collection("storyIntents")
-          .doc(storyIntentId)
-          .get();
-        if (intentSnap.exists) {
-          const intentText = intentSnap.get("text");
-          note = typeof intentText === "string" ? intentText : "";
-        }
-      }
+      const note = intent;
 
       const cadenceReason: string | null =
         typeof proposalData.cadenceReason === "string" ? proposalData.cadenceReason : null;
@@ -153,7 +193,7 @@ export function directionOptionsRouter(deps: {
         ...(recommendation !== undefined ? { recommendation } : {}),
         rewrites: [],
         cadences: CADENCES.map(({ id, name, description }) => ({ id, name, description })),
-        soundtracks: soundtrackCatalog(library, recommendedCadence, recommendedDuration === "short" ? shortSeconds : DURATION_SECONDS[recommendedDuration]),
+        soundtracks: soundtrackCatalog(library, recommendedCadence, recommendedDuration === "short" ? shortSeconds : DURATION_SECONDS[recommendedDuration], suggestedTrackId),
         durations,
         lengthHints,
         maximumDurationSec,
