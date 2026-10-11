@@ -34,4 +34,15 @@ describe("project flow record (emulator)", () => {
     expect(undone.revision).toBe(2);
     expect(undone.people).toEqual([]);
   });
+
+  it("records face moves and person merges", async () => {
+    const projectId = crypto.randomUUID();
+    await adminDb.doc(`projects/${projectId}`).set({ userId: "owner" });
+    await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "p1", action: { type: "person", personId: "a", name: "Alex" } });
+    await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "p2", action: { type: "person", personId: "b", name: "Emma" } });
+    const moved = await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "p3", action: { type: "move-photo", faceId: "f1", personId: "a" } });
+    expect(moved.people.find((person) => person.personId === "a")?.faceIds).toEqual(["f1"]);
+    const merged = await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "p4", action: { type: "merge", personId: "a", targetPersonId: "b" } });
+    expect(merged.people.find((person) => person.personId === "a")?.mergedInto).toBe("b");
+  });
 });

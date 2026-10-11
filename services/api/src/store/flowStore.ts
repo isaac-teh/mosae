@@ -24,17 +24,23 @@ async function migrateFlow(db: Firestore, projectId: string, projectData: Fireba
   const castPeople = cast.data()?.people;
   const people = Array.isArray(castPeople) ? castPeople.flatMap((person: Record<string, unknown>) => typeof person.personId === "string" ? [personDefaults(person.personId, { ...person, confirmed: cast.get("confirmed") === true })] : []) : [];
   let answer: string | null = null;
-  if (!intents.empty) answer = typeof intents.docs[0]!.get("text") === "string" ? intents.docs[0]!.get("text") as string : null;
+  let storySummary: string | null = null;
+  let mentionedPeople: string[] = [];
+  if (!intents.empty) {
+    answer = typeof intents.docs[0]!.get("text") === "string" ? intents.docs[0]!.get("text") as string : null;
+    mentionedPeople = Array.isArray(intents.docs[0]!.get("focus")) ? (intents.docs[0]!.get("focus") as unknown[]).filter((value): value is string => typeof value === "string") : [];
+  }
   const proposalId = projectData.currentProposalId;
-  if (!answer && typeof proposalId === "string") {
+  if (typeof proposalId === "string") {
     const proposal = await project.collection("storyProposals").doc(proposalId).get();
+    storySummary = typeof proposal.get("title") === "string" ? proposal.get("title") as string : null;
     const intentId = proposal.get("storyIntentId");
-    if (typeof intentId === "string") {
+    if (!answer && typeof intentId === "string") {
       const intent = await project.collection("storyIntents").doc(intentId).get();
       answer = typeof intent.get("text") === "string" ? intent.get("text") as string : null;
     }
   }
-  return DirectorFlowSchema.parse({ ...emptyFlow(), story: { answer, storySummary: null, mentionedPeople: [] }, people });
+  return DirectorFlowSchema.parse({ ...emptyFlow(), story: { answer, storySummary, mentionedPeople }, people });
 }
 
 export class FlowStoreError extends Error {
@@ -49,13 +55,14 @@ export async function readFlow(db: Firestore, userId: string, projectId: string)
   const stored = DirectorFlowSchema.safeParse(snapshot.get("flow"));
   if (stored.success) return stored.data;
   const migrated = await migrateFlow(db, projectId, snapshot.data()!);
-  await db.runTransaction(async (transaction) => {
+  return db.runTransaction(async (transaction) => {
     const current = await transaction.get(project);
     if (!current.exists || current.get("userId") !== userId) throw new FlowStoreError("not_found");
     const latest = DirectorFlowSchema.safeParse(current.get("flow"));
-    if (!latest.success) transaction.update(project, { flow: migrated });
+    if (latest.success) return latest.data;
+    transaction.update(project, { flow: migrated });
+    return migrated;
   });
-  return migrated;
 }
 
 function apply(flow: DirectorFlow, action: FlowAction): DirectorFlow {
@@ -92,12 +99,15 @@ export async function mutateFlow(db: Firestore, input: { userId: string; project
   const project = flowRef(db, input.projectId);
   const actionRef = project.collection("flowActions").doc(input.actionId);
   const readinessRef = project.collection("readiness").doc("summary");
-  const latestActionQuery = project.collection("flowActions").orderBy("createdAt", "desc").limit(1);
+  const latestActionQuery = project.collection("flowActions").orderBy("revision", "desc").limit(1);
   const seeded = await readFlow(db, input.userId, input.projectId);
   return db.runTransaction(async (transaction) => {
-    const [projectSnap, actionSnap, latestActions, readinessSnap] = await Promise.all([transaction.get(project), transaction.get(actionRef), transaction.get(latestActionQuery), transaction.get(readinessRef)]);
+    const [projectSnap, actionSnap, latestActions] = await Promise.all([transaction.get(project), transaction.get(actionRef), transaction.get(latestActionQuery)]);
     if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) throw new FlowStoreError("not_found");
-    if (actionSnap.exists) return DirectorFlowSchema.parse(actionSnap.get("result"));
+    if (actionSnap.exists) {
+      if (JSON.stringify(actionSnap.get("action")) !== JSON.stringify(input.action)) throw new FlowStoreError("invalid_action");
+      return DirectorFlowSchema.parse(actionSnap.get("result"));
+    }
     const parsed = DirectorFlowSchema.safeParse(projectSnap.get("flow"));
     const before = parsed.success ? parsed.data : seeded;
     let candidate = apply(before, input.action);
@@ -110,7 +120,7 @@ export async function mutateFlow(db: Firestore, input: { userId: string; project
     const next = DirectorFlowSchema.parse({ ...candidate, revision: before.revision + 1 });
     transaction.update(project, { flow: next });
     transaction.set(readinessRef, { flowRevision: next.revision }, { merge: true });
-    transaction.create(actionRef, { result: next, previous: before, actionType: input.action.type, createdAt: Date.now() });
+    transaction.create(actionRef, { result: next, previous: before, action: input.action, actionType: input.action.type, revision: next.revision, createdAt: Date.now() });
     return next;
   });
 }

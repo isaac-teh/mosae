@@ -55,12 +55,17 @@ export async function settleProject(
   const readiness = readinessOf(facts);
   const projectSnapshot = await db.collection("projects").doc(projectId).get();
   const flowRevision = typeof projectSnapshot.get("flow.revision") === "number" ? projectSnapshot.get("flow.revision") as number : 0;
-  await db.collection("projects").doc(projectId).collection("readiness").doc("summary").set({
-    ...facts,
-    settled: readiness.settled,
-    outcome: readiness.settled ? readiness.outcome : null,
-    flowRevision,
-    updatedAt: now,
+  const summaryRef = db.collection("projects").doc(projectId).collection("readiness").doc("summary");
+  await db.runTransaction(async (transaction) => {
+    const current = await transaction.get(summaryRef);
+    const priorRevision = typeof current.get("flowRevision") === "number" ? current.get("flowRevision") as number : 0;
+    transaction.set(summaryRef, {
+      ...facts,
+      settled: readiness.settled,
+      outcome: readiness.settled ? readiness.outcome : null,
+      flowRevision: Math.max(priorRevision, flowRevision),
+      updatedAt: now,
+    });
   });
   if (!readiness.settled) return { settled: false, enqueued: false, outcome: null, facts };
 

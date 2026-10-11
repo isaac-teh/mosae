@@ -27,6 +27,6 @@ export const FlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("undo") }),
 ]);
 
-export const FlowMutationRequestSchema = z.strictObject({ actionId: z.string().min(1).max(128), action: FlowActionSchema });
+export const FlowMutationRequestSchema = z.strictObject({ actionId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), action: FlowActionSchema });
 export type DirectorFlow = z.infer<typeof DirectorFlowSchema>;
 export type FlowAction = z.infer<typeof FlowActionSchema>;

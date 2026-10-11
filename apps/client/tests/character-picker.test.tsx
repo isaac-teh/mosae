@@ -10,6 +10,7 @@ const boundary = vi.hoisted(() => ({
   getCast: vi.fn(async () => null as any),
   confirmCast: vi.fn(async () => ({ cast: {}, proposalId: "plan-2" }) as any),
   getAssetThumbnailUrl: vi.fn(async () => "https://signed.example/thumb.jpg"),
+  mutateProjectFlow: vi.fn(async () => ({ revision: 1 })),
 }));
 
 // Type the mocks so test bodies can pass typed payloads without `as any` noise.
@@ -20,6 +21,7 @@ vi.mock("@/lib/characters", () => ({
   getCast: boundary.getCast,
   confirmCast: boundary.confirmCast,
   getAssetThumbnailUrl: boundary.getAssetThumbnailUrl,
+  mutateProjectFlow: boundary.mutateProjectFlow,
 }));
 vi.mock("expo-router", () => ({ useLocalSearchParams: () => boundary.params, useRouter: () => ({ navigate: boundary.navigate }) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ route: (path: string, params?: Record<string, unknown>) => ({ path, params }) }) }));
@@ -111,6 +113,28 @@ describe("Character Picker", () => {
       proposalId: "plan-1",
     });
     expect(boundary.navigate).toHaveBeenCalledWith({ path: "/review-moments", params: { planId: "plan-2" } });
+  });
+
+  it("can remove a face from a person and merge people", async () => {
+    await render(); await flush();
+    await clickByAriaLabel("Move A parent photo 1 to someone else");
+    await clickByAriaLabel("Remove photo from person");
+    await clickByAriaLabel("Same person as A parent");
+    await clickByAriaLabel("Looks right"); await flush();
+    expect((boundary.confirmCast.mock.calls as any[][])[0]![1]).toMatchObject({
+      people: [{ personId: "p-dad" }],
+      moves: expect.arrayContaining([{ faceId: "f-dad", personId: null }]),
+      merges: [{ fromPersonId: "p-kid", toPersonId: "p-dad" }],
+    });
+  });
+
+  it("offers an explicit remake choice after people are changed on an existing film", async () => {
+    boundary.params = { ...boundary.params, afterFilm: "true" };
+    await render(); await flush();
+    await type("Emma", 0);
+    await clickByAriaLabel("Looks right"); await flush();
+    expect(host.textContent).toContain("Remake the film with these changes?");
+    expect(boundary.navigate).not.toHaveBeenCalled();
   });
 
   it("drops a left-out person from the focus", async () => {

@@ -19,6 +19,7 @@ function reportFailure(cause: unknown): string {
 function mergeSummary(current: ProjectSummary | null, next: ProjectSummary): ProjectSummary {
   if (!current) return next;
   return { ...current, ...next,
+    flowRevision: Math.max(current.flowRevision ?? 0, next.flowRevision ?? 0),
     processed: { ingested: Math.max(current.processed.ingested, next.processed.ingested), understood: Math.max(current.processed.understood, next.processed.understood), faces: Math.max(current.processed.faces, next.processed.faces) },
     ready: { ...next.ready, summary: current.ready.summary || next.ready.summary, faces: current.ready.faces || next.ready.faces, story: current.ready.story || next.ready.story, plan: current.ready.plan || next.ready.plan, film: current.ready.film || next.ready.film },
   };
@@ -55,7 +56,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const summaryRef = useRef(summary);
   summaryRef.current = summary;
   const [error, setError] = useProjectState<string | null>(projectEpoch, currentProjectEpoch, null);
-  const [pendingInterpret, setPendingInterpret] = useProjectState<{ reply: string; text: string; mentionedPeople?: string[]; storySummary?: string } | null>(projectEpoch, currentProjectEpoch, null);
+  const [pendingInterpret, setPendingInterpret] = useProjectState<{ reply: string; text: string; mentionedPeople?: string[]; storySummary?: string; change?: { kind: string; personId?: string | null; name?: string; role?: string } } | null>(projectEpoch, currentProjectEpoch, null);
   const [saving, setSaving] = useProjectState(projectEpoch, currentProjectEpoch, false);
   const [momentState, setMomentState] = useProjectState<Record<string, "keep" | "leave">>(projectEpoch, currentProjectEpoch, {});
   const [directionOptions, setDirectionOptions] = useProjectState<DirectionOptions | null>(projectEpoch, currentProjectEpoch, null);
@@ -406,7 +407,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       personSaving.current = true;
       setError(null);
       const people = input.people ?? [];
-      const roleValue = role === "My daughter" || role === "My son" ? "child" : role === "Skip" ? "other" : "parent";
+      const roleValue = role === "child" || role === "My daughter" || role === "My son" ? "child" : role === "other" || role === "Skip" ? "other" : "parent";
       const personName = name ?? (role === "Skip" ? undefined : role);
       const previousEdit = peopleEdits.current.get(personId);
       peopleEdits.current.set(personId, { name: role === "Skip" ? null : personName ?? null, role: roleValue, skipped: role === "Skip" });
@@ -687,11 +688,19 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const interpretedPeople = result.change.kind === "occasion" && Array.isArray(result.change.mentionedPeople)
           ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
         const storySummary = result.change.kind === "occasion" && typeof result.change.storyText === "string" ? result.change.storyText : undefined;
-        setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
+        setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}), ...(result.change.kind === "person" ? { change: result.change } : {}) });
       } catch (cause) { setError(reportFailure(cause)); }
       finally { interpretInFlight.current = false; }
     },
-    async confirmInterpret() { if (pendingInterpret) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary); },
+    async confirmInterpret() {
+      if (!pendingInterpret) return;
+      const change = pendingInterpret.change;
+      if (change?.kind === "person" && change.personId && change.name) {
+        setPendingInterpret(null);
+        return actions.setPerson(change.personId, change.role ?? "other", change.name);
+      }
+      if (pendingInterpret.mentionedPeople || pendingInterpret.storySummary) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary);
+    },
     answerOccasion(text: string, storyText?: string) {
       if (occasionSaving.current) return;
       const questionUploadComplete = state.items.find((item) => item.kind === "occasion-question")?.uploadComplete;
