@@ -497,7 +497,8 @@ describe("Director chat", () => {
     await renderScreen();
     await click("A trip");
     await waitFor(() => expect(hasText("I couldn't shape this one. Try again")).toBe(true));
-    expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="A trip"]')).toBeFalsy();
+    expect(hasText("A trip")).toBe(true);
     const summaryReadsAtFailure = mocks.repo.getSummary.mock.calls.length;
     await act(async () => new Promise((resolve) => setTimeout(resolve, 3_100)));
     expect(mocks.repo.getSummary).toHaveBeenCalledTimes(summaryReadsAtFailure);
@@ -708,6 +709,64 @@ describe("Director chat", () => {
     expect(hasText("Looked through all of them")).toBe(true);
     await act(async () => finish({ planId: "proposal-1" }));
     await waitFor(() => expect(host.querySelector('[data-from="you"]')?.textContent).toContain("A trip"));
+  });
+
+  it("reveals the ready people step before plan creation resolves", async () => {
+    let finish!: (value: { planId: string }) => void;
+    setup({ createPlan: () => new Promise((resolve) => { finish = resolve; }) });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    expect(chat.state.step).toBe("people");
+    expect(chat.state.items.some((item) => item.kind === "person")).toBe(true);
+    await act(async () => finish({ planId: "proposal-1" }));
+  });
+
+  it("keeps the answered story intent when plan creation fails", async () => {
+    setup({ createPlan: async () => { throw new Error("offline"); } });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    await waitFor(() => expect(chat.error).toContain("couldn't shape"));
+    expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
+    expect(chat.state.items.some((item) => item.kind === "person")).toBe(true);
+  });
+
+  it("keeps a named person when a later refresh returns a stale unnamed row", async () => {
+    setup();
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    await act(async () => chat.actions.setPerson("person-1", "Type a name", "Emily"));
+    await act(async () => { chat.retry(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(chat.people.find((person) => person.personId === "person-1")?.name).toBe("Emily");
+    expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
+  });
+
+  it("advances after selecting a photo and confirming people without returning to story upload", async () => {
+    setup();
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    await act(async () => chat.actions.setPerson("person-1", "Type a name", "Emily"));
+    await act(async () => chat.actions.setPerson("person-2", "My son"));
+    await act(async () => chat.actions.send("Emily"));
+    const missedAction = chat.state.items.find((item) => item.kind === "missed-person");
+    expect(missedAction?.kind).toBe("missed-person");
+    expect(chat.state.items.filter((item) => item.kind === "missed-person" && item.personId === missedAction?.personId)).toHaveLength(1);
+    if (missedAction?.kind !== "missed-person") throw new Error("Expected missed person tag action");
+    await act(async () => chat.actions.completeMissedPerson(missedAction.personId, "Emily", 1, "https://thumb.test/emily"));
+    expect(chat.state.items.some((item) => item.kind === "missed-person" && item.personId === missedAction.personId)).toBe(false);
+    await act(async () => chat.actions.confirmPeople());
+    expect(chat.state.step).toBe("people");
+    await act(async () => chat.actions.confirmPeopleSummary());
+    expect(chat.state.step).toBe("moments");
+    expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
+    expect(chat.state.items.some((item) => item.kind === "you" && item.text === "A trip")).toBe(true);
   });
 
   it("shows the retry message when interpretation fails and keeps the occasion reply usable", async () => {

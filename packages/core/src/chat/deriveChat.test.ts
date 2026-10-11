@@ -53,6 +53,11 @@ describe("deriveChat state table", () => {
     expect(tagging.items.find((item) => item.kind === "mosae" && item.id === "missed-select-p-missed-2")).toMatchObject({ text: "Help me select 1 photo of Uncle Tan." });
   });
 
+  it("renders exactly one select action for the missed person currently being tagged", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "Emily", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, missedPeople: [{ personId: "missed-1", name: "Emily", momentCount: 0 }], missedPersonTagging: { personId: "missed-1", name: "Emily" } });
+    expect(state.items.filter((item) => item.kind === "missed-person" && item.personId === "missed-1")).toHaveLength(1);
+  });
+
   it("summarizes the named cast and moment counts before continuing", () => {
     const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false, people: [
       { personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
