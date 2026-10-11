@@ -1,5 +1,6 @@
 import type { AssembledClip } from "./assemble.js";
 import { fadeOutSec } from "./directingRules.js";
+import { loadLibrary } from "../music/library.js";
 
 /** Audio clip emitted by the audio layer. */
 export interface AudioClip {
@@ -15,6 +16,10 @@ export interface AudioClip {
   kind: "speech" | "ambient" | "music";
   /** Gain level (0 = mute, 1 = full). */
   gain: number;
+  sourceInSec?: number;
+  sourceOutSec?: number;
+  fadeInSec?: number;
+  fadeOutSec?: number;
 }
 
 /**
@@ -110,13 +115,28 @@ export function buildAudioClips(
     const hasLoudPeak = clips.some(clip => (clip.loudPeak ?? 0) >= 0.7);
     const musicGain = hasLoudPeak ? 0.45 : 0.6; // lower bed under loud cheers, laughs or splashes
 
-    audioClips.push({
+    const track = loadLibrary().find((item) => item.id === soundtrackId);
+    const analysis = track?.analysis;
+    const trackDuration = analysis?.durationSec ?? track?.durationSec ?? timelineDurationSec;
+    const outroStart = analysis?.ending.outroStartSec ?? 0;
+    if (trackDuration > timelineDurationSec + 1 && outroStart > 1 && timelineDurationSec >= 12 && trackDuration - outroStart >= 3) {
+      const tailDuration = Math.min(trackDuration - outroStart, Math.max(3, Math.min(timelineDurationSec / 3, 16)));
+      const outroSourceIn = trackDuration - tailDuration;
+      const joinSec = timelineDurationSec - tailDuration;
+      const crossfadeSec = Math.min(0.5, joinSec, tailDuration);
+      audioClips.push({ order: order++, sourceCandidateId: soundtrackId, startSec: 0, endSec: joinSec + crossfadeSec, kind: "music", gain: musicGain, sourceInSec: 0, sourceOutSec: joinSec + crossfadeSec, fadeInSec: Math.min(1, timelineDurationSec * 0.05), fadeOutSec: crossfadeSec });
+      audioClips.push({ order: order++, sourceCandidateId: soundtrackId, startSec: joinSec, endSec: timelineDurationSec, kind: "music", gain: musicGain, sourceInSec: outroSourceIn, sourceOutSec: trackDuration, fadeInSec: crossfadeSec, fadeOutSec: fadeDuration });
+    } else audioClips.push({
       order: order++,
       sourceCandidateId: soundtrackId,
       startSec: 0,
       endSec: timelineDurationSec,
       kind: "music",
       gain: musicGain,
+      sourceInSec: 0,
+      sourceOutSec: Math.min(timelineDurationSec, trackDuration),
+      fadeInSec: Math.min(1, timelineDurationSec * 0.05),
+      fadeOutSec: fadeDuration,
     });
 
     // Reduce music gain under speech clips (ducking)

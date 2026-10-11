@@ -153,7 +153,7 @@ export function directionOptionsRouter(deps: {
         ...(recommendation !== undefined ? { recommendation } : {}),
         rewrites: [],
         cadences: CADENCES.map(({ id, name, description }) => ({ id, name, description })),
-        soundtracks: soundtrackCatalog(library, recommendedCadence),
+        soundtracks: soundtrackCatalog(library, recommendedCadence, recommendedDuration === "short" ? shortSeconds : DURATION_SECONDS[recommendedDuration]),
         durations,
         lengthHints,
         maximumDurationSec,

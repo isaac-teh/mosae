@@ -1,7 +1,7 @@
 import React from "react";
 import type { AudioClip, VideoClip } from "@mosae/contracts";
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { audioTrimFrames, clipFitForSource, gainToVolume, type TimelineProps } from "./timelineMetadata";
+import { audioTrimFrames, audioVolumeAt, clipFitForSource, type TimelineProps } from "./timelineMetadata";
 import { Collage } from "./collage/Collage";
 import { redactImageSource } from "./imageDiagnostic";
 import { PhotoInteraction } from "./PhotoInteraction";
@@ -46,11 +46,14 @@ function AudioTrack({ clip, fps, sources }: { clip: AudioClip; fps: number; sour
   const src = sources[key];
   if (!src) return null;
   const { trimBeforeFrames, trimAfterFrames } = audioTrimFrames(clip.source, fps);
+  const durationFrames = Math.max(1, Math.round((clip.source.sourceOutSec - clip.source.sourceInSec) * fps));
+  const fadeInFrames = Math.round(clip.fadeInSec * fps);
+  const fadeOutFrames = Math.round(clip.fadeOutSec * fps);
   return (
     <Sequence from={0} durationInFrames={Number.MAX_SAFE_INTEGER}>
       <Audio
         src={src}
-        volume={gainToVolume(clip.gainDb)}
+        volume={(frame) => audioVolumeAt(clip.gainDb, frame, durationFrames, fadeInFrames, fadeOutFrames)}
         trimBefore={trimBeforeFrames}
         trimAfter={trimAfterFrames}
       />

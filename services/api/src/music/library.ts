@@ -23,13 +23,19 @@ export type LibraryTrack = {
   artist?: string;
   licence?: string;
   sourceUrl?: string;
+  analysis?: MusicAnalysis;
 };
+
+export type MusicAnalysis = { durationSec: number; bpm: number; hasPulse: boolean; pulseRegularity: number; beatsSec: number[]; downbeatsSec: number[]; downbeatStrength?: number[]; bars: { startSec: number; endSec: number }[]; energySections: { startSec: number; endSec: number; energy: number; level: "low" | "medium" | "high" }[]; ending: { lastStrongDownbeatSec: number; outroStartSec: number } };
 
 const FIXTURES = fileURLToPath(new URL("../../fixtures/music/", import.meta.url));
 
 export function loadLibrary(directory = FIXTURES): LibraryTrack[] {
   const parsed = JSON.parse(readFileSync(join(directory, "library.json"), "utf8")) as { tracks: LibraryTrack[] };
-  return parsed.tracks;
+  const analysisPath = join(directory, "music-analysis.json");
+  if (!existsSync(analysisPath)) return parsed.tracks;
+  const analyses = JSON.parse(readFileSync(analysisPath, "utf8")) as { tracks: Record<string, MusicAnalysis> };
+  return parsed.tracks.map((track) => ({ ...track, analysis: analyses.tracks[track.id] }));
 }
 
 /** Where a track lives in the bucket. */
@@ -41,10 +47,11 @@ export function libraryPath(track: Pick<LibraryTrack, "file">): string {
  * The catalog shown on the directing screen. Tracks matching the suggested
  * cadence come first, so the pre-selected soundtrack fits the suggested tone.
  */
-export function soundtrackCatalog(tracks: LibraryTrack[], cadence: string | null): { id: string; name: string; description: string; mood: string; durationSec: number; suggested: boolean }[] {
+export function soundtrackCatalog(tracks: LibraryTrack[], cadence: string | null, targetDurationSec?: number): { id: string; name: string; description: string; mood: string; durationSec: number; suggested: boolean }[] {
   return [...tracks]
     .map((track, index) => ({ track, index }))
-    .sort((a, b) => Number(b.track.cadence === cadence) - Number(a.track.cadence === cadence) || a.index - b.index)
+    .sort((a, b) => Number(b.track.cadence === cadence) - Number(a.track.cadence === cadence)
+      || (targetDurationSec === undefined ? 0 : Math.abs(a.track.durationSec - targetDurationSec) - Math.abs(b.track.durationSec - targetDurationSec)) || a.index - b.index)
     .map(({ track }) => ({ id: track.id, name: track.name, description: track.description, mood: track.cadence, durationSec: track.durationSec, suggested: cadence !== null && track.cadence === cadence }));
 }
 

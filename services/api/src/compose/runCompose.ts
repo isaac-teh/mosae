@@ -19,6 +19,8 @@ import { collageCountRange, DIRECTING_RULES, budgetSlotCount, fadeOutSec, moment
 import { MODELS } from "../gemini/pricing.js";
 import { findSpeechBoundaryViolations, repairSpeechBoundaries } from "./speechBoundaries.js";
 import { styleRecipeForCadence } from "./styleRecipe.js";
+import { snapPhotoBoundaries, type CutMusic } from "./musicCuts.js";
+import { loadLibrary } from "../music/library.js";
 
 export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
   if (!momentOrder?.length) return clips;
@@ -646,6 +648,13 @@ export async function runCompose(
     };
   }
 
+  const soundtrack = job.soundtrackId ? loadLibrary().find((track) => track.id === job.soundtrackId) : undefined;
+  const musicAnalysis: CutMusic | undefined = soundtrack?.analysis ?? (soundtrack ? { hasPulse: soundtrack.beatsSec.length >= 12, beatsSec: soundtrack.beatsSec, downbeatsSec: soundtrack.beatsSec.filter((_, index) => index % 4 === 0) } : undefined);
+  if (musicAnalysis) {
+    const snapped = snapPhotoBoundaries(fittedClips.map((clip) => ({ kind: clip.kind, holdSec: clip.holdSec ?? 0, minHoldSec: clip.minHoldSec ?? fitHolds.min, maxHoldSec: clip.maxHoldSec ?? fitHolds.max, hasSpeech: clip.hasSpeech, locked: storyLockIds.has(clip.itemId), peak: clip.itemId === peakCandidate?.itemId, transitionOverlapSec: clip.transition === "crossfade" ? TRANSITION_SECONDS.crossfade : 0 })), musicAnalysis, styleRecipe.cutOn);
+    fittedClips = fittedClips.map((clip, index) => clip.kind === "photo" ? { ...clip, holdSec: snapped[index]!.holdSec } : clip);
+  }
+
   // Stage 5: reflow — compute startSec, quantize to 30fps, resolve overlaps
   const transitionFor = (kind: "cut" | "crossfade" | "dip") => ({ kind, durationSec: TRANSITION_SECONDS[kind] });
 
@@ -726,7 +735,7 @@ export async function runCompose(
       return {
         id: `audio-${index + 1}`,
         source: ac.kind === "music" && job.soundtrackId
-          ? { kind: "soundtrack" as const, soundtrackId: job.soundtrackId, sourceInSec: 0, sourceOutSec: result.durationSec }
+          ? { kind: "soundtrack" as const, soundtrackId: job.soundtrackId, sourceInSec: ac.sourceInSec ?? 0, sourceOutSec: ac.sourceOutSec ?? result.durationSec }
           : (() => {
               const candidate = candidateMap.get(ac.sourceCandidateId);
               // The renderer resolves a source id to a file; a moment id is not
@@ -743,8 +752,8 @@ export async function runCompose(
         // speech. Hardcoding it from the role threw that away and left the
         // music sitting on top of every line of dialogue.
         gainDb: gainToDb(ac.gain),
-        fadeInSec: ac.kind === "music" ? Math.min(1.0, result.durationSec * 0.05) : 0,
-        fadeOutSec: ac.kind === "music" ? fadeOutSec(result.durationSec) : 0,
+        fadeInSec: ac.kind === "music" ? ac.fadeInSec ?? Math.min(1.0, result.durationSec * 0.05) : 0,
+        fadeOutSec: ac.kind === "music" ? ac.fadeOutSec ?? fadeOutSec(result.durationSec) : 0,
       };
     }),
     // Text overlays the model chose, burned in when the user asked for captions.

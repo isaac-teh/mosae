@@ -107,6 +107,24 @@ function stretchTierlessPhotos(timeline: Timeline, cadenceId: CadenceId, targetS
     };
     return { ...original, startSec: geometry.startSec, durationSec: geometry.durationSec };
   });
+  const music = timeline.audioClips.filter((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
+  const fitMusic = () => {
+    if (music.length < 2) return timeline.audioClips.map((clip) => {
+      if (clip.role !== "music" || clip.source.kind !== "soundtrack") return clip;
+      return { ...clip, source: { ...clip.source, sourceOutSec: clip.source.sourceInSec + Math.min(clip.source.sourceOutSec - clip.source.sourceInSec, Math.max(0, flowed.durationSec - clip.startSec)) }, fadeOutSec: Math.min(clip.fadeOutSec, flowed.durationSec) };
+    });
+    const body = music[0]!;
+    const outro = music.at(-1)!;
+    if (body.source.kind !== "soundtrack" || outro.source.kind !== "soundtrack") return timeline.audioClips;
+    const tailDuration = Math.min(outro.source.sourceOutSec - outro.source.sourceInSec, Math.max(1, flowed.durationSec / 3));
+    const joinSec = flowed.durationSec - tailDuration;
+    const crossfadeSec = Math.min(body.fadeOutSec, joinSec, tailDuration);
+    return timeline.audioClips.map((clip) => {
+      if (clip.id === body.id && clip.source.kind === "soundtrack") return { ...clip, source: { ...clip.source, sourceOutSec: joinSec + crossfadeSec }, fadeOutSec: crossfadeSec };
+      if (clip.id === outro.id && clip.source.kind === "soundtrack") return { ...clip, startSec: joinSec, source: { ...clip.source, sourceInSec: clip.source.sourceOutSec - tailDuration }, fadeInSec: crossfadeSec, fadeOutSec: Math.min(1, tailDuration) };
+      return clip;
+    });
+  };
   return {
     ...timeline,
     durationSec: flowed.durationSec,
@@ -115,9 +133,7 @@ function stretchTierlessPhotos(timeline: Timeline, cadenceId: CadenceId, targetS
       const index = timeline.videoClips.findIndex((clip) => Math.abs(clip.startSec - chapter.startSec) < 1 / timeline.fps);
       return index < 0 ? chapter : { ...chapter, startSec: videoClips[index]!.startSec };
     }),
-    audioClips: timeline.audioClips.map((clip) => clip.role === "music" && clip.source.kind === "soundtrack"
-      ? { ...clip, source: { ...clip.source, sourceOutSec: flowed.durationSec }, fadeOutSec: Math.min(1, flowed.durationSec) }
-      : clip),
+    audioClips: fitMusic(),
   };
 }
 

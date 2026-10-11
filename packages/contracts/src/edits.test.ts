@@ -292,6 +292,20 @@ describe("applyEdits", () => {
     expect(applyEdits(firstCut, [{ op: "setMusicVolume", audioClipId: "music", gainDb: 13 }])).toMatchObject({ ok: false, opIndex: 0 });
   });
 
+  it("preserves analysed soundtrack offsets on ordinary edits and resets only on explicit replacement", () => {
+    const withOutro: Timeline = { ...firstCut, audioClips: [
+      { id: "music-body", source: { kind: "soundtrack", soundtrackId: "soft-piano", sourceInSec: 0, sourceOutSec: 7.5 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0.5, fadeOutSec: 0.5 },
+      { id: "music-outro", source: { kind: "soundtrack", soundtrackId: "soft-piano", sourceInSec: 57, sourceOutSec: 60 }, role: "music", startSec: 7, gainDb: -12, fadeInSec: 0.5, fadeOutSec: 1 },
+    ] };
+    const moved = applyEdits(withOutro, [{ op: "setMusicVolume", audioClipId: "music-body", gainDb: -11 }]);
+    expect(moved.ok).toBe(true);
+    if (moved.ok) expect(moved.timeline.audioClips.map((clip) => [clip.startSec, clip.source])).toEqual(withOutro.audioClips.map((clip) => [clip.startSec, clip.source]));
+    const replaced = applyEdits(withOutro, [{ op: "setSoundtrack", soundtrackId: "new-theme" }]);
+    expect(replaced.ok).toBe(true);
+    if (replaced.ok) expect(replaced.timeline.audioClips).toMatchObject([{ id: "music-body", startSec: 0, source: { kind: "soundtrack", soundtrackId: "new-theme", sourceInSec: 0 } }]);
+    if (replaced.ok) expect(replaced.timeline.audioClips).toHaveLength(1);
+  });
+
   it("rejects volume for an uncreated editor soundtrack and applies it after setSoundtrack", () => {
     const noMusic = parseTimeline({ ...firstCut, audioClips: [] });
     expect(applyEdits(noMusic, [{ op: "setMusicVolume", audioClipId: "editor-soundtrack", gainDb: 0 }])).toMatchObject({ ok: false, opIndex: 0 });
