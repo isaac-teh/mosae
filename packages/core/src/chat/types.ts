@@ -1,7 +1,9 @@
 import type { Film, StoryPlan } from "../story/types.js";
 import type { PersonAgeBand } from "./personChips.js";
+import type { DirectorFlow } from "@mosae/contracts";
 
 export type ProjectSummary = {
+  flowRevision?: number;
   total: number;
   photos: number;
   clips: number;
@@ -19,6 +21,7 @@ export type ProjectSummary = {
 };
 
 export type ChatInput = {
+  flow?: DirectorFlow;
   localMediaPending?: boolean;
   localUpload?: { total: number; settled: number; failed: number; photos: number; clips: number };
   earlyOccasionAnswer?: string;

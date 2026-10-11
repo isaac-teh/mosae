@@ -1,5 +1,6 @@
 import type { AlternativeShot, CreateOption, Direction, DirectionOptions, Film, PlanEdits, StoryPlan, EditInterpretContext, EditInterpretation, EditConversationTurn } from "./types";
 import type { ProjectSummary } from "../chat/types";
+import type { DirectorFlow, FlowAction } from "@mosae/contracts";
 import type { EditOp, Timeline } from "@mosae/contracts";
 import type { PersonAgeBand } from "../chat/personChips";
 
@@ -16,10 +17,12 @@ export type FilmTimeline = { timeline: Timeline; sources: Record<string, string>
 export type { EditInterpretContext, EditInterpretation, EditScope } from "./types";
 
 export interface StoryRepository {
-  watchReadiness?(projectId: string, onChange: () => void, onError: (error: unknown) => void): () => void;
+  watchReadiness?(projectId: string, onChange: (snapshot?: { flowRevision?: number }) => void, onError: (error: unknown) => void): () => void;
   listFilms(): Promise<FilmListItem[]>;
   getProjectResume(projectId: string): Promise<ProjectResumeState>;
   getSummary(projectId: string): Promise<ProjectSummary>;
+  getFlow?(projectId: string): Promise<DirectorFlow>;
+  mutateFlow?(projectId: string, actionId: string, action: FlowAction): Promise<DirectorFlow>;
   interpret(projectId: string, req: ChatInterpretRequest): Promise<ChatInterpretResult>;
   getPeople(projectId: string): Promise<DirectorPerson[] | null>;
   createPlan(storyText: string, mediaRefs: string[]): Promise<{ planId: string }>;

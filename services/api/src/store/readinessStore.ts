@@ -53,10 +53,13 @@ export async function settleProject(
 ): Promise<{ settled: boolean; enqueued: boolean; outcome: ProjectOutcome | null; facts: ProjectFacts }> {
   const facts = await gatherFacts(db, projectId);
   const readiness = readinessOf(facts);
+  const projectSnapshot = await db.collection("projects").doc(projectId).get();
+  const flowRevision = typeof projectSnapshot.get("flow.revision") === "number" ? projectSnapshot.get("flow.revision") as number : 0;
   await db.collection("projects").doc(projectId).collection("readiness").doc("summary").set({
     ...facts,
     settled: readiness.settled,
     outcome: readiness.settled ? readiness.outcome : null,
+    flowRevision,
     updatedAt: now,
   });
   if (!readiness.settled) return { settled: false, enqueued: false, outcome: null, facts };

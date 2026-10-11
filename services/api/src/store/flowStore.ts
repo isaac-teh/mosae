@@ -11,6 +11,7 @@ const personDefaults = (personId: string, value: Record<string, unknown> = {}) =
   skipped: value.skipped === true || value.excluded === true,
   manualShotAdds: Array.isArray(value.manualShots) ? value.manualShots.filter((x): x is string => typeof x === "string") : [],
   manualShotRemoves: Array.isArray(value.removedShots) ? value.removedShots.filter((x): x is string => typeof x === "string") : [],
+  faceIds: Array.isArray(value.faceIds) ? value.faceIds.filter((x): x is string => typeof x === "string") : [],
   mergedInto: typeof value.mergedInto === "string" ? value.mergedInto : null,
 });
 
@@ -71,6 +72,12 @@ function apply(flow: DirectorFlow, action: FlowAction): DirectorFlow {
     (action.included ? removes : adds).delete(action.shotId);
     return { ...flow, people: [...flow.people.filter((person) => person.personId !== action.personId), { ...prior, manualShotAdds: [...adds], manualShotRemoves: [...removes] }] };
   }
+  if (action.type === "move-photo") {
+    if (action.personId !== null && !flow.people.some((person) => person.personId === action.personId)) throw new FlowStoreError("invalid_action");
+    return { ...flow, people: flow.people.map((person) => ({ ...person, faceIds: action.personId === person.personId
+      ? [...new Set([...person.faceIds, action.faceId])]
+      : person.faceIds.filter((faceId) => faceId !== action.faceId) })) };
+  }
   if (action.type === "merge") {
     if (action.personId === action.targetPersonId) throw new FlowStoreError("invalid_action");
     const source = flow.people.find((person) => person.personId === action.personId);
@@ -84,10 +91,11 @@ function apply(flow: DirectorFlow, action: FlowAction): DirectorFlow {
 export async function mutateFlow(db: Firestore, input: { userId: string; projectId: string; actionId: string; action: FlowAction }): Promise<DirectorFlow> {
   const project = flowRef(db, input.projectId);
   const actionRef = project.collection("flowActions").doc(input.actionId);
+  const readinessRef = project.collection("readiness").doc("summary");
   const latestActionQuery = project.collection("flowActions").orderBy("createdAt", "desc").limit(1);
   const seeded = await readFlow(db, input.userId, input.projectId);
   return db.runTransaction(async (transaction) => {
-    const [projectSnap, actionSnap, latestActions] = await Promise.all([transaction.get(project), transaction.get(actionRef), transaction.get(latestActionQuery)]);
+    const [projectSnap, actionSnap, latestActions, readinessSnap] = await Promise.all([transaction.get(project), transaction.get(actionRef), transaction.get(latestActionQuery), transaction.get(readinessRef)]);
     if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) throw new FlowStoreError("not_found");
     if (actionSnap.exists) return DirectorFlowSchema.parse(actionSnap.get("result"));
     const parsed = DirectorFlowSchema.safeParse(projectSnap.get("flow"));
@@ -101,6 +109,7 @@ export async function mutateFlow(db: Firestore, input: { userId: string; project
     }
     const next = DirectorFlowSchema.parse({ ...candidate, revision: before.revision + 1 });
     transaction.update(project, { flow: next });
+    transaction.set(readinessRef, { flowRevision: next.revision }, { merge: true });
     transaction.create(actionRef, { result: next, previous: before, actionType: input.action.type, createdAt: Date.now() });
     return next;
   });
