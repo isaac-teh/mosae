@@ -341,20 +341,17 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       planFailed.current = false;
       setSaving(true); setError(null);
       const storyText = storyTextOverride ?? answer ?? pendingInterpret?.text ?? input.earlyOccasionAnswer ?? (summary?.country ? `${summary.country} trip` : summary?.places[0] || "Our story");
-      // Reveal the next chat step from the readiness and people data already in
-      // memory. Plan creation and the follow-up snapshot can take several seconds.
-      setInput((current) => ({ ...current, intent: { text: answer ?? input.earlyOccasionAnswer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
       try {
         const result = await repository.createPlan([storyText, ...input.notes].join("\n"), []);
         if (!isCurrentProject()) return;
         proposalId.current = result.planId;
-        setInput((current) => ({ ...current, pendingResponse: undefined, earlyOccasionAnswer: undefined, earlyOccasionStoryText: undefined }));
+        setInput((current) => ({ ...current, pendingResponse: undefined, earlyOccasionAnswer: undefined, earlyOccasionStoryText: undefined, intent: { text: answer ?? input.earlyOccasionAnswer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
         setPendingInterpret(null);
-        void refresh().catch((cause) => { if (isCurrentProject()) setError(reportFailure(cause)); });
+        await refresh();
       } catch (cause) {
         if (!isCurrentProject()) return;
         planFailed.current = true; reportFailure(cause);
-        setInput((current) => ({ ...current, intent: null, pendingResponse: undefined, earlyOccasionAnswer: undefined, earlyOccasionStoryText: undefined }));
+        setInput((current) => ({ ...current, pendingResponse: undefined, ...(!current.intent && current.earlyOccasionAnswer ? { earlyOccasionAnswer: undefined, earlyOccasionStoryText: undefined } : {}) }));
         setError("I couldn't shape this one. Try again.");
       }
       finally { if (isCurrentProject()) { occasionSaving.current = false; setSaving(false); } }
