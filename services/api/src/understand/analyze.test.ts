@@ -39,6 +39,21 @@ describe("Gemini shot analysis", () => {
     }
   });
 
+  it("normalizes legacy photo story fields and clamps model emotion to 0–1", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mosae-analyze-test-"));
+    try {
+      const renderPath = path.join(dir, "render.jpg");
+      await writeFile(renderPath, "jpeg-bytes");
+      const result = await analyzePhoto(deps(vi.fn().mockResolvedValue(reply(JSON.stringify({ caption: "c", subjects: [], setting: "beach", activities: [], mood: "joyful", shotType: "wide", aesthetics: 4, keyMomentScore: 4, tags: [], emotionScore: 2 })))), { assetId: "a1", shotId: "s1", renderPath });
+      expect(result).toMatchObject({ storyRole: "normal", emotionScore: 1 });
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
+  it("derives legacy video emotion and defaults its story role", async () => {
+    const result = await analyzeVideo(deps(vi.fn().mockResolvedValue(reply(videoJson(1)))), { assetId: "a1", file: { uri: "gs://x", mimeType: "video/mp4" }, shotCount: 1, durationSec: 1 });
+    expect(result.shots[0]).toMatchObject({ storyRole: "normal", emotionScore: 0.85 });
+  });
+
   it("repairs a video response that has the wrong number of known shots", async () => {
     const generateContent = vi.fn().mockResolvedValueOnce(reply(videoJson(1))).mockResolvedValueOnce(reply(videoJson(2)));
     const result = await analyzeVideo(deps(generateContent), { assetId: "a1", file: { uri: "gs://x/file", mimeType: "video/mp4" }, shotCount: 2, durationSec: 5 });

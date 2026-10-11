@@ -20,10 +20,14 @@ export const MusicCueSchema = z.object({
   atSec: z.number(),
   cue: z.string(),
 });
+export const StoryChoiceSchema = z.object({ candidateId: z.string(), reason: z.string().min(1) });
 
 export const ComposeResponseSchema = z.object({
   clips: z.array(ComposeClipSchema),
   musicCues: z.array(MusicCueSchema),
+  openerId: StoryChoiceSchema.optional(),
+  peakId: StoryChoiceSchema.optional(),
+  closerId: StoryChoiceSchema.optional(),
 });
 
 export type ComposePicks = z.infer<typeof ComposeResponseSchema>;

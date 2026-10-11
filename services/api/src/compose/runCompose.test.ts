@@ -102,6 +102,30 @@ function makeJob(overrides?: Partial<ComposeJob>): ComposeJob {
 }
 
 describe("runCompose — collages", () => {
+  it("accepts valid model boundary choices and logs their reasons", async () => {
+    const result = await runCompose(makeJob(), makeDeps({ generateStructured: async () => ({
+      clips: [{ candidateId: "video1", transition: "cut", audio: "keep" }, { candidateId: "photo1#still@c1", transition: "cut", audio: "mute" }],
+      musicCues: [],
+      openerId: { candidateId: "video1", reason: "The opening line establishes the trip." },
+      closerId: { candidateId: "photo1", reason: "The sunset gives the story a quiet finish." },
+    }) }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    expect(result.droppedPicks).toContain("Gemini opener: video1 — The opening line establishes the trip.");
+    expect(result.droppedPicks).toContain("Gemini closer: photo1 — The sunset gives the story a quiet finish.");
+  });
+
+  it("rejects invalid model boundary choices and records deterministic fallback", async () => {
+    const result = await runCompose(makeJob(), makeDeps({ generateStructured: async () => ({
+      clips: [{ candidateId: "video1#s0@0c0", transition: "cut", audio: "keep" }, { candidateId: "photo1#still@c1", transition: "cut", audio: "mute" }],
+      musicCues: [],
+      openerId: { candidateId: "photo1#still@c1", reason: "Looks nice." },
+    }) }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    expect(result.droppedPicks.some((reason) => reason.includes("Gemini opener rejected") && reason.includes("deterministic rule used"))).toBe(true);
+  });
+
   it("records duplicate photo overflow on droppedPicks and keeps the canonical photo", async () => {
     const moments = ["primary", "duplicate", "other"].map((id) => ({
       id, shotId: `shot-${id}`, kind: "photo" as const, title: id, description: "", rationale: "",

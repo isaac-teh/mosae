@@ -81,7 +81,7 @@ export async function loadComposeCatalog(
         dHash: asset.quality?.dHash ?? null,
         dupOf: asset.dupOf ?? null,
         ...(analysis?.kind === "photo"
-          ? { analysis: { caption: analysis.caption, setting: analysis.setting, mood: analysis.mood, activities: analysis.activities, shotType: analysis.shotType, aesthetics: analysis.aesthetics, keyMomentScore: analysis.keyMomentScore }, keyMomentScore: analysis.keyMomentScore }
+          ? { analysis: { caption: analysis.caption, setting: analysis.setting, mood: analysis.mood, activities: analysis.activities, shotType: analysis.shotType, aesthetics: analysis.aesthetics, keyMomentScore: analysis.keyMomentScore, storyRole: analysis.storyRole, emotionScore: analysis.emotionScore }, keyMomentScore: analysis.keyMomentScore }
           : {}),
       });
       continue;
@@ -106,6 +106,8 @@ export async function loadComposeCatalog(
           description: analysis?.kind === "video" ? analysis.description : "",
           role: analysis?.kind === "video" ? analysis.role : undefined,
           emotion: analysis?.kind === "video" ? analysis.emotion : undefined,
+          emotionScore: analysis?.kind === "video" ? analysis.emotionScore : undefined,
+          storyRole: analysis?.kind === "video" ? analysis.storyRole : undefined,
           subjects: analysis?.kind === "video" ? analysis.subjects : undefined,
           quality: analysis?.kind === "video" ? analysis.quality : undefined,
           usable: analysis?.kind === "video" ? analysis.usable : true,
