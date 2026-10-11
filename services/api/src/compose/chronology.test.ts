@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { spreadVideoClips, type ClipTime } from "./chronology.js";
+import { applyArc, spreadVideoClips, type ClipTime } from "./chronology.js";
 
 type Clip = { itemId: string; kind: "photo" | "video"; inSec?: number; highlightScore?: number };
 const timeOf = new Map<string, ClipTime>([
@@ -40,5 +40,18 @@ describe("spreadVideoClips", () => {
     const clips: Clip[] = [{ itemId: "v1", kind: "video" }, { itemId: "v2", kind: "video", inSec: 5 }, { itemId: "p1", kind: "photo" }];
     const result = spreadVideoClips(clips, new Map(), source);
     expect(result.map((clip) => clip.kind)).toEqual(["video", "photo", "video"]);
+  });
+});
+
+describe("applyArc", () => {
+  it("keeps a selected peak at its chronological position", () => {
+    const clips = ["p1", "p2", "p3"].map((itemId) => ({ itemId }));
+    const time = new Map<string, ClipTime>([
+      ["p1", { chapter: 0, localTime: "2026-01-01T08:00:00", score: 0.2 }],
+      ["p2", { chapter: 0, localTime: "2026-01-01T08:10:00", score: 0.9 }],
+      ["p3", { chapter: 0, localTime: "2026-01-01T08:20:00", score: 0.3 }],
+    ]);
+    const result = applyArc(clips, time);
+    expect(result.clips.map(({ itemId }) => itemId)).toEqual(["p1", "p2", "p3"]);
   });
 });

@@ -22,6 +22,9 @@ export interface Candidate {
   speechSegments?: TranscriptSegment[];
   windowScore?: number;
   highlightScore?: number;
+  quality?: number;
+  emotion?: number;
+  energy?: number;
   /** Additional strong beat from a source after one primary clip is represented. */
   isExtraMoment?: boolean;
   loudPeak?: number;
@@ -33,6 +36,8 @@ export interface Shot {
   endSec: number;
   description?: string;
   role?: string;
+  emotion?: string;
+  subjects?: string[];
   quality?: number;
   usable?: boolean;
   highlights?: { startSec: number; endSec: number; label?: string; score: number }[];
@@ -49,6 +54,12 @@ export interface AssetAnalysis {
   shots?: Shot[];
   transcript?: TranscriptSegment[];
   caption?: string;
+  setting?: string;
+  mood?: string;
+  activities?: string[];
+  shotType?: string;
+  aesthetics?: number;
+  keyMomentScore?: number;
 }
 
 export interface Asset {
@@ -143,7 +154,10 @@ export function buildCandidates(
           chapterIndex: chapter.index,
           minHoldSec: holds.min,
           maxHoldSec: holds.max,
-          description: asset.analysis?.caption || asset.file || itemId,
+          quality: asset.analysis?.aesthetics !== undefined ? asset.analysis.aesthetics / 5 : asset.analysis?.keyMomentScore !== undefined ? asset.analysis.keyMomentScore / 5 : undefined,
+          emotion: asset.analysis?.mood ? (/joy|happy|smil|laugh|love|warm|tender|celebrat/i.test(asset.analysis.mood) ? 0.85 : /calm|peace|gentle|quiet/i.test(asset.analysis.mood) ? 0.65 : undefined) : undefined,
+          energy: (asset.analysis?.activities ?? []).some((activity) => /run|dance|jump|play|splash|race|cheer|laugh/i.test(activity)) ? 0.75 : undefined,
+          description: [asset.analysis?.caption, asset.analysis?.setting, asset.analysis?.mood, ...(asset.analysis?.activities ?? [])].filter(Boolean).join(". ") || asset.file || itemId,
         });
         continue;
       }
@@ -182,7 +196,7 @@ export function buildCandidates(
           const highlightScore = Math.max(0, ...(shot.highlights ?? []).filter(h => h.endSec > window.inSec && h.startSec < window.outSec).map(h => h.score));
           const signalStep = shot.signals?.stepSec ?? 0.25;
           const loudPeak = Math.max(0, ...(shot.signals?.loud ?? []).filter((_, i) => shot.startSec + i * signalStep < window.outSec && shot.startSec + (i + 1) * signalStep > window.inSec));
-          out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${window.inSec}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: window.inSec, outSec: window.outSec, lengthSec: Number((window.outSec - window.inSec).toFixed(2)), hasSpeech, speechSegments: speechInShot.filter(s => s.startSec >= window.inSec - 0.01 && s.endSec <= window.outSec + 0.01), windowScore: score, highlightScore, loudPeak, description: `${shot.role === 'A_ROLL' ? 'speech to camera: ' : ''}${shot.description || ''}`.slice(0, 160) });
+          out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${window.inSec}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: window.inSec, outSec: window.outSec, lengthSec: Number((window.outSec - window.inSec).toFixed(2)), hasSpeech, speechSegments: speechInShot.filter(s => s.startSec >= window.inSec - 0.01 && s.endSec <= window.outSec + 0.01), windowScore: score, highlightScore, loudPeak, quality: shot.quality, emotion: shot.emotion ? (/joy|happy|smil|laugh|love|warm|tender|celebrat/i.test(shot.emotion) ? 0.85 : /calm|peace|gentle|quiet/i.test(shot.emotion) ? 0.65 : undefined) : undefined, energy: Math.max(highlightScore, score), description: `${shot.role === 'A_ROLL' ? 'speech to camera: ' : ''}${shot.description || ''}`.slice(0, 160) });
           if (sameScene) { added++; break; }
           // Emit other explicitly strong, distinct moments from the same shot.
           // Signals alone can select the primary window, but never authorize extras.

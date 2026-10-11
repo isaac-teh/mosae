@@ -81,7 +81,7 @@ export async function loadComposeCatalog(
         dHash: asset.quality?.dHash ?? null,
         dupOf: asset.dupOf ?? null,
         ...(analysis?.kind === "photo"
-          ? { analysis: { caption: analysis.caption }, keyMomentScore: analysis.keyMomentScore }
+          ? { analysis: { caption: analysis.caption, setting: analysis.setting, mood: analysis.mood, activities: analysis.activities, shotType: analysis.shotType, aesthetics: analysis.aesthetics, keyMomentScore: analysis.keyMomentScore }, keyMomentScore: analysis.keyMomentScore }
           : {}),
       });
       continue;
@@ -105,6 +105,8 @@ export async function loadComposeCatalog(
           endSec,
           description: analysis?.kind === "video" ? analysis.description : "",
           role: analysis?.kind === "video" ? analysis.role : undefined,
+          emotion: analysis?.kind === "video" ? analysis.emotion : undefined,
+          subjects: analysis?.kind === "video" ? analysis.subjects : undefined,
           quality: analysis?.kind === "video" ? analysis.quality : undefined,
           usable: analysis?.kind === "video" ? analysis.usable : true,
           highlights: analysis?.kind === "video" ? analysis.highlights : undefined,
@@ -354,6 +356,7 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
       generationId: task.generationId,
       timeline,
       droppedPicks: result.droppedPicks,
+      leftOut: result.leftOut,
       reasons: result.reasons,
       ...(result.durationSelection ? {
         settings: { ...settings.settings, durationId: result.durationSelection.id, durationSec: result.durationSelection.durationSec },

@@ -2,6 +2,13 @@ import type { CadenceId } from "@mosae/contracts";
 
 /** Deterministic first-cut rules shared by prompting, fitting and collage placement. */
 export const DIRECTING_RULES = {
+  // Stage 1 directing constants. Kept together for the later StyleRecipe extraction.
+  photoHolds: { memory: [2.2, 3.2], lively: [1.5, 2.2] } as const,
+  buildTightening: 0.15,
+  closerHoldBoost: 0.30,
+  averagePhotoHoldSec: 2.7,
+  momentWeights: { quality: 0.35, emotion: 0.25, energy: 0.20, people: 0.10, intent: 0.10 } as const,
+  peakMedianMargin: 0.08,
   basePhotoSec: 1,
   secondsPerPhoto: 0.2,
   holdVariance: 0.2,
@@ -52,11 +59,37 @@ export function requestedCollageCount(mediaCount: number, amount: "few" | "lots"
 }
 
 /** Boundary slots permitted by the approved placement rules; chosen by seeded story score. */
-export function collagePlacementOptions(clipCount: number, collageCount: number): number[][] {
-  if (collageCount === 1 && clipCount >= 1) return [[0], [clipCount - 1]];
-  if (collageCount === 2 && clipCount >= 2) return [[0, 1], [0, clipCount - 1], [clipCount - 2, clipCount - 1]];
-  if (collageCount === 3 && clipCount >= 3) return [[0, 1, clipCount - 1], [0, 1, Math.floor(clipCount / 2)], [0, clipCount - 2, clipCount - 1], [Math.floor(clipCount / 2), clipCount - 2, clipCount - 1]];
-  return [];
+export function collagePlacementOptions(clipCount: number, collageCount: number, lockedSlots: number[] = []): number[][] {
+  const locked = new Set(lockedSlots);
+  const valid = (slots: number[]) => slots.every((slot) => slot >= 0 && slot < clipCount && !locked.has(slot));
+  const all: number[][] = [];
+  for (let start = 0; start <= clipCount - collageCount; start++) {
+    const slots = Array.from({ length: collageCount }, (_, offset) => start + offset);
+    if (valid(slots)) all.push(slots);
+  }
+  return all;
+}
+
+export function momentScore(input: { quality?: number; emotion?: number; energy?: number; peopleRelevance?: number; intentMatch?: number }): number {
+  const w = DIRECTING_RULES.momentWeights;
+  const clamp = (n: number | undefined) => Math.max(0, Math.min(1, n ?? 0));
+  return w.quality * clamp(input.quality) + w.emotion * clamp(input.emotion) + w.energy * clamp(input.energy)
+    + w.people * clamp(input.peopleRelevance) + w.intent * clamp(input.intentMatch);
+}
+
+export function budgetSlotCount(lengthSec: number, averageHoldSec: number = DIRECTING_RULES.averagePhotoHoldSec): number {
+  return Math.max(0, Math.floor(lengthSec / averageHoldSec));
+}
+
+export function leftOutLengthHint(input: { durationSec: number; nextDurationSec?: number; goodMomentCount: number; photoCount: number; videoSec: number; lockedPhotoCount?: number }): { fromDurationSec: number; nextDurationSec: number } | undefined {
+  if (!input.nextDurationSec || input.goodMomentCount <= 0) return undefined;
+  const photoSlots = budgetSlotCount(Math.max(0, input.durationSec - input.videoSec));
+  const lockedPhotos = Math.min(input.photoCount, input.lockedPhotoCount ?? 3);
+  const includedPhotos = Math.max(lockedPhotos, Math.min(input.photoCount, photoSlots));
+  const leftOutCount = Math.max(0, input.goodMomentCount - (input.goodMomentCount - input.photoCount) - includedPhotos);
+  return leftOutCount / input.goodMomentCount > 0.4
+    ? { fromDurationSec: input.durationSec, nextDurationSec: input.nextDurationSec }
+    : undefined;
 }
 
 export function deterministicPlacement(clipCount: number, collageCount: number, seed: string): number[] {

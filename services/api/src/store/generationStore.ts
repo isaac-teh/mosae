@@ -89,6 +89,7 @@ export async function publishGeneration(
     generationId: string;
     timeline: Generation["timeline"];
     droppedPicks: string[];
+    leftOut?: { shotId: string; reason: string }[];
     reasons?: string[];
     settings?: Generation["settings"];
     now: number;
@@ -111,6 +112,9 @@ export async function publishGeneration(
     const editsSnap = await tx.get(editsRef);
 
     const existing = genSnap.data() as Generation;
+
+    const proposalRef = db.collection("projects").doc(input.projectId).collection("storyProposals").doc(existing.proposalId);
+    const proposalSnap = input.leftOut === undefined ? null : await tx.get(proposalRef);
 
     // Only allow publishing from composing state
     if (existing.status !== "composing") {
@@ -136,6 +140,14 @@ export async function publishGeneration(
       composedEditRevision: Number(editsSnap.get("revision") ?? 0),
     };
     tx.set(genRef, updated);
+    if (proposalSnap?.exists && input.leftOut !== undefined) {
+      const prior = proposalSnap.get("leftOut");
+      const retained = Array.isArray(prior) ? prior.filter((entry): entry is { shotId: string; reason: string } =>
+        !!entry && typeof entry === "object" && typeof (entry as { shotId?: unknown }).shotId === "string"
+        && typeof (entry as { reason?: unknown }).reason === "string" && (entry as { reason: string }).reason !== "didn't fit the length") : [];
+      const lengthLeftOut = [...retained, ...input.leftOut.filter((entry) => entry.reason === "didn't fit the length")];
+      tx.update(proposalRef, { leftOut: lengthLeftOut });
+    }
 
     // A late-finishing older composition must not displace a newer film. Auto
     // ids do not sort by time, so recency is read from the request pointer the

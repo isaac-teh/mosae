@@ -95,6 +95,7 @@ export type CreateOption = "film" | "album" | "share" | "apple-photos";
 export type Cadence = { id: string; name: string; description: string };
 export type Soundtrack = { id: string; name: string; description: string; mood?: string; durationSec?: number; suggested?: boolean };
 export type DurationChoice = { id: "30s" | "1m" | "2m" | "3m" | "4m" | "5m" | "short"; label: string; caption: string; seconds: number };
+export type LengthHint = { fromDurationSec: number; nextDurationSec: number };
 
 export type DirectionOptions = {
   recommendation?: string;
@@ -103,6 +104,7 @@ export type DirectionOptions = {
   cadences: Cadence[];
   soundtracks: Soundtrack[];
   durations: DurationChoice[];
+  lengthHints?: LengthHint[];
   recommendedDuration: DurationChoice["id"];
   /** Estimated capacity across the kept proposal media, in seconds. */
   maximumDurationSec?: number;

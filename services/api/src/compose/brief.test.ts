@@ -16,28 +16,29 @@ describe("holdsFor", () => {
     },
   );
 
-  it("keeps every cadence within the configured ±20% range", () => {
+  it("keeps each cadence inside its Memory or Lively hold range", () => {
     for (const { id } of CADENCES) {
       const h = holdsFor(id);
-      expect(h.min).toBeCloseTo(h.base * 0.8, 2);
-      expect(h.max).toBeCloseTo(h.base * 1.2, 2);
+      const range = id === "playful" || id === "energetic" ? [1.5, 2.2] : [2.2, 3.2];
+      expect(h.min).toBe(range[0]);
+      expect(h.max).toBe(range[1]);
       expect(h.base).toBeGreaterThanOrEqual(h.min);
       expect(h.base).toBeLessThanOrEqual(h.max);
     }
   });
 
-  it("tender holds match the table", () => {
+  it("tender holds use the Memory range", () => {
     const h = holdsFor("tender" as any);
-    expect(h.base).toBe(2.4);
-    expect(h.min).toBe(1.92);
-    expect(h.max).toBe(2.88);
+    expect(h.base).toBe(2.7);
+    expect(h.min).toBe(2.2);
+    expect(h.max).toBe(3.2);
   });
 
-  it("energetic has the shortest holds", () => {
+  it("energetic uses the Lively range", () => {
     const h = holdsFor("energetic" as any);
-    expect(h.base).toBe(1.2);
-    expect(h.min).toBe(0.96);
-    expect(h.max).toBe(1.44);
+    expect(h.base).toBe(1.85);
+    expect(h.min).toBe(1.5);
+    expect(h.max).toBe(2.2);
   });
 });
 
@@ -45,15 +46,15 @@ describe("craftBrief", () => {
   it("includes rhythm section with correct hold values for tender", () => {
     const brief = craftBrief("tender" as any, 60);
     expect(brief).toContain("Rhythm");
-    expect(brief).toContain("2.40s");
-    expect(brief).toContain("1.92–2.88s");
+    expect(brief).toContain("2.70s");
+    expect(brief).toContain("2.20–3.20s");
     expect(brief).toContain("60s");
   });
 
   it("includes rhythm section with correct hold values for energetic", () => {
     const brief = craftBrief("energetic" as any, 30);
-    expect(brief).toContain("1.20s");
-    expect(brief).toContain("0.96–1.44s");
+    expect(brief).toContain("1.85s");
+    expect(brief).toContain("1.50–2.20s");
     expect(brief).toContain("30s");
   });
 

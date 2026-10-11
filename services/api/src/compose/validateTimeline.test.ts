@@ -303,6 +303,20 @@ describe("validateTimeline — semantic rules", () => {
 });
 
 describe("repairOnce — deterministic fixes", () => {
+  it("does not clamp a locked story hold during timeline repair", () => {
+    const timeline = makeTimeline({
+      videoClips: [{
+        id: "cand-photo-1", source: { kind: "photo", shotId: "shot-photo-1" },
+        startSec: 0, durationSec: 8, transitionIn: { kind: "cut", durationSec: 0 },
+      } as VideoClip],
+    });
+    const ctx = makeCtx({ targetSec: 8, lockedClipIds: new Set(["cand-photo-1"]) });
+    const result = repairOnce(timeline, validateTimeline(timeline, ctx), ctx);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.timeline.videoClips[0]).toMatchObject({ id: "cand-photo-1", durationSec: 8, startSec: 0 });
+  });
+
   it("repairs a gap beside a collage without dropping the collage", () => {
     const timeline = makeTimeline({
       schemaVersion: 2,

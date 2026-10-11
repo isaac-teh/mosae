@@ -60,7 +60,7 @@ export function fitDuration(
   targetSec: number,
   holds: Holds,
   mustIncludeMomentIds: string[] = [],
-  options: { minimumFilmSec?: number; maximumStretchedPhotoSec?: number; maximumStretchedPhotoMultiplier?: number } = {},
+  options: { minimumFilmSec?: number; maximumStretchedPhotoSec?: number; maximumStretchedPhotoMultiplier?: number; lockedMomentIds?: string[] } = {},
 ): FitResult {
   const notes: string[] = [];
   let effectiveTargetSec = targetSec;
@@ -81,6 +81,7 @@ export function fitDuration(
     const photos = workingClips.filter(
       c =>
         c.holdSec != null &&
+        !mustIncludeMomentIds.includes(c.itemId) &&
         ((drift > 0 && c.holdSec > holds.min) || (drift < 0 && c.holdSec < holds.max)),
     );
 
@@ -90,7 +91,7 @@ export function fitDuration(
         // Too long: trim silent video clips from their tail
         let excess = drift;
         for (const clip of [...workingClips].reverse()) {
-          if (excess <= 0.01 || clip.sourceOutSec == null || clip.hasSpeech) continue;
+          if (excess <= 0.01 || clip.sourceOutSec == null || clip.hasSpeech || mustIncludeMomentIds.includes(clip.itemId) || options.lockedMomentIds?.includes(clip.itemId)) continue;
           const spare = (clip.sourceOutSec - (clip.sourceInSec ?? 0)) - DIRECTING_RULES.videoMinClipSec;
           const cut = Math.min(spare, excess);
           if (cut <= 0) continue;

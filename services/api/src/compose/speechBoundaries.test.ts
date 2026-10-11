@@ -32,6 +32,15 @@ describe("speech boundary checks", () => {
     expect(findSpeechBoundaryViolations(repaired, segments)).toEqual([]);
   });
 
+  it("keeps a locked story clip while speech repair extends it to the full sentence", () => {
+    const segment = fixture.segments.find((item) => Math.abs(item.endSec - item.startSec - 4.54) < 0.01)!;
+    const segments = new Map([[segment.shotId, [segment]]]);
+    const locked = makeTimeline(segment.startSec, 4, "cut", segment.shotId);
+    const repaired = repairSpeechBoundaries(locked, segments);
+    expect(repaired.videoClips[0]).toMatchObject({ id: "speech", source: { shotId: segment.shotId, sourceInSec: segment.startSec, sourceOutSec: segment.endSec } });
+    expect(findSpeechBoundaryViolations(repaired, segments)).toEqual([]);
+  });
+
   it("keeps an over-cap complete sentence intact when the only cut would split speech", () => {
     const segment = fixture.segments.find((item) => Math.abs(item.endSec - item.startSec - 8) < 0.01)!;
     const segments = new Map([[segment.shotId, [segment]]]);

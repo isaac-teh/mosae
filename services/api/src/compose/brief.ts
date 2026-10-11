@@ -1,5 +1,5 @@
 import { CADENCES, type CadenceId } from "@mosae/contracts";
-import { photoHoldRange } from "./directingRules.js";
+import { DIRECTING_RULES, photoHoldRange } from "./directingRules.js";
 
 /** Hold lengths in seconds for a still or a quiet shot, chosen by the story's mood. */
 export interface Holds {
@@ -13,6 +13,12 @@ const HOLDS: Record<CadenceId, Holds> = Object.fromEntries(
   (Object.keys({ tender: 1, reflective: 1, playful: 1, energetic: 1, celebratory: 1 }) as CadenceId[])
     .map((cadence) => [cadence, photoHoldRange(1, cadence)]),
 ) as Record<CadenceId, Holds>;
+
+for (const cadence of Object.keys(HOLDS) as CadenceId[]) {
+  const lively = cadence === "playful" || cadence === "energetic";
+  const [min, max] = lively ? DIRECTING_RULES.photoHolds.lively : DIRECTING_RULES.photoHolds.memory;
+  HOLDS[cadence] = { base: (min + max) / 2, min, max };
+}
 
 const DEFAULT_HOLDS: Holds = { base: 3, min: 1, max: 5 };
 

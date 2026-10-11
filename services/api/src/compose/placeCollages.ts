@@ -5,7 +5,7 @@ import {
   applyEdits, type CollageClip, type Timeline,
 } from "@mosae/contracts";
 import { hamming64 } from "../cluster/duplicates.js";
-import { collagePlacementOptions, DIRECTING_RULES, photoBaseDuration, requestedCollageCount } from "./directingRules.js";
+import { collageCountRange, collagePlacementOptions, DIRECTING_RULES, photoBaseDuration, requestedCollageCount } from "./directingRules.js";
 import type { CadenceId } from "@mosae/contracts";
 import { reflow } from "@mosae/contracts";
 
@@ -18,7 +18,7 @@ export type CollageSource = {
   dupOf?: string | null;
   hasSpeech?: boolean;
 };
-export type CollageStyle = { collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful"; cadenceId?: CadenceId; tierless?: boolean; stretchTargetSec?: number };
+export type CollageStyle = { collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful"; cadenceId?: CadenceId; tierless?: boolean; stretchTargetSec?: number; lockedClipIds?: string[] };
 
 export type CollageReview = { combos: Array<{ layoutId: string; motionId: string; verdict: string }> };
 const defaultReviewPath = fileURLToPath(new URL("../../../../docs/design/collage-review.json", import.meta.url));
@@ -132,7 +132,7 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     return style.stretchTargetSec !== undefined ? stretchTierlessPhotos(upgraded, cadenceId, style.stretchTargetSec) : upgraded;
   }
   const approved = review.combos.filter((combo) => combo.verdict === "keep" && ALLOWED_COMBOS.some((allowed) => allowed.layoutId === combo.layoutId && allowed.motionId === combo.motionId));
-  const countRules = mediaCount < 20 ? 4 : mediaCount < 50 && collageLimit > 1 ? 4 : DIRECTING_RULES.collageMaxPhotos;
+  const countRules = collageCountRange(mediaCount).maxPhotos;
   const maxCandidateSlots = Math.min(countRules, DIRECTING_RULES.collageMaxPhotos, Math.max(2, ...COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((aspect) => aspect === timeline.aspect) && approved.some((combo) => combo.layoutId === layout.id)).map((layout) => layout.maxSlots)));
   const clips = timeline.videoClips;
   const replacements = new Map<number, { end: number; collage: CollageClip }>();
@@ -141,6 +141,7 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
   let removedCount = 0;
   let lastLayout: string | undefined;
   const maxPerChapter = collageLimit;
+  const lockedClipIds = new Set(style.lockedClipIds ?? []);
   const preferredMotions = motionFeel === "calm"
     ? new Set(["page-turn", "print-drop", "focus-relay"])
     : new Set(["stack-deal", "tape-slap", "crash-zoom"]);
@@ -148,27 +149,27 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
   for (let index = 0; index < clips.length && replacements.size < collageLimit;) {
     const first = clips[index];
     const origin = sources.get(idOf(first));
-    if (!origin || "kind" in first || (chapterCounts.get(origin.chapterId) ?? 0) >= maxPerChapter) { index++; continue; }
+    if (!origin || lockedClipIds.has(idOf(first)) || "kind" in first || (chapterCounts.get(origin.chapterId) ?? 0) >= maxPerChapter) { index++; continue; }
     const group = [first];
     // Video clips remain independent timeline clips; never convert them into collage slots.
     if (first.source.kind === "video") { index++; continue; }
     for (let nextIndex = index + 1; nextIndex < clips.length && group.length < maxCandidateSlots; nextIndex++) {
       const next = clips[nextIndex];
       const metadata = sources.get(idOf(next));
-      if (!metadata || "kind" in next || next.source.kind === "video") break;
+      if (!metadata || lockedClipIds.has(idOf(next)) || "kind" in next || next.source.kind === "video") break;
       if (!related(origin, metadata, true)) break;
       group.push(next);
     }
     // Ordinary trips rarely have sub-minute duplicate bursts. If the tight
     // candidate set is too small for a reviewed layout, use a coherent run
     // from one day or one event to reach its minimum slot count.
-    const requiredMin = mediaCount < 20 ? 3 : mediaCount < 50 && collageLimit === 1 ? 4 : 2;
+    const requiredMin = collageCountRange(mediaCount).minPhotos;
     if (group.length < requiredMin) {
       group.length = 1;
       for (let nextIndex = index + 1; nextIndex < clips.length && group.length < maxCandidateSlots; nextIndex++) {
         const next = clips[nextIndex];
         const metadata = sources.get(idOf(next));
-        if (!metadata || "kind" in next || next.source.kind !== "photo" || first.source.kind !== "photo" || !sameDayOrEvent(origin, metadata)) break;
+        if (!metadata || lockedClipIds.has(idOf(next)) || "kind" in next || next.source.kind !== "photo" || first.source.kind !== "photo" || !sameDayOrEvent(origin, metadata)) break;
         group.push(next);
       }
     }
@@ -224,7 +225,8 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
   const collageCount = replacements.size;
   const collageClips = [...replacements.values()].map(({ collage }) => collage);
   const placementSeed = `${seed}:${collageClips.map((collage) => `${collage.chapterId}:${collage.spec.slots.map((slot) => slot.shotId).join(",")}`).join("|")}`;
-  const positionOptions = collagePlacementOptions(visual.length, collageCount);
+  const lockedSlots = visual.flatMap((clip, index) => lockedClipIds.has(idOf(clip)) ? [index] : []);
+  const positionOptions = collagePlacementOptions(visual.length, collageCount, lockedSlots);
   const preservesArc = (positions: number[]) => {
     const moved = [...visual];
     for (let index = 0; index < positions.length; index++) {
@@ -255,7 +257,5 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     relaid = moved.timeline;
   }
   // applyEdits performs reflow after each move and preserves clip identities.
-  const finalMove = applyEdits(relaid, [{ op: "move", clipId: idOf(relaid.videoClips[0]!), toIndex: 0 }]);
-  if (finalMove.ok) relaid = finalMove.timeline;
   return style.stretchTargetSec !== undefined || style.tierless ? stretchTierlessPhotos(relaid, cadenceId, style.stretchTargetSec ?? DIRECTING_RULES.minimumFilmSec) : relaid;
 }

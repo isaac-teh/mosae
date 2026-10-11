@@ -27,6 +27,19 @@ describe("direction options contextual copy", () => {
 });
 
 describe("direction options v2 capacity", () => {
+  it("returns a next-length hint when the chosen budget leaves over 40 percent of good moments out", async () => {
+    const moments = Array.from({ length: 40 }, (_, index) => ({ id: `m${index}`, shotId: `s${index}`, kind: "photo", title: `Photo ${index}`, description: "", rationale: "" }));
+    const projectRef = {
+      get: async () => ({ exists: true, get: () => "owner" }),
+      collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({ moments, constraints: {}, recommendedCadence: "reflective" }) }) }) }),
+    };
+    const db = { collection: () => ({ doc: () => projectRef }) } as unknown as Firestore;
+    const app = express();
+    app.use("/api/projects", directionOptionsRouter({ db, auth: (_req, res, next) => { res.locals.userId = "owner"; next(); } }));
+    const response = await request(await listeningServer(app)).get("/api/projects/project-1/proposals/proposal-1/direction-options");
+    expect(response.body.lengthHints).toContainEqual({ fromDurationSec: 30, nextDurationSec: 60 });
+  });
+
   it("composes the six-photo recommendation returned to the chat director", async () => {
     const moments = Array.from({ length: 6 }, (_, index) => ({ id: `m${index}`, shotId: `s${index}`, kind: "photo" as const, title: `Photo ${index}`, description: "", rationale: "" }));
     const projectRef = {

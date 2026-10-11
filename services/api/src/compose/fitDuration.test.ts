@@ -68,6 +68,13 @@ describe("fitDuration — photo holds", () => {
     expect(total).toBeGreaterThanOrEqual(targetSec * 0.9);
   });
 
+  it("keeps story-locked moments in the film while fitting their photo holds", () => {
+    const clips = [makePhotoClip("opener", 3.2), makePhotoClip("build", 4), makePhotoClip("peak", 3.4), makePhotoClip("closer", 3.51)];
+    const result = fitDuration(clips, 9, holds, [], { lockedMomentIds: ["opener", "peak", "closer"] });
+    expect(result.clips.map(({ itemId }) => itemId)).toEqual(["opener", "build", "peak", "closer"]);
+    expect(result.clips.reduce((sum, clip) => sum + (clip.holdSec ?? 0), 0)).toBeCloseTo(9, 0);
+  });
+
   it("an unreachable target shortens rather than padding", () => {
     const clips = [
       makePhotoClip("photo1", 2), // already at min
@@ -129,6 +136,11 @@ describe("fitDuration — silent video trimming", () => {
     const result = fitDuration(clips, targetSec, holds);
 
     expect(result.clips[1]!.sourceOutSec).toBe(10); // unchanged
+  });
+
+  it("never trims a locked silent story clip under duration pressure", () => {
+    const result = fitDuration([makeVideoClip("locked-video", 0, 8)], 3, holds, ["locked-video"]);
+    expect(result.clips[0]!.sourceOutSec).toBe(8);
   });
 });
 
