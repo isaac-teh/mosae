@@ -21,6 +21,7 @@ import { findSpeechBoundaryViolations, repairSpeechBoundaries } from "./speechBo
 import { styleRecipeForCadence } from "./styleRecipe.js";
 import { snapPhotoBoundaries, type CutMusic } from "./musicCuts.js";
 import { loadLibrary } from "../music/library.js";
+import { reviewTimeline } from "./reviewTimeline.js";
 
 export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
   if (!momentOrder?.length) return clips;
@@ -48,6 +49,8 @@ export type ComposeResult = {
   droppedPicks: string[];
   /** What duration fitting had to do. Empty when the film landed on target. */
   notes: string[];
+  /** Deterministic repairs applied by the final polish pass. */
+  reviewNotes: string[];
   reasons: string[];
   leftOut: { shotId: string; reason: string }[];
   /** Automatically selected Short tier when a tierless film cannot reach 20s. */
@@ -839,11 +842,30 @@ export async function runCompose(
     final = repaired.timeline;
   }
 
+  const lockedMoments = timeline.videoClips
+    .filter((clip) => (validationCtx.lockedClipIds ?? new Set<string>()).has("kind" in clip ? clip.clipId : clip.id))
+    .map((clip) => ({ clipId: "kind" in clip ? clip.clipId : clip.id, startSec: clip.startSec, durationSec: clip.durationSec }));
+  const reviewed = reviewTimeline(final, {
+    candidates: candidateMap,
+    assets: deps.assets,
+    shotIdByMoment,
+    targetSec: fittedTargetSec,
+    recipe: styleRecipe,
+    transcriptByShot,
+    lockedMoments,
+    ...(musicAnalysis ? { music: musicAnalysis } : {}),
+  });
+  final = reviewed.timeline;
+  const finalIssues = [...validateTimeline(final, { ...validationCtx, targetSec: final.durationSec }), ...findSpeechBoundaryViolations(final, transcriptByShot).map(v => ({ path: `videoClips[${v.clipId}].source.${v.edge}`, message: `source ${v.edge} still splits transcript segment`, severity: "fixable" as const }))];
+  if (finalIssues.length > 0) {
+    return { ok: false, reasons: [`final review failed validation: ${finalIssues.map(issue => issue.message).join("; ")}`] };
+  }
+
   // Structural parse is the last gate on both paths. A repair that drops a clip
   // can leave the timeline structurally invalid, so it is not exempt from this.
   const parsedResult = safeParseTimeline(final);
   if (!parsedResult.ok) {
-    return { ok: false, reasons: [`structural validation failed: ${parsedResult.errors.join("; ")}`] };
+    return { ok: false, reasons: [`structural validation failed: ${parsedResult.errors.join("; ")} AUDIO=${JSON.stringify(final.audioClips.map((clip) => ({ id: clip.id, role: clip.role, startSec: clip.startSec, source: clip.source })))}`] };
   }
 
   return {
@@ -852,8 +874,9 @@ export async function runCompose(
     styleId: styleRecipe.id,
     droppedPicks,
     notes: fitNotes,
+    reviewNotes: reviewed.reviewNotes,
     reasons: castReasons,
-    leftOut: lengthLeftOut,
+    leftOut: [...lengthLeftOut, ...reviewed.leftOut],
     ...(job.durationId === null && parsedResult.timeline.durationSec < 20
       ? { durationSelection: { id: "short" as const, durationSec: parsedResult.timeline.durationSec } }
       : {}),
