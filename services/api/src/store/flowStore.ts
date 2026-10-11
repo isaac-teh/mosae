@@ -66,6 +66,7 @@ export async function readFlow(db: Firestore, userId: string, projectId: string)
 }
 
 function apply(flow: DirectorFlow, action: FlowAction): DirectorFlow {
+  if (action.type === "batch") return action.actions.reduce((current, item) => apply(current, item), flow);
   if (action.type === "story-answer") return { ...flow, story: { answer: action.answer, storySummary: action.storySummary ?? flow.story.storySummary, mentionedPeople: action.mentionedPeople ?? flow.story.mentionedPeople } };
   if (action.type === "person") {
     const prior = flow.people.find((person) => person.personId === action.personId) ?? personDefaults(action.personId);
@@ -94,6 +95,22 @@ function apply(flow: DirectorFlow, action: FlowAction): DirectorFlow {
   return flow;
 }
 
+// Firestore may reorder map keys and omit undefined values when storing actions.
+// Canonicalize object keys recursively and omit undefined fields so genuine
+// retries compare equal regardless of serialization order.
+function canonicalStringify(value: unknown): string {
+  const canonicalize = (item: unknown): unknown => {
+    if (Array.isArray(item)) return item.map((entry) => entry === undefined ? null : canonicalize(entry));
+    if (item !== null && typeof item === "object") {
+      return Object.fromEntries(Object.keys(item as Record<string, unknown>).sort()
+        .filter((key) => (item as Record<string, unknown>)[key] !== undefined)
+        .map((key) => [key, canonicalize((item as Record<string, unknown>)[key])]));
+    }
+    return item;
+  };
+  return JSON.stringify(canonicalize(value));
+}
+
 /** Applies one action once per client action id and advances revision atomically. */
 export async function mutateFlow(db: Firestore, input: { userId: string; projectId: string; actionId: string; action: FlowAction }): Promise<DirectorFlow> {
   const project = flowRef(db, input.projectId);
@@ -105,7 +122,7 @@ export async function mutateFlow(db: Firestore, input: { userId: string; project
     const [projectSnap, actionSnap, latestActions] = await Promise.all([transaction.get(project), transaction.get(actionRef), transaction.get(latestActionQuery)]);
     if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) throw new FlowStoreError("not_found");
     if (actionSnap.exists) {
-      if (JSON.stringify(actionSnap.get("action")) !== JSON.stringify(input.action)) throw new FlowStoreError("invalid_action");
+      if (canonicalStringify(actionSnap.get("action")) !== canonicalStringify(input.action)) throw new FlowStoreError("invalid_action");
       return DirectorFlowSchema.parse(actionSnap.get("result"));
     }
     const parsed = DirectorFlowSchema.safeParse(projectSnap.get("flow"));
@@ -120,7 +137,7 @@ export async function mutateFlow(db: Firestore, input: { userId: string; project
     const next = DirectorFlowSchema.parse({ ...candidate, revision: before.revision + 1 });
     transaction.update(project, { flow: next });
     transaction.set(readinessRef, { flowRevision: next.revision }, { merge: true });
-    transaction.create(actionRef, { result: next, previous: before, action: input.action, actionType: input.action.type, revision: next.revision, createdAt: Date.now() });
+    transaction.create(actionRef, { result: next, previous: before, action: JSON.parse(canonicalStringify(input.action)), actionType: input.action.type, revision: next.revision, createdAt: Date.now() });
     return next;
   });
 }

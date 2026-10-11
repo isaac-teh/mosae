@@ -112,6 +112,15 @@ describe("Character Picker", () => {
       moves: [{ faceId: "f-kid-2", personId: "p-kid" }],
       proposalId: "plan-1",
     });
+    expect(boundary.mutateProjectFlow).toHaveBeenCalledTimes(1);
+    expect(boundary.mutateProjectFlow.mock.calls[0]?.[1]).toMatchObject({
+      type: "batch",
+      actions: expect.arrayContaining([
+        expect.objectContaining({ type: "person", personId: "p-dad", skipped: true }),
+        expect.objectContaining({ type: "person", personId: "p-kid", name: "Mia" }),
+        expect.objectContaining({ type: "move-photo", faceId: "f-kid-2", personId: "p-kid" }),
+      ]),
+    });
     expect(boundary.navigate).toHaveBeenCalledWith({ path: "/review-moments", params: { planId: "plan-2" } });
   });
 

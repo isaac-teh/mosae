@@ -17,13 +17,34 @@ describe("project flow record (emulator)", () => {
     const projectId = crypto.randomUUID();
     await adminDb.doc(`projects/${projectId}`).set({ userId: "owner" });
     await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "a1", action: { type: "story-answer", answer: "Our trip", storySummary: "Japan", mentionedPeople: ["Mia"] } });
+    const unansweredSummary = await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "a1-optional", action: { type: "story-answer", answer: "Our trip", storySummary: undefined, mentionedPeople: ["Mia"] } });
+    expect(await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "a1-optional", action: { mentionedPeople: ["Mia"], answer: "Our trip", type: "story-answer" } })).toEqual(unansweredSummary);
     const named = await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "a2", action: { type: "person", personId: "p1", name: "Mia", role: "child", confirmed: true } });
-    const replay = await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "a2", action: { type: "person", personId: "p1", name: "Wrong", role: "other" } });
-    expect(named.revision).toBe(2);
+    const replay = await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "a2", action: { confirmed: true, role: "child", name: "Mia", personId: "p1", type: "person" } });
+    expect(named.revision).toBe(3);
     expect(replay).toEqual(named);
     const moved = await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "a3", action: { type: "manual-shot", personId: "p1", shotId: "s1", included: true } });
-    expect(moved.revision).toBe(3);
+    expect(moved.revision).toBe(4);
     expect(moved.people[0]?.manualShotAdds).toEqual(["s1"]);
+  });
+
+  it("applies a batch in one revision and replays it idempotently", async () => {
+    const projectId = crypto.randomUUID();
+    await adminDb.doc(`projects/${projectId}`).set({ userId: "owner" });
+    const action = { type: "batch" as const, actions: [
+      { type: "person" as const, personId: "a", name: "Alex", role: "parent", confirmed: true },
+      { type: "person" as const, personId: "b", name: "Emma", role: "child", confirmed: true },
+      { type: "move-photo" as const, faceId: "f1", personId: "b" },
+    ] };
+    const batch = await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "batch1", action });
+    expect(batch.revision).toBe(1);
+    expect(batch.people.find((person) => person.personId === "b")?.faceIds).toEqual(["f1"]);
+    const replay = await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "batch1", action: { actions: [
+      { confirmed: true, role: "parent", name: "Alex", personId: "a", type: "person" },
+      { confirmed: true, role: "child", name: "Emma", personId: "b", type: "person" },
+      { personId: "b", faceId: "f1", type: "move-photo" },
+    ], type: "batch" } });
+    expect(replay).toEqual(batch);
   });
 
   it("undoes the latest action while advancing the revision", async () => {

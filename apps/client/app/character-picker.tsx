@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FocusChip } from "@/components/ds";
+import type { FlowAction } from "@mosae/contracts";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
 import { useStoryFlow } from "@/lib/storyFlow";
@@ -194,13 +195,14 @@ export default function CharacterPickerScreen() {
         ...(merges.length ? { merges } : {}),
         ...(planId ? { proposalId: planId } : {}),
       });
-      for (const person of kept) await mutateProjectFlow(projectId, { type: "person", personId: person.personId, name: person.name.trim() || null, role: person.role, confirmed: true, skipped: person.excluded });
+      const flowActions: Exclude<FlowAction, { type: "batch" }>[] = kept.map((person) => ({ type: "person", personId: person.personId, name: person.name.trim() || null, role: person.role, confirmed: true, skipped: person.excluded }));
       for (const merge of merges) {
         const source = cast?.people.find((person) => person.personId === merge.fromPersonId);
-        await mutateProjectFlow(projectId, { type: "person", personId: merge.fromPersonId, name: source?.name ?? null, role: source?.role ?? "other", confirmed: true });
-        await mutateProjectFlow(projectId, { type: "merge", personId: merge.fromPersonId, targetPersonId: merge.toPersonId });
+        flowActions.push({ type: "person", personId: merge.fromPersonId, name: source?.name ?? null, role: source?.role ?? "other", confirmed: true });
+        flowActions.push({ type: "merge", personId: merge.fromPersonId, targetPersonId: merge.toPersonId });
       }
-      for (const move of moves) await mutateProjectFlow(projectId, { type: "move-photo", faceId: move.faceId, personId: move.personId });
+      for (const move of moves) flowActions.push({ type: "move-photo", faceId: move.faceId, personId: move.personId });
+      if (flowActions.length) await mutateProjectFlow(projectId, { type: "batch", actions: flowActions });
       // Confirming revises the plan, so the next screen must be shown the
       // version that came back — not the one we started from.
       if (afterFilm === "true") { setRemakePlanId(result.proposalId ?? planId); setRemakeOffer(true); }
