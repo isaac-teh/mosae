@@ -4,6 +4,9 @@ import { castSummary } from "../cast/castSummary.js";
 import { safeParseTimeline } from "@mosae/contracts";
 import { MODELS } from "../gemini/pricing.js";
 import { estimateUsd } from "../gemini/client.js";
+import { buildCandidates } from "./buildCandidates.js";
+import { holdsFor } from "./brief.js";
+import { readFileSync } from "node:fs";
 
 describe("applyUserOrder", () => {
   const clips = ["m1", "m2", "m3"].map((itemId) => ({ itemId }));
@@ -252,6 +255,37 @@ describe("runCompose — collages", () => {
 });
 
 describe("runCompose — founder video coverage rules", () => {
+  it("keeps the directing-comparison speech segments complete under video-share pressure", async () => {
+    const fixture = JSON.parse(readFileSync(new URL("./fixtures/speech-boundaries.json", import.meta.url), "utf8")) as {
+      segments: Array<{ shotId: string; startSec: number; endSec: number; text: string }>;
+    };
+    for (const [index, segment] of fixture.segments.entries()) {
+      const itemId = `speech-${index}`;
+      const shotId = segment.shotId;
+      const proposal = makeProposal({
+        moments: [{ id: itemId, shotId, kind: "video", previewInSec: segment.startSec, previewOutSec: segment.endSec, title: "Speech", description: "", rationale: "" }],
+        chapters: [{ id: "speech-chapter", title: "Speech", summary: "", momentIds: [itemId] }],
+        constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
+      });
+      const assets = new Map([[itemId, { kind: "video" as const, assetId: shotId, analysis: {
+        shots: [{ startSec: segment.startSec, endSec: segment.endSec, description: "Complete spoken sentence", role: "A_ROLL", quality: 1, usable: true }],
+        transcript: [{ startSec: segment.startSec, endSec: segment.endSec, text: segment.text }],
+      } }]]);
+      const candidate = buildCandidates([{ index: 0, itemIds: [itemId] }], assets, holdsFor("reflective"), 6, "reflective").find((entry) => entry.kind === "video" && entry.hasSpeech)!;
+      const result = await runCompose(makeJob({ proposal, durationId: "1m", cadenceId: "reflective" }), makeDeps({
+        assets,
+        generateStructured: async () => ({ clips: [{ candidateId: candidate.candidateId, transition: "crossfade", audio: "keep" }], musicCues: [] }),
+      }));
+      if (!result.ok) throw new Error(result.reasons.join("; "));
+      const clip = result.timeline.videoClips.find((entry) => "source" in entry && entry.source.kind === "video");
+      if (!clip || !("source" in clip) || clip.source.kind !== "video") throw new Error("speech clip missing from final timeline");
+      expect(clip.source.sourceInSec).toBeLessThanOrEqual(segment.startSec + 0.15);
+      expect(clip.source.sourceOutSec).toBeGreaterThanOrEqual(segment.endSec - 0.15);
+      expect(clip.durationSec).toBeLessThanOrEqual(8.15);
+      expect(clip.transitionIn?.kind).toBe("cut");
+    }
+  });
+
   it("keeps all five videos in a 12-second playful Short even when coverage exceeds half the cut", async () => {
     const videoLengths = [6.08, 6, 8.08, 50.05, 6.08];
     const videos = videoLengths.map((length, index) => ({ id: `video-${index}`, shotId: `shot-video-${index}`, kind: "video" as const, previewInSec: 0, previewOutSec: length, title: `Video ${index}`, description: "", rationale: "" }));

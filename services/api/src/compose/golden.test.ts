@@ -69,7 +69,7 @@ describe("golden composition", () => {
   it("keeps every source when minimum video coverage exceeds the 50% cap", async () => {
     const result = await compose();
     if (!result.ok) throw new Error(result.reasons.join("; "));
-    expect(result.droppedPicks).toEqual([]);
+    expect(result.droppedPicks.some((reason) => /video share cap exceeded .* preserve complete speech/.test(reason))).toBe(true);
     const included = new Set(result.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.shotId) : [clip.source.shotId]));
     expect(included).toEqual(new Set(["shot-arrival", "shot-talking", "shot-water", "shot-dusk"]));
     const videoSec = result.timeline.videoClips.filter((clip) => "source" in clip && clip.source.kind === "video").reduce((sum, clip) => sum + clip.durationSec, 0);
@@ -175,7 +175,7 @@ describe("golden composition", () => {
     expect(generateStructured).toHaveBeenCalledTimes(1);
   });
 
-  it("gives each clip the overlap its own transitionIn declares", async () => {
+  it("keeps transitions outside the complete spoken segment", async () => {
     // `transitionIn` is the transition INTO a clip. m-talking and m-dusk declare
     // crossfades and are the clips pulled back over their predecessors;
     // m-water declares a cut and sits flush. Before the fix each declaration
@@ -190,21 +190,23 @@ describe("golden composition", () => {
     const boundary = (out: typeof arrival, incoming: typeof arrival) =>
       Number(((out.startSec + out.durationSec) - incoming.startSec).toFixed(6));
 
-    expect(talking.transitionIn?.kind).toBe("crossfade");
-    expect(boundary(arrival, talking)).toBeCloseTo(0.5);
+    expect(talking.transitionIn?.kind).toBe("cut");
+    expect(boundary(arrival, talking)).toBeCloseTo(0);
+    if (!("source" in talking) || talking.source.kind !== "video") throw new Error("talking clip missing video source");
+    expect(talking.source).toMatchObject({ sourceInSec: 2.9, sourceOutSec: 8.1 });
     expect(water.transitionIn?.kind).toBe("cut");
     expect(boundary(dusk, water)).toBeCloseTo(0);
   });
 
-  it("lands within 10% of the length it was fitted to", async () => {
+  it("allows a share-cap overage when preserving complete speech requires it", async () => {
     const timeline = await composeOrThrow();
     // Minimum video coverage can exceed the share cap; both source clips remain.
-    expect(timeline.durationSec).toBeCloseTo(15);
+    expect(timeline.durationSec).toBeCloseTo(17.2);
   });
 
   it("burns in the model's text overlay and ducks the music under speech or loud peaks", async () => {
     const timeline = await composeOrThrow();
-    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 11, endSec: 15 }]);
+    expect(timeline.captions).toEqual([{ text: "Into the water", startSec: 13.2, endSec: 17.2 }]);
 
     const music = timeline.audioClips.find((clip) => clip.role === "music");
     const ambient = timeline.audioClips.find((clip) => clip.role === "ambient");

@@ -16,6 +16,7 @@ import { applyArc, orderByChronology, spreadVideoClips, type ClipTime } from "./
 import { loadCollageReview, placeCollages, type CollageReview, type CollageSource } from "./placeCollages.js";
 import { DIRECTING_RULES, fadeOutSec } from "./directingRules.js";
 import { MODELS } from "../gemini/pricing.js";
+import { findSpeechBoundaryViolations, repairSpeechBoundaries } from "./speechBoundaries.js";
 
 export function applyUserOrder<T extends { itemId: string }>(clips: T[], momentOrder: string[] | undefined, chapterOf: Map<string, number>): T[] {
   if (!momentOrder?.length) return clips;
@@ -439,7 +440,7 @@ export async function runCompose(
   const paceMinimum = ({ tender: 4, reflective: 4, playful: 2, energetic: 2, celebratory: 3 } as const)[job.cadenceId];
   if (videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6) {
     fittedClips = fittedClips.map((clip) => {
-      if (clip.kind !== "video") return clip;
+      if (clip.kind !== "video" || clip.hasSpeech) return clip;
       const inSec = clip.sourceInSec ?? 0;
       const currentLength = (clip.sourceOutSec ?? inSec) - inSec;
       const minimum = Math.min(currentLength, paceMinimum);
@@ -457,10 +458,26 @@ export async function runCompose(
     .reduce((sum, clip) => sum + Math.min(paceMinimum, Math.max(0, (clip.sourceOutSec ?? 0) - (clip.sourceInSec ?? 0))), 0);
   const coverageExceedsCap = usablePrimarySources.size > 0 && [...usablePrimarySources].every((source) => representedPrimarySources.has(source))
     && coverageMinimumSeconds > fittedFilmLength(fittedClips) * 0.5 + 1e-6;
+  // Optional multi-moment clips are the first to go under cap pressure.
+  if (videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6) {
+    fittedClips = fittedClips.filter((clip) => {
+      const drop = clip.kind === "video" && candidateById.get(clip.candidateId)?.isExtraMoment;
+      if (drop) videoShareDrops.push(`${clip.itemId}: optional extra dropped to preserve complete speech`);
+      return !drop;
+    });
+  }
   if (coverageExceedsCap) fittedClips = fittedClips.filter((clip) => clip.kind !== "video" || !candidateById.get(clip.candidateId)?.isExtraMoment);
   while (fittedClips.some(c => c.kind === "video") && videoSeconds() > fittedFilmLength(fittedClips) * 0.5 + 1e-6) {
     if (coverageExceedsCap) break;
-    const loser = fittedClips.filter(c => c.kind === "video").sort((a, b) => (a.windowScore ?? 0) - (b.windowScore ?? 0) || a.candidateId.localeCompare(b.candidateId))[0]!;
+    // Silent picture can be removed; complete speech is never shortened or
+    // discarded solely to satisfy a soft share cap.
+    const removable = fittedClips.filter(c => c.kind === "video" && !c.hasSpeech && candidateById.get(c.candidateId)?.isExtraMoment);
+    if (!removable.length) {
+      const overage = videoSeconds() - fittedFilmLength(fittedClips) * 0.5;
+      videoShareDrops.push(`video share cap exceeded by ${overage.toFixed(2)}s to preserve complete speech`);
+      break;
+    }
+    const loser = removable.sort((a, b) => (a.windowScore ?? 0) - (b.windowScore ?? 0) || a.candidateId.localeCompare(b.candidateId))[0]!;
     fittedClips = fittedClips.filter(c => c !== loser);
     videoShareDrops.push(`${loser.itemId}: video share limit`);
   }
@@ -486,6 +503,18 @@ export async function runCompose(
       if (candidate.kind === "photo") candidate.minHoldSec = Math.min(candidate.minHoldSec ?? DIRECTING_RULES.shortTierMinSec, DIRECTING_RULES.shortTierMinSec);
     }
   }
+
+  // Keep a crossfade outside speech: an overlap at either edge can hide the
+  // picture while the sentence is still being delivered.
+  fittedClips = fittedClips.map((clip, index, all) => {
+    const touchesSpeech = clip.kind === "video" && clip.hasSpeech
+      || all[index - 1]?.kind === "video" && all[index - 1]?.hasSpeech;
+    if (clip.kind === "video" && clip.hasSpeech && clip.transition === "crossfade"
+      || touchesSpeech && clip.transition === "crossfade") {
+      return { ...clip, transition: "cut" };
+    }
+    return clip;
+  });
 
   // Every clip must name a shot the renderer can resolve to a file. A moment id
   // is not one, so a moment with no shot is a failure here rather than a film
@@ -652,17 +681,24 @@ export async function runCompose(
   };
 
   const droppedPicks = [...dropped.map((drop) => drop.reason), ...duplicateDropReasons, ...videoShareDrops, ...noWindowDrops];
-  const issues = validateTimeline(withCollages, validationCtx);
+  const transcriptByShot = new Map<string, import("./buildCandidates.js").TranscriptSegment[]>();
+  for (const [itemId, asset] of deps.assets) {
+    if (asset.kind === "video" && asset.analysis?.transcript) transcriptByShot.set(shotIdByMoment.get(itemId) ?? itemId, asset.analysis.transcript);
+  }
+  const speechIssues = findSpeechBoundaryViolations(withCollages, transcriptByShot).map(v => ({ path: `videoClips[${v.clipId}].source.${v.edge}`, message: `source ${v.edge} ${v.boundarySec}s splits transcript segment [${v.segment.startSec},${v.segment.endSec}]`, severity: "fixable" as const }));
+  const issues = [...validateTimeline(withCollages, validationCtx), ...speechIssues];
 
   let final = withCollages;
   if (issues.length > 0) {
     // One repair pass, deterministic only. A second pass is a loop in disguise.
-    const repaired = repairOnce(withCollages, issues, validationCtx);
+    let repaired = repairOnce(withCollages, issues, validationCtx);
     if (!repaired.ok) {
       return { ok: false, reasons: [`validation failed: ${repaired.reasons.join("; ")}`] };
     }
 
-    const secondIssues = validateTimeline(repaired.timeline, validationCtx);
+    repaired = { ok: true, timeline: repairSpeechBoundaries(repaired.timeline, transcriptByShot) };
+
+    const secondIssues = [...validateTimeline(repaired.timeline, validationCtx), ...findSpeechBoundaryViolations(repaired.timeline, transcriptByShot).map(v => ({ path: `videoClips[${v.clipId}].source.${v.edge}`, message: `source ${v.edge} still splits transcript segment`, severity: "fixable" as const }))];
     if (secondIssues.length > 0) {
       return { ok: false, reasons: [`repair did not fix all issues: ${secondIssues.map(i => i.message).join("; ")}`] };
     }

@@ -4,7 +4,7 @@
   "mode": "memory",
   "aspect": "9:16",
   "fps": 30,
-  "durationSec": 15,
+  "durationSec": 17.2,
   "chapters": [
     {
       "title": "Getting there",
@@ -12,7 +12,7 @@
     },
     {
       "title": "The water",
-      "startSec": 7
+      "startSec": 9.2
     }
   ],
   "videoClips": [
@@ -35,13 +35,13 @@
         "kind": "video",
         "shotId": "shot-talking",
         "sourceInSec": 2.9,
-        "sourceOutSec": 6.9
+        "sourceOutSec": 8.1
       },
-      "startSec": 3.5,
-      "durationSec": 4,
+      "startSec": 4,
+      "durationSec": 5.2,
       "transitionIn": {
-        "kind": "crossfade",
-        "durationSec": 0.5
+        "kind": "cut",
+        "durationSec": 0
       }
     },
     {
@@ -50,11 +50,11 @@
         "kind": "photo",
         "shotId": "shot-dusk"
       },
-      "startSec": 7,
+      "startSec": 9.2,
       "durationSec": 4,
       "transitionIn": {
-        "kind": "crossfade",
-        "durationSec": 0.5
+        "kind": "cut",
+        "durationSec": 0
       }
     },
     {
@@ -65,7 +65,7 @@
         "sourceInSec": 3.9,
         "sourceOutSec": 7.9
       },
-      "startSec": 11,
+      "startSec": 13.2,
       "durationSec": 4,
       "transitionIn": {
         "kind": "cut",
@@ -80,10 +80,10 @@
         "kind": "asset",
         "assetId": "shot-talking",
         "sourceInSec": 2.9,
-        "sourceOutSec": 6.9
+        "sourceOutSec": 8.1
       },
       "role": "speech",
-      "startSec": 3.5,
+      "startSec": 4,
       "gainDb": 0,
       "fadeInSec": 0,
       "fadeOutSec": 0
@@ -97,7 +97,7 @@
         "sourceOutSec": 7.9
       },
       "role": "ambient",
-      "startSec": 11,
+      "startSec": 13.2,
       "gainDb": -10.46,
       "fadeInSec": 0,
       "fadeOutSec": 0
@@ -108,20 +108,20 @@
         "kind": "soundtrack",
         "soundtrackId": "soundtrack-dusk",
         "sourceInSec": 0,
-        "sourceOutSec": 15
+        "sourceOutSec": 17.2
       },
       "role": "music",
       "startSec": 0,
       "gainDb": -13.98,
-      "fadeInSec": 0.75,
+      "fadeInSec": 0.86,
       "fadeOutSec": 1
     }
   ],
   "captions": [
     {
       "text": "Into the water",
-      "startSec": 11,
-      "endSec": 15
+      "startSec": 13.2,
+      "endSec": 17.2
     }
   ]
 }

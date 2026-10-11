@@ -1,0 +1,23 @@
+{
+  "source": "directing-comparison speech-inputs.json",
+  "segments": [
+    {
+      "shotId": "aroll-3",
+      "startSec": 0.83,
+      "endSec": 5.08,
+      "text": "It's Monday here in Minneapolis, Minnesota for Super Bowl 52."
+    },
+    {
+      "shotId": "aroll-4",
+      "startSec": 0,
+      "endSec": 8,
+      "text": "It's day two out here at Super Bowl 52 in Minneapolis, Minnesota, and today we're talking air security with Air Marine Operations."
+    },
+    {
+      "shotId": "aroll-7",
+      "startSec": 0,
+      "endSec": 4.54,
+      "text": "U.S. Customs and Border Protection's count down to kickoff, 48 hours until game time."
+    }
+  ]
+}

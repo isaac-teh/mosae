@@ -18,6 +18,8 @@ export interface Candidate {
   minHoldSec?: number;
   maxHoldSec?: number;
   hasSpeech?: boolean;
+  /** Complete transcript segments covered by this legal source window. */
+  speechSegments?: TranscriptSegment[];
   windowScore?: number;
   highlightScore?: number;
   /** Additional strong beat from a source after one primary clip is represented. */
@@ -161,14 +163,26 @@ export function buildCandidates(
           const speechInShot = transcript.filter(s => s.endSec > shot.startSec && s.startSec < shot.endSec);
           const probe = bestWindow(shot, Math.min(maxLength, duration), { speech: speechInShot });
           const target = sameScene ? Math.min(DIRECTING_RULES.videoMinClipSec, duration) : Math.max(Math.min(DIRECTING_RULES.videoMinClipSec, duration), videoTargetLength(cadence, duration, probe?.score ?? 0));
-          const window = bestWindow(shot, target, { speech: speechInShot });
+          let window = bestWindow(shot, target, { speech: speechInShot });
+          // A scoring window can straddle one edge of a transcript segment.
+          // When it does, use the complete sentence as the candidate, provided
+          // it fits the directing rule's eight-second speech allowance.
+          if (window) {
+            const splitSegments = speechInShot.filter(s =>
+              window!.inSec > s.startSec + 0.15 && window!.inSec < s.endSec - 0.15
+              || window!.outSec > s.startSec + 0.15 && window!.outSec < s.endSec - 0.15);
+            const complete = splitSegments
+              .filter(s => s.startSec >= shot.startSec - 0.01 && s.endSec <= shot.endSec + 0.01 && s.endSec - s.startSec <= 8)
+              .sort((a, b) => (b.endSec - b.startSec) - (a.endSec - a.startSec))[0];
+            if (complete) window = { inSec: complete.startSec, outSec: complete.endSec, score: scoreWindow(shot, complete.startSec, complete.endSec) };
+          }
           if (!window) continue;
           const hasSpeech = speechInShot.some(s => s.startSec >= window.inSec - 0.01 && s.endSec <= window.outSec + 0.01);
           const score = window.score;
           const highlightScore = Math.max(0, ...(shot.highlights ?? []).filter(h => h.endSec > window.inSec && h.startSec < window.outSec).map(h => h.score));
           const signalStep = shot.signals?.stepSec ?? 0.25;
           const loudPeak = Math.max(0, ...(shot.signals?.loud ?? []).filter((_, i) => shot.startSec + i * signalStep < window.outSec && shot.startSec + (i + 1) * signalStep > window.inSec));
-          out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${window.inSec}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: window.inSec, outSec: window.outSec, lengthSec: Number((window.outSec - window.inSec).toFixed(2)), hasSpeech, windowScore: score, highlightScore, loudPeak, description: `${shot.role === 'A_ROLL' ? 'speech to camera: ' : ''}${shot.description || ''}`.slice(0, 160) });
+          out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${window.inSec}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: window.inSec, outSec: window.outSec, lengthSec: Number((window.outSec - window.inSec).toFixed(2)), hasSpeech, speechSegments: speechInShot.filter(s => s.startSec >= window.inSec - 0.01 && s.endSec <= window.outSec + 0.01), windowScore: score, highlightScore, loudPeak, description: `${shot.role === 'A_ROLL' ? 'speech to camera: ' : ''}${shot.description || ''}`.slice(0, 160) });
           if (sameScene) { added++; break; }
           // Emit other explicitly strong, distinct moments from the same shot.
           // Signals alone can select the primary window, but never authorize extras.
@@ -181,7 +195,7 @@ export function buildCandidates(
             if (!(extraOut > extraIn) || speechInShot.some((s) => (extraIn > s.startSec + 0.01 && extraIn < s.endSec - 0.01) || (extraOut > s.startSec + 0.01 && extraOut < s.endSec - 0.01))) continue;
             if (Math.max(0, Math.max(extraIn, window.inSec) - Math.min(extraOut, window.outSec)) < 3) continue;
             const extraScore = scoreWindow(shot, extraIn, extraOut);
-            out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${extraIn.toFixed(2)}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: Number(extraIn.toFixed(2)), outSec: Number(extraOut.toFixed(2)), lengthSec: Number(extraLength.toFixed(2)), hasSpeech: false, windowScore: extraScore, highlightScore: highlight.score, isExtraMoment: true, loudPeak: 0, description: `${shot.description || ''}`.slice(0, 160) });
+            out.push({ candidateId: `${itemId}#s${shots.indexOf(shot)}@${extraIn.toFixed(2)}c${chapter.index}`, itemId, kind: 'video', chapterIndex: chapter.index, inSec: Number(extraIn.toFixed(2)), outSec: Number(extraOut.toFixed(2)), lengthSec: Number(extraLength.toFixed(2)), hasSpeech: false, speechSegments: [], windowScore: extraScore, highlightScore: highlight.score, isExtraMoment: true, loudPeak: 0, description: `${shot.description || ''}`.slice(0, 160) });
           }
           if (++added >= perItem) break;
         }
@@ -201,6 +215,7 @@ export function buildCandidates(
             outSec: range.outSec,
             lengthSec: Number((range.outSec - range.inSec).toFixed(2)),
             hasSpeech: range.hasSpeech,
+            speechSegments: range.hasSpeech ? transcript.filter(s => s.startSec >= range.inSec - 0.01 && s.endSec <= range.outSec + 0.01) : [],
             description: `${shot.role === 'A_ROLL' ? 'speech to camera: ' : ''}${shot.description || ''}`.slice(0, 160),
           });
           added++;
