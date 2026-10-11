@@ -14,7 +14,7 @@ import type { Timeline, StoryProposal, CadenceId } from "@mosae/contracts";
 import type { Candidate, Asset } from "./buildCandidates.js";
 import { applyArc, orderByChronology, spreadVideoClips, type ClipTime } from "./chronology.js";
 import { loadCollageReview, placeCollages, type CollageReview, type CollageSource } from "./placeCollages.js";
-import { DIRECTING_RULES, fadeOutSec } from "./directingRules.js";
+import { DIRECTING_RULES, budgetSlotCount, fadeOutSec, momentScore } from "./directingRules.js";
 import { MODELS } from "../gemini/pricing.js";
 import { findSpeechBoundaryViolations, repairSpeechBoundaries } from "./speechBoundaries.js";
 
@@ -355,6 +355,32 @@ export async function runCompose(
   const uniqueAssembledClips = assembledClips.filter((clip) => !duplicateClipIds.has(clip.candidateId));
   const eligibleCandidates = candidates.filter((candidate) => !duplicateClipIds.has(candidate.candidateId));
 
+  // Choose boundary locks from existing analysis only. Emotion is inferred
+  // from key-moment/mood proxies already folded into keyMomentScore; no new AI input.
+  const usablePhotos = eligibleCandidates.filter((candidate) => candidate.kind === "photo");
+  const firstChapter = Math.min(...eligibleCandidates.map((candidate) => candidate.chapterIndex));
+  const lastChapter = Math.max(...eligibleCandidates.map((candidate) => candidate.chapterIndex));
+  const rankMoment = (candidate: Candidate) => {
+    const asset = deps.assets.get(candidate.itemId);
+    return momentScore({ quality: asset?.keyMomentScore, emotion: asset?.keyMomentScore,
+      energy: candidate.highlightScore ?? candidate.windowScore, peopleRelevance: 0,
+      intentMatch: candidate.description.toLowerCase().split(/\W+/).filter((word) => word.length > 3 && job.proposal.summary.toLowerCase().includes(word)).length ? 1 : 0 });
+  };
+  const openerCandidate = eligibleCandidates.filter((candidate) => candidate.chapterIndex === firstChapter)
+    .sort((a, b) => Number(b.kind === "video" && (b.highlightScore ?? 0) >= DIRECTING_RULES.videoHighlightBoundaryMin) - Number(a.kind === "video" && (a.highlightScore ?? 0) >= DIRECTING_RULES.videoHighlightBoundaryMin) || rankMoment(b) - rankMoment(a) || a.itemId.localeCompare(b.itemId))[0];
+  const closerCandidate = eligibleCandidates.filter((candidate) => candidate.chapterIndex === lastChapter)
+    .sort((a, b) => rankMoment(b) - rankMoment(a) || a.itemId.localeCompare(b.itemId))[0];
+  const scored = eligibleCandidates.map((candidate) => ({ candidate, score: rankMoment(candidate) }));
+  const median = [...scored].sort((a, b) => a.score - b.score)[Math.floor(scored.length / 2)]?.score ?? 0;
+  const peakCandidate = scored.filter(({ candidate, score }) => candidate !== openerCandidate && candidate !== closerCandidate && score >= median + DIRECTING_RULES.peakMedianMargin)
+    .sort((a, b) => b.score - a.score || a.candidate.itemId.localeCompare(b.candidate.itemId))[0]?.candidate;
+  const lockedIds = new Set([openerCandidate?.itemId, peakCandidate?.itemId, closerCandidate?.itemId].filter((id): id is string => !!id));
+  for (const candidate of [openerCandidate, peakCandidate, closerCandidate]) {
+    if (!candidate || uniqueAssembledClips.some((clip) => clip.itemId === candidate.itemId)) continue;
+    uniqueAssembledClips.push({ ...candidate, order: uniqueAssembledClips.length + 1, transition: "cut", audio: "mute",
+      ...(candidate.kind === "photo" ? { holdSec: holdsFor(job.cadenceId).base } : { sourceInSec: candidate.inSec, sourceOutSec: candidate.outSec, hasSpeech: candidate.hasSpeech }) });
+  }
+
   const holds = holdsFor(job.cadenceId);
   const durationCompleteClips = completeDurationMaterial(
     uniqueAssembledClips,
@@ -363,7 +389,7 @@ export async function runCompose(
     hiddenShotIds,
     new Set(job.proposal.constraints.deselectedMomentIds ?? []),
     new Set(job.proposal.constraints.excludedShotIds ?? []),
-    job.proposal.constraints.mustIncludeMomentIds,
+    [...new Set([...job.proposal.constraints.mustIncludeMomentIds, ...lockedIds])],
     targetSec,
     holds.max,
     holds.base,
@@ -377,7 +403,27 @@ export async function runCompose(
   // boundaries → fitDuration.
   const timeOf = job.timeOf ?? new Map<string, ClipTime>();
   const chapterOf = job.chapterOf ?? new Map<string, number>();
-  const chronological = orderByChronology(durationCompleteClips, timeOf);
+  // Budget photos by comfortable holds; all usable primary videos get their
+  // one source slot first. Locked story moments are exempt from overflow.
+  const videoClipsForBudget = durationCompleteClips.filter((clip) => clip.kind === "video");
+  const photoClipsForBudget = durationCompleteClips.filter((clip) => clip.kind === "photo");
+  const photoSlots = Math.max(0, budgetSlotCount(targetSec - videoClipsForBudget.reduce((sum, clip) => sum + (clip.lengthSec ?? 0), 0), holdsFor(job.cadenceId).base));
+  const orderedPhotos = [...photoClipsForBudget].sort((a, b) => Number(lockedIds.has(b.itemId)) - Number(lockedIds.has(a.itemId)) || rankMoment(b) - rankMoment(a) || (timeOf.get(a.itemId)?.chapter ?? 0) - (timeOf.get(b.itemId)?.chapter ?? 0) || a.itemId.localeCompare(b.itemId));
+  const retainedPhotos = orderedPhotos.filter((clip, index) => lockedIds.has(clip.itemId) || index < photoSlots);
+  const budgeted = [...videoClipsForBudget, ...retainedPhotos];
+  const chronological = orderByChronology(budgeted, timeOf);
+  const peakIndex = peakCandidate ? chronological.findIndex((clip) => clip.itemId === peakCandidate.itemId) : -1;
+  if (peakIndex >= 0) {
+    chronological.forEach((clip, index) => {
+      if (clip.kind !== "photo" || lockedIds.has(clip.itemId)) return;
+      const progress = Math.min(1, index / Math.max(1, peakIndex));
+      clip.holdSec = Number((holdsFor(job.cadenceId).base * (1 - DIRECTING_RULES.buildTightening * progress)).toFixed(2));
+    });
+  }
+  if (closerCandidate?.kind === "photo") {
+    const closerClip = chronological.find((clip) => clip.itemId === closerCandidate.itemId);
+    if (closerClip?.holdSec != null) closerClip.holdSec = Number((closerClip.holdSec * (1 + DIRECTING_RULES.closerHoldBoost)).toFixed(2));
+  }
   const arc = applyArc(chronological, timeOf);
   let selectedClips = arc.clips;
   let castReasons: string[] = arc.reasons;
@@ -419,7 +465,8 @@ export async function runCompose(
     selectedClips = selectedClips.map((clip) => pinned.has(clip.itemId) ? clip : ordered[cursor++]!);
   }
 
-  selectedClips = spreadVideoClips(selectedClips, timeOf, (clip) => deps.assets.get(clip.itemId)?.assetId ?? clip.itemId);
+  // Keep the selected story beats at their capture positions. Video sharing is
+  // handled below without reordering this chronology.
 
   // Stage 5: fitDuration — adjust photo holds to target duration
   const { clips: initiallyFittedClips, notes: fitNotes, targetSec: fittedTargetSec } = fitDuration(

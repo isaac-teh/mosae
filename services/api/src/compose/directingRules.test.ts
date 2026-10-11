@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collageCountRange, collagePlacementOptions, deterministicPlacement, DIRECTING_RULES, fadeOutSec, photoBaseDuration, photoHoldRange, requestedCollageCount, videoTargetLength } from "./directingRules.js";
+import { budgetSlotCount, collageCountRange, collagePlacementOptions, deterministicPlacement, DIRECTING_RULES, fadeOutSec, momentScore, photoBaseDuration, photoHoldRange, requestedCollageCount, videoTargetLength } from "./directingRules.js";
 
 describe("deterministic directing rules", () => {
   it.each([1, 2, 3, 4, 5, 6])("uses photo-count base pace for %i photos", (n) => expect(photoBaseDuration(n, "playful")).toBeCloseTo(1 + 0.2 * n));
@@ -24,10 +24,16 @@ describe("deterministic directing rules", () => {
     expect(requestedCollageCount(60, "lots")).toBe(3);
   });
   it("lists all permitted one, two and three-collage positions", () => {
-    expect(collagePlacementOptions(8, 1)).toEqual([[0], [7]]);
-    expect(collagePlacementOptions(8, 2)).toEqual([[0, 1], [0, 7], [6, 7]]);
-    expect(collagePlacementOptions(8, 3)).toEqual([[0, 1, 7], [0, 1, 4], [0, 6, 7], [4, 6, 7]]);
+    expect(collagePlacementOptions(8, 1)).toEqual([[0], [1], [2], [3], [4], [5], [6], [7]]);
+    expect(collagePlacementOptions(8, 2, [0, 4, 7])).toEqual([[1, 2], [2, 3], [5, 6]]);
     expect(deterministicPlacement(8, 2, "same")).toEqual(deterministicPlacement(8, 2, "same"));
+  });
+  it("budgets slots at the comfortable hold and scores moments deterministically", () => {
+    expect(budgetSlotCount(60)).toBe(22);
+    expect(budgetSlotCount(60, 2)).toBe(30);
+    expect(momentScore({ quality: 1, emotion: 1, energy: 1, peopleRelevance: 1, intentMatch: 1 })).toBeCloseTo(1);
+    expect(DIRECTING_RULES.photoHolds.memory).toEqual([2.2, 3.2]);
+    expect(DIRECTING_RULES.photoHolds.lively).toEqual([1.5, 2.2]);
   });
   it("limits collage photo capacity and minimum hold stretching", () => {
     expect(DIRECTING_RULES.collageMaxPhotos).toBe(6);

@@ -67,14 +67,7 @@ export function spreadVideoClips<T extends DistributableClip>(clips: T[], timeOf
 }
 
 export function applyArc<T extends { itemId: string }>(clips: T[], timeOf: Map<string, ClipTime>): { clips: T[]; reasons: string[] } {
-  const chapters = [...new Set(clips.map((c) => timeOf.get(c.itemId)?.chapter ?? 0))];
-  if (chapters.length < 2) return { clips, reasons: [] };
-  const out: T[] = [];
-  chapters.forEach((chapter, index) => {
-    const group = clips.filter((c) => (timeOf.get(c.itemId)?.chapter ?? 0) === chapter);
-    if (index === chapters.length - 1 || group.length < 2) { out.push(...group); return; }
-    const peak = group.reduce((best, clip) => (timeOf.get(clip.itemId)?.score ?? 0) > (timeOf.get(best.itemId)?.score ?? 0) ? clip : best);
-    out.push(...group.filter((clip) => clip !== peak), peak);
-  });
-  return { clips: out, reasons: ["Each day builds to its best moment."] };
+  // The story arc is expressed through holds; moving a selected peak to a
+  // chapter boundary falsifies capture chronology and breaks its lock.
+  return { clips, reasons: [] };
 }
