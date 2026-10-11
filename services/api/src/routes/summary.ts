@@ -28,7 +28,7 @@ export function summaryRouter(deps: { db: Firestore; auth?: RequestHandler }): R
       let hasPlan = typeof proposalId === "string";
       if (!hasPlan) hasPlan = !(await project.collection("storyProposals").limit(1).get()).empty;
       const manifest = await gatherSummaryUpload(deps.db, req.params.projectId, assets);
-      return res.json(summarise(assets, hasPlan, { ...manifest, projectStatus: projectSnap.get("status") }));
+      return res.json({ ...summarise(assets, hasPlan, { ...manifest, projectStatus: projectSnap.get("status") }), flowRevision: typeof projectSnap.get("flow.revision") === "number" ? projectSnap.get("flow.revision") : 0 });
     } catch (error) {
       console.error("summary route failed", error);
       return res.status(500).json({ error: "internal" });

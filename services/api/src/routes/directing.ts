@@ -24,12 +24,14 @@ import { chooseFocus } from "../cast/focus.js";
 import { leaveOutShots } from "../cast/leaveOut.js";
 import type { Cast, CastPerson } from "../cast/types.js";
 import { z } from "zod";
+import { FlowMutationRequestSchema } from "@mosae/contracts";
 import type { PhotoAnalysis } from "../domain/understanding.js";
 import { buildDerivativePath } from "../domain/ids.js";
 import { getStorage } from "firebase-admin/storage";
 import { getAdminApp } from "../firebase/admin.js";
 import { firebaseThumbnailUrlStore } from "../ingest/objectStore.js";
 import type { ThumbnailUrlStore } from "../ingest/objectStore.js";
+import { FlowStoreError, mutateFlow, readFlow } from "../store/flowStore.js";
 
 type DirectingProject = Project & { currentProposalId?: string | null };
 
@@ -200,6 +202,18 @@ export function directingRouter(deps: {
 
   const ownedProject = async (userId: string, projectId: string): Promise<DirectingProject | null> =>
     getOwnedProject(deps.db, userId, projectId) as Promise<DirectingProject | null>;
+
+  router.get("/:projectId/flow", async (req, res) => {
+    try { res.json({ flow: await readFlow(deps.db, res.locals.userId, req.params.projectId) }); }
+    catch (error) { if (error instanceof FlowStoreError) { res.status(error.code === "not_found" ? 404 : 400).json({ error: error.code }); return; } handleError(res, error); }
+  });
+
+  router.post("/:projectId/flow/actions", async (req, res) => {
+    const body = FlowMutationRequestSchema.safeParse(req.body);
+    if (!body.success) { res.status(400).json({ error: "invalid_action" }); return; }
+    try { res.json({ flow: await mutateFlow(deps.db, { userId: res.locals.userId, projectId: req.params.projectId, ...body.data }) }); }
+    catch (error) { if (error instanceof FlowStoreError) { res.status(error.code === "not_found" ? 404 : 400).json({ error: error.code }); return; } handleError(res, error); }
+  });
 
   router.post("/:projectId/story-intents", async (req, res) => {
     const userId: string = res.locals.userId;
@@ -503,7 +517,7 @@ export function directingRouter(deps: {
       });
       const bodySchema = z.strictObject({
         people: z.array(personSchema), focus: z.array(z.string().min(1)),
-        moves: z.array(z.strictObject({ faceId: z.string().min(1), personId: z.string().min(1) })).optional(),
+        moves: z.array(z.strictObject({ faceId: z.string().min(1), personId: z.string().min(1).nullable() })).optional(),
         merges: z.array(z.strictObject({ fromPersonId: z.string().min(1), toPersonId: z.string().min(1) })).optional(),
         /** The current plan: when given, the cast's leave-out and focus are applied to it straight away. */
         proposalId: z.string().min(1).optional(),
@@ -517,7 +531,7 @@ export function directingRouter(deps: {
       const { people, moves = [], merges = [] } = parsed.data;
       let { focus } = parsed.data;
       const mergeTargets = new Map(merges.map(({ fromPersonId, toPersonId }) => [fromPersonId, toPersonId]));
-      if ([...people.map((person) => person.personId), ...focus, ...moves.map((move) => move.personId), ...merges.flatMap((merge) => [merge.fromPersonId, merge.toPersonId])].some((id) => !validId(id)) ||
+      if ([...people.map((person) => person.personId), ...focus, ...moves.flatMap((move) => move.personId ? [move.personId] : []), ...merges.flatMap((merge) => [merge.fromPersonId, merge.toPersonId])].some((id) => !validId(id)) ||
           merges.some(({ fromPersonId, toPersonId }) => fromPersonId === toPersonId || !current.people.some((person) => person.personId === fromPersonId) || !people.some((person) => person.personId === toPersonId) || people.some((person) => person.personId === fromPersonId)) ||
           new Set(merges.map(({ fromPersonId }) => fromPersonId)).size !== merges.length ||
           focus.some((id) => people.some((person) => person.personId === id && person.excluded)) ||
@@ -545,7 +559,7 @@ export function directingRouter(deps: {
       const peopleById = new Map<string, CastPerson>();
       const subjectsByShot = shots.map((shot) => photoRoles((shot.analysis?.faces ?? []).map((face) => face.bbox)));
       const facesByShot: NonNullable<PhotoAnalysis["faces"]>[] = shots.map((shot, shotIndex) => (shot.analysis?.faces ?? []).map((face, faceIndex) => {
-        const originalId = moved.get(face.faceId) ?? face.characterId;
+        const originalId = moved.has(face.faceId) ? moved.get(face.faceId) ?? undefined : face.characterId;
         const mappedPersonId = originalId ? mergeTargets.get(originalId) ?? originalId : undefined;
         const personId = mappedPersonId && !removedShotOwners.get(shot.shotId)?.has(mappedPersonId) ? mappedPersonId : undefined;
         const { characterId: _characterId, name: _name, role: _role, ...faceFields } = face;

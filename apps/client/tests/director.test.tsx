@@ -734,6 +734,36 @@ describe("Director chat", () => {
     expect(chat.state.items.some((item) => item.kind === "person")).toBe(true);
   });
 
+  it("ignores an older flow snapshot after the story answer is acknowledged", async () => {
+    setup();
+    let reads = 0;
+    const old = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [] };
+    mocks.repo.getFlow = vi.fn(async () => { reads++; return old; });
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => ({ revision: 1, story: { answer: action.answer, storySummary: "Japan trip", mentionedPeople: [] }, people: [] }));
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await waitFor(() => expect(reads).toBeGreaterThan(0));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "you" && item.text === "A trip")).toBe(true));
+    expect(chat.state.step).toBe("people");
+    expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
+  });
+
+  it("routes a typed name correction through person interpretation to the rename mutation", async () => {
+    setup({ interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(true));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    await waitFor(() => expect(chat.state.step).toBe("people"));
+    await act(async () => chat.actions.send("Actually her name is Emma"));
+    await waitFor(() => expect(mocks.repo.interpret).toHaveBeenCalled());
+    await act(async () => chat.actions.confirmInterpret());
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Emma" })]) })));
+  });
+
   it("keeps a named person when a later refresh returns a stale unnamed row", async () => {
     setup();
     let chat!: ReturnType<typeof useDirectorChat>;

@@ -3,7 +3,7 @@ import { ensureSignedIn } from "../auth";
 import { ApiError } from "../apiClient";
 import { getCoreConfig } from "../config";
 import { getFirestoreClient } from "../firebase";
-import { normalizeDirectionRecommendation, parseTimeline, type EditOp } from "@mosae/contracts";
+import { normalizeDirectionRecommendation, parseTimeline, type DirectorFlow, type FlowAction, type EditOp } from "@mosae/contracts";
 import type { ChatInterpretRequest, DirectorPerson, EditorMediaItem, FilmEdits, FilmListItem, FilmRender, ProjectResumeState, StoryRepository } from "./repository";
 import type { ProjectSummary } from "../chat/types";
 import type { DirectionOptions, Film, EditInterpretation } from "./types";
@@ -17,7 +17,7 @@ import {
 type RecordData = Record<string, unknown>;
 
 export type ApiStoryRepositoryDeps = {
-  watchReadiness?(projectId: string, onChange: () => void, onError: (error: unknown) => void): () => void;
+  watchReadiness?(projectId: string, onChange: (snapshot?: { flowRevision?: number }) => void, onError: (error: unknown) => void): () => void;
   listenDocument(path: string, waitForExists?: boolean): Promise<unknown | null>;
   /**
    * Resolves with the first existing snapshot the predicate accepts. A document
@@ -64,7 +64,7 @@ const firebaseDeps: ApiStoryRepositoryDeps = {
     let active = true;
     void ensureSignedIn().then(() => {
       if (!active) return;
-      unsubscribe = onSnapshot(doc(getFirestoreClient(), "projects", projectId, "readiness", "summary"), () => onChange(), onError);
+      unsubscribe = onSnapshot(doc(getFirestoreClient(), "projects", projectId, "readiness", "summary"), (snapshot) => onChange(snapshot.data() as { flowRevision?: number }), onError);
     }).catch(onError);
     return () => { active = false; unsubscribe?.(); };
   },
@@ -415,6 +415,14 @@ export function createApiStoryRepository(
       };
     },
     getSummary: async (id) => await deps.request("GET", `/api/projects/${encodeURIComponent(id)}/summary`) as ProjectSummary,
+    getFlow: async (id) => {
+      const response = record(await deps.request("GET", `/api/projects/${encodeURIComponent(id)}/flow`), "flow response");
+      return record(response.flow, "flow") as unknown as DirectorFlow;
+    },
+    mutateFlow: async (id, actionId, action) => {
+      const response = record(await deps.request("POST", `/api/projects/${encodeURIComponent(id)}/flow/actions`, { actionId, action }), "flow response");
+      return record(response.flow, "flow") as unknown as DirectorFlow;
+    },
     interpret: async (id, req) => await deps.request("POST", `/api/projects/${encodeURIComponent(id)}/chat/interpret`, req) as { reply: string; change: { kind: string; [key: string]: unknown } },
     getPeople: async (id): Promise<DirectorPerson[] | null> => {
       const root = `projects/${id}`;

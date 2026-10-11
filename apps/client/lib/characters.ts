@@ -1,4 +1,17 @@
 import { ensureSignedIn, getCoreConfig } from "@mosae/core";
+import type { DirectorFlow, FlowAction } from "@mosae/contracts";
+let flowActionCounter = 0;
+
+export async function mutateProjectFlow(projectId: string, action: FlowAction): Promise<DirectorFlow> {
+  const user = await ensureSignedIn();
+  const res = await fetch(`${getCoreConfig().apiBaseUrl}/api/projects/${encodeURIComponent(projectId)}/flow/actions`, {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` },
+    body: JSON.stringify({ actionId: `${Date.now()}-${++flowActionCounter}`, action }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Unable to save this change");
+  return json.flow as DirectorFlow;
+}
 
 /** A single photo-face crop awaiting (or holding) a character identity. */
 export type FaceAssignment = {
@@ -105,7 +118,7 @@ export type ConfirmCastInput = {
   people: { personId: string; role: CastRole; name?: string; excluded?: boolean }[];
   /** Empty lets the director choose the focus from who is most often the subject. */
   focus: string[];
-  moves?: { faceId: string; personId: string }[];
+  moves?: { faceId: string; personId: string | null }[];
   merges?: { fromPersonId: string; toPersonId: string }[];
   /** The plan on screen; the cast is applied to it and a revised version comes back. */
   proposalId?: string;

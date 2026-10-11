@@ -67,6 +67,14 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
 }
 
 describe("createApiStoryRepository", () => {
+  it("reads revisioned flow and posts idempotent actions", async () => {
+    const request = vi.fn().mockResolvedValueOnce({ flow: { revision: 4 } }).mockResolvedValueOnce({ flow: { revision: 5 } });
+    const repository = createApiStoryRepository({ projectId: "project-1" }, dependencies({ request }));
+    await expect(repository.getFlow!("project-1")).resolves.toEqual({ revision: 4 });
+    await expect(repository.mutateFlow!("project-1", "action-1", { type: "person", personId: "p1", name: "Emma" })).resolves.toEqual({ revision: 5 });
+    expect(request).toHaveBeenNthCalledWith(1, "GET", "/api/projects/project-1/flow");
+    expect(request).toHaveBeenNthCalledWith(2, "POST", "/api/projects/project-1/flow/actions", { actionId: "action-1", action: { type: "person", personId: "p1", name: "Emma" } });
+  });
   it("subscribes to the owner readiness summary document and refreshes on changes", async () => {
     const unsubscribe = vi.fn();
     const changed = vi.fn();

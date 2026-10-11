@@ -98,6 +98,7 @@ export function canConfirmStory(input: ChatInput): boolean {
 }
 
 export function deriveChat(input: ChatInput): ChatState {
+  if (input.flow?.story.answer && !input.intent) input = { ...input, intent: { text: input.flow.story.answer }, storySummary: input.flow.story.storySummary ?? undefined, mentionedPeople: input.flow.story.mentionedPeople };
   const items: ChatItem[] = [];
   let step: ChatState["step"] = "occasion";
   let confirmed: ChatState["confirmed"] = 0;

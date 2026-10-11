@@ -27,6 +27,11 @@ const base = (): ChatInput => ({
 const kinds = (items: ChatItem[]) => items.map((item) => item.kind);
 
 describe("deriveChat state table", () => {
+  it("uses an answered flow snapshot to enter the people step before a plan exists", () => {
+    const state = deriveChat({ ...base(), intent: null, plan: null, people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 2, sampleShotIds: [], days: [] }], peopleConfirmed: false, flow: { revision: 1, story: { answer: "Our Japan trip", storySummary: "Japan trip", mentionedPeople: ["Mia"] }, people: [] } });
+    expect(state.step).toBe("people");
+    expect(state.items.some((item) => item.kind === "you" && item.text === "Our Japan trip")).toBe(true);
+  });
   it("renders each mid-flow question with its own reply and only the latest pending turn as thinking", () => {
     const state = deriveChat({
       ...base(), intent: null,

@@ -19,6 +19,7 @@ function reportFailure(cause: unknown): string {
 function mergeSummary(current: ProjectSummary | null, next: ProjectSummary): ProjectSummary {
   if (!current) return next;
   return { ...current, ...next,
+    flowRevision: Math.max(current.flowRevision ?? 0, next.flowRevision ?? 0),
     processed: { ingested: Math.max(current.processed.ingested, next.processed.ingested), understood: Math.max(current.processed.understood, next.processed.understood), faces: Math.max(current.processed.faces, next.processed.faces) },
     ready: { ...next.ready, summary: current.ready.summary || next.ready.summary, faces: current.ready.faces || next.ready.faces, story: current.ready.story || next.ready.story, plan: current.ready.plan || next.ready.plan, film: current.ready.film || next.ready.film },
   };
@@ -55,7 +56,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const summaryRef = useRef(summary);
   summaryRef.current = summary;
   const [error, setError] = useProjectState<string | null>(projectEpoch, currentProjectEpoch, null);
-  const [pendingInterpret, setPendingInterpret] = useProjectState<{ reply: string; text: string; mentionedPeople?: string[]; storySummary?: string } | null>(projectEpoch, currentProjectEpoch, null);
+  const [pendingInterpret, setPendingInterpret] = useProjectState<{ reply: string; text: string; mentionedPeople?: string[]; storySummary?: string; change?: { kind: string; personId?: string | null; name?: string; role?: string } } | null>(projectEpoch, currentProjectEpoch, null);
   const [saving, setSaving] = useProjectState(projectEpoch, currentProjectEpoch, false);
   const [momentState, setMomentState] = useProjectState<Record<string, "keep" | "leave">>(projectEpoch, currentProjectEpoch, {});
   const [directionOptions, setDirectionOptions] = useProjectState<DirectionOptions | null>(projectEpoch, currentProjectEpoch, null);
@@ -86,6 +87,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const planFailed = useRef(false);
   const resumeProjectId = useRef<string | null>(null);
   const peopleEdits = useRef(new Map<string, { name: string | null; role: string | null; skipped: boolean }>());
+  const flowRevision = useRef(0);
+  const flowSnapshot = useRef(input.flow);
+  const actionSequence = useRef(0);
   const skipPeopleForNow = useRef(false);
   const mounted = useRef(true);
   const generationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,6 +117,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     planFailed.current = false;
     resumeProjectId.current = null;
     peopleEdits.current.clear();
+    flowRevision.current = 0;
+    flowSnapshot.current = undefined;
+    actionSequence.current = 0;
     skipPeopleForNow.current = false;
     compositionStartedAt.current = null;
     activeFilmId.current = null;
@@ -167,16 +174,23 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const requestId = ++refreshRequest.current;
     const stillValid = () => mounted.current && isCurrentProject() && refreshEpoch === uploadEpoch.current && requestId === refreshRequest.current;
     const startedWhilePending = previousLocalPending.current;
-    const result = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId)]).catch(cause => {
+    const result = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId), repository.getFlow?.(projectId) ?? Promise.resolve(null)]).catch(cause => {
       if (stillValid()) throw cause;
       return null;
     });
     if (!result || !stillValid()) return;
-    const [nextSummary, people] = result;
+    const [nextSummary, people, nextFlow] = result;
+    const acceptedFlow = nextFlow && nextFlow.revision >= flowRevision.current ? nextFlow : flowSnapshot.current;
+    if (acceptedFlow) { flowRevision.current = Math.max(flowRevision.current, acceptedFlow.revision); flowSnapshot.current = acceptedFlow; }
     if (!startedWhilePending && !previousLocalPending.current && refreshEpoch === uploadEpoch.current) acceptedSummaryEpoch.current = refreshEpoch;
     const mergedSummary = mergeSummary(summaryRef.current, nextSummary);
     summaryRef.current = mergedSummary;
     setSummary(mergedSummary);
+    if (acceptedFlow) setInput((current) => ({ ...current, flow: acceptedFlow,
+      intent: current.intent ?? (acceptedFlow.story.answer ? { text: acceptedFlow.story.answer } : null),
+      ...(acceptedFlow.story.storySummary ? { storySummary: acceptedFlow.story.storySummary } : {}),
+      ...(acceptedFlow.story.mentionedPeople.length ? { mentionedPeople: acceptedFlow.story.mentionedPeople } : {}),
+      people: current.people?.map((person) => { const stored = acceptedFlow.people.find((entry) => entry.personId === person.personId); return stored ? { ...person, name: person.name ?? stored.name, role: person.role ?? stored.role, skipped: person.skipped || stored.skipped } : person; }) ?? current.people }));
     if (activeFilmId.current) pollFilmRef.current(activeFilmId.current);
     const mapped = people?.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
@@ -207,7 +221,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         setInput((current) => ({
           ...current,
           summary: mergedSummary,
-          intent: resume.proposalId || hasGeneration ? { text: confirmedStory } : current.intent,
+          intent: current.intent ?? (resume.proposalId || hasGeneration ? { text: confirmedStory } : null),
           people: mergedSummary.ready.faces ? mapped?.map((person) => {
             const local = current.people?.find((item) => item.personId === person.personId);
             return local?.name || local?.skipped ? { ...person, ...local } : person;
@@ -331,6 +345,18 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   }, [repository, projectId, currentProjectEpoch, directionOptions, recoverDirectionOptions]);
   pollFilmRef.current = (filmId) => { void pollFilm(filmId); };
 
+  const commitFlowAction = async (action: import("@mosae/contracts").FlowAction) => {
+    if (!repository.mutateFlow) return null;
+    const actionId = `${projectId}-${Date.now()}-${++actionSequence.current}`;
+    const snapshot = await repository.mutateFlow(projectId, actionId, action);
+    if (snapshot.revision >= flowRevision.current) {
+      flowRevision.current = snapshot.revision;
+      flowSnapshot.current = snapshot;
+      setInput((current) => ({ ...current, flow: snapshot }));
+    }
+    return snapshot;
+  };
+
   const actions = {
     async resolveLateVideo(assetId: string, choice: "add" | "undo" | "dismiss") {
       const film = input.generation?.film;
@@ -361,6 +387,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const storyText = storyTextOverride ?? answer ?? pendingInterpret?.text ?? input.earlyOccasionAnswer ?? (summary?.country ? `${summary.country} trip` : summary?.places[0] || "Our story");
       setInput((current) => ({ ...current, intent: current.intent ?? { text: answer ?? input.earlyOccasionAnswer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
       try {
+        await commitFlowAction({ type: "story-answer", answer: answer ?? input.earlyOccasionAnswer ?? storyText, storySummary: storySummary ?? input.earlyOccasionStoryText ?? null, mentionedPeople: mentionedPeople ?? [] });
         const result = await repository.createPlan([storyText, ...input.notes].join("\n"), []);
         if (!isCurrentProject()) return;
         proposalId.current = result.planId;
@@ -380,7 +407,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       personSaving.current = true;
       setError(null);
       const people = input.people ?? [];
-      const roleValue = role === "My daughter" || role === "My son" ? "child" : role === "Skip" ? "other" : "parent";
+      const roleValue = role === "child" || role === "My daughter" || role === "My son" ? "child" : role === "other" || role === "Skip" ? "other" : "parent";
       const personName = name ?? (role === "Skip" ? undefined : role);
       const previousEdit = peopleEdits.current.get(personId);
       peopleEdits.current.set(personId, { name: role === "Skip" ? null : personName ?? null, role: roleValue, skipped: role === "Skip" });
@@ -397,6 +424,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       }
       setInput((current) => ({ ...current, people: updated, pendingResponse: "person" }));
       try {
+        await commitFlowAction({ type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, confirmed: role !== "Skip", skipped: role === "Skip" });
         const merge = duplicate?.mode === "automatic" ? [{ fromPersonId: personId, toPersonId: duplicate.personId }] : [];
         const castPeople = merge.length ? updated.filter((person) => person.personId !== personId) : updated;
         const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(merge.length ? { merges: merge } : {}), ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
@@ -660,11 +688,19 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const interpretedPeople = result.change.kind === "occasion" && Array.isArray(result.change.mentionedPeople)
           ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
         const storySummary = result.change.kind === "occasion" && typeof result.change.storyText === "string" ? result.change.storyText : undefined;
-        setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
+        setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}), ...(result.change.kind === "person" ? { change: result.change } : {}) });
       } catch (cause) { setError(reportFailure(cause)); }
       finally { interpretInFlight.current = false; }
     },
-    async confirmInterpret() { if (pendingInterpret) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary); },
+    async confirmInterpret() {
+      if (!pendingInterpret) return;
+      const change = pendingInterpret.change;
+      if (change?.kind === "person" && change.personId && change.name) {
+        setPendingInterpret(null);
+        return actions.setPerson(change.personId, change.role ?? "other", change.name);
+      }
+      if (pendingInterpret.mentionedPeople || pendingInterpret.storySummary) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary);
+    },
     answerOccasion(text: string, storyText?: string) {
       if (occasionSaving.current) return;
       const questionUploadComplete = state.items.find((item) => item.kind === "occasion-question")?.uploadComplete;
