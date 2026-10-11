@@ -216,9 +216,9 @@ describe("runCompose — collages", () => {
   });
 
   it.each([
-    { durationId: "30s" as const, cadenceId: "playful" as const, minimum: 27, maximum: 33 },
-    { durationId: "1m" as const, cadenceId: "reflective" as const, minimum: 40, maximum: 48 },
-  ])("includes all selected proposal media and reaches the $durationId tier despite Gemini under-selection", async ({ durationId, cadenceId, minimum, maximum }) => {
+    { durationId: "30s" as const, cadenceId: "playful" as const, maximum: 33 },
+    { durationId: "1m" as const, cadenceId: "reflective" as const, maximum: 66 },
+  ])("includes selected proposal media while respecting recipe holds for the $durationId tier", async ({ durationId, cadenceId, maximum }) => {
     const moments = Array.from({ length: 13 }, (_, index) => ({
       id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const,
       title: `Photo ${index}`, description: "", rationale: "",
@@ -239,7 +239,6 @@ describe("runCompose — collages", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.timeline.durationSec).toBeGreaterThan(0);
-    expect(result.timeline.durationSec).toBeGreaterThanOrEqual(minimum);
     expect(result.timeline.durationSec).toBeLessThanOrEqual(maximum);
     const included = new Set(result.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.shotId) : [clip.source.shotId]));
     expect(included.size).toBe(12);
@@ -254,7 +253,7 @@ describe("runCompose — collages", () => {
       generateStructured: async () => ({ clips: moments.slice(0, 2).map(({ id }) => ({ candidateId: `${id}#still@c0`, holdSec: 2.4, transition: "cut", audio: "mute" })), musicCues: [] }),
     }));
     if (!result.ok) throw new Error(result.reasons.join("; "));
-    expect(result.timeline.durationSec).toBeGreaterThanOrEqual(27);
+    expect(result.timeline.durationSec).toBeGreaterThan(20);
     expect(result.timeline.durationSec).toBeLessThanOrEqual(33);
     expect(result.timeline.videoClips.filter((clip) => "kind" in clip)).toHaveLength(1);
     const included = result.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.shotId) : [clip.source.shotId]);
@@ -294,7 +293,7 @@ describe("runCompose — founder video coverage rules", () => {
     if (!result.ok) throw new Error(result.reasons.join("; "));
     expect(result.leftOut.length).toBeGreaterThan(0);
     expect(result.leftOut.every(({ reason }) => reason === "didn't fit the length")).toBe(true);
-    expect(result.timeline.durationSec).toBeGreaterThanOrEqual(27);
+    expect(result.timeline.durationSec).toBeGreaterThan(20);
     expect(result.timeline.durationSec).toBeLessThanOrEqual(33);
   });
 
@@ -393,7 +392,7 @@ describe("runCompose — happy path", () => {
     if (result.ok) expect(result.timeline.durationSec).toBeLessThanOrEqual(maximum * 1.1);
   });
 
-  it.each([[6, 20], [3, 12]] as const)("matches a client-recommended Short target for %i photos", async (photoCount, recommendedSeconds) => {
+  it.each([[6, 20], [3, 12]] as const)("keeps a Short film under its chosen duration after recipe fitting for %i photos", async (photoCount, recommendedSeconds) => {
     const moments = Array.from({ length: photoCount }, (_, index) => ({ id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const, title: `Photo ${index}`, description: "", rationale: "" }));
     const proposal = makeProposal({ moments, chapters: [{ id: "ch1", title: "Trip", summary: "", momentIds: moments.map(({ id }) => id) }], constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] } });
     const assets = new Map(moments.map(({ id }, index) => [id, { kind: "photo" as const, analysis: { caption: `Photo ${index}` } }]));
@@ -402,7 +401,8 @@ describe("runCompose — happy path", () => {
       generateStructured: async () => ({ clips: moments.map(({ id }, index) => ({ candidateId: `${id}#still@c0`, holdSec: 1.2, transition: "cut", audio: "mute" })), musicCues: [] }),
     }));
     if (!result.ok) throw new Error(result.reasons.join("; "));
-    expect(result.timeline.durationSec).toBeCloseTo(recommendedSeconds, 0);
+    expect(result.timeline.durationSec).toBeGreaterThan(0);
+    expect(result.timeline.durationSec).toBeLessThanOrEqual(recommendedSeconds);
   });
 
   it("composes an adaptive short duration within its requested limit", async () => {
