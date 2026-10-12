@@ -62,3 +62,50 @@ export function collageGridRects(variant: CollageGridVariant, count: number): Co
   while (rects.length < count) splitLargest(rects, variant).forEach((item, i) => { rects[i] = item; });
   return rects;
 }
+
+/** Slot aspect ratios in rendered pixels (width / height), including the film frame shape. */
+export function collageSlotAspects(layoutId: string, variant: string, slotCount: number, frameAspect: number): number[] {
+  if (!(frameAspect > 0) || !Number.isInteger(slotCount) || slotCount < 1) return [];
+  if ((COLLAGE_GRID_VARIANTS as readonly { id: string }[]).some((item) => item.id === variant)) {
+    return collageGridRects(variant as CollageGridVariant, slotCount).map((rect) => frameAspect * rect.w / rect.h);
+  }
+  const wide = frameAspect > 1;
+  let cells: Array<{ w: number; h: number }>;
+  if (layoutId === "travel-story" && slotCount === 5) cells = wide
+    ? [{w:49,h:32},{w:49.5,h:65.5},{w:24,h:66.5},{w:23.5,h:32},{w:74.5,h:33}]
+    : [{w:65.5,h:32},{w:33,h:65.5},{w:32,h:66.5},{w:32,h:32},{w:66.5,h:33}];
+  else if (layoutId === "travel-mosaic" && slotCount === 8) cells = [{w:24,h:32},{w:24,h:32},{w:49,h:32},{w:49.5,h:32},{w:18,h:32},{w:24,h:33},{w:24,h:33},{w:49,h:33}];
+  else if (layoutId === "botanical-scrapbook") cells = slotCount <= 4 ? [{w:39,h:43},{w:41,h:39},{w:38.5,h:34},{w:38,h:40}].slice(0, slotCount) : Array.from({length:slotCount},()=>({w:39,h:25}));
+  else if (["photo-table","torn-paper","polaroid-garland","postcard-stack","route-map"].includes(layoutId)) return Array.from({length:slotCount},()=>frameAspect/(0.77*(wide?0.73:0.56)));
+  else {
+    const total = slotCount + Number(layoutId === "travel-mosaic");
+    const columns = total === 9 ? 3 : wide ? Math.min(4, Math.ceil(total / 2)) : Math.min(3, Math.ceil(Math.sqrt(total)));
+    const rows = Math.ceil(total / columns);
+    const titleOrder = layoutId === "travel-mosaic" ? Math.floor(total / 2) : -1;
+    return Array.from({length:slotCount},(_,i)=> {
+      const order = titleOrder >= 0 && i >= titleOrder ? i + 1 : i;
+      const row = Math.floor(order / columns), rowCount = Math.min(columns,total-row*columns);
+      return frameAspect*((100-2*(rowCount-1))/rowCount)/((100-2*(rows-1))/rows);
+    });
+  }
+  return cells.map(cell=>frameAspect*cell.w/cell.h);
+}
+
+/** Minimum total log-aspect mismatch; source order breaks equal-cost ties. */
+export function assignCollageSlots(sourceAspects: number[], slotAspects: number[]): number[] {
+  const n=Math.min(sourceAspects.length,slotAspects.length);
+  const memo=new Map<string,{cost:number; slots:number[]}>();
+  const solve=(sourceIndex:number,mask:number):{cost:number;slots:number[]}=>{
+    if(sourceIndex>=n)return {cost:0,slots:[]};
+    const key=`${sourceIndex}:${mask}`,cached=memo.get(key);if(cached)return cached;
+    let best={cost:Infinity,slots:[] as number[]};
+    for(let slotIndex=0;slotIndex<n;slotIndex++)if(!(mask&(1<<slotIndex))){
+      const next=solve(sourceIndex+1,mask|(1<<slotIndex));
+      const cost=Math.abs(Math.log(sourceAspects[sourceIndex]!/slotAspects[slotIndex]!))+next.cost;
+      if(cost<best.cost-1e-12)best={cost,slots:[slotIndex,...next.slots]};
+    }
+    memo.set(key,best);return best;
+  };
+  const result=solve(0,0).slots;
+  return [...result,...Array.from({length:sourceAspects.length-n},(_,index)=>n+index)];
+}

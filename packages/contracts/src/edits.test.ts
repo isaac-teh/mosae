@@ -179,13 +179,19 @@ describe("applyEdits", () => {
     if (!result.ok) expect(result.error).toContain("at most one video cell");
   });
 
-  it("stores normalized collage cell crop and resets it when the layout changes", () => {
+  it("stores dimensions when a collage photo is added or replaced", () => {
+    const replaced = apply([{ op: "replaceCollageSlot", clipId: "c1", slotId: "s1", shotId: "portrait", kind: "photo", width: 900, height: 1600 }]);
+    const clip = replaced.timeline.videoClips[3]!;
+    expect("kind" in clip ? clip.spec.slots[0] : null).toMatchObject({ shotId: "portrait", width: 900, height: 1600 });
+  });
+
+  it("preserves a user-set collage crop when the layout changes", () => {
     const cropped = apply([{ op: "setCollageCrop", clipId: "c1", slotId: "s1", crop: { x: 0.7, y: 0.2, scale: 2 } }]);
     const croppedClip = cropped.timeline.videoClips[3]!;
     expect("kind" in croppedClip ? croppedClip.spec.slots[0]?.crop : null).toEqual({ x: 0.7, y: 0.2, scale: 2 });
     const reset = apply([{ op: "setCollageCrop", clipId: "c1", slotId: "s1", crop: { x: 0.7, y: 0.2, scale: 2 } }, { op: "setCollageLayout", clipId: "c1", layoutId: "travel-mosaic" }]);
     const resetClip = reset.timeline.videoClips[3]!;
-    expect("kind" in resetClip ? resetClip.spec.slots[0]?.crop : null).toBeUndefined();
+    expect("kind" in resetClip ? resetClip.spec.slots[0] : null).toMatchObject({ crop: { x: 0.7, y: 0.2, scale: 2 }, manualCrop: true });
   });
 
   it("sets one complete collage spec atomically and retains clip duration", () => {

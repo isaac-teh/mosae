@@ -1,5 +1,5 @@
 import type { PhotoCrop } from "@mosae/contracts";
-import { COLLAGE_GRID_VARIANTS, collageGridRects } from "@mosae/contracts";
+import { collageSlotAspects } from "@mosae/contracts";
 
 export type FramingFace = { bbox: [number, number, number, number]; confidence?: number; characterId?: string; prominence?: string; faceVisible?: boolean };
 
@@ -19,38 +19,7 @@ export function cellAspect(frameAspect: number, rect: { w: number; h: number }):
 
 /** Match the grid cell geometry used by the shared collage layout helper. */
 export function collageCellAspect(layoutId: string, slotCount: number, slotIndex: number, frameAspect: number): number | undefined {
-  if (COLLAGE_GRID_VARIANTS.some(({ id }) => id === layoutId)) {
-    const rect = collageGridRects(layoutId as typeof COLLAGE_GRID_VARIANTS[number]["id"], slotCount)[slotIndex];
-    return rect ? cellAspect(frameAspect, rect) : undefined;
-  }
-  const wide = frameAspect > 1;
-  if (layoutId === "travel-mosaic" && slotCount === 8) {
-    const cells = [{ w: 24, h: 32 }, { w: 24, h: 32 }, { w: 49, h: 32 }, { w: 49.5, h: 32 }, { w: 18, h: 32 }, { w: 24, h: 33 }, { w: 24, h: 33 }, { w: 49, h: 33 }];
-    return cells[slotIndex] ? cellAspect(frameAspect, cells[slotIndex]!) : undefined;
-  }
-  if (layoutId === "travel-story" && slotCount === 5) {
-    const cells = wide
-      ? [{ w: 49, h: 32 }, { w: 49.5, h: 65.5 }, { w: 24, h: 66.5 }, { w: 23.5, h: 32 }, { w: 74.5, h: 33 }]
-      : [{ w: 65.5, h: 32 }, { w: 33, h: 65.5 }, { w: 32, h: 66.5 }, { w: 32, h: 32 }, { w: 66.5, h: 33 }];
-    return cells[slotIndex] ? cellAspect(frameAspect, cells[slotIndex]!) : undefined;
-  }
-  if (layoutId === "botanical-scrapbook") {
-    const cells = slotCount <= 4 ? [{ w: 39, h: 43 }, { w: 41, h: 39 }, { w: 38.5, h: 34 }, { w: 38, h: 40 }] : Array.from({ length: slotCount }, () => ({ w: 39, h: 25 }));
-    return cells[slotIndex] ? cellAspect(frameAspect, cells[slotIndex]!) : undefined;
-  }
-  if (["photo-table", "torn-paper", "polaroid-garland", "postcard-stack", "route-map"].includes(layoutId)) {
-    return frameAspect * (wide ? 1 / (0.77 * 0.73) : 1 / (0.77 * 0.56));
-  }
-  // Match SampleLayouts' row/column grid for the remaining layouts.
-  const hasTitle = layoutId === "travel-mosaic";
-  const total = slotCount + Number(hasTitle);
-  const columns = total === 9 ? 3 : wide ? Math.min(4, Math.ceil(total / 2)) : Math.min(3, Math.ceil(Math.sqrt(total)));
-  const rows = Math.ceil(total / columns);
-  const titleOrder = hasTitle ? Math.floor(total / 2) : -1;
-  const order = titleOrder >= 0 && slotIndex >= titleOrder ? slotIndex + 1 : slotIndex;
-  const row = Math.floor(order / columns);
-  const rowCount = Math.min(columns, total - row * columns);
-  return slotIndex >= 0 && slotIndex < slotCount ? frameAspect * ((100 - 2 * (rowCount - 1)) / rowCount) / ((100 - 2 * (rows - 1)) / rows) : undefined;
+  return collageSlotAspects(layoutId, layoutId, slotCount, frameAspect)[slotIndex];
 }
 
 /** Convert normalized face boxes to CSS object-position coordinates for cover-fit. */

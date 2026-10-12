@@ -10,6 +10,7 @@ import { getEditConversation, type EditConversationTurn } from "./editStore.js";
 export type EditSourceCandidate = {
   shotId: string; assetId: string; kind: "photo" | "video"; caption: string;
   personIds: string[]; sourceStartSec: number | null; sourceEndSec: number | null;
+  width?: number; height?: number;
 };
 export type EditContext = {
   scope: EditScope;
@@ -65,6 +66,8 @@ export async function loadEditContext(db: Firestore, userId: string, projectId: 
     shotId: shot.id, assetId: (shot as typeof working[number]).assetId, kind: shot.analysis!.kind,
     caption: (shot.analysis!.kind === "photo" ? shot.analysis!.caption : shot.analysis!.description).slice(0, 2000),
     personIds: shot.analysis!.kind === "photo" ? [...new Set((shot.analysis!.faces ?? []).flatMap(face => face.characterId && personIds.has(face.characterId) ? [face.characterId] : []))] : [],
+    ...(assetMap.get((shot as typeof working[number]).assetId)?.media?.width ? { width: assetMap.get((shot as typeof working[number]).assetId)!.media!.width } : {}),
+    ...(assetMap.get((shot as typeof working[number]).assetId)?.media?.height ? { height: assetMap.get((shot as typeof working[number]).assetId)!.media!.height } : {}),
     sourceStartSec: shot.sourceStartSec ?? null, sourceEndSec: shot.sourceEndSec ?? null,
   }));
   const timeline = generation.get("timeline") as Timeline | undefined;

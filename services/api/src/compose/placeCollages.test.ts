@@ -52,6 +52,19 @@ describe("placeCollages", () => {
     expect(result.durationSec).toBeLessThan(timeline.durationSec);
     expect(safeParseTimeline(result).ok).toBe(true);
   });
+  it("prefers a wide-top layout for one landscape and two portrait photos", () => {
+    const { timeline: base, sources } = fixture(["burst", "burst", "burst", "other", "other", "other"]);
+    const timeline = { ...base, aspect: "16:9" as const };
+    sources.set("clip-0", { ...sources.get("clip-0")!, width: 1600, height: 900 });
+    sources.set("clip-1", { ...sources.get("clip-1")!, width: 900, height: 1600 });
+    sources.set("clip-2", { ...sources.get("clip-2")!, width: 900, height: 1600 });
+    const result = placeCollages(timeline, sources, "orientation-choice", { combos: [
+      { layoutId: "grid-wide-top", motionId: "print-drop", verdict: "keep" },
+      { layoutId: "grid-three-columns", motionId: "print-drop", verdict: "keep" },
+    ] }, {}, 20);
+    const collage = collages(result)[0];
+    expect(collage && "kind" in collage ? collage.spec.layoutId : null).toBe("grid-wide-top");
+  });
   it("stretches a tierless four-photo collage under its own 6s cap", () => {
     const { timeline, sources } = fixture(["burst", "burst", "burst", "burst", "e4", "e5", "e6"]);
     const result = placeCollages(timeline, sources, "tierless-four-photo", review, { tierless: true }, 8);

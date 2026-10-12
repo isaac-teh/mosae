@@ -1,7 +1,9 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { GoogleAuth } from "google-auth-library";
 import { applyEdits, type EditOp, type Generation } from "@mosae/contracts";
+import type { ShotAnalysis } from "../domain/understanding.js";
 import { addSourceDimensions, resolveSources, type SourceDeps } from "../compose/resolveSources.js";
+import { fitCollageCrops } from "../compose/fitCollageCrops.js";
 import { failGeneration, markSaved, resetRender, setRenderProgress } from "../store/generationStore.js";
 import { throttleProgress } from "./throttleProgress.js";
 
@@ -282,6 +284,17 @@ async function renderEditRevision(
   let renderTimeline = applied.timeline;
   try {
     renderTimeline = await addSourceDimensions(applied.timeline, config.sources.loadAsset, task.projectId);
+    const slotShotIds = [...new Set(renderTimeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.flatMap((slot) => slot.shotId && !slot.manualCrop ? [slot.shotId] : []) : []))];
+    if (slotShotIds.length) {
+      const shotDocs = await config.db.getAll(...slotShotIds.map((shotId) => project.collection("shots").doc(shotId)));
+      const facesByShot = new Map<string, import("../compose/focalCrop.js").FramingFace[]>();
+      for (const shot of shotDocs) {
+        const analysis = shot.get("analysis") as ShotAnalysis | undefined;
+        if (analysis?.kind === "photo") facesByShot.set(shot.id, analysis.faces ?? []);
+      }
+      const focus = generation.settings.focus;
+      renderTimeline = fitCollageCrops(renderTimeline, facesByShot, new Set(focus && focus !== "family" ? [focus] : []));
+    }
     sources = await resolveSources(renderTimeline, config.sources, task.projectId, "render");
     if (config.signRead) sources = Object.fromEntries(await Promise.all(
       Object.entries(sources).map(async ([id, path]) => [id, await config.signRead!(path)] as const),

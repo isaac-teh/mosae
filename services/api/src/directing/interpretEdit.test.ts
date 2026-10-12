@@ -168,6 +168,27 @@ describe("interpretEdit", () => {
     }
   });
 
+  it("reassigns added photos to the slot whose shape best matches their orientation", async () => {
+    const collageTimeline: Timeline = { ...timeline, aspect: "16:9", schemaVersion: 2, videoClips: [{ kind: "collage", clipId: "collage", startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
+      layoutId: "grid-wide-top", motionId: "print-drop", effectId: null, seed: "s", durationSec: 6,
+      slots: [
+        { slotId: "portrait", shotId: "portrait", kind: "photo", width: 900, height: 1600 },
+        { slotId: "wide-a", shotId: "wide-a", kind: "photo", width: 1600, height: 900 },
+        { slotId: "wide-b", shotId: "wide-b", kind: "photo", width: 1600, height: 900 },
+      ],
+    } }] };
+    const groundedContext = { scope: { kind: "clip" as const, clipId: "collage" }, storyIntent: null, constraints: {}, people: [], selected: null,
+      candidates: [{ shotId: "wide-new", assetId: "asset", kind: "photo" as const, caption: "A lake", personIds: [], sourceStartSec: null, sourceEndSec: null, width: 1600, height: 900 }], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Add more collage", timeline: collageTimeline, groundedContext }, {
+      generate: async () => ({ kind: "edit", ops: [{ op: "addCollageSlot", clipId: "collage", slotId: "new-slot", shotId: "wide-new", kind: "photo" }] }),
+    });
+    expect(result.kind).toBe("edit");
+    if (result.kind === "edit") {
+      const specEdit = result.ops.find((op) => op.op === "setCollageSpec");
+      expect(specEdit && specEdit.op === "setCollageSpec" ? specEdit.spec.slots.map((slot) => slot.slotId) : []).toEqual(["wide-a", "portrait", "wide-b", "ai-slot-collage-1"]);
+    }
+  });
+
   it("selects an approved larger layout when an added collage photo exceeds capacity", async () => {
     const collageTimeline: Timeline = { ...timeline, schemaVersion: 2, videoClips: [{ kind: "collage", clipId: "collage", startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
       layoutId: "torn-paper", motionId: "print-drop", effectId: null, seed: "s", durationSec: 6,

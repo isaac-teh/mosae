@@ -15,8 +15,9 @@ mkdirSync(out,{recursive:true}); mkdirSync(resolve(out,"samples"),{recursive:tru
 function run(args){const r=spawnSync("npx",["remotion",...args],{cwd:packageRoot,stdio:"inherit",env:{...process.env,MOSAE_COLLAGE_STILL_PLACEHOLDERS:fallback?"1":"0"}});if(r.error)throw r.error;if(r.status!==0)process.exit(r.status??1);}
 const layouts=["photo-table","torn-paper","polaroid-garland","postcard-stack","route-map","travel-mosaic","travel-story","botanical-scrapbook","nine-photo-grid"];
 const samples=[["photo-table","stack-deal"],["torn-paper","print-drop"],["polaroid-garland","focus-relay"],["postcard-stack","stack-deal"],["route-map","stack-deal"],["travel-mosaic","print-drop"],["travel-story","focus-relay"],["botanical-scrapbook","tape-slap"],["nine-photo-grid","print-drop"]];
-for(const file of readdirSync(out))if(file.endsWith(".png")&&file!=="contact-sheet.png"&&!layouts.includes(file.slice(0,-4)))rmSync(resolve(out,file),{force:true});
+for(const file of readdirSync(out))if(file.endsWith(".png")&&file!=="contact-sheet.png"&&file!=="mixed-orientation.png"&&!layouts.includes(file.slice(0,-4)))rmSync(resolve(out,file),{force:true});
 for(const file of readdirSync(resolve(out,"samples")))if(file.endsWith(".mp4"))rmSync(resolve(out,"samples",file),{force:true});
+run(["still",entry,"Collage-mixed-orientation",resolve(out,"mixed-orientation.png"),"--frame=75",`--public-dir=${galleryPublic}`]);
 for(const layout of layouts){run(["still",entry,`Collage-${layout}`,resolve(out,`${layout}.png`),"--frame=125",`--public-dir=${publicDir}`]);}
 run(["still",entry,"CollageContactSheet",resolve(out,"contact-sheet.png"),"--frame=125",`--public-dir=${publicDir}`]);
 for(const [layout,motion] of samples)run(["render",entry,`Sample-${layout}`,resolve(out,"samples",`${layout}-${motion}.mp4`),"--codec=h264",`--public-dir=${publicDir}`]);

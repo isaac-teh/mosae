@@ -20,11 +20,11 @@ export const EditOpSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("setCollageLayout"), clipId, layoutId: z.string().min(1) }),
   z.strictObject({ op: z.literal("setCollageMotion"), clipId, motionId: z.string().min(1) }),
   z.strictObject({ op: z.literal("setCollageEffect"), clipId, effectId: z.string().min(1).nullable() }),
-  z.strictObject({ op: z.literal("replaceCollageSlot"), clipId, slotId: z.string().min(1), shotId, kind: z.enum(["photo", "video"]) }),
+  z.strictObject({ op: z.literal("replaceCollageSlot"), clipId, slotId: z.string().min(1), shotId, kind: z.enum(["photo", "video"]), width: positiveSeconds.optional(), height: positiveSeconds.optional() }),
   z.strictObject({ op: z.literal("setCollageCrop"), clipId, slotId: z.string().min(1), crop: z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), scale: z.number().min(1).max(4), rotationDeg: z.number().finite().min(-180).max(180).optional() }) }),
   z.strictObject({ op: z.literal("setPhotoCrop"), clipId, crop: z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), scale: z.number().min(1).max(4), rotationDeg: z.number().finite().min(-180).max(180).optional() }) }),
   z.strictObject({ op: z.literal("setCollageSpec"), clipId, spec: CollageSpecSchema }),
-  z.strictObject({ op: z.literal("addCollageSlot"), clipId, slotId: z.string().min(1), shotId, kind: z.enum(["photo", "video"]) }),
+  z.strictObject({ op: z.literal("addCollageSlot"), clipId, slotId: z.string().min(1), shotId, kind: z.enum(["photo", "video"]), width: positiveSeconds.optional(), height: positiveSeconds.optional() }),
   z.strictObject({ op: z.literal("removeCollageSlot"), clipId, slotId: z.string().min(1) }),
   z.strictObject({ op: z.literal("splitCollage"), clipId }),
   z.strictObject({ op: z.literal("setAspect"), aspect: z.enum(["9:16", "16:9"]) }),
@@ -267,13 +267,13 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         const layoutChange = op.op === "setCollageLayout" ? op : nextOp?.op === "setCollageLayout" && nextOp.clipId === op.clipId ? nextOp : null;
         const motionChange = op.op === "setCollageMotion" ? op : nextOp?.op === "setCollageMotion" && nextOp.clipId === op.clipId ? nextOp : null;
         const isLayoutMotionPair = Boolean(layoutChange && motionChange && ((op.op === "setCollageLayout" && nextOp?.op === "setCollageMotion") || (op.op === "setCollageMotion" && nextOp?.op === "setCollageLayout")));
-        const next = isLayoutMotionPair ? { ...spec, layoutId: layoutChange!.layoutId, motionId: motionChange!.motionId, slots: spec.slots.map((slot) => ({ ...slot, crop: undefined })) }
-          : op.op === "setCollageLayout" ? { ...spec, layoutId: op.layoutId, slots: spec.slots.map((slot) => ({ ...slot, crop: undefined })) }
+        const next = isLayoutMotionPair ? { ...spec, layoutId: layoutChange!.layoutId, motionId: motionChange!.motionId, slots: spec.slots.map((slot) => slot.manualCrop ? slot : ({ ...slot, crop: undefined })) }
+          : op.op === "setCollageLayout" ? { ...spec, layoutId: op.layoutId, slots: spec.slots.map((slot) => slot.manualCrop ? slot : ({ ...slot, crop: undefined })) }
           : op.op === "setCollageMotion" ? { ...spec, motionId: op.motionId }
           : op.op === "setCollageEffect" ? { ...spec, effectId: op.effectId }
-          : op.op === "replaceCollageSlot" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { slotId: slot.slotId, shotId: op.shotId, kind: op.kind } : slot) }
-          : op.op === "setCollageCrop" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { ...slot, crop: op.crop } : slot) }
-          : op.op === "addCollageSlot" ? { ...spec, slots: [...spec.slots, { slotId: op.slotId, shotId: op.shotId, kind: op.kind }] }
+          : op.op === "replaceCollageSlot" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { slotId: slot.slotId, shotId: op.shotId, kind: op.kind, ...(op.width !== undefined ? { width: op.width } : {}), ...(op.height !== undefined ? { height: op.height } : {}) } : slot) }
+          : op.op === "setCollageCrop" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { ...slot, crop: op.crop, manualCrop: true } : slot) }
+          : op.op === "addCollageSlot" ? { ...spec, slots: [...spec.slots, { slotId: op.slotId, shotId: op.shotId, kind: op.kind, ...(op.width !== undefined ? { width: op.width } : {}), ...(op.height !== undefined ? { height: op.height } : {}) }] }
           : { ...spec, slots: spec.slots.filter((slot) => slot.slotId !== op.slotId) };
         const changed = collageWithSpec(item.clip, next as CollageClip["spec"]);
         if (typeof changed === "string") return fail(changed);

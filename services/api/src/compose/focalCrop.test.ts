@@ -12,6 +12,17 @@ describe("focalCrop", () => {
     expect(left + visibleWidth).toBeGreaterThanOrEqual(0.2);
   });
 
+  it("keeps an edge face inside a rendered collage slot after cover crop", () => {
+    const frameAspect = 16 / 9;
+    const slotAspect = collageCellAspect("grid-tall-left", 3, 0, frameAspect)!;
+    const bbox: [number, number, number, number] = [0.24, 0.01, 0.68, 0.19];
+    const crop = focalCrop([face(bbox)], frameAspect, slotAspect)!;
+    const visibleWidth = slotAspect / frameAspect;
+    const visibleLeft = crop.x * (1 - visibleWidth);
+    expect(visibleLeft).toBeLessThanOrEqual(bbox[1]);
+    expect(visibleLeft + visibleWidth).toBeGreaterThanOrEqual(bbox[3]);
+  });
+
   it("centres the union of faces when it fits", () => {
     const crop = focalCrop([face([0.25, 0.35, 0.55, 0.45]), face([0.3, 0.48, 0.6, 0.62])], 16 / 9, 9 / 16)!;
     const visibleWidth = (9 / 16) / (16 / 9);
