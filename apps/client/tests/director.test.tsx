@@ -662,7 +662,8 @@ describe("Director chat", () => {
     await click("Me");
     await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
     await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
-    expect(host.querySelector('button[aria-label="Change"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Change"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="Change Noah"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Skip for now"]')).toBeNull();
     expect(hasText("Three people appear often in your moments. Who is this?")).toBe(true);
     expect(hasText("Who's this? They're in 212 of your moments.")).toBe(true);
@@ -1021,7 +1022,7 @@ describe("Director chat", () => {
     await act(async () => chat.actions.send("Rename Emma"));
     expect(chat.pendingInterpret?.change?.kind).toBe("person");
 
-    await act(async () => chat.actions.reopenPeople());
+    await act(async () => chat.actions.reopenPerson("person-1"));
     await waitFor(() => expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-1")).toBe(true));
     const interpretCalls = mocks.repo.interpret.mock.calls.length;
     await act(async () => chat.actions.send("Kara"));

@@ -485,11 +485,6 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       }
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
-    reopenPeople() {
-      const person = input.people?.find((entry) => !entry.skipped);
-      if (!person) return;
-      this.reopenPerson(person.personId);
-    },
     reopenPerson(personId: string) {
       const person = input.people?.find((entry) => entry.personId === personId && !entry.skipped);
       if (!person) return;
