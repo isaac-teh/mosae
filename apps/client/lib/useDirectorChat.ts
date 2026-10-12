@@ -445,6 +445,15 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       }
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
+    confirmPersonIdentity(personId: string) {
+      setInput((current) => ({ ...current, personIdentityConfirmedIds: [...new Set([...(current.personIdentityConfirmedIds ?? []), personId])] }));
+    },
+    reopenPeople() {
+      const person = input.people?.find((entry) => !entry.skipped);
+      if (!person) return;
+      peopleEdits.current.set(person.personId, { name: null, role: null, skipped: false });
+      setInput((current) => ({ ...current, people: (current.people ?? []).map((entry) => entry.personId === person.personId ? { ...entry, name: null } : entry), personIdentityConfirmedIds: (current.personIdentityConfirmedIds ?? []).filter((id) => id !== person.personId), peopleConfirmed: false, peopleSummaryConfirmed: undefined }));
+    },
     async resolvePersonMerge(eventId: string, samePerson: boolean) {
       const event = input.mergeEvents?.find(({ id }) => id === eventId);
       if (!event || personSaving.current) return;
@@ -692,19 +701,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const interpretedPeople = result.change.kind === "occasion" && Array.isArray(result.change.mentionedPeople)
           ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
         const storySummary = result.change.kind === "occasion" && typeof result.change.storyText === "string" ? result.change.storyText : undefined;
-        setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}), ...(result.change.kind === "person" ? { change: result.change } : {}) });
+        setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
       } catch (cause) { setError(reportFailure(cause)); }
       finally { interpretInFlight.current = false; }
     },
-    async confirmInterpret() {
-      if (!pendingInterpret) return;
-      const change = pendingInterpret.change;
-      if (change?.kind === "person" && change.personId && change.name) {
-        setPendingInterpret(null);
-        return actions.setPerson(change.personId, change.role ?? "other", change.name);
-      }
-      if (pendingInterpret.mentionedPeople || pendingInterpret.storySummary) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary);
-    },
+    async confirmInterpret() { if (pendingInterpret) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary); },
     answerOccasion(text: string, storyText?: string) {
       if (occasionSaving.current) return;
       const questionUploadComplete = state.items.find((item) => item.kind === "occasion-question")?.uploadComplete;

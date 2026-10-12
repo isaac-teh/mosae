@@ -274,18 +274,52 @@ describe("deriveChat state table", () => {
       { personId: "other", name: null, role: null, skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
     ], peopleConfirmed: false, plan: null });
     expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ kind: "mosae", text: "A Children's Day celebration for your son — lovely!" });
-    expect(state.items.find((item) => item.kind === "person-confirm")).toMatchObject({ personId: "son", label: "My son", text: "Is this your son?", sampleFaces });
+    expect(state.items.find((item) => item.kind === "person")).toMatchObject({ personId: "son", phase: "identify", questionText: "Is this the same person in all of these?", sampleFaces });
+  });
+
+
+  it("asks one detected person at a time, photo confirmation before their name", () => {
+    const first = { personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] };
+    const second = { personId: "p2", name: null, role: null, skipped: false, momentCount: 2, sampleShotIds: [], days: [] };
+    const state = deriveChat({ ...base(), intent: { text: "A trip" }, people: [first, second], peopleConfirmed: false, plan: null });
+    expect(state.items.find((item) => item.kind === "person")).toMatchObject({ personId: "p1", phase: "identify" });
+    const namedStep = deriveChat({ ...base(), intent: { text: "A trip" }, people: [{ ...first }, second], personIdentityConfirmedIds: ["p1"], peopleConfirmed: false, plan: null });
+    expect(namedStep.items.filter((item) => item.kind === "person")).toHaveLength(1);
+    expect(namedStep.items.find((item) => item.kind === "person")).toMatchObject({ personId: "p1", phase: "name", questionText: "What's their name?" });
+  });
+
+  it("keeps the story, per-person checks, summary, options, and preview in order", () => {
+    const people = [
+      { personId: "p1", name: null as string | null, role: "child", skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
+      { personId: "p2", name: null as string | null, role: "child", skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
+    ];
+    const story = deriveChat({ ...base(), people, peopleConfirmed: false, personIdentityConfirmedIds: [] });
+    expect(story.items.find((item) => item.id === "occasion-answer")?.kind).toBe("you");
+    expect(story.items.find((item) => item.kind === "person") as Extract<ChatItem, { kind: "person" }>).toMatchObject({ personId: "p1", phase: "identify" });
+    const person1Name = deriveChat({ ...base(), people, peopleConfirmed: false, personIdentityConfirmedIds: ["p1"] });
+    expect(person1Name.items.find((item) => item.kind === "person") as Extract<ChatItem, { kind: "person" }>).toMatchObject({ personId: "p1", phase: "name" });
+    const person2 = deriveChat({ ...base(), people: [{ ...people[0], name: "Mia" }, { ...people[1], name: null }], peopleConfirmed: false, personIdentityConfirmedIds: ["p1"] });
+    expect(person2.items.find((item) => item.kind === "person") as Extract<ChatItem, { kind: "person" }>).toMatchObject({ personId: "p2", phase: "identify" });
+    const named = [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }];
+    const summaryState = deriveChat({ ...base(), people: named, peopleConfirmed: true, peopleSummaryConfirmed: false });
+    expect(summaryState.items.find((item) => item.kind === "people-summary")?.kind).toBe("people-summary");
+    const options = deriveChat({ ...base(), people: named, peopleConfirmed: true, peopleSummaryConfirmed: true, direction: { confirmed: false, pace: "gentle", lengthSec: 90, focus: "family" } });
+    expect(options.step).toBe("direction");
+    expect(options.items.some((item) => item.kind === "direction")).toBe(true);
+    const preview = deriveChat({ ...base(), people: named, peopleConfirmed: true, peopleSummaryConfirmed: true, momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 90, focus: "family" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } });
+    expect(preview.items.some((item) => item.kind === "film")).toBe(true);
+    expect(preview.items.some((item) => item.id === "people-summary")).toBe(false);
   });
 
   it("uses a warm question when the story answer does not mention a person", () => {
     const state = deriveChat({ ...base(), intent: { text: "A day at the beach" }, people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
-    expect(state.items.find((item) => item.kind === "person")).toMatchObject({ personId: "p1", momentCount: 4, questionText: "Who's this? They're in 4 of your moments." });
+    expect(state.items.find((item) => item.kind === "person")).toMatchObject({ personId: "p1", momentCount: 4, phase: "identify", questionText: "Is this the same person in all of these?" });
   });
 
   it("uses a normalized interpret summary and named person when both are available", () => {
     const state = deriveChat({ ...base(), intent: { text: "Mia's Children's Day party" }, storySummary: "Children's Day celebration", mentionedPeople: ["Mia"], people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
     expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ text: "A Children's Day celebration for Mia — lovely!" });
-    expect(state.items.find((item) => item.kind === "person-confirm")).toMatchObject({ text: "Is this Mia?", label: "Mia" });
+    expect(state.items.find((item) => item.kind === "person")).toMatchObject({ phase: "identify", questionText: "Is this the same person in all of these?" });
   });
 
   it("uses the flow copy and surfaces summary progress", () => {

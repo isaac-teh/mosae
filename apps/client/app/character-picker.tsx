@@ -4,12 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FocusChip } from "@/components/ds";
-import type { FlowAction } from "@mosae/contracts";
 import type { Href } from "expo-router";
 import { useStepBack } from "@/lib/useStepBack";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { StepHeader } from "@/components/StepHeader";
-import { type Cast, type CastRole, type ProjectCharacters, confirmCast, getAssetThumbnailUrl, getCast, getProjectCharacters, mutateProjectFlow } from "@/lib/characters";
+import { type Cast, type CastRole, type ProjectCharacters, confirmCast, getAssetThumbnailUrl, getCast, getProjectCharacters } from "@/lib/characters";
 import { faceCropGeometry, imageSizeFromLoadEvent, type FaceBbox } from "@/lib/faceCrop";
 import { StableUriImage } from "@/components/StableUriImage";
 
@@ -72,7 +71,7 @@ type Face = { faceId: string; shotId: string; assetId: string; bbox?: [number, n
 
 export default function CharacterPickerScreen() {
   const router = useRouter();
-  const { planId, projectId, afterFilm } = useLocalSearchParams<{ planId?: string; projectId?: string; afterFilm?: string }>();
+  const { planId, projectId } = useLocalSearchParams<{ planId?: string; projectId?: string }>();
   const { route } = useStoryFlow();
   // Opened from Review, so back returns there with the plan on screen.
   const goBack = useStepBack(route("/review-moments", { planId }) as Href);
@@ -89,10 +88,6 @@ export default function CharacterPickerScreen() {
   const [assignment, setAssignment] = useState<Record<string, string | null>>({});
   const [original, setOriginal] = useState<Record<string, string | null>>({});
   const [movingFaceId, setMovingFaceId] = useState<string | null>(null);
-  const [undoDraft, setUndoDraft] = useState<{ people: DraftPerson[]; focus: string[]; assignment: Record<string, string | null>; merges: { fromPersonId: string; toPersonId: string }[] } | null>(null);
-  const [merges, setMerges] = useState<{ fromPersonId: string; toPersonId: string }[]>([]);
-  const [remakeOffer, setRemakeOffer] = useState(false);
-  const [remakePlanId, setRemakePlanId] = useState<string | undefined>(planId);
   // Guards against surfacing an error from a stale load after navigation.
   const hasLoaded = useRef(false);
 
@@ -153,20 +148,17 @@ export default function CharacterPickerScreen() {
   });
 
   const updatePerson = (personId: string, change: Partial<DraftPerson>) => {
-    setUndoDraft({ people, focus, assignment, merges });
     setPeople((prev) => prev.map((person) => (person.personId === personId ? { ...person, ...change } : person)));
     // Someone left out can't be who the film centres on.
     if (change.excluded) setFocus((prev) => prev.filter((id) => id !== personId));
   };
   const toggleFocus = (personId: string) =>
-    (setUndoDraft({ people, focus, assignment, merges }), setFocus((prev) => (prev.includes(personId) ? prev.filter((id) => id !== personId) : [...prev, personId])));
-  const moveFace = (faceId: string, personId: string | "new" | "remove") => {
-    setUndoDraft({ people, focus, assignment, merges });
-    let target: string | null = personId === "remove" ? null : personId;
+    setFocus((prev) => (prev.includes(personId) ? prev.filter((id) => id !== personId) : [...prev, personId]));
+  const moveFace = (faceId: string, personId: string | "new") => {
+    let target = personId;
     if (personId === "new") {
-      const newPersonId = `p-new-${people.length + 1}`;
-      target = newPersonId;
-      setPeople((prev) => [...prev, { personId: newPersonId, role: "other", name: "", excluded: false, fallback: `New person ${prev.filter((person) => person.personId.startsWith("p-new-")).length + 1}` }]);
+      target = `p-new-${people.length + 1}`;
+      setPeople((prev) => [...prev, { personId: target, role: "other", name: "", excluded: false, fallback: `New person ${prev.filter((person) => person.personId.startsWith("p-new-")).length + 1}` }]);
     }
     setAssignment((prev) => ({ ...prev, [faceId]: target }));
     setMovingFaceId(null);
@@ -181,8 +173,8 @@ export default function CharacterPickerScreen() {
     setError(null);
     try {
       const moves = Object.entries(assignment)
-        .filter(([faceId, personId]) => personId !== original[faceId])
-        .map(([faceId, personId]) => ({ faceId, personId }));
+        .filter(([faceId, personId]) => personId !== null && personId !== original[faceId])
+        .map(([faceId, personId]) => ({ faceId, personId: personId as string }));
       // A person the user emptied of every crop is dropped rather than kept as a ghost.
       const kept = people.filter((person) => Object.values(assignment).includes(person.personId));
       const result = await confirmCast(projectId, {
@@ -192,21 +184,11 @@ export default function CharacterPickerScreen() {
         })),
         focus: focus.filter((id) => kept.some((person) => person.personId === id)),
         moves,
-        ...(merges.length ? { merges } : {}),
         ...(planId ? { proposalId: planId } : {}),
       });
-      const flowActions: Exclude<FlowAction, { type: "batch" }>[] = kept.map((person) => ({ type: "person", personId: person.personId, name: person.name.trim() || null, role: person.role, confirmed: true, skipped: person.excluded }));
-      for (const merge of merges) {
-        const source = cast?.people.find((person) => person.personId === merge.fromPersonId);
-        flowActions.push({ type: "person", personId: merge.fromPersonId, name: source?.name ?? null, role: source?.role ?? "other", confirmed: true });
-        flowActions.push({ type: "merge", personId: merge.fromPersonId, targetPersonId: merge.toPersonId });
-      }
-      for (const move of moves) flowActions.push({ type: "move-photo", faceId: move.faceId, personId: move.personId });
-      if (flowActions.length) await mutateProjectFlow(projectId, { type: "batch", actions: flowActions });
       // Confirming revises the plan, so the next screen must be shown the
       // version that came back — not the one we started from.
-      if (afterFilm === "true") { setRemakePlanId(result.proposalId ?? planId); setRemakeOffer(true); }
-      else proceed(result.proposalId ?? planId);
+      proceed(result.proposalId ?? planId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to save who is in your film");
     } finally {
@@ -218,17 +200,6 @@ export default function CharacterPickerScreen() {
 
   const others = facesOf(null);
   const moveTargets = (faceId: string) => people.filter((person) => person.personId !== assignment[faceId]);
-  const mergePerson = (fromPersonId: string, toPersonId: string) => {
-    setUndoDraft({ people, focus, assignment, merges });
-    setMerges((current) => [...current.filter(({ fromPersonId: from }) => from !== fromPersonId), { fromPersonId, toPersonId }]);
-    setAssignment((current) => Object.fromEntries(Object.entries(current).map(([faceId, owner]) => [faceId, owner === fromPersonId ? toPersonId : owner])));
-    setFocus((current) => current.map((id) => id === fromPersonId ? toPersonId : id).filter((id, index, all) => all.indexOf(id) === index));
-    setPeople((current) => current.filter((person) => person.personId !== fromPersonId));
-  };
-  const undoLastChange = () => {
-    if (!undoDraft) return;
-    setPeople(undoDraft.people); setFocus(undoDraft.focus); setAssignment(undoDraft.assignment); setMerges(undoDraft.merges); setUndoDraft(null);
-  };
 
   const cropRow = (faces: Face[], ownerLabel: string) => (
     <View className="mt-3 flex-row flex-wrap gap-2">
@@ -267,7 +238,6 @@ export default function CharacterPickerScreen() {
           <Pressable role="button" aria-label="Move to a new person" onPress={() => moveFace(movingFace.faceId, "new")} className="items-center rounded-full bg-surface-sunken py-3">
             <Text className="font-sans-semibold text-button leading-5 text-action">+ Someone else</Text>
           </Pressable>
-          {assignment[movingFace.faceId] !== null && <Pressable role="button" aria-label="Remove photo from person" onPress={() => moveFace(movingFace.faceId, "remove")} className="items-center rounded-full bg-surface-sunken py-3"><Text className="font-sans-semibold text-button leading-5 text-action">Remove from this person</Text></Pressable>}
           <Pressable role="button" aria-label="Cancel" onPress={() => setMovingFaceId(null)} className="items-center py-2">
             <Text className="font-sans-medium text-label leading-5 text-ink-muted">Cancel</Text>
           </Pressable>
@@ -334,7 +304,6 @@ export default function CharacterPickerScreen() {
               </View>
               <Text className="mt-3 font-sans text-caption leading-4 text-ink-muted">{`Photos of ${label}. Not them? Tap the photo to move it.`}</Text>
               {cropRow(faces, label)}
-              {ordered.filter((other) => other.personId !== person.personId).length > 0 && <View className="mt-2 flex-row flex-wrap gap-2">{ordered.filter((other) => other.personId !== person.personId).map((other) => <Pressable key={other.personId} role="button" aria-label={`Same person as ${other.name.trim() || other.fallback}`} onPress={() => mergePerson(person.personId, other.personId)} className="rounded-full bg-surface-sunken px-3 py-2"><Text className="font-sans-semibold text-caption text-ink">Same person as {other.name.trim() || other.fallback}</Text></Pressable>)}</View>}
               <Pressable role="switch" aria-checked={person.excluded} aria-label={`Leave ${label} out`} onPress={() => updatePerson(person.personId, { excluded: !person.excluded })} className="mt-3 self-start rounded-full bg-surface-sunken px-3 py-1.5">
                 <Text className="font-sans-semibold text-caption leading-4 text-ink">{person.excluded ? "Bring back into the film" : "Leave out of the film"}</Text>
               </Pressable>
@@ -354,7 +323,6 @@ export default function CharacterPickerScreen() {
 
       <View className="absolute inset-x-0 bottom-0 z-20 bg-surface px-4 pb-2">
         {error && <Text role="alert" className="mb-1 text-center font-sans text-caption leading-4 text-action">{error}</Text>}
-        {undoDraft && <Pressable role="button" aria-label="Undo last change" disabled={saving} onPress={undoLastChange} className="mt-2 items-center py-2"><Text className="font-sans-semibold text-caption text-action">Undo last change</Text></Pressable>}
         <Pressable
           role="button"
           aria-label="Looks right"
@@ -368,7 +336,6 @@ export default function CharacterPickerScreen() {
           <Text className="font-sans-medium text-caption leading-4 text-ink-muted">Skip — let Mosaé decide</Text>
         </Pressable>
       </View>
-      {remakeOffer && <View role="dialog" aria-label="Remake film" className="absolute inset-x-4 bottom-24 z-30 rounded-[18px] bg-surface-raised p-4 shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.2)]"><Text className="font-sans-semibold text-label text-ink">Remake the film with these changes?</Text><View className="mt-3 flex-row gap-2"><Pressable role="button" aria-label="Remake the film with these changes" onPress={() => { setRemakeOffer(false); proceed(remakePlanId); }} className="flex-1 items-center rounded-full bg-action py-3"><Text className="font-sans-semibold text-on-action">Review changes</Text></Pressable><Pressable role="button" aria-label="Not now" onPress={() => { setRemakeOffer(false); router.back(); }} className="items-center rounded-full bg-surface-sunken px-4 py-3"><Text className="font-sans-semibold text-ink">Not now</Text></Pressable></View><Text className="mt-2 font-sans text-caption text-ink-muted">Your current film will stay as it is until you choose to make another.</Text></View>}
       {movePopup}
     </View>
   );
