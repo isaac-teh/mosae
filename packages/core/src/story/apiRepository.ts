@@ -451,6 +451,7 @@ export function createApiStoryRepository(
         const shotId = String(shot.shotId);
         for (const faceValue of Array.isArray(shot.faces) ? shot.faces : []) {
           const face = record(faceValue, "face");
+          if (face.prominence === "background") continue;
           if (typeof face.characterId !== "string" || !face.characterId) continue;
           const group = groups.get(face.characterId) ?? { shots: new Set<string>(), samples: new Map(), days: new Set<number>() };
           group.shots.add(shotId);

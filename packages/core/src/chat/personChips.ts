@@ -1,5 +1,13 @@
 export type PersonAgeBand = "child" | "teen" | "adult" | "senior";
 
+/** People shown in the director flow: foreground clusters matching the existing 2-shot threshold or 10% of photos. */
+export function mainPeople<T extends { personId: string; momentCount: number; backgroundOnly?: boolean }>(clusters: readonly T[], shotCount: number): T[] {
+  return clusters
+    .filter((person) => !person.backgroundOnly && (person.momentCount >= 2 || (shotCount > 0 && person.momentCount / shotCount >= 0.1)))
+    .sort((a, b) => b.momentCount - a.momentCount)
+    .slice(0, 5);
+}
+
 const ANSWERS: Record<PersonAgeBand, string[]> = {
   child: ["My son", "My daughter", "Friend", "Type a name"],
   teen: ["My son", "My daughter", "Friend", "Type a name"],
