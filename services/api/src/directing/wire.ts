@@ -263,7 +263,7 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
           // Validation failures get one clean model attempt before surfacing.
           const terminal = !result.retryable || acquired.attempts >= (result.code === "validation_failed" ? 2 : MAX_PLAN_ATTEMPTS);
           await ownedUpdate({
-            status: terminal ? "failed" : "queued", code: result.retryable && terminal ? "retries_exhausted" : result.code,
+            status: terminal ? "failed" : "queued", code: result.retryable && terminal && result.code !== "validation_failed" ? "retries_exhausted" : result.code,
             lastError: result.code, reason: result.reason, diagnostics: result.diagnostics, usage: result.usage,
           });
           if (terminal) return "failed";

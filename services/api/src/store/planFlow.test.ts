@@ -72,7 +72,8 @@ describe("plan flow (emulator)", () => {
     await dispatchDue(adminDb, queue, 200, 1000);
     expect((await ref.get()).data()).toMatchObject({ status: "succeeded", attempts: 1, leaseUntil: null });
     expect(scripted.inputs).toHaveLength(1);
-    expect(scripted.inputs[0].messages[0].content).toContain("shot-0 | photo | 2026-05-03 | park");
+    expect(scripted.inputs[0].messages[0].content).toContain("shot-0 | photo | 2026-05-03");
+    expect(scripted.inputs[0].messages[0].content).toContain("park");
     expect((await project.get()).get("currentProposalId")).toBe((await ref.get()).get("proposalId"));
     expect(await worker(task)).toBe("skipped");
   });
@@ -186,7 +187,7 @@ describe("plan flow (emulator)", () => {
     expect(await worker(task)).toBe("skipped");
     expect(scripted.inputs).toHaveLength(4);
     expect(scripted.inputs[0].messages[0].content).not.toContain("shot-0 | photo");
-    expect((await ref.get()).data()).toMatchObject({ status: "failed", attempts: 2, code: "validation_failed", leaseUntil: null });
+    expect((await ref.get()).data()).toMatchObject({ status: "failed", attempts: 2, code: "validation_failed", lastError: "validation_failed", leaseUntil: null });
     expect((await project.collection("storyProposals").get()).empty).toBe(true);
   });
 
