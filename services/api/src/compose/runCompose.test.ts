@@ -249,13 +249,15 @@ describe("runCompose — collages", () => {
     const moments = Array.from({ length: 10 }, (_, index) => ({ id: `photo${index}`, shotId: `shot-${index}`, kind: "photo" as const, title: `Photo ${index}`, description: "", rationale: "" }));
     const proposal = makeProposal({ moments, chapters: [{ id: "ch1", title: "Trip", summary: "", momentIds: moments.map(({ id }) => id) }] });
     const assets = new Map(moments.map(({ id }, index) => [id, { kind: "photo" as const, assetId: `asset-${index}`, eventId: "event-1", localTime: `2026-06-01T09:${String(index).padStart(2, "0")}:00` }]));
-    const result = await runCompose(makeJob({ proposal, durationId: "30s", cadenceId: "tender", collageAmount: "few" }), makeDeps({ assets,
+    const result = await runCompose(makeJob({ proposal, durationId: "30s", cadenceId: "tender", collageAmount: "few", soundtrackId: "pixabay-362266", soundtrackExplicit: true }), makeDeps({ assets, soundtrackIds: new Set(["pixabay-362266"]),
       generateStructured: async () => ({ clips: moments.slice(0, 2).map(({ id }) => ({ candidateId: `${id}#still@c0`, holdSec: 2.4, transition: "cut", audio: "mute" })), musicCues: [] }),
     }));
     if (!result.ok) throw new Error(result.reasons.join("; "));
     expect(result.timeline.durationSec).toBeGreaterThan(20);
     expect(result.timeline.durationSec).toBeLessThanOrEqual(33);
     expect(result.timeline.videoClips.filter((clip) => "kind" in clip)).toHaveLength(1);
+    expect(safeParseTimeline(result.timeline).ok).toBe(true);
+    for (const clip of result.timeline.videoClips) if ("kind" in clip) expect(clip.spec.durationSec).toBe(clip.durationSec);
     const included = result.timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.map((slot) => slot.shotId) : [clip.source.shotId]);
     expect(new Set(included).size).toBe(10);
   });

@@ -192,7 +192,8 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
     const userId = (projectSnap.get("userId") as string | undefined) ?? "";
 
     const fail = async (reasons: string[]): Promise<ComposeTaskResult> => {
-      await failGeneration(db, { userId, projectId: task.projectId, generationId: task.generationId, reasons });
+      console.error("film compose failed", { projectId: task.projectId, generationId: task.generationId, reasons });
+      await failGeneration(db, { userId, projectId: task.projectId, generationId: task.generationId, reasons: ["Something went wrong while making your film. Try again."] });
       return "failed";
     };
 

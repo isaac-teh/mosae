@@ -11,6 +11,7 @@ export {
   PhotoCropSchema,
   parseTimeline,
   safeParseTimeline,
+  syncCollageDurations,
   type Timeline,
   type VideoClip,
   type PhotoCrop,

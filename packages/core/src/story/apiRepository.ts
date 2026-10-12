@@ -781,8 +781,7 @@ function isStatus(value: unknown, ...statuses: string[]): boolean {
 }
 
 function failureMessage(generation: RecordData): string {
-  const reasons = Array.isArray(generation.failureReasons) ? generation.failureReasons.filter((reason) => typeof reason === "string") : [];
-  return reasons.join("; ") || "Film failed";
+  return "Something went wrong while making your film. Try again.";
 }
 
 function newId(): string {
