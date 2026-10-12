@@ -19,7 +19,7 @@ export async function savePersonMoments(projectId: string, personId: string, nam
   if (!existing) people.push({ personId, role: "other", ...(name ? { name } : {}), excluded: false });
   await confirmCast(projectId, { people: people.map((person) => person.personId === personId ? { ...person, ...(name ? { name } : {}), addShots, removeShots } : person), focus: current.focus });
   await Promise.all([
-    mutateProjectFlow(projectId, { type: "person", personId, name: name ?? existing?.name ?? null, role: existing?.role ?? "other", confirmed: true, skipped: false }),
+    mutateProjectFlow(projectId, { type: "person", personId, name: name ?? existing?.name ?? null, role: existing?.role ?? "other", confirmed: Boolean(name ?? existing?.name), skipped: false }),
     ...addShots.map((shotId) => mutateProjectFlow(projectId, { type: "manual-shot", personId, shotId, included: true })),
     ...removeShots.map((shotId) => mutateProjectFlow(projectId, { type: "manual-shot", personId, shotId, included: false })),
   ]);

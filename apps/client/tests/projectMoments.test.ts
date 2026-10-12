@@ -20,7 +20,7 @@ describe("savePersonMoments", () => {
       focus: [],
     });
     expect(boundary.mutateProjectFlow).toHaveBeenCalledWith("project-1", {
-      type: "person", personId: "person-1", name: null, role: "other", confirmed: true, skipped: false,
+      type: "person", personId: "person-1", name: null, role: "other", confirmed: false, skipped: false,
     });
   });
 });
