@@ -78,5 +78,6 @@ export {
 } from "./reflow.js";
 
 export { EditOpSchema, applyEdits, mergeOps, type EditOp, type EditResult } from "./edits.js";
+export { refitSoundtrackToDuration } from "./soundtrack.js";
 export { RenderResolutionSchema, type RenderResolution } from "./render.js";
 export { DirectorFlowSchema, FlowActionSchema, FlowMutationRequestSchema, FlowPersonSchema, type DirectorFlow, type FlowAction } from "./flow.js";
