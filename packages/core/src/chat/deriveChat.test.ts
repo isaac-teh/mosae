@@ -120,6 +120,21 @@ describe("deriveChat state table", () => {
     expect(state.items).toContainEqual({ kind: "you", id: "missed-clarification-question-1", text: "There is someone else" });
     expect(state.items).toContainEqual({ kind: "mosae", id: "missed-clarification-reply-1", text: "Who did I miss? Type their name." });
   });
+  it("keeps the missed-person prompt, clarification, name and photo request in chronological order", () => {
+    const people = [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }];
+    const clarification = { question: "There is someone else", reply: "Who did I miss? Type their name." };
+    const beforeName = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: true, people, interpTurns: [clarification] });
+    expect(beforeName.items.findIndex((item) => item.id === "anyone-else")).toBeLessThan(beforeName.items.findIndex((item) => item.id === "missed-clarification-question-1"));
+    const tagging = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: true, people, interpTurns: [clarification], missedPeople: [{ personId: "missed-1", name: "Grandma", momentCount: 0 }], missedPersonTagging: { personId: "missed-1", name: "Grandma" } });
+    expect(tagging.items.some((item) => item.id === "anyone-else")).toBe(true);
+    expect(tagging.items.map((item) => item.id).filter((id) => ["missed-clarification-question-1", "missed-clarification-reply-1", "missed-name-missed-1", "missed-select-missed-1", "missed-tag-missed-1"].includes(id))).toEqual([
+      "missed-clarification-question-1", "missed-clarification-reply-1", "missed-name-missed-1", "missed-select-missed-1", "missed-tag-missed-1",
+    ]);
+    const afterTagging = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false, people, interpTurns: [clarification], missedPeople: [{ personId: "missed-1", name: "Grandma", momentCount: 1 }] });
+    expect(afterTagging.items.findIndex((item) => item.id === "anyone-else")).toBeLessThan(afterTagging.items.findIndex((item) => item.id === "missed-clarification-question-1"));
+    expect(afterTagging.items.findIndex((item) => item.id === "anyone-else-next")).toBeGreaterThan(afterTagging.items.findIndex((item) => item.id === "missed-name-missed-1"));
+    expect(afterTagging.items.at(-1)?.id).toBe("anyone-else-next");
+  });
   it("automatically asks again after a missed person is tagged, including stale refreshed counts", () => {
     const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false,
       people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }, { personId: "missed-1", name: "Grandma", role: "other", skipped: false, momentCount: 1, sampleShotIds: [], days: [] }],
