@@ -42,11 +42,16 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("web editor preview seeks", () => {
-  it("renders the preview from its first frame before playback", async () => {
-    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} />));
-    expect(host.querySelector('[data-testid="player"]')?.getAttribute("data-initial-frame")).toBe("0");
-    expect(playerMock.seekTo).toHaveBeenCalledWith(0);
+  it("shows the first fully visible frame while paused at zero, then starts playback at frame zero", async () => {
+    const fadingTimeline: Timeline = { ...timeline, videoClips: [{ id: "opening", source: { kind: "photo", shotId: "poster" }, startSec: 0, durationSec: 3, transitionIn: { kind: "crossfade", durationSec: 0.4 } }] };
+    await act(async () => root.render(<EditorPreview timeline={fadingTimeline} sources={{ poster: "poster.jpg" }} />));
+    expect(host.querySelector('[data-testid="player"]')?.getAttribute("data-initial-frame")).toBe("12");
+    expect(host.querySelector('[aria-label="Play preview"]')?.getAttribute("data-current-time")).toBe("0");
+    expect(playerMock.seekTo).not.toHaveBeenCalled();
     expect(playerMock.play).not.toHaveBeenCalled();
+    await act(async () => (host.querySelector('[aria-label="Play preview"]') as HTMLDivElement).click());
+    expect(playerMock.seekTo).toHaveBeenCalledWith(0);
+    expect(playerMock.play).toHaveBeenCalledOnce();
   });
 
   it("leaves the shared chat player seek and fullscreen lifecycle alone on mount", async () => {
@@ -84,6 +89,7 @@ describe("web editor preview seeks", () => {
     await act(async () => root.render(<Harness />));
     const inputProps = playerMock.inputProps[0];
     playerMock.seekTo.mockClear();
+    await act(async () => playerMock.listeners.get("play")?.({ detail: { frame: 0 } }));
     await act(async () => playerMock.listeners.get("frameupdate")?.({ detail: { frame: 90 } }));
     expect(host.textContent).toContain("3");
     expect(playerMock.seekTo).not.toHaveBeenCalled();

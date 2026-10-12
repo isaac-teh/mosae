@@ -35,16 +35,14 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   const [overlayFullscreen, setOverlayFullscreen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const currentTimeRef = useRef(playheadSec);
+  const hasUserPositioned = useRef(playheadSec > 0);
   const lastToggleRequest = useRef(togglePlayRequest);
   const inputProps = useMemo(() => ({ timeline, sources, selectedClipId, onSelectClip, onCommitPhotoCrop, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }), [timeline, sources, selectedClipId, onSelectClip, onCommitPhotoCrop, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop]);
-  useLayoutEffect(() => {
-    if (controls === "chat") return;
-    player.current?.seekTo(0);
-  }, [controls]);
   useEffect(() => {
     const current = player.current;
     if (!current) return;
     const time = ({ detail }: { detail: { frame: number } }) => {
+      if (!playing && !hasUserPositioned.current) return;
       const seconds = detail.frame / timeline.fps;
       currentTimeRef.current = seconds;
       setCurrentTime(seconds);
@@ -64,7 +62,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
       current.removeEventListener("pause", pause);
       current.removeEventListener("ended", pause);
     };
-  }, [timeline.fps, onTimeChange, onPlayingChange]);
+  }, [timeline.fps, onTimeChange, onPlayingChange, playing]);
 
   useLayoutEffect(() => {
     if (controls !== "chat" || !portalHost) return;
@@ -97,6 +95,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   useEffect(() => {
     if (!seekRequest || !player.current) return;
     const seconds = Math.max(0, Math.min(timeline.durationSec, seekRequest.seconds));
+    hasUserPositioned.current = true;
     currentTimeRef.current = seconds;
     setCurrentTime(seconds);
     player.current.seekTo(Math.max(0, Math.min(Math.ceil(timeline.durationSec * timeline.fps) - 1, Math.round(seconds * timeline.fps))));
@@ -107,6 +106,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   }, [pauseRequest]);
 
   const playFromPlayhead = () => {
+    hasUserPositioned.current = true;
     player.current?.seekTo(Math.max(0, Math.min(Math.ceil(timeline.durationSec * timeline.fps) - 1, Math.round(currentTimeRef.current * timeline.fps))));
     player.current?.play();
   };
@@ -129,6 +129,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   };
   const seekTo = (seconds: number) => {
     const clamped = Math.max(0, Math.min(timeline.durationSec, seconds));
+    hasUserPositioned.current = true;
     currentTimeRef.current = clamped;
     setCurrentTime(clamped);
     player.current?.seekTo(Math.max(0, Math.min(Math.ceil(timeline.durationSec * timeline.fps) - 1, Math.round(clamped * timeline.fps))));
@@ -166,11 +167,12 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
 
   const first = timeline.videoClips[0];
   const firstShotId = first && ("kind" in first ? first.spec.slots[0]?.shotId : first.source.shotId);
+  const posterFrame = first && !("kind" in first) ? Math.round(first.transitionIn.durationSec * timeline.fps) : 0;
   const loadingPoster = (poster ?? (firstShotId ? sources[firstShotId] : undefined));
   const previewContent = <>
     <style>{`.mosae-editor-preview [data-collage-cell][aria-pressed="true"] { border-color: #168dff !important; border-width: 12px !important; }`}</style>
     <div role="button" aria-label={playing ? "Pause preview" : "Play preview"} data-current-time={currentTime} tabIndex={0} onClick={togglePlayback} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); togglePlayback(); } }} style={{ position: "absolute", top: fullscreen && controls === "chat" ? "env(safe-area-inset-top)" : 0, right: 0, bottom: fullscreen && controls === "chat" ? "env(safe-area-inset-bottom)" : 0, left: 0 }}>
-    <Player ref={player} component={MosaeTimeline} inputProps={inputProps} initialFrame={0} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}
+    <Player ref={player} component={MosaeTimeline} inputProps={inputProps} initialFrame={posterFrame} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}
       compositionWidth={timeline.aspect === "9:16" ? 1080 : 1920} compositionHeight={timeline.aspect === "9:16" ? 1920 : 1080}
       fps={timeline.fps} style={{ width: "100%", height: "100%" }} controls={false}
       renderLoading={() => <View className="absolute inset-0 items-center justify-center bg-[#18211d]">{loadingPoster ? <Image source={{ uri: loadingPoster }} resizeMode="cover" className="size-full opacity-70" /> : <Text className="font-sans text-body text-on-screen">Loading your film…</Text>}</View>}
