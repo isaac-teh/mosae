@@ -91,6 +91,47 @@ function setup(options: { faces?: boolean; orientation?: { portrait: number; lan
 }
 
 describe("Director chat", () => {
+  it("resumes a proposal-backed people step on the same unanswered person and shows the tag return", async () => {
+    setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    const personFlow = (personId: string, name: string | null, confirmed: boolean) => ({ personId, name, role: name ? "child" : null, confirmed, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
+    mocks.repo.getFlow = vi.fn(async () => ({ revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [personFlow("person-1", "Mia", true), personFlow("person-2", null, false)], peopleSummaryConfirmed: false }));
+    mocks.params = { completedPersonId: "person-2", completedPersonName: "this person", completedMomentCount: "3", completedSampleUri: "https://tagged/photo.jpg" };
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy());
+    expect(hasText("Thanks. I've tagged all")).toBe(false);
+    expect(hasText("Got it — these are the photos of this person.")).toBe(true);
+    expect(host.querySelector('img[src="https://tagged/photo.jpg"]')).toBeTruthy();
+    expect(hasText("Who's this? They're in 3 of your moments.")).toBe(true);
+  });
+
+  it("refreshes into the correct unanswered person from the flow record", async () => {
+    setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    const personFlow = (personId: string, name: string | null, confirmed: boolean) => ({ personId, name, role: name ? "child" : null, confirmed, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
+    mocks.repo.getFlow = vi.fn(async () => ({ revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [personFlow("person-1", "Mia", true), personFlow("person-2", null, false)], peopleSummaryConfirmed: false }));
+    await renderScreen();
+    await waitFor(() => expect(hasText("Who's this? They're in 90 of your moments.")).toBe(true));
+    expect(hasText("Thanks. I've tagged all")).toBe(false);
+    expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy();
+  });
+
+  it("keeps a confirmed people summary dismissed after a fresh mount", async () => {
+    setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    const personFlow = (personId: string, name: string) => ({ personId, name, role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
+    let flow: any = { revision: 7, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map((person) => personFlow(person.personId, "Mia")), peopleSummaryConfirmed: false };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, peopleSummaryConfirmed: action.confirmed }; return flow; });
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
+    await click("Confirm");
+    await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), { type: "people-summary-confirmed", confirmed: true }));
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await renderScreen();
+    await waitFor(() => expect(mocks.repo.getPlan).toHaveBeenCalledWith("proposal-1"));
+    expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
+    expect(hasText("Thanks. I've tagged all")).toBe(false);
+    expect(host.querySelector('[aria-label="Filtered photos"]')).toBeTruthy();
+  });
   it("defaults to the suggested soundtrack but keeps an existing explicit pick", () => {
     const options = [{ id: "first", name: "First", description: "" }, { id: "suggested", name: "Suggested", description: "", suggested: true }];
     expect(defaultSoundtrackId(null, options)).toBe("suggested");

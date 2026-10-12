@@ -1,7 +1,7 @@
 import { DirectorFlowSchema, type DirectorFlow, type FlowAction } from "@mosae/contracts";
 import type { Firestore } from "firebase-admin/firestore";
 
-const emptyFlow = (): DirectorFlow => ({ revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [] });
+const emptyFlow = (): DirectorFlow => ({ revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [], peopleSummaryConfirmed: false });
 const flowRef = (db: Firestore, projectId: string) => db.collection("projects").doc(projectId);
 const personDefaults = (personId: string, value: Record<string, unknown> = {}) => ({
   personId,
@@ -65,8 +65,8 @@ export async function readFlow(db: Firestore, userId: string, projectId: string)
   });
 }
 
-function apply(flow: DirectorFlow, action: FlowAction): DirectorFlow {
-  if (action.type === "batch") return action.actions.reduce((current, item) => apply(current, item), flow);
+export function applyFlowAction(flow: DirectorFlow, action: FlowAction): DirectorFlow {
+  if (action.type === "batch") return action.actions.reduce((current, item) => applyFlowAction(current, item), flow);
   if (action.type === "story-answer") return { ...flow, story: { answer: action.answer, storySummary: action.storySummary ?? flow.story.storySummary, mentionedPeople: action.mentionedPeople ?? flow.story.mentionedPeople } };
   if (action.type === "person") {
     const prior = flow.people.find((person) => person.personId === action.personId) ?? personDefaults(action.personId);
@@ -92,6 +92,7 @@ function apply(flow: DirectorFlow, action: FlowAction): DirectorFlow {
     if (!source || !flow.people.some((person) => person.personId === action.targetPersonId)) throw new FlowStoreError("invalid_action");
     return { ...flow, people: flow.people.map((person) => person.personId === action.personId ? { ...person, mergedInto: action.targetPersonId, skipped: true } : person) };
   }
+  if (action.type === "people-summary-confirmed") return { ...flow, peopleSummaryConfirmed: action.confirmed };
   return flow;
 }
 
@@ -127,7 +128,7 @@ export async function mutateFlow(db: Firestore, input: { userId: string; project
     }
     const parsed = DirectorFlowSchema.safeParse(projectSnap.get("flow"));
     const before = parsed.success ? parsed.data : seeded;
-    let candidate = apply(before, input.action);
+    let candidate = applyFlowAction(before, input.action);
     if (input.action.type === "undo") {
       const last = latestActions.docs[0];
       const previous = DirectorFlowSchema.safeParse(last?.get("previous"));
