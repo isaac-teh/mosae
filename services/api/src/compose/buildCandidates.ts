@@ -69,6 +69,8 @@ export interface AssetAnalysis {
 
 export interface Asset {
   kind: 'photo' | 'video';
+  width?: number;
+  height?: number;
   analysis?: AssetAnalysis;
   file?: string;
   keyMomentScore?: number;

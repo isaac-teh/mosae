@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import {
   ALLOWED_COMBOS, COLLAGE_EFFECTS, COLLAGE_LAYOUTS, CollageSpecSchema,
   applyEdits, type CollageClip, type Timeline,
+  collageSlotAspects, assignCollageSlots,
 } from "@mosae/contracts";
 import { hamming64 } from "../cluster/duplicates.js";
 import { collageCountRange, collagePlacementOptions, DIRECTING_RULES, photoBaseDuration, requestedCollageCount } from "./directingRules.js";
@@ -11,6 +12,8 @@ import { reflow } from "@mosae/contracts";
 
 export type CollageSource = {
   assetId: string;
+  width?: number;
+  height?: number;
   chapterId: string;
   eventId?: string | null;
   localTime?: string | null;
@@ -204,7 +207,20 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     const motionChoices = preferred.length ? preferred : combinations;
     const varied = motionChoices.filter((combo) => combo.layoutId !== lastLayout);
     const choices = varied.length ? varied : motionChoices;
-    const chosen = choices[hash(`${seed}:${index}:combo`) % choices.length];
+    const sourceAspects = group.map((clip) => {
+      const source = clip.source;
+      const dimensions = sources.get(idOf(clip));
+      return dimensions?.width && dimensions.height ? dimensions.width / dimensions.height : source.width && source.height ? source.width / source.height : timeline.aspect === "16:9" ? 16 / 9 : 9 / 16;
+    });
+    const frameAspect = timeline.aspect === "16:9" ? 16 / 9 : 9 / 16;
+    const score = (layoutId: string) => {
+      const slots = collageSlotAspects(layoutId, layoutId, group.length, frameAspect);
+      const assignment = assignCollageSlots(sourceAspects, slots);
+      return assignment.reduce((sum, slotIndex, sourceIndex) => sum + Math.abs(Math.log(sourceAspects[sourceIndex]! / (slots[slotIndex] ?? sourceAspects[sourceIndex]!))), 0);
+    };
+    const bestScore = Math.min(...choices.map((combo) => score(combo.layoutId)));
+    const bestChoices = choices.filter((combo) => score(combo.layoutId) <= bestScore + 0.08);
+    const chosen = bestChoices[hash(`${seed}:${index}:combo`) % bestChoices.length];
     const effect = COLLAGE_EFFECTS[hash(`${seed}:${index}:effect`) % COLLAGE_EFFECTS.length];
     // Collage duration belongs to its photo count and cadence. Member holds
     // are independent shot choices and must not be summed into the collage.
@@ -213,7 +229,15 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
     const spec = CollageSpecSchema.parse({
       layoutId: chosen.layoutId, motionId: chosen.motionId, effectId: effect.id,
       seed: `${seed}:${idOf(first)}`, durationSec,
-      slots: group.map((clip) => ({ slotId: idOf(clip), shotId: clip.source.shotId, kind: clip.source.kind })),
+      slots: (() => {
+        const aspects = collageSlotAspects(chosen.layoutId, chosen.layoutId, group.length, frameAspect);
+        const assignment = assignCollageSlots(sourceAspects, aspects);
+        return group.map((clip, sourceIndex) => ({ clip, sourceIndex })).sort((a,b)=>assignment[a.sourceIndex]!-assignment[b.sourceIndex]!).map(({clip}) => ({
+          slotId: idOf(clip), shotId: clip.source.shotId, kind: clip.source.kind,
+          ...((sources.get(idOf(clip))?.width && sources.get(idOf(clip))?.height) ? { width: sources.get(idOf(clip))!.width!, height: sources.get(idOf(clip))!.height! } : clip.source.width && clip.source.height ? { width: clip.source.width, height: clip.source.height } : {}),
+          ...(clip.source.kind === "photo" && clip.source.crop ? { crop: clip.source.crop } : {}),
+        }));
+      })(),
     });
     const collage: CollageClip = {
       kind: "collage", clipId: `collage:${idOf(first)}`,

@@ -862,6 +862,8 @@ export async function runCompose(
     if (!asset || !chapter) continue;
     collageSources.set(clip.id, {
       assetId: asset.assetId ?? candidate.itemId,
+      width: asset.width,
+      height: asset.height,
       chapterId: chapter.id,
       eventId: asset.eventId,
       localTime: asset.localTime,
