@@ -384,6 +384,25 @@ describe("deriveChat state table", () => {
     expect(state.items.findIndex((item) => item.id === "merge-p2")).toBeGreaterThan(state.items.findIndex((item) => item.id === "person-answer-p2"));
   });
 
+  it("keeps merged people in their original question order and preserves the announced count", () => {
+    const people = [
+      { personId: "a", name: "Kara", role: null, skipped: false, momentCount: 10, sampleShotIds: [], sampleFaces: [{ shotId: "a1", uri: "kara-a.jpg", bbox: [0, 0, 1, 1] as [number, number, number, number] }], days: [] },
+      { personId: "c", name: "Me", role: "parent", skipped: false, momentCount: 7, sampleShotIds: [], days: [] },
+    ];
+    const mergeEvents = [{ id: "merge-b", personId: "b", targetPersonId: "a", answer: "Kara", targetName: "Kara", sampleFaces: ["kara-a.jpg"], questionFaces: ["kara-b.jpg"], momentCount: 8, response: "Yes, same person" as const }];
+    const expectedHistory = ["person-question-a", "person-answer-a", "person-question-b", "person-answer-b", "merge-b", "person-question-c", "person-answer-c"];
+
+    const live = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null, mergeEvents });
+    expect(live.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Three people appear often in your moments. Who is this?" });
+    expect(live.items.filter((item) => expectedHistory.includes(item.id)).map((item) => item.id)).toEqual(expectedHistory);
+    expect(live.items.find((item) => item.id === "person-question-b")).toMatchObject({ photos: ["kara-b.jpg"] });
+
+    const summaryState = deriveChat({ ...base(), people, peopleConfirmed: true, peopleSummaryConfirmed: false, mergeEvents });
+    expect(summaryState.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Three people appear often in your moments. Who is this?" });
+    expect(summaryState.items.filter((item) => expectedHistory.includes(item.id)).map((item) => item.id)).toEqual(expectedHistory);
+    expect(summaryState.items.find((item) => item.id === "person-question-b")).toMatchObject({ photos: ["kara-b.jpg"] });
+  });
+
   it("holds the next identity question until the repeated-name merge is answered", () => {
     const state = deriveChat({ ...base(), people: [
       { personId: "p1", name: "Me", role: "parent", skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
