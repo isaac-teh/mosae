@@ -179,6 +179,12 @@ describe("applyEdits", () => {
     if (!result.ok) expect(result.error).toContain("at most one video cell");
   });
 
+  it("stores dimensions when a collage photo is added or replaced", () => {
+    const replaced = apply([{ op: "replaceCollageSlot", clipId: "c1", slotId: "s1", shotId: "portrait", kind: "photo", width: 900, height: 1600 }]);
+    const clip = replaced.timeline.videoClips[3]!;
+    expect("kind" in clip ? clip.spec.slots[0] : null).toMatchObject({ shotId: "portrait", width: 900, height: 1600 });
+  });
+
   it("preserves a user-set collage crop when the layout changes", () => {
     const cropped = apply([{ op: "setCollageCrop", clipId: "c1", slotId: "s1", crop: { x: 0.7, y: 0.2, scale: 2 } }]);
     const croppedClip = cropped.timeline.videoClips[3]!;

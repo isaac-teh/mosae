@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 import { Asset } from "expo-asset";
 import { COLLAGE_LAYOUTS, type EditOp, type Timeline } from "@mosae/contracts";
-import { createReplacementGuard, duplicateClip, trimRange, uploadReplacement, videoTrimBounds, type ContextToolbarAction, type UploadProgress } from "@mosae/core";
+import { createReplacementGuard, duplicateClip, fitEditedCollageSlots, trimRange, uploadReplacement, videoTrimBounds, type ContextToolbarAction, type UploadProgress } from "@mosae/core";
 import { useStoryFlow } from "@/lib/storyFlow";
 import { useEditor } from "@/lib/useEditor";
 import type { StoryPlan, DirectionOptions, Moment } from "@mosae/core";
@@ -126,13 +126,18 @@ export default function EditorScreen() {
     return [...new Map(listed.filter((moment) => moment.shotId).map((moment) => [moment.shotId!, moment])).values()];
   }, [plan, editor.unusedMedia]);
   const inFilmShotIds = useMemo(() => getInFilmShotIds(editor.timeline), [editor.timeline]);
+  const applyPreparedOps = (op: EditOp | EditOp[]) => {
+    const batch = Array.isArray(op) ? op : [op];
+    const fitted = editor.timeline ? fitEditedCollageSlots(editor.timeline, batch) : batch;
+    return fitted.length === 1 && !Array.isArray(op) ? editor.apply(fitted[0]!) : editor.applyMany(fitted);
+  };
   const onApply = (op: EditOp | EditOp[]) => {
-    const applied = Array.isArray(op) ? editor.applyMany(op) : editor.apply(op);
+    const applied = applyPreparedOps(op);
     if (applied) { replacementUploadNonce.current.invalidate(); setTool(null); }
     return applied;
   };
   const onApplyCollage = (op: EditOp | EditOp[]) => {
-    const applied = Array.isArray(op) ? editor.applyMany(op) : editor.apply(op);
+    const applied = applyPreparedOps(op);
     if (applied && selectedClip && "kind" in selectedClip) {
       setPauseRequest((request) => request + 1);
       seekTo(selectedClip.startSec + Math.min(1.5, selectedClip.durationSec / 2));
@@ -216,7 +221,7 @@ export default function EditorScreen() {
       if (media.kind !== "photo") throw new Error("replacement_kind_mismatch");
       editor.setSource(media.shotId, media.previewUrl);
       const op: EditOp = targetSlotId
-        ? { op: "replaceCollageSlot", clipId: targetClipId, slotId: targetSlotId, shotId: media.shotId, kind: "photo" }
+        ? { op: "replaceCollageSlot", clipId: targetClipId, slotId: targetSlotId, shotId: media.shotId, kind: "photo", ...(media.width !== undefined ? { width: media.width } : {}), ...(media.height !== undefined ? { height: media.height } : {}) }
         : { op: "swapShot", clipId: targetClipId, shotId: media.shotId };
       if (!onApply(op)) setReplacementUploadError("The uploaded photo could not be applied.");
     } catch (error) {

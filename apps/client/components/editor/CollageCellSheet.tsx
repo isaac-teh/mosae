@@ -18,19 +18,20 @@ export function CollageCellSheet({ mode, clip, slotId, moments, inFilmShotIds = 
   const full = mode === "add" && !slotId && count >= layout.maxSlots;
   const canVideo = mode === "add" ? videoCount < layout.maxVideoCells : videoCount - Number(activeSlot?.kind === "video") < layout.maxVideoCells;
   const candidates = moments.filter((moment) => moment.shotId);
+  const dimensions = (moment: Moment) => ({ ...(moment.width !== undefined ? { width: moment.width } : {}), ...(moment.height !== undefined ? { height: moment.height } : {}) });
   const applyChoice = (moment: Moment) => {
     const kind = moment.kind === "video" ? "video" : "photo";
     if (mode === "add" && slotId) {
       const source = sources[moment.shotId!] ?? moment.imageKey;
       onSource?.(moment.shotId!, source);
-      onApply({ op: "replaceCollageSlot", clipId: clip.clipId, slotId, shotId: moment.shotId!, kind });
+      onApply({ op: "replaceCollageSlot", clipId: clip.clipId, slotId, shotId: moment.shotId!, kind, ...dimensions(moment) });
     } else if (mode === "add") {
       const ordinal = count + 1;
-      onApply({ op: "addCollageSlot", clipId: clip.clipId, slotId: `cell:${moment.shotId}:${ordinal}`, shotId: moment.shotId!, kind });
+      onApply({ op: "addCollageSlot", clipId: clip.clipId, slotId: `cell:${moment.shotId}:${ordinal}`, shotId: moment.shotId!, kind, ...dimensions(moment) });
     } else if (slotId) {
       const source = sources[moment.shotId!] ?? moment.imageKey;
       onSource?.(moment.shotId!, source);
-      onApply({ op: "replaceCollageSlot", clipId: clip.clipId, slotId, shotId: moment.shotId!, kind });
+      onApply({ op: "replaceCollageSlot", clipId: clip.clipId, slotId, shotId: moment.shotId!, kind, ...dimensions(moment) });
     }
     onClose();
   };

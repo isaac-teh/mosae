@@ -19,7 +19,7 @@ export { watchProjectProgress, type ProgressDeps } from "./progress/watchProgres
 export { deriveChat, canConfirmStory, getSetAsideSummary } from "./chat/deriveChat";
 export { mainPeople, matchExistingPersonAnswer, orderPeopleByMergeSimilarity, personAnswerChips, type PersonAgeBand } from "./chat/personChips";
 export { trimRange, videoTrimBounds, type TimelineTrimEdge, type TrimRangeInput } from "./editor/timelineTrim";
-export { reorderSlots, reassignCollageSlots } from "./editor/reorderSlots";
+export { reorderSlots, reassignCollageSlots, fitEditedCollageSlots } from "./editor/reorderSlots";
 export { duplicateClip } from "./editor/duplicateClip";
 export { contextToolbar, type EditorSelection, type ContextToolbarAction } from "./editor/contextToolbar";
 export type { ChatInput, ChatItem, ChatState, ProjectSummary } from "./chat/types";
