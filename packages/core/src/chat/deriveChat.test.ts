@@ -27,6 +27,32 @@ const base = (): ChatInput => ({
 const kinds = (items: ChatItem[]) => items.map((item) => item.kind);
 
 describe("deriveChat state table", () => {
+  it("uses one main-person set for the intro, ordered questions, and summary", () => {
+    const people = [
+      { personId: "mom", name: null, role: null, skipped: false, momentCount: 30, sampleShotIds: [], days: [] },
+      { personId: "daughter", name: null, role: null, skipped: false, momentCount: 70, sampleShotIds: [], days: [] },
+      { personId: "dad", name: null, role: null, skipped: false, momentCount: 50, sampleShotIds: [], days: [] },
+    ];
+    const first = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null });
+    expect((first.items.find((item) => item.kind === "mosae" && item.id === "people-intro") as Extract<ChatItem, { kind: "mosae" }> | undefined)?.text).toBe("Three people appear often in your moments. Who is this?");
+    expect(first.items.find((item) => item.kind === "person")?.kind === "person" && (first.items.find((item) => item.kind === "person") as Extract<ChatItem, { kind: "person" }>).personId).toBe("daughter");
+    const second = deriveChat({ ...base(), people: people.map((person, i) => i === 1 ? { ...person, name: "My daughter" } : person), peopleConfirmed: false, plan: null });
+    expect(second.items.find((item) => item.kind === "person" && item.personId === "dad")).toBeTruthy();
+    const third = deriveChat({ ...base(), people: people.map((person) => person.personId === "daughter" || person.personId === "dad" ? { ...person, name: person.personId === "daughter" ? "My daughter" : "My dad" } : person), peopleConfirmed: false, plan: null });
+    expect(third.items.find((item) => item.kind === "person" && item.personId === "mom")).toBeTruthy();
+    const namedPeople = people.map((person) => ({ ...person, name: person.personId }));
+    const allAnswered = deriveChat({ ...base(), people: namedPeople, peopleConfirmed: false, plan: null });
+    expect(allAnswered.items.filter((item) => item.id.startsWith("person-question-")).map((item) => item.id)).toEqual(["person-question-daughter", "person-question-dad", "person-question-mom"]);
+    const summaryState = deriveChat({ ...base(), people: namedPeople, peopleConfirmed: true, peopleSummaryConfirmed: false });
+    expect((summaryState.items.find((item) => item.kind === "mosae" && item.id === "people-summary-message") as Extract<ChatItem, { kind: "mosae" }> | undefined)?.text).toBe("Thanks. I've tagged all three in your moments.");
+    expect(summaryState.items.find((item) => item.kind === "people-summary")?.kind === "people-summary" && (summaryState.items.find((item) => item.kind === "people-summary") as Extract<ChatItem, { kind: "people-summary" }>).people.map(({ personId }) => personId)).toEqual(["daughter", "dad", "mom"]);
+  });
+
+  it("does not describe one main person as three", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "only", name: null, role: null, skipped: false, momentCount: 6, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
+    expect((state.items.find((item) => item.kind === "mosae" && item.id === "people-intro") as Extract<ChatItem, { kind: "mosae" }> | undefined)?.text).toBe("One person appears often in your moments. Who is this?");
+  });
+
   it("uses an answered flow snapshot to enter the people step before a plan exists", () => {
     const state = deriveChat({ ...base(), intent: null, plan: null, people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 2, sampleShotIds: [], days: [] }], peopleConfirmed: false, flow: { revision: 1, story: { answer: "Our Japan trip", storySummary: "Japan trip", mentionedPeople: ["Mia"] }, people: [] } });
     expect(state.step).toBe("people");
@@ -244,7 +270,7 @@ describe("deriveChat state table", () => {
       { name: "first unnamed person", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: null, role: null, skipped: false, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "person"] },
       { name: "third person after two named", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: n < 2 ? `Person ${n}` : null, role: n < 2 ? "child" : null, skipped: false, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "you", "person"] },
       { name: "all people named", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: `Person ${n}`, role: "child", skipped: false, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "you", "you", "anyone-else"] },
-      { name: "top three by moment count then anyone else", input: { ...base(), people: [0, 1, 2, 3].map((n) => ({ personId: `p${n}`, name: n === 3 ? null : `Person ${n}`, role: "child", skipped: false, momentCount: [4, 40, 30, 1][n], sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "you", "you", "anyone-else"] },
+      { name: "ten-percent cluster remains eligible", input: { ...base(), people: [0, 1, 2, 3].map((n) => ({ personId: `p${n}`, name: n === 3 ? null : `Person ${n}`, role: "child", skipped: false, momentCount: [4, 40, 30, 1][n], sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "you", "you", "person"] },
       { name: "skipped person counts as answered", input: { ...base(), people: [0, 1, 2].map((n) => ({ personId: `p${n}`, name: null, role: null, skipped: n === 0, momentCount: 3 - n, sampleShotIds: [], days: [] })), peopleConfirmed: false, plan: null }, step: "people", confirmed: 1, kinds: ["you", "you", "person"] },
       { name: "no people detected", input: { ...base(), people: [], peopleConfirmed: false, momentsConfirmed: false }, step: "direction", confirmed: 3, kinds: ["you", "typing"] },
       { name: "people confirmed and plan ready", input: { ...base(), people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: true }, step: "direction", confirmed: 3, kinds: ["you", "you", "typing"] },
@@ -363,7 +389,7 @@ describe("deriveChat state table", () => {
       { personId: "p3", name: null, role: null, skipped: false, momentCount: 1, sampleShotIds: [], days: [] },
     ];
     const state = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null });
-    expect(state.items.filter((item) => item.kind !== "mosae" && item.kind !== "upload-status").map((item) => item.kind === "you" ? item.text : item.kind === "anyone-else" ? "anyone-else" : item.kind)).toEqual(["Our Japan trip", "Most", "Second", "Four", "anyone-else"]);
+    expect(state.items.filter((item) => item.kind !== "mosae" && item.kind !== "upload-status").map((item) => item.kind === "you" ? item.text : item.kind === "anyone-else" ? "anyone-else" : item.kind)).toEqual(["Our Japan trip", "Most", "Second", "Four", "person"]);
   });
 
   it("records Skip as a reply and asks the next person", () => {

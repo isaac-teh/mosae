@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { orderPeopleByMergeSimilarity, personAnswerChips, matchExistingPersonAnswer } from "./personChips.js";
+import { mainPeople, orderPeopleByMergeSimilarity, personAnswerChips, matchExistingPersonAnswer } from "./personChips.js";
+
+describe("mainPeople", () => {
+  it("keeps frequent foreground clusters, sorts by moments, and caps the flow at five", () => {
+    const clusters = [
+      { personId: "rare", momentCount: 1 }, { personId: "background", momentCount: 20, backgroundOnly: true },
+      ...Array.from({ length: 6 }, (_, i) => ({ personId: `p${i}`, momentCount: 10 - i })),
+    ];
+    expect(mainPeople(clusters, 100).map(({ personId }) => personId)).toEqual(["p0", "p1", "p2", "p3", "p4"]);
+  });
+
+  it("includes clusters appearing in at least ten percent of shots", () => {
+    expect(mainPeople([{ personId: "ten-percent", momentCount: 10 }, { personId: "below", momentCount: 1 }], 100).map(({ personId }) => personId)).toEqual(["ten-percent"]);
+  });
+});
 
 describe("personAnswerChips", () => {
   it.each([

@@ -17,7 +17,7 @@ export { startStoryPlan, watchStoryPlan, type StoryPlanJob } from "./story/plann
 export { computeProgress, describeProgress, type ProjectProgress, type ProjectStatus, type RawProgress } from "./progress/progress";
 export { watchProjectProgress, type ProgressDeps } from "./progress/watchProgress";
 export { deriveChat, canConfirmStory, getSetAsideSummary } from "./chat/deriveChat";
-export { matchExistingPersonAnswer, orderPeopleByMergeSimilarity, personAnswerChips, type PersonAgeBand } from "./chat/personChips";
+export { mainPeople, matchExistingPersonAnswer, orderPeopleByMergeSimilarity, personAnswerChips, type PersonAgeBand } from "./chat/personChips";
 export { trimRange, videoTrimBounds, type TimelineTrimEdge, type TrimRangeInput } from "./editor/timelineTrim";
 export { reorderSlots } from "./editor/reorderSlots";
 export { duplicateClip } from "./editor/duplicateClip";

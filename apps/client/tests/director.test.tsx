@@ -536,7 +536,7 @@ describe("Director chat", () => {
   });
 
   it("confirms a story-mentioned son on the top face cluster and saves Yes as My son", async () => {
-    setup({ interpret: async () => ({ reply: "Children's Day celebration", change: { kind: "occasion", storyText: "Children's Day celebration", mentionedPeople: ["son"] } }) }); await renderScreen();
+    setup({ people: [...people, { personId: "person-3", name: null, role: null, ageBand: "adult", momentCount: 5, sampleShotIds: [], sampleFaces: [], days: [2] }], interpret: async () => ({ reply: "Children's Day celebration", change: { kind: "occasion", storyText: "Children's Day celebration", mentionedPeople: ["son"] } }) }); await renderScreen();
     const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "My son children day celebration"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("→"); await click("Yes, that's right");
@@ -549,6 +549,8 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Someone else"]')).toBeTruthy();
     await click("Yes");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "My son", role: "child" })]) })));
+    expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy();
+    expect(hasText("Three people appear often in your moments. Who is this?")).toBe(true);
   });
 
   it("runs story, per-person photo review and tagging, summary, options, and preview in order", async () => {
@@ -599,6 +601,23 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="A trip"]')).toBeNull();
   });
 
+  it.each(["typed name", "Tag it, return, then type a name"] as const)("asks person two after person one is answered by %s", async (path) => {
+    setup({ people: [...people, { personId: "person-3", name: null, role: null, ageBand: "adult", momentCount: 5, sampleShotIds: [], sampleFaces: [], days: [2] }] });
+    await renderScreen();
+    await click("A trip");
+    if (path === "Tag it, return, then type a name") {
+      await click("Not the same person? Tag it");
+      mocks.params = { completedPersonId: "person-1", completedPersonName: "this person", completedMomentCount: "3" };
+      await renderScreen();
+    }
+    await click("Type a name");
+    const nameInput = host.querySelector('input[aria-label="Person name"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(nameInput, "Mia"); nameInput.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("Save name");
+    await waitFor(() => expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy());
+    expect(hasText("Three people appear often in your moments. Who is this?")).toBe(true);
+  });
+
   it("reveals existing person choices after Someone else", async () => {
     setup({ interpret: async () => ({ reply: "Children's Day celebration", change: { kind: "occasion", storyText: "Children's Day celebration", mentionedPeople: ["son"] } }) }); await renderScreen();
     const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
@@ -607,6 +626,8 @@ describe("Director chat", () => {
     expect(hasText("Is this your son?")).toBe(true);
     await click("Someone else");
     expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
+    await click("My daughter");
+    await waitFor(() => expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy());
   });
 
   it("does not revise a plan proposal until its asynchronous job has published it", async () => {
@@ -712,6 +733,7 @@ describe("Director chat", () => {
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
     expect(hasText("Skip")).toBe(true);
     expect(hasText("Family")).toBe(false);
+    expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
   });
 
   it("shows the selected role chip label in the reply", async () => {
@@ -820,6 +842,31 @@ describe("Director chat", () => {
     await waitFor(() => expect(chat.state.items.some((item) => item.kind === "you" && item.text === "A trip")).toBe(true));
     expect(chat.state.step).toBe("people");
     expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
+  });
+
+  it("keeps asking each main person when a flow snapshot refresh arrives between answers", async () => {
+    const threePeople = [...people, { personId: "person-3", name: null, role: null, ageBand: "adult", momentCount: 5, sampleShotIds: [], sampleFaces: [], days: [2] }];
+    setup({ readyPlan: true, people: threePeople });
+    let revision = 1;
+    mocks.repo.getFlow = vi.fn(async () => ({ revision, story: { answer: "A trip", storySummary: "Japan trip", mentionedPeople: [] }, people: [] }));
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-1")).toBe(true));
+
+    await act(async () => chat.actions.setPerson("person-1", "My daughter"));
+    expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-2")).toBe(true);
+    revision++;
+    await act(async () => { chat.retry(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-2")).toBe(true);
+
+    await act(async () => chat.actions.setPerson("person-2", "My mum"));
+    expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-3")).toBe(true);
+    await act(async () => chat.actions.setPerson("person-3", "My dad"));
+    expect(chat.state.items.some((item) => item.kind === "anyone-else")).toBe(true);
+    await act(async () => chat.actions.confirmPeople());
+    expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true);
   });
 
   it("does not route a typed person correction through occasion confirmation or rename", async () => {
