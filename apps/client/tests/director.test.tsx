@@ -1158,8 +1158,10 @@ describe("Director chat", () => {
     expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Who did I miss? Type their name.")).toBe(true);
     await act(async () => chat.actions.send("Grandma"));
     expect(flow.missedPeople).toEqual([{ personId: expect.stringMatching(/^p-missed-/), name: "Grandma" }]);
-    expect(chat.state.items.some((item) => item.kind === "you" && item.text === "There is someone else")).toBe(true);
-    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Grandma.")).toBe(true);
+    const missedTurnOrder = () => chat.state.items.map((item) => item.id).filter((id) => ["anyone-else", "missed-clarification-question-1", "missed-clarification-reply-1", "missed-name-" + flow.missedPeople[0].personId, "missed-select-" + flow.missedPeople[0].personId].includes(id));
+    expect(missedTurnOrder()).toEqual(["anyone-else", "missed-clarification-question-1", "missed-clarification-reply-1", "missed-name-" + flow.missedPeople[0].personId, "missed-select-" + flow.missedPeople[0].personId]);
+    await act(async () => { await chat.retry(); });
+    expect(missedTurnOrder()).toEqual(["anyone-else", "missed-clarification-question-1", "missed-clarification-reply-1", "missed-name-" + flow.missedPeople[0].personId, "missed-select-" + flow.missedPeople[0].personId]);
   });
 
   it("shows the retry message when interpretation fails and keeps the occasion reply usable", async () => {
