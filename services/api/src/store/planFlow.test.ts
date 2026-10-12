@@ -174,17 +174,19 @@ describe("plan flow (emulator)", () => {
     expect(scripted.inputs).toHaveLength(0);
   });
 
-  it("fails validation permanently and omits analysis for superseded asset generations", async () => {
+  it("retries a validation failure once with a fresh attempt and omits superseded asset generations", async () => {
     const { project, addJob } = await seed();
     const { task, ref } = await addJob();
     await project.collection("assets").doc("asset-0").update({ generation: "2" });
     const scripted = model();
     const worker = createPlan({ db: adminDb, model: scripted.instance, now: () => 100 });
+    await expect(worker(task)).rejects.toThrow("validation_failed");
+    expect((await ref.get()).data()).toMatchObject({ status: "queued", attempts: 1, code: "validation_failed", leaseUntil: null });
     expect(await worker(task)).toBe("failed");
     expect(await worker(task)).toBe("skipped");
-    expect(scripted.inputs).toHaveLength(2);
+    expect(scripted.inputs).toHaveLength(4);
     expect(scripted.inputs[0].messages[0].content).not.toContain("shot-0 | photo");
-    expect((await ref.get()).data()).toMatchObject({ status: "failed", attempts: 1, code: "validation_failed", leaseUntil: null });
+    expect((await ref.get()).data()).toMatchObject({ status: "failed", attempts: 2, code: "validation_failed", leaseUntil: null });
     expect((await project.collection("storyProposals").get()).empty).toBe(true);
   });
 

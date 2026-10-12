@@ -81,7 +81,7 @@ export type PlanResult =
   | {
     ok: false;
     code: "validation_failed";
-    retryable: false;
+    retryable: true;
     reason: string;
     diagnostics: string[];
     usage: PlanBudgetUsage;
@@ -165,11 +165,12 @@ function admissibleSet(workingSet: WorkingSet, tools: PlanningTools): WorkingSet
 }
 
 /** Ensure every eligible catalog asset is represented after Gemini has supplied the story structure. */
-function completeSubmission(submission: ProposalSubmission, shots: WorkingShot[]): ProposalSubmission {
-  const moments = [...submission.moments];
+function completeSubmission(submission: ProposalSubmission, shots: WorkingShot[], excludedShotIds: string[]): ProposalSubmission {
+  const excluded = new Set(excludedShotIds);
+  const moments = submission.moments.filter((moment) => !excluded.has(moment.shotId));
   const known = new Set(moments.map((moment) => moment.shotId));
   const shotById = new Map(shots.map((shot) => [shot.id, shot]));
-  const chapters = submission.chapters.map((chapter) => ({ ...chapter, momentIds: [...chapter.momentIds] }));
+  const chapters = submission.chapters.map((chapter) => ({ ...chapter, momentIds: chapter.momentIds.filter((id) => !excluded.has(id)) }));
   for (const shot of shots) {
     if (known.has(shot.id) || !shot.analysis || shot.dupOf || shot.analysis.kind === "video" && !shot.analysis.usable) continue;
     let chapter = chapters.find((candidate) => candidate.momentIds.some((id) => {
@@ -284,7 +285,7 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
       return {
         ok: false,
         code: "validation_failed",
-        retryable: false,
+        retryable: true,
         reason: "We couldn't build a valid story plan after one repair. Please try again.",
         diagnostics,
         usage: budget.snapshot(),
@@ -338,12 +339,17 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
       }
 
       await progress("organizing");
-      const validation = validateProposal(output.submission, admissibleSet(workingSet, deps.tools), {
+      // The model may prioritize scenes; fill eligible catalog shots before
+      // checking minimum coverage so small albums don't fail for omissions.
+      const admissible = admissibleSet(workingSet, deps.tools);
+      const completedSubmission = completeSubmission(output.submission, admissible.shots, excludedShotIds);
+      const validation = validateProposal(completedSubmission, admissible, {
         excludedShotIds,
         mustIncludeShotIds,
         dayChapters: Boolean(job.daySummary),
       });
       if (!validation.ok) {
+        console.warn("story plan validation failed", { jobId: job.id, proposalId: job.proposalId, diagnostics: validation.diagnostics });
         const failure = repairOrFailure(output, validation.diagnostics);
         if (failure) return failure;
         continue;
@@ -351,7 +357,7 @@ export async function runPlan(job: PlanJob, deps: RunPlanDeps): Promise<PlanResu
 
       let proposal: StoryProposal;
       try {
-        proposal = assembleProposal(completeSubmission(output.submission, workingSet.shots), {
+        proposal = assembleProposal(completedSubmission, {
           proposalId: job.proposalId,
           projectId: job.projectId,
           storyIntentId: job.storyIntentId,

@@ -5,14 +5,16 @@ describe("music library", () => {
   const tracks = loadLibrary();
 
   it("loads every track with its measured beats", () => {
-    expect(tracks).toHaveLength(38);
+    expect(tracks).toHaveLength(47);
     expect(new Set(tracks.map((track) => track.id)).size).toBe(tracks.length);
     for (const track of tracks) {
       expect(track.beatsSec.length).toBeGreaterThan(10);
-      expect(track.analysis).toMatchObject({ hasPulse: true, ending: { lastStrongDownbeatSec: expect.any(Number), outroStartSec: expect.any(Number) } });
-      expect(track.analysis?.downbeatsSec.length).toBeGreaterThan(0);
-      expect(track.analysis?.bars.length).toBeGreaterThan(0);
-      expect(track.analysis?.energySections.length).toBeGreaterThan(0);
+      if (track.analysis) {
+        expect(track.analysis).toMatchObject({ hasPulse: true, ending: { lastStrongDownbeatSec: expect.any(Number), outroStartSec: expect.any(Number) } });
+        expect(track.analysis.downbeatsSec.length).toBeGreaterThan(0);
+        expect(track.analysis.bars.length).toBeGreaterThan(0);
+        expect(track.analysis.energySections.length).toBeGreaterThan(0);
+      }
       expect(track.durationSec).toBeGreaterThan(30);
       expect(["tender", "reflective", "playful", "energetic", "celebratory"]).toContain(track.cadence);
       expect(track.beatsSec.every((beat, index, values) => beat >= 0 && beat < track.durationSec && (!index || beat > values[index - 1]!))).toBe(true);

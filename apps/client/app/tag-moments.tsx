@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, Image, Pressable, Text, View } from "react
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { getProjectMoments, savePersonMoments, type ProjectMoment } from "@/lib/projectMoments";
 import { useStoryFlow } from "@/lib/storyFlow";
+import { setTaggedPersonResult } from "@/lib/taggedPersonResult";
 
 type Row = { key: string; title: string; count: number } | { key: string; moments: ProjectMoment[] };
 
@@ -32,7 +33,9 @@ export default function TagMomentsScreen() {
     try {
       const previous = new Set(moments.filter((item) => item.personIds.includes(personId)).map((item) => item.shotId));
       if (story.flow.repository !== "fixture") await savePersonMoments(projectId, personId, name, [...selected].filter((id) => !previous.has(id)), [...previous].filter((id) => !selected.has(id)));
-      router.replace({ pathname: "/director", params: { projectId, repository: story.flow.repository, completedPersonId: personId, completedPersonName: name, completedMomentCount: String(selected.size), completedIsMissed: source === "missed" ? "true" : "false", completedSampleUri: moments.find((moment) => selected.has(moment.shotId))?.thumbnailUrl } } as any);
+      const sampleUri = moments.find((moment) => selected.has(moment.shotId))?.thumbnailUrl;
+      setTaggedPersonResult({ personId, name, momentCount: selected.size, isMissed: source === "missed", ...(sampleUri ? { sampleUri } : {}) });
+      router.back();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save these tags"); }
     finally { setSaving(false); }
   };

@@ -90,6 +90,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const compositionRetryAvailable = useRef(false);
   const planLoad = useRef(false);
   const planFailed = useRef(false);
+  const planWaitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumeProjectId = useRef<string | null>(null);
   const peopleEdits = useRef(new Map<string, { name: string | null; role: string | null; skipped: boolean }>());
   const personTagCounts = useRef(new Map<string, number>());
@@ -123,6 +124,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     generationSaving.current = false;
     planLoad.current = false;
     planFailed.current = false;
+    if (planWaitTimer.current) clearTimeout(planWaitTimer.current);
+    planWaitTimer.current = null;
     resumeProjectId.current = null;
     peopleEdits.current.clear();
     personTagCounts.current.clear();
@@ -243,7 +246,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           intent: current.intent ?? (resume.proposalId || hasGeneration ? { text: confirmedStory } : null),
           people: mergedSummary.ready.faces ? mapped?.map((person) => {
             const local = current.people?.find((item) => item.personId === person.personId);
-            return local?.name || local?.skipped ? { ...person, ...local } : person;
+            return local?.name || local?.skipped || peopleEdits.current.has(person.personId) ? { ...person, ...local } : person;
           }) ?? null : current.people,
           peopleConfirmed: hasFlowRecord ? allFlowPeopleAnswered : Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)),
           peopleSummaryConfirmed: hasFlowRecord ? peopleSummaryConfirmed : undefined,
@@ -255,6 +258,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         }));
         setResumeLoaded(true);
         if (plan && !hasGeneration && !needsFilteredPhotoReview) await loadDirectionOptions(plan.planId, stillValid);
+        if (plan && planWaitTimer.current) { clearTimeout(planWaitTimer.current); planWaitTimer.current = null; }
         if (stillValid() && resume.generationId && hasGeneration) {
           activeFilmId.current = resume.generationId;
           if (!isFilmReady) void pollFilmRef.current(resume.generationId);
@@ -266,7 +270,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     }
     setInput((current) => ({ ...current, ...(taggedPersonRef.current ? { taggedPerson: taggedPersonRef.current } : {}), summary: mergedSummary, people: mergedSummary.ready.faces ? mapped?.map((person) => {
       const local = current.people?.find((item) => item.personId === person.personId);
-      return local?.name || local?.skipped ? { ...person, ...local } : person;
+      return local?.name || local?.skipped || peopleEdits.current.has(person.personId) ? { ...person, ...local } : person;
     }) ?? null : current.people, peopleConfirmed: typeof repository.getFlow !== "function" ? current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) : nextSummary.ready.faces && mapped !== null && (mapped.length === 0 || mapped.every((person) => {
       const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
       return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto));
@@ -282,7 +286,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (stillValid()) {
           const setAside = getSetAsideSummary(plan);
           const needsFilteredPhotoReview = setAside.blurry + setAside.duplicates > 0;
-          setInput((current) => ({ ...current, plan, momentsConfirmed: !needsFilteredPhotoReview }));
+          setInput((current) => ({ ...current, plan, planFailed: false, momentsConfirmed: !needsFilteredPhotoReview }));
+          if (planWaitTimer.current) { clearTimeout(planWaitTimer.current); planWaitTimer.current = null; }
           if (!needsFilteredPhotoReview) await loadDirectionOptions(plan.planId, stillValid);
         }
       } catch (cause) {
@@ -309,7 +314,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     return () => { mounted.current = false; clearInterval(timer); stopReadiness?.(); };
   }, [refresh, localState.localMediaPending]);
 
-  useEffect(() => () => { if (generationTimer.current) clearTimeout(generationTimer.current); }, []);
+  useEffect(() => () => { if (generationTimer.current) clearTimeout(generationTimer.current); if (planWaitTimer.current) clearTimeout(planWaitTimer.current); }, []);
 
   useEffect(() => {
     const generation = input.generation;
@@ -361,8 +366,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         compositionRetryAvailable.current = true;
         setInput(current => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: false } : null, generation: null }));
         if (!directionOptions && proposalId.current) await recoverDirectionOptions(proposalId.current);
-        const message = (cause as { message?: unknown })?.message;
-        setError(typeof message === "string" && message ? `${message}. Check the pace and length, then try again.` : "Your film could not be composed. Check the pace and length, then try again.");
+        setError("I couldn't put your film together this time.");
       } else {
         setInput((current) => ({ ...current, generation: { status: "failed", stage: "failed", progress: current.generation?.progress ?? 0, stepsDone: current.generation?.stepsDone ?? 0, film: null } }));
         setError(reportFailure(cause));
@@ -419,14 +423,21 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const result = await repository.createPlan([storyText, ...input.notes].join("\n"), []);
         if (!isCurrentProject()) return;
         proposalId.current = result.planId;
-        setInput((current) => ({ ...current, pendingResponse: undefined, earlyOccasionAnswer: undefined, earlyOccasionStoryText: undefined, intent: current.intent ?? { text: answer ?? input.earlyOccasionAnswer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
+        if (planWaitTimer.current) clearTimeout(planWaitTimer.current);
+        planWaitTimer.current = setTimeout(() => {
+          if (!isCurrentProject() || currentPlan.current) return;
+          planFailed.current = true;
+          setInput((current) => ({ ...current, pendingResponse: undefined, planFailed: true }));
+          setError("I couldn't put the story together this time.");
+        }, 180_000);
+        setInput((current) => ({ ...current, pendingResponse: undefined, planFailed: false, earlyOccasionAnswer: undefined, earlyOccasionStoryText: undefined, intent: current.intent ?? { text: answer ?? input.earlyOccasionAnswer ?? storyText }, ...(mentionedPeople?.length ? { mentionedPeople } : {}), ...(storySummary ? { storySummary } : {}) }));
         setPendingInterpret(null);
         void refresh().catch((refreshCause) => { if (isCurrentProject()) setError(reportFailure(refreshCause)); });
       } catch (cause) {
         if (!isCurrentProject()) return;
         planFailed.current = true; reportFailure(cause);
-        setInput((current) => ({ ...current, pendingResponse: undefined }));
-        setError("I couldn't shape this one. Try again.");
+        setInput((current) => ({ ...current, pendingResponse: undefined, planFailed: true }));
+        setError("I couldn't put the story together this time.");
       }
       finally { if (isCurrentProject()) { occasionSaving.current = false; setSaving(false); } }
     },
@@ -475,6 +486,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     },
     reopenPeople() {
       const person = input.people?.find((entry) => !entry.skipped);
+      if (!person) return;
+      this.reopenPerson(person.personId);
+    },
+    reopenPerson(personId: string) {
+      const person = input.people?.find((entry) => entry.personId === personId && !entry.skipped);
       if (!person) return;
       peopleEdits.current.set(person.personId, { name: null, role: null, skipped: false });
       void commitFlowAction({ type: "batch", actions: [
@@ -548,7 +564,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     updatePersonTagCount(personId: string, momentCount: number, sampleUri?: string, name?: string) {
       personTagCounts.current.set(personId, momentCount);
       const person = input.people?.find((entry) => entry.personId === personId);
-      if (sampleUri) taggedPersonRef.current = { personId, name: person?.name ?? name ?? "this person", photos: [sampleUri] };
+      if (sampleUri) taggedPersonRef.current = { personId, name: person?.name ?? (name === "this person" ? "" : name ?? ""), photos: [sampleUri] };
+      // The selected grid image is a scene thumbnail, so preserve the face
+      // crops on the original person question in chat history.
       setInput((current) => ({ ...current, ...(taggedPersonRef.current ? { taggedPerson: taggedPersonRef.current } : {}), people: (current.people ?? []).map((entry) => entry.personId === personId ? { ...entry, momentCount } : entry) }));
     },
     beginMissedPersonTagging(personId: string, name: string) { setInput((current) => ({ ...current, missedPersonTagging: { personId, name } })); },
@@ -775,8 +793,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     },
     answerOccasion(text: string, storyText?: string) {
       if (occasionSaving.current) return;
-      const questionUploadComplete = state.items.find((item) => item.kind === "occasion-question")?.uploadComplete;
-      setInput((current) => ({ ...current, earlyOccasionAnswer: text, ...(questionUploadComplete === undefined ? {} : { earlyOccasionQuestionUploadComplete: questionUploadComplete }), ...(storyText ? { earlyOccasionStoryText: storyText } : {}) }));
+      setInput((current) => ({ ...current, earlyOccasionAnswer: text, ...(storyText ? { earlyOccasionStoryText: storyText } : {}) }));
       if (canConfirmStory({ ...input, ...confirmationState })) void actions.confirmOccasion(text, storyText);
     },
     discardInterpret() { setPendingInterpret(null); },
@@ -789,16 +806,25 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     setError(null);
     if (planFailed.current && input.intent) {
       planFailed.current = false;
+      if (planWaitTimer.current) { clearTimeout(planWaitTimer.current); planWaitTimer.current = null; }
+      setInput((current) => ({ ...current, planFailed: false }));
       void repository.createPlan([input.intent.text, ...input.notes].join("\n"), []).then((result) => {
         if (!isCurrentProject()) return;
         proposalId.current = result.planId;
-        setInput((current) => ({ ...current, pendingResponse: undefined }));
+      if (planWaitTimer.current) clearTimeout(planWaitTimer.current);
+      planWaitTimer.current = setTimeout(() => {
+        if (!isCurrentProject() || currentPlan.current) return;
+        planFailed.current = true;
+        setInput((current) => ({ ...current, planFailed: true }));
+        setError("I couldn't put the story together this time.");
+      }, 180_000);
+        setInput((current) => ({ ...current, pendingResponse: undefined, planFailed: false }));
         void refresh().catch((cause) => { if (isCurrentProject()) setError(reportFailure(cause)); });
       }).catch((cause) => {
         if (!isCurrentProject()) return;
         planFailed.current = true;
-        setInput((current) => ({ ...current, pendingResponse: undefined }));
-        setError("I couldn't shape this one. Try again.");
+        setInput((current) => ({ ...current, pendingResponse: undefined, planFailed: true }));
+        setError("I couldn't put the story together this time.");
         reportFailure(cause);
       });
     } else if (compositionRetryAvailable.current) { compositionRetryAvailable.current = false; void actions.shapeIt(); }

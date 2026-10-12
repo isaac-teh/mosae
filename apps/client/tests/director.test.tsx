@@ -25,7 +25,7 @@ vi.mock("react-native", () => {
 });
 
 const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, confirmCast: vi.fn(), push: vi.fn(), setParams: vi.fn(), params: {} as Record<string, string | undefined>, openPicker: vi.fn(), selectFiles: ((_: File[]) => {}) as (files: File[]) => void, uploadMedia: vi.fn(), projectId: "project-1" }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ projectId: mocks.projectId, ...mocks.params }), useRouter: () => ({ back: vi.fn(), push: mocks.push, setParams: mocks.setParams }) }));
+vi.mock("expo-router", () => ({ useFocusEffect: (callback: () => void) => React.useEffect(callback, [callback]), useLocalSearchParams: () => ({ projectId: mocks.projectId, ...mocks.params }), useRouter: () => ({ back: vi.fn(), push: mocks.push, setParams: mocks.setParams }) }));
 vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typeof import("@mosae/core")>()), getStoryRepository: () => mocks.repo, uploadMedia: (...args: any[]) => mocks.uploadMedia(...args) }));
 vi.mock("@/lib/characters", () => ({ confirmCast: (...args: any[]) => mocks.confirmCast(...args) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flowRepo, flow: { repository: "api", projectId: "project-1" } }) }));
@@ -121,6 +121,11 @@ describe("Director chat", () => {
     mocks.repo.getFlow = vi.fn(async () => flow);
     mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, peopleSummaryConfirmed: action.confirmed }; return flow; });
     await renderScreen();
+    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
+    expect(host.querySelector('button[aria-label="Change Mia"]')).toBeTruthy();
+    await click("Change Mia");
+    await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
+    await click("My daughter");
     await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
     await click("Confirm");
     await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), { type: "people-summary-confirmed", confirmed: true }));
@@ -568,7 +573,7 @@ describe("Director chat", () => {
     setup({ createPlan: vi.fn().mockRejectedValue(new Error("planner failed")) });
     await renderScreen();
     await click("A trip");
-    await waitFor(() => expect(hasText("I couldn't shape this one. Try again")).toBe(true));
+    await waitFor(() => expect(hasText("I couldn't put the story together this time.")).toBe(true));
     expect(host.querySelector('button[aria-label="A trip"]')).toBeFalsy();
     expect(hasText("A trip")).toBe(true);
     const summaryReadsAtFailure = mocks.repo.getSummary.mock.calls.length;
@@ -576,6 +581,25 @@ describe("Director chat", () => {
     expect(mocks.repo.getSummary).toHaveBeenCalledTimes(summaryReadsAtFailure);
     await click("Try again");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledTimes(2));
+  });
+
+  it("stops the plan spinner after three minutes and offers a retry", async () => {
+    setup({ people: [] });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(true));
+    vi.useFakeTimers();
+    try {
+      await act(async () => { await chat.actions.confirmOccasion("A trip", "Our trip"); });
+      expect(chat.state.items.some((item) => item.id === "plan-wait")).toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(180_000); });
+      expect(chat.error).toBe("I couldn't put the story together this time.");
+      expect(chat.state.items.some((item) => item.id === "plan-wait")).toBe(false);
+      chat.retry();
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(mocks.repo.createPlan).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); }
   });
 
   it("saves the selected role and name before asking about the next person", async () => {
@@ -831,7 +855,7 @@ describe("Director chat", () => {
     const infoLog = vi.spyOn(console, "info").mockImplementation(() => {});
     setup({ createPlan: async () => { throw new Error("not_found"); } }); await renderScreen();
     await click("A trip");
-    await waitFor(() => expect(hasText("I couldn't shape this one. Try again.")).toBe(true));
+    await waitFor(() => expect(hasText("I couldn't put the story together this time.")).toBe(true));
     expect(hasText("not_found")).toBe(false);
     expect(hasText("Try again")).toBe(true);
     expect(infoLog).toHaveBeenCalledWith("Director chat request failed", "not_found");
@@ -907,7 +931,7 @@ describe("Director chat", () => {
     function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
     await act(async () => root.render(<Harness />));
     await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
-    await waitFor(() => expect(chat.error).toContain("couldn't shape"));
+    await waitFor(() => expect(chat.error).toContain("couldn't put the story together"));
     expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
     expect(chat.state.items.some((item) => item.kind === "person")).toBe(true);
   });
@@ -1237,8 +1261,9 @@ describe("Director chat", () => {
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
     await click("Sounds good");
 
-    await waitFor(() => expect(hasText("short duration exceeds available material")).toBe(true));
+    await waitFor(() => expect(hasText("I couldn't put your film together this time.")).toBe(true));
     expect(hasText("Shaping your film")).toBe(false);
+    expect(hasText("Sounds good")).toBe(false);
     expect([...host.querySelectorAll("button")].some((button) => button.textContent?.trim() === "Try again")).toBe(true);
     await click("Try again");
 
