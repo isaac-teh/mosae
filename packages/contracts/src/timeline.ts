@@ -179,6 +179,14 @@ export type AudioClip = z.infer<typeof AudioClipSchema>;
 export type Caption = z.infer<typeof CaptionSchema>;
 export type Timeline = z.infer<typeof TimelineSchema>;
 
+/** Keep the rendered collage spec duration in lockstep with its timeline clip. */
+export function syncCollageDurations<T extends Timeline>(timeline: T): T {
+  for (const clip of timeline.videoClips) {
+    if ("kind" in clip) clip.spec.durationSec = clip.durationSec;
+  }
+  return timeline;
+}
+
 export function collageShotIds(timeline: Timeline): string[] {
   return timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []) : []);
 }

@@ -62,7 +62,7 @@ function DirectFilmScreenContent({ planId, repository, route }: {
       setDurationId(value.recommendedDuration);
       // Start on the tone the planner read from the photos, not the first in the list.
       setCadenceIndex(Math.max(0, value.cadences.findIndex((cadence) => cadence.id === value.recommendedCadence)));
-    }).catch((cause: Error) => { if (isCurrent()) setError(cause.message); });
+    }).catch(() => { if (isCurrent()) setError("Something went wrong while making your film. Try again."); });
   }, [isCurrent, planId, repository]);
   useEffect(load, [load]);
 
@@ -87,7 +87,7 @@ function DirectFilmScreenContent({ planId, repository, route }: {
       if (!isCurrent()) return;
       router.navigate(route("/review-film", { filmId: filmId }) as never);
     } catch (cause) {
-      if (isCurrent()) setError(cause instanceof Error ? cause.message : "Unable to direct your film");
+      if (isCurrent()) setError("Something went wrong while making your film. Try again.");
     } finally {
       if (isCurrent()) setDirecting(false);
     }

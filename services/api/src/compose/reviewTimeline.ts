@@ -1,4 +1,5 @@
 import type { Timeline } from "@mosae/contracts";
+import { syncCollageDurations } from "@mosae/contracts";
 import type { Candidate, Asset, TranscriptSegment } from "./buildCandidates.js";
 import type { StyleRecipe } from "./styleRecipe.js";
 import type { CutMusic } from "./musicCuts.js";
@@ -55,6 +56,7 @@ function reflow(timeline: Timeline): void {
     cursor = clip.startSec + clip.durationSec;
   });
   timeline.durationSec = round(cursor);
+  syncCollageDurations(timeline);
   for (const { caption, clipId, offsetStart, offsetEnd } of captionOwners) {
     const clip = timeline.videoClips.find(item => idOf(item) === clipId);
     if (!clip) continue;

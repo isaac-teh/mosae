@@ -1,4 +1,4 @@
-import { reflow, safeParseTimeline, type ClipPlan } from "@mosae/contracts";
+import { reflow, safeParseTimeline, syncCollageDurations, type ClipPlan } from "@mosae/contracts";
 import { DURATION_SECONDS } from "@mosae/contracts";
 import { buildCandidates } from "./buildCandidates.js";
 import { allocateBudget } from "./budget.js";
@@ -885,6 +885,7 @@ export async function runCompose(
   for (const [itemId, asset] of deps.assets) {
     if (asset.kind === "video" && asset.analysis?.transcript) transcriptByShot.set(shotIdByMoment.get(itemId) ?? itemId, asset.analysis.transcript);
   }
+  syncCollageDurations(withCollages);
   const speechIssues = findSpeechBoundaryViolations(withCollages, transcriptByShot).map(v => ({ path: `videoClips[${v.clipId}].source.${v.edge}`, message: `source ${v.edge} ${v.boundarySec}s splits transcript segment [${v.segment.startSec},${v.segment.endSec}]`, severity: "fixable" as const }));
   const issues = [...validateTimeline(withCollages, validationCtx), ...speechIssues];
 
@@ -927,6 +928,7 @@ export async function runCompose(
 
   // Structural parse is the last gate on both paths. A repair that drops a clip
   // can leave the timeline structurally invalid, so it is not exempt from this.
+  syncCollageDurations(final);
   const parsedResult = safeParseTimeline(final);
   if (!parsedResult.ok) {
     return { ok: false, reasons: [`structural validation failed: ${parsedResult.errors.join("; ")} AUDIO=${JSON.stringify(final.audioClips.map((clip) => ({ id: clip.id, role: clip.role, startSec: clip.startSec, source: clip.source })))}`] };

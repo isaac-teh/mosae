@@ -118,7 +118,7 @@ describe("golden composition", () => {
     expect(serialized[0]).toBe(expected);
   });
 
-  it("deterministically stretches a four-photo collage from its photo-count base", async () => {
+  it.each(["few", "lots"] as const)("validates music-backed %s collage films across repeated golden fixture runs", async (collageAmount) => {
     const moments = Array.from({ length: 8 }, (_, index) => ({
       id: `collage-photo-${index}`,
       shotId: `collage-shot-${index}`,
@@ -134,7 +134,7 @@ describe("golden composition", () => {
       chapters: [{ id: "trip", title: "Trip", summary: "", momentIds: moments.map((moment) => moment.id) }],
       constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] },
     };
-    const job: ComposeJob = { ...input.job, proposal, durationId: null, cadenceId: "playful", soundtrackId: null, collageAmount: "few" };
+    const job: ComposeJob = { ...input.job, proposal, durationId: null, cadenceId: "playful", soundtrackId: "pixabay-362266", soundtrackExplicit: true, collageAmount };
     const catalog = Object.fromEntries(moments.map((moment, index) => [moment.id, {
       ...(input.catalog["m-arrival"] as Asset),
       assetId: `trip-asset-${index}`,
@@ -147,7 +147,7 @@ describe("golden composition", () => {
     };
     const deps: ComposeDeps = {
       generateStructured: async () => response,
-      soundtrackIds: new Set(),
+      soundtrackIds: new Set(["pixabay-362266"]),
       assets: new Map(Object.entries(catalog)),
       collageReview: { combos: [{ layoutId: "torn-paper", motionId: "print-drop", verdict: "keep" }] },
     };
@@ -160,6 +160,8 @@ describe("golden composition", () => {
       expect(collage.durationSec).toBeGreaterThanOrEqual(photoBaseDuration(4, "playful"));
       expect(collage.durationSec).toBeLessThanOrEqual(photoBaseDuration(4, "playful") * DIRECTING_RULES.tierlessPhotoStretchMultiplier);
       expect(collage.spec.durationSec).toBe(collage.durationSec);
+      expect(safeParseTimeline(result.timeline).ok).toBe(true);
+      for (const clip of result.timeline.videoClips) if ("kind" in clip) expect(clip.spec.durationSec).toBe(clip.durationSec);
     }
     const serializedRuns = runs.map((result) => result.ok ? serialize(result.timeline) : "");
     expect(serializedRuns[0]).toBe(serializedRuns[1]);

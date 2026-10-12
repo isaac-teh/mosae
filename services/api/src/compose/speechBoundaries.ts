@@ -1,4 +1,5 @@
 import type { Timeline } from "@mosae/contracts";
+import { syncCollageDurations } from "@mosae/contracts";
 import type { TranscriptSegment } from "./buildCandidates.js";
 
 export const SPEECH_BOUNDARY_TOLERANCE_SEC = 0.15;
@@ -92,5 +93,5 @@ export function repairSpeechBoundaries(
     }
     repaired.durationSec = Number((repaired.durationSec + change.delta).toFixed(2));
   }
-  return repaired;
+  return syncCollageDurations(repaired);
 }

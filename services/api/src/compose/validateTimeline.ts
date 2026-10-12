@@ -1,4 +1,4 @@
-import { applyEdits, reflow, type AudioClip, type Caption, type ClipPlan, type Timeline, type VideoClip } from "@mosae/contracts";
+import { applyEdits, reflow, syncCollageDurations, type AudioClip, type Caption, type ClipPlan, type Timeline, type VideoClip } from "@mosae/contracts";
 import type { Candidate } from "./buildCandidates.js";
 
 /** A semantic issue found during validation. */
@@ -206,7 +206,7 @@ export function repairOnce(
     });
     adjusted.durationSec = Math.max(adjusted.durationSec, ...adjusted.videoClips.map((clip) => clip.startSec + clip.durationSec));
     const relaid = applyEdits(adjusted, [{ op: "move", clipId: visualId(adjusted.videoClips[0]), toIndex: 0 }]);
-    return relaid.ok ? { ok: true, timeline: relaid.timeline } : { ok: false, reasons: [relaid.error] };
+    return relaid.ok ? { ok: true, timeline: syncCollageDurations(relaid.timeline) } : { ok: false, reasons: [relaid.error] };
   }
 
   const videoClips = timeline.videoClips.filter((clip): clip is VideoClip => "source" in clip);
