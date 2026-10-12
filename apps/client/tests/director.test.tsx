@@ -95,7 +95,7 @@ describe("Director chat", () => {
     setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
     const personFlow = (personId: string, name: string | null, confirmed: boolean) => ({ personId, name, role: name ? "child" : null, confirmed, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
     mocks.repo.getFlow = vi.fn(async () => ({ revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [personFlow("person-1", "Mia", true), personFlow("person-2", null, false)], peopleSummaryConfirmed: false }));
-    mocks.params = { completedPersonId: "person-2", completedPersonName: "this person", completedMomentCount: "3", completedSampleUri: "https://tagged/photo.jpg" };
+    mocks.params = { completedPersonId: "person-2", completedMomentCount: "3", completedSampleUri: "https://tagged/photo.jpg" };
     await renderScreen();
     await waitFor(() => expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy());
     expect(hasText("Thanks. I've tagged all")).toBe(false);
@@ -647,8 +647,8 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy();
 
     await click("Not the same person? Tag it");
-    expect(mocks.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: "/tag-moments", params: expect.objectContaining({ personId: "person-2", source: "identity" }) }));
-    mocks.params = { completedPersonId: "person-2", completedPersonName: "this person", completedMomentCount: "3" };
+    expect(mocks.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: "/tag-moments", params: expect.objectContaining({ personId: "person-2", name: "", source: "identity" }) }));
+    mocks.params = { completedPersonId: "person-2", completedMomentCount: "3" };
     await renderScreen();
     await waitFor(() => expect(hasText("Who's this? They're in")).toBe(true));
     expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy();
@@ -689,7 +689,7 @@ describe("Director chat", () => {
     await click("A trip");
     if (path === "Tag it, return, then type a name") {
       await click("Not the same person? Tag it");
-      mocks.params = { completedPersonId: "person-1", completedPersonName: "this person", completedMomentCount: "3" };
+      mocks.params = { completedPersonId: "person-1", completedMomentCount: "3" };
       await renderScreen();
     }
     await click("Type a name");

@@ -10,7 +10,8 @@ type Row = { key: string; title: string; count: number } | { key: string; moment
 export default function TagMomentsScreen() {
   const router = useRouter();
   const story = useStoryFlow();
-  const { projectId, personId, name, faceUri, source } = useLocalSearchParams<{ projectId: string; personId: string; name: string; faceUri?: string; source?: string }>();
+  const { projectId, personId, name, faceUri, source } = useLocalSearchParams<{ projectId: string; personId: string; name?: string; faceUri?: string; source?: string }>();
+  const displayName = name?.trim() || "this person";
   const [moments, setMoments] = useState<ProjectMoment[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,7 @@ export default function TagMomentsScreen() {
     setSaving(true); setError(null);
     try {
       const previous = new Set(moments.filter((item) => item.personIds.includes(personId)).map((item) => item.shotId));
-      const personName = source === "missed" ? name : name.toLocaleLowerCase() === "this person" ? null : name;
+      const personName = source === "missed" ? displayName : name?.trim() || null;
       if (story.flow.repository !== "fixture") await savePersonMoments(projectId, personId, personName, [...selected].filter((id) => !previous.has(id)), [...previous].filter((id) => !selected.has(id)));
       const sampleUri = faceUri || moments.find((moment) => selected.has(moment.shotId))?.thumbnailUrl;
       setTaggedPersonResult({ personId, name: personName ?? "", momentCount: selected.size, isMissed: source === "missed", ...(sampleUri ? { sampleUri } : {}) });
@@ -42,9 +43,9 @@ export default function TagMomentsScreen() {
   };
   return <View className="flex-1 bg-ink">
     <View className="flex-row items-center justify-between px-4 pt-12 pb-3"><Pressable role="button" accessibilityLabel="Close" onPress={() => router.back()}><Text className="text-2xl text-on-screen">×</Text></Pressable><Text className="font-sans-semibold text-button text-on-screen">Tag moments</Text><Pressable role="button" onPress={() => void save()} disabled={saving}><Text className="font-sans-semibold text-button text-on-screen">{saving ? "Saving…" : "Done"}</Text></Pressable></View>
-    <View className="mx-4 mb-3 rounded-md bg-surface-raised px-3 py-3"><Text className="font-sans text-body text-ink">Tap a moment to tag {name.toLocaleLowerCase()}</Text></View>
+    <View className="mx-4 mb-3 rounded-md bg-surface-raised px-3 py-3"><Text className="font-sans text-body text-ink">Tap a moment to tag {displayName.toLocaleLowerCase()}</Text></View>
     {error && <Text className="px-4 pb-2 font-sans text-caption text-on-screen">{error}</Text>}
     {!moments.length && !error ? <ActivityIndicator className="mt-8" /> : <FlatList data={rows} keyExtractor={(row) => row.key} contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 24 }} renderItem={({ item }) => "title" in item ? <View className="flex-row items-center justify-between py-3"><Text className="font-sans-semibold text-label text-on-screen">{item.title}</Text><Text className="font-sans text-caption text-on-screen">{item.count} moments</Text></View> : <View className="flex-row gap-1 pb-1">{item.moments.map((moment) => <Pressable key={moment.shotId} role="button" accessibilityLabel={`${selected.has(moment.shotId) ? "Untag" : "Tag"} moment`} onPress={() => setSelected((current) => { const next = new Set(current); next.has(moment.shotId) ? next.delete(moment.shotId) : next.add(moment.shotId); return next; })} className="relative aspect-square flex-1 overflow-hidden bg-surface-sunken">
-      <Image source={{ uri: moment.thumbnailUrl }} resizeMode="cover" className="size-full" />{selected.has(moment.shotId) && <View className="absolute left-1 top-1 rounded-pill bg-white px-2 py-1"><Text className="font-sans-medium text-caption text-ink">{name}</Text></View>}{moment.kind === "video" && <View className="absolute bottom-1 right-1 rounded-sm bg-black/70 px-1.5 py-1"><Text className="font-sans text-caption text-on-screen">{`${Math.floor((moment.durationSec ?? 0) / 60)}:${String(Math.floor((moment.durationSec ?? 0) % 60)).padStart(2, "0")}`}</Text></View>}</Pressable>)}{Array.from({ length: 3 - item.moments.length }, (_, index) => <View key={`empty-${index}`} className="flex-1" />)}</View>} />}
+      <Image source={{ uri: moment.thumbnailUrl }} resizeMode="cover" className="size-full" />{selected.has(moment.shotId) && <View className="absolute left-1 top-1 rounded-pill bg-white px-2 py-1"><Text className="font-sans-medium text-caption text-ink">{displayName}</Text></View>}{moment.kind === "video" && <View className="absolute bottom-1 right-1 rounded-sm bg-black/70 px-1.5 py-1"><Text className="font-sans text-caption text-on-screen">{`${Math.floor((moment.durationSec ?? 0) / 60)}:${String(Math.floor((moment.durationSec ?? 0) % 60)).padStart(2, "0")}`}</Text></View>}</Pressable>)}{Array.from({ length: 3 - item.moments.length }, (_, index) => <View key={`empty-${index}`} className="flex-1" />)}</View>} />}
   </View>;
 }
