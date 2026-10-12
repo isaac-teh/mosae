@@ -37,6 +37,10 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   const currentTimeRef = useRef(playheadSec);
   const lastToggleRequest = useRef(togglePlayRequest);
   const inputProps = useMemo(() => ({ timeline, sources, selectedClipId, onSelectClip, onCommitPhotoCrop, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop }), [timeline, sources, selectedClipId, onSelectClip, onCommitPhotoCrop, selectedCollageCellId, onSelectCollageCell, onCommitCollageCrop]);
+  useLayoutEffect(() => {
+    if (controls === "chat") return;
+    player.current?.seekTo(0);
+  }, [controls]);
   useEffect(() => {
     const current = player.current;
     if (!current) return;
@@ -166,7 +170,7 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   const previewContent = <>
     <style>{`.mosae-editor-preview [data-collage-cell][aria-pressed="true"] { border-color: #168dff !important; border-width: 12px !important; }`}</style>
     <div role="button" aria-label={playing ? "Pause preview" : "Play preview"} data-current-time={currentTime} tabIndex={0} onClick={togglePlayback} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); togglePlayback(); } }} style={{ position: "absolute", top: fullscreen && controls === "chat" ? "env(safe-area-inset-top)" : 0, right: 0, bottom: fullscreen && controls === "chat" ? "env(safe-area-inset-bottom)" : 0, left: 0 }}>
-    <Player ref={player} component={MosaeTimeline} inputProps={inputProps} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}
+    <Player ref={player} component={MosaeTimeline} inputProps={inputProps} initialFrame={0} durationInFrames={Math.max(1, Math.ceil(timeline.durationSec * timeline.fps))}
       compositionWidth={timeline.aspect === "9:16" ? 1080 : 1920} compositionHeight={timeline.aspect === "9:16" ? 1920 : 1080}
       fps={timeline.fps} style={{ width: "100%", height: "100%" }} controls={false}
       renderLoading={() => <View className="absolute inset-0 items-center justify-center bg-[#18211d]">{loadingPoster ? <Image source={{ uri: loadingPoster }} resizeMode="cover" className="size-full opacity-70" /> : <Text className="font-sans text-body text-on-screen">Loading your film…</Text>}</View>}

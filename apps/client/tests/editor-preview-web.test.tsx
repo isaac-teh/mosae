@@ -18,7 +18,7 @@ vi.mock("@remotion/player", () => ({
       play: playerMock.play,
       pause: playerMock.pause,
     }));
-    return React.createElement("div", { "data-testid": "player", "data-duration": props.durationInFrames });
+    return React.createElement("div", { "data-testid": "player", "data-duration": props.durationInFrames, "data-initial-frame": props.initialFrame });
   }),
 }));
 vi.mock("@mosae/video/timeline", () => ({ MosaeTimeline: () => null }));
@@ -42,6 +42,18 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("web editor preview seeks", () => {
+  it("renders the preview from its first frame before playback", async () => {
+    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} />));
+    expect(host.querySelector('[data-testid="player"]')?.getAttribute("data-initial-frame")).toBe("0");
+    expect(playerMock.seekTo).toHaveBeenCalledWith(0);
+    expect(playerMock.play).not.toHaveBeenCalled();
+  });
+
+  it("leaves the shared chat player seek and fullscreen lifecycle alone on mount", async () => {
+    await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} controls="chat" />));
+    expect(playerMock.seekTo).not.toHaveBeenCalled();
+  });
+
   it.each([undefined, "chat"] as const)("passes a replaced video source through the %s shared preview", async (controls) => {
     const videoTimeline: Timeline = { ...timeline, durationSec: 4, videoClips: [{ id: "replaced", source: { kind: "video", shotId: "video-shot", sourceInSec: 2, sourceOutSec: 6, sourceDurationSec: 12, width: 1920, height: 1080 }, startSec: 0, durationSec: 4, transitionIn: { kind: "cut", durationSec: 0 } }] };
     await act(async () => root.render(<EditorPreview timeline={videoTimeline} sources={{ "video-shot": "signed-proxy.mp4" }} controls={controls} />));
@@ -71,6 +83,7 @@ describe("web editor preview seeks", () => {
     }
     await act(async () => root.render(<Harness />));
     const inputProps = playerMock.inputProps[0];
+    playerMock.seekTo.mockClear();
     await act(async () => playerMock.listeners.get("frameupdate")?.({ detail: { frame: 90 } }));
     expect(host.textContent).toContain("3");
     expect(playerMock.seekTo).not.toHaveBeenCalled();

@@ -176,10 +176,8 @@ export default function EditorScreen() {
   }, [editor.timeline, selectEditorClip, seekTo]);
   const onTimelineSelect = useCallback((id: string, startSec: number) => {
     chooseClip(id);
-    const clip = editor.timeline?.videoClips.find((candidate) => clipId(candidate) === id);
-    if (clip && "kind" in clip) return;
     seekTo(startSec);
-  }, [chooseClip, editor.timeline, seekTo]);
+  }, [chooseClip, seekTo]);
   const openSoundtrackPicker = useCallback(() => { replacementUploadNonce.current.invalidate(); setPauseRequest((request) => request + 1); setTool("Soundtrack"); }, []);
   const onSelectAudio = useCallback((id: string) => {
     replacementUploadNonce.current.invalidate();
