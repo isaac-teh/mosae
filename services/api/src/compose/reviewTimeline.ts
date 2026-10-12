@@ -40,6 +40,7 @@ function descriptionSimilarity(a: string, b: string): number {
 function falseSimilarity(a: string, b: string): number { return a.toLowerCase().trim() === b.toLowerCase().trim() ? 1 : 0; }
 
 function reflow(timeline: Timeline): void {
+  const chapterIndexByClip = new Map(timeline.videoClips.map((clip) => [idOf(clip), chapterFor(timeline, clip.startSec)]));
   const captionOwners = timeline.captions.map(caption => {
     const owner = timeline.videoClips
       .map(clip => ({ clip, overlap: Math.max(0, Math.min(caption.endSec, clip.startSec + clip.durationSec) - Math.max(caption.startSec, clip.startSec)) }))
@@ -72,10 +73,12 @@ function reflow(timeline: Timeline): void {
       audio.source.sourceOutSec = round(Math.min(audio.source.sourceOutSec, audio.source.sourceInSec + clip.durationSec));
     }
   }
-  for (const chapter of timeline.chapters) {
-    const found = timeline.videoClips.find(clip => chapterFor(timeline, clip.startSec) === timeline.chapters.indexOf(chapter));
-    if (found) chapter.startSec = found.startSec;
-  }
+  timeline.chapters = timeline.chapters.flatMap((chapter, index) => {
+    const members = timeline.videoClips.filter((clip) => chapterIndexByClip.get(idOf(clip)) === index);
+    if (!members.length) return [];
+    const startSec = Math.min(...members.map((clip) => clip.startSec));
+    return startSec < timeline.durationSec ? [{ ...chapter, startSec }] : [];
+  });
   timeline.audioClips = timeline.audioClips.filter(clip =>
     clip.startSec < timeline.durationSec - 0.001
     && clip.source.sourceOutSec - clip.source.sourceInSec >= 1 / 30,

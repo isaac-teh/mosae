@@ -40,6 +40,24 @@ export function isAutomaticDayLabel(text: string): boolean {
   return /^(?:day|chapter)\s+\d+\b/i.test(text.trim());
 }
 
+/** Rebuild chapter markers from surviving clips after any duration/review reflow. */
+function syncTimelineChapters(timeline: Timeline, candidates: ReadonlyMap<string, Candidate>, proposal: StoryProposal): void {
+  const starts = new Map<number, number[]>();
+  for (const clip of timeline.videoClips) {
+    const chapterIndex = "kind" in clip
+      ? proposal.chapters.findIndex((chapter) => chapter.id === clip.chapterId)
+      : candidates.get(clip.id)?.chapterIndex;
+    if (chapterIndex === undefined || chapterIndex < 0) continue;
+    starts.set(chapterIndex, [...(starts.get(chapterIndex) ?? []), clip.startSec]);
+  }
+  timeline.chapters = proposal.chapters.flatMap((chapter, index) => {
+    const chapterStarts = starts.get(index);
+    if (!chapterStarts?.length) return [];
+    const startSec = Math.min(...chapterStarts);
+    return startSec < timeline.durationSec ? [{ title: chapter.title, startSec }] : [];
+  });
+}
+
 /** Result of a compose run. */
 export type ComposeResult = {
   ok: true;
@@ -306,7 +324,6 @@ export async function runCompose(
   } catch (error) {
     return { ok: false, reasons: [`gemini call failed: ${error instanceof Error ? error.message : String(error)}`] };
   }
-
   // Validate the model's response against our schema
   const parsed = validateComposeResponse(rawResponse);
   if (!parsed.ok) {
@@ -860,6 +877,7 @@ export async function runCompose(
   } catch (error) {
     return { ok: false, reasons: [`collage placement failed: ${error instanceof Error ? error.message : String(error)}`] };
   }
+  syncTimelineChapters(withCollages, candidateMap, job.proposal);
   // A collage can replace several fitted photo slots with one shorter clip.
   // Keep the collage only when the final film remains inside the chosen band;
   // the already fitted individual stills are the duration-safe fallback.
@@ -921,6 +939,7 @@ export async function runCompose(
     ...(musicAnalysis ? { music: musicAnalysis } : {}),
   });
   final = reviewed.timeline;
+  syncTimelineChapters(final, candidateMap, job.proposal);
   const finalIssues = [...validateTimeline(final, { ...validationCtx, targetSec: final.durationSec }), ...findSpeechBoundaryViolations(final, transcriptByShot).map(v => ({ path: `videoClips[${v.clipId}].source.${v.edge}`, message: `source ${v.edge} still splits transcript segment`, severity: "fixable" as const }))];
   if (finalIssues.length > 0) {
     return { ok: false, reasons: [`final review failed validation: ${finalIssues.map(issue => issue.message).join("; ")}`] };
