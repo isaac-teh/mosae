@@ -292,7 +292,9 @@ export function deriveChat(input: ChatInput): ChatState {
     add({ kind: "mosae", id: "people-intro", text: `${count === 1 ? "One person appears" : `${label[0]!.toLocaleUpperCase()}${label.slice(1)} people appear`} often in your moments. Who is this?` });
   }
   const addMissedPeople = () => {
+    const knownPersonIds = new Set((input.people ?? []).map(({ personId }) => personId));
     for (const person of input.missedPeople ?? []) {
+      if (knownPersonIds.has(person.personId)) continue;
       add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
       if (person.momentCount === 0 && person.personId !== input.missedPersonTagging?.personId) add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name });
     }
@@ -300,7 +302,8 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "mosae", id: `missed-select-${input.missedPersonTagging.personId}`, text: `Help me select 1 photo of ${input.missedPersonTagging.name}.` });
       add({ kind: "missed-person", id: `missed-tag-${input.missedPersonTagging.personId}`, ...input.missedPersonTagging });
     }
-    if (!(input.missedPeople ?? []).some(({ momentCount }) => momentCount === 0) && !input.missedPersonTagging) add({ kind: "anyone-else", id: "anyone-else", text: "Did I miss anyone? Type the names of who were missed in the box below." });
+    const hasUntaggedMissedPerson = (input.missedPeople ?? []).some(({ personId, momentCount }) => momentCount === 0 && !knownPersonIds.has(personId));
+    if (!hasUntaggedMissedPerson && !input.missedPersonTagging) add({ kind: "anyone-else", id: "anyone-else", text: (input.missedPeople ?? []).length ? "Did I miss anyone else? Type the names of who were missed in the box below." : "Did I miss anyone? Type the names of who were missed in the box below." });
   };
   const people = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
   const orderedHistory = [

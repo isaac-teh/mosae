@@ -992,7 +992,7 @@ describe("Director chat", () => {
     expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-2")).toBe(true);
   });
 
-  it("confirms a pending person interpretation when the user types yes", async () => {
+  it("routes typed text on the post-summary missed-person prompt instead of interpreting it", async () => {
     setup({ readyPlan: true, interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
     let chat!: ReturnType<typeof useDirectorChat>;
     function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
@@ -1003,13 +1003,12 @@ describe("Director chat", () => {
     await act(async () => chat.actions.confirmPeople());
     await act(async () => chat.actions.confirmPeopleSummary());
     await act(async () => chat.actions.send("Rename Emma"));
-    expect(chat.pendingInterpret?.change?.kind).toBe("person");
-    await act(async () => chat.actions.send("Yes"));
     expect(chat.pendingInterpret).toBeNull();
-    expect(mocks.confirmCast).toHaveBeenLastCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Emma", role: "child" })]) }));
+    expect(mocks.repo.interpret).not.toHaveBeenCalled();
+    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Emma.")).toBe(true);
   });
 
-  it("uses non-confirmation text as the active person's answer while an interpretation is pending", async () => {
+  it("keeps active-person answers working after missed-person text", async () => {
     setup({ readyPlan: true, interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
     let chat!: ReturnType<typeof useDirectorChat>;
     function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
@@ -1020,7 +1019,7 @@ describe("Director chat", () => {
     await act(async () => chat.actions.confirmPeople());
     await act(async () => chat.actions.confirmPeopleSummary());
     await act(async () => chat.actions.send("Rename Emma"));
-    expect(chat.pendingInterpret?.change?.kind).toBe("person");
+    expect(chat.pendingInterpret).toBeNull();
 
     await act(async () => chat.actions.reopenPerson("person-1"));
     await waitFor(() => expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-1")).toBe(true));
@@ -1029,10 +1028,10 @@ describe("Director chat", () => {
     expect(chat.pendingInterpret).toBeNull();
     expect(mocks.repo.interpret).toHaveBeenCalledTimes(interpretCalls);
     expect(mocks.confirmCast).toHaveBeenLastCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Kara" })]) }));
-    expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true);
+    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Emma.")).toBe(true);
   });
 
-  it("applies a pending person interpretation from the confirmation button action", async () => {
+  it("does not call the interpreter for non-confirmation text on the missed-person prompt", async () => {
     setup({ readyPlan: true, interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
     let chat!: ReturnType<typeof useDirectorChat>;
     function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
@@ -1045,7 +1044,8 @@ describe("Director chat", () => {
     await act(async () => chat.actions.send("Rename Emma"));
     await act(async () => chat.actions.confirmInterpret());
     expect(chat.pendingInterpret).toBeNull();
-    expect(mocks.confirmCast).toHaveBeenLastCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Emma", role: "child" })]) }));
+    expect(mocks.repo.interpret).not.toHaveBeenCalled();
+    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Emma.")).toBe(true);
   });
 
   it("keeps a named person when a later refresh returns a stale unnamed row", async () => {
@@ -1095,6 +1095,51 @@ describe("Director chat", () => {
     expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Grandma.")).toBe(true);
     await act(async () => { await chat.retry(); });
     await waitFor(() => expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Grandma.")).toBe(true));
+  });
+
+  it.each(["There is someone else", "another person", "one more", "I forgot someone", "someone is missing", "you missed someone", "There's also Grandma"])("handles missed-person text '%s' locally", async (message) => {
+    setup({ readyPlan: true, people: [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }] });
+    let flow: any = { revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map((person) => ({ personId: person.personId, name: person.personId === "person-1" ? "Mia" : "Noah", role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })), peopleSummaryConfirmed: false };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, ...(action.type === "missed-people" ? { missedPeople: action.people } : { peopleSummaryConfirmed: action.confirmed }) }; return flow; });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true));
+    await act(async () => chat.actions.send(message));
+    expect(mocks.repo.interpret).not.toHaveBeenCalled();
+    if (message === "There is someone else" || message === "another person" || message === "one more" || message === "I forgot someone" || message === "someone is missing" || message === "you missed someone") {
+      expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Who did I miss? Type their name.")).toBe(true);
+      expect(flow.missedPeople).toBeUndefined();
+    } else {
+      expect(flow.missedPeople).toEqual([{ personId: expect.stringMatching(/^p-missed-/), name: "Grandma" }]);
+      expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Grandma.")).toBe(true);
+    }
+  });
+
+  it("restores a completed missed-person tag and asks proactively again after refresh", async () => {
+    setup({ readyPlan: true, people: [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }] });
+    const personFlow = (personId: string, name: string | null, manualShotAdds: string[] = []) => ({ personId, name, role: name ? "child" : null, confirmed: true, skipped: false, manualShotAdds, manualShotRemoves: [], faceIds: [], mergedInto: null });
+    mocks.repo.getFlow = vi.fn(async () => ({ revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [personFlow("person-1", "Mia"), personFlow("person-2", "Noah"), personFlow("p-missed-grandma", "Grandma", ["shot-1"])], missedPeople: [{ personId: "p-missed-grandma", name: "Grandma" }], peopleSummaryConfirmed: false }));
+    await renderScreen();
+    await waitFor(() => expect(host.textContent).toContain("Did I miss anyone else? Type the names of who were missed in the box below."));
+    expect(host.textContent).not.toContain("Help me select 1 photo of Grandma.");
+    expect(host.textContent).not.toContain("I didn't catch that");
+  });
+
+  it("treats a clear everyone confirmation as the summary Confirm action", async () => {
+    setup({ readyPlan: true, people: [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }] });
+    let flow: any = { revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map((person) => ({ personId: person.personId, name: person.personId === "person-1" ? "Mia" : "Noah", role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })), peopleSummaryConfirmed: false };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, peopleSummaryConfirmed: action.confirmed }; return flow; });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true));
+    await act(async () => chat.actions.send("That's everyone"));
+    expect(flow.peopleSummaryConfirmed).toBe(true);
+    expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(false);
+    expect(mocks.repo.interpret).not.toHaveBeenCalled();
   });
 
   it("shows the retry message when interpretation fails and keeps the occasion reply usable", async () => {
