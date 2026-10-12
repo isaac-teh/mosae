@@ -333,6 +333,21 @@ describe("editor tool operations", () => {
     expect(mockScrollTo).toHaveBeenLastCalledWith({ x: 120, animated: false });
   });
 
+  it("uses the tapped clip's rendered timeline start when selection scrolls", async () => {
+    mockScrollTo.mockClear();
+    const staleStarts = { ...timeline, videoClips: clips.map((clip, index) => index === 2 ? { ...clip, startSec: 0 } : clip) };
+    function Harness() {
+      const [playhead, setPlayhead] = React.useState(0);
+      const [selected, setSelected] = React.useState<string | null>(null);
+      return <TimelineStrip timeline={staleStarts} sources={{}} selectedClipId={selected} playheadSec={playhead} onSelect={(id, startSec) => { setSelected(id); setPlayhead(startSec); }} onScrub={setPlayhead} />;
+    }
+    await render(<Harness />);
+    await click("Select clip c");
+    expect(host.querySelector('[aria-label="Select clip c"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('[aria-label="Timeline playhead"]')?.getAttribute("style")).toContain("left: 49px");
+    expect(mockScrollTo).toHaveBeenLastCalledWith({ x: 240, animated: false });
+  });
+
   it("uses one scale for ruler ticks, chapters, clip bounds and the music bar", async () => {
     const withRows: Timeline = {
       ...timeline,
@@ -349,6 +364,30 @@ describe("editor tool operations", () => {
     expect(musicTrack.getAttribute("style")).toContain("width: 360px");
     expect(Boolean(musicTrack.compareDocumentPosition(photoClip) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(host.querySelector('[aria-label="Select music Sandcastle Days"]')).toBeNull();
+  });
+
+  it("aligns the music bar with the clips and ends at the shorter soundtrack or film end", async () => {
+    const withShortMusic: Timeline = {
+      ...timeline,
+      audioClips: [{ id: "music-short", role: "music", source: { kind: "soundtrack", soundtrackId: "track-1", sourceInSec: 0, sourceOutSec: 6 }, startSec: 0, gainDb: 0, fadeInSec: 0, fadeOutSec: 0 }],
+    };
+    await render(<TimelineStrip timeline={withShortMusic} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} />);
+    const musicTrack = host.querySelector('[aria-label="Music track Soundtrack"]')!;
+    const firstClip = host.querySelector('[aria-label="Select clip a"]')!.parentElement!;
+    expect(musicTrack.getAttribute("style")).toContain("left: 50px");
+    expect(musicTrack.getAttribute("style")).toContain("width: 240px");
+    expect(musicTrack.getAttribute("style")).toContain(firstClip.getAttribute("style")?.match(/left: [^;]+/)?.[0]);
+  });
+
+  it("keeps the soundtrack label at the start of the bar as it scrolls", async () => {
+    const withMusic: Timeline = {
+      ...timeline,
+      audioClips: [{ id: "music-1", role: "music", source: { kind: "soundtrack", soundtrackId: "track-1", sourceInSec: 0, sourceOutSec: 9 }, startSec: 0, gainDb: 0, fadeInSec: 0, fadeOutSec: 0 }],
+    };
+    await render(<TimelineStrip timeline={withMusic} sources={{}} selectedClipId={null} playheadSec={0} soundtrackName="Café Corner · paced to the film" onSelect={() => {}} onScrub={() => {}} />);
+    const label = host.querySelector('[aria-label="Music track label"]')!;
+    expect(label.getAttribute("style") ?? "").not.toContain("sticky");
+    expect(label.parentElement?.getAttribute("style") ?? "").not.toContain("sticky");
   });
 
   it("selects an existing music track without opening the soundtrack picker", async () => {

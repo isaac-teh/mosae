@@ -34,7 +34,9 @@ type TimelineRowsProps = {
 
 const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails, selectedClipId, selectedAudioClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, onDeselect, onSlotPointerDown, onSlotPointerMove, onSlotPointerUp, reorderPreview, onSoundtrack, onSelectAudio, onAddClip }: TimelineRowsProps) {
   const music = timeline.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
-  const musicDuration = music ? music.source.sourceOutSec - music.source.sourceInSec : 0;
+  const musicEndSec = music ? Math.min(music.startSec + music.source.sourceOutSec - music.source.sourceInSec, timeline.durationSec) : 0;
+  const musicLeft = music ? timeToX(music.startSec, pixelsPerSecond, leadingPadding) : 0;
+  const musicWidth = music ? Math.max(1, timeToX(musicEndSec, pixelsPerSecond, leadingPadding) - musicLeft) : 0;
   const tickSeconds = Array.from({ length: Math.floor(timeline.durationSec) + 1 }, (_, second) => second);
   return <View style={{ width: contentWidth }}>
     <View accessibilityLabel="Timeline ruler" className="relative h-[27px]">
@@ -55,8 +57,8 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
     <View className="relative mt-1 h-[36px]">
       {selectedClipId || selectedAudioClipId ? <Pressable role="button" accessibilityLabel="Deselect selected audio" onPress={onDeselect} style={{ position: "absolute", zIndex: 0, left: 0, right: 0, top: 0, height: 32 }} /> : null}
       {music ? <Pressable role="button" accessibilityLabel={`Music track ${soundtrackName ?? "Soundtrack"}`} aria-pressed={selectedAudioClipId === music.id} onPress={() => onSelectAudio(music.id)}
-        style={{ position: "absolute", left: timeToX(music.startSec, pixelsPerSecond, leadingPadding), width: Math.max(1, musicDuration * pixelsPerSecond), height: 32, top: 0, borderWidth: selectedAudioClipId === music.id ? 2 : 0, borderColor: "#FF8F70" }} className="justify-center rounded-sm bg-[#2B856C] px-2">
-        <Text accessibilityLabel="Music track label" style={Platform.OS === "web" ? { position: "sticky", left: 8, alignSelf: "flex-start", maxWidth: Math.max(132, leadingPadding * 2 - 16) } as any : undefined} numberOfLines={1} ellipsizeMode="tail" className="font-sans-medium text-[11px] text-white">♫ {soundtrackName ?? "Soundtrack"}</Text>
+        style={{ position: "absolute", left: musicLeft, width: musicWidth, height: 32, top: 0, borderWidth: selectedAudioClipId === music.id ? 2 : 0, borderColor: "#FF8F70" }} className="justify-center rounded-sm bg-[#2B856C] px-2">
+        <Text accessibilityLabel="Music track label" numberOfLines={1} ellipsizeMode="tail" className="font-sans-medium text-[11px] text-white">♫ {soundtrackName ?? "Soundtrack"}</Text>
       </Pressable> : <Pressable role="button" accessibilityLabel="Open soundtrack picker" onPress={onSoundtrack} style={{ position: "absolute", left: leadingPadding, width: Math.max(1, timeline.durationSec * pixelsPerSecond), height: 32, top: 0 }} className="justify-center rounded-sm bg-[#1C5548] px-2">
         <Text numberOfLines={1} className="font-sans text-[11px] text-white">+ Add soundtrack</Text>
       </Pressable>}
@@ -87,7 +89,7 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
             onTouchStart={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), { ...event.nativeEvent, currentTarget: event.currentTarget, pointerId: 0 })}
             onContextMenu={(event: any) => event.preventDefault()}
             onDragStart={(event: any) => event.preventDefault()}
-            onPress={(event: any) => { event?.stopPropagation?.(); onSelect(id, clip.startSec); }}
+            onPress={(event: any) => { event?.stopPropagation?.(); onSelect(id, start); }}
             style={{ width: Math.max(1, duration * pixelsPerSecond), height: "100%", overflow: "hidden", borderRadius: 5, backgroundColor: "transparent", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none", ...(Platform.OS === "web" ? ({ touchAction: "pan-x" } as unknown as ViewStyle) : {}) }}
             {...({ draggable: false } as any)}>
             {uri && isVideo ? <View pointerEvents="none" accessibilityLabel="Video filmstrip frames" style={{ position: "absolute", inset: 0, flexDirection: "row", overflow: "hidden" }}>

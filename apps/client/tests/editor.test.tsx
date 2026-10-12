@@ -171,6 +171,13 @@ describe("film editor", () => {
     expect(host.querySelector('[aria-label="Replace"]')).not.toBeNull();
   });
 
+  it("selects and seeks to the exact start of the tapped timeline clip", async () => {
+    await render(<EditorScreen />);
+    await click("Select clip c");
+    expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec")).toBe("6");
+    expect(host.querySelector('[aria-label="Select clip c"]')?.getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("shows Add photo and fills the first empty slot when a two-slot collage clip is selected", async () => {
     const twoSlotCollage = { ...collageClip, spec: { ...collageClip.spec, layoutId: "two-photo-diptych" as const, motionId: "print-drop" as const, slots: [{ slotId: "s1", shotId: "shot-s1", kind: "photo" as const }, { slotId: "s2", empty: true as const }] } };
     boundary.repository.getFilmTimeline.mockResolvedValue({
@@ -181,6 +188,7 @@ describe("film editor", () => {
     boundary.repository.getPlan.mockResolvedValue({ planId: "plan", moments: [{ id: "m-photo", title: "Trip photo", meta: "Day 1", tag: { emoji: "📷", label: "Photo" }, imageKey: "photo.jpg", kind: "photo", selected: false, favorite: false, shotId: "shot-photo" }], leftOut: [] });
     await render(<EditorScreen />);
     await click("Select clip collage-test");
+    expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec")).toBe("0");
     expect(host.querySelector('[aria-label="Add photo"]')?.textContent).toContain("Add photo");
     await click("Add photo");
     await click("Add cell Trip photo");
@@ -196,7 +204,7 @@ describe("film editor", () => {
     await render(<EditorScreen />);
     await click("Select clip collage-test");
     await click("Test select first collage cell");
-    expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec")).toBe("0.65");
+    expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec")).toBe("0");
     expect(Number(host.querySelector('[data-testid="preview"]')?.getAttribute("data-pause-request"))).toBeGreaterThan(0);
     await click("Remove");
     expect(host.querySelector('[aria-label="Undo"]')?.getAttribute("disabled"), host.textContent).toBeNull();
