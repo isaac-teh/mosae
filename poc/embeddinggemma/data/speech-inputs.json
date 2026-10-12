@@ -1,0 +1,806 @@
+{
+  "config": {
+    "name": "speech",
+    "set": "creator",
+    "duration": "1m",
+    "cadence": "reflective",
+    "intent": "A documentary recap of Super Bowl security preparation. Preserve complete spoken thoughts and show varied relevant activity."
+  },
+  "transport": {
+    "model": "gemini-3.1-flash-lite",
+    "temperature": "SDK default",
+    "mediaResolution": "MEDIA_RESOLUTION_LOW"
+  },
+  "proposal": {
+    "schemaVersion": 1,
+    "id": "compare-speech",
+    "projectId": "local-comparison",
+    "storyIntentId": "local-intent",
+    "parentProposalId": null,
+    "state": "accepted",
+    "version": 1,
+    "title": "A documentary recap of Super Bowl security preparation. Preserve complete spoken thoughts and show varied relevant activity.",
+    "moments": [
+      {
+        "id": "aroll-3",
+        "shotId": "aroll-3",
+        "kind": "video",
+        "title": "aroll-3",
+        "description": "Two officials standing in a facility discussing Super Bowl 52 security preparations.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 53.47
+      },
+      {
+        "id": "aroll-4",
+        "shotId": "aroll-4",
+        "kind": "video",
+        "title": "aroll-4",
+        "description": "An officer stands in front of a helicopter and speaks to the camera.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 53.66
+      },
+      {
+        "id": "aroll-5",
+        "shotId": "aroll-5",
+        "kind": "video",
+        "title": "aroll-5",
+        "description": "Two officers standing and talking to camera",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 39.2
+      },
+      {
+        "id": "aroll-6",
+        "shotId": "aroll-6",
+        "kind": "video",
+        "title": "aroll-6",
+        "description": "The man stands in front of a stadium and talks to the camera.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 31.89
+      },
+      {
+        "id": "aroll-7",
+        "shotId": "aroll-7",
+        "kind": "video",
+        "title": "aroll-7",
+        "description": "Customs officer speaking directly into the camera inside the helicopter",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 35.21
+      }
+    ],
+    "chapters": [
+      {
+        "id": "chapter-0",
+        "title": "all",
+        "summary": "A documentary recap of Super Bowl security preparation. Preserve complete spoken thoughts and show varied relevant activity.",
+        "momentIds": [
+          "aroll-3",
+          "aroll-4",
+          "aroll-5",
+          "aroll-6",
+          "aroll-7"
+        ]
+      }
+    ],
+    "constraints": {
+      "excludedShotIds": [],
+      "deselectedMomentIds": [],
+      "mustIncludeMomentIds": [],
+      "feedback": []
+    },
+    "openQuestions": []
+  },
+  "assets": {
+    "aroll-3": {
+      "kind": "video",
+      "assetId": "aroll-3",
+      "file": "aroll-3.mp4",
+      "keyMomentScore": 0,
+      "localTime": "0000:00:00 00:00:00",
+      "analysis": {
+        "itemId": "aroll-3",
+        "file": "aroll-3.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 53.47,
+            "shotType": "medium_shot",
+            "camera": "static",
+            "role": "A_ROLL",
+            "description": "Two officials standing in a facility discussing Super Bowl 52 security preparations.",
+            "subjects": [
+              "Chris (CBP public affairs)",
+              "Douglas Harrison (CBP field coordinator)"
+            ],
+            "emotion": "professional",
+            "quality": 1,
+            "usable": true,
+            "reason": "The shot is steady and clear with both participants in the frame for the entire duration."
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0.83,
+            "endSec": 5.08,
+            "text": "It's Monday here in Minneapolis, Minnesota for Super Bowl 52."
+          },
+          {
+            "startSec": 5.08,
+            "endSec": 10.15,
+            "text": "Seven days till kickoff and U.S. Customs and Border Protection is already been here on the ground for a few days."
+          },
+          {
+            "startSec": 10.15,
+            "endSec": 14.54,
+            "text": "Joining me now is lead field coordinator of CBP, Chief Doug Harrison."
+          },
+          {
+            "startSec": 14.54,
+            "endSec": 16.32,
+            "text": "Chief, how are you?"
+          },
+          {
+            "startSec": 16.32,
+            "endSec": 17.51,
+            "text": "Good, Chris. How are you?"
+          },
+          {
+            "startSec": 17.51,
+            "endSec": 20.89,
+            "text": "Great, so I hear it takes a lot of uh planning and organization."
+          },
+          {
+            "startSec": 20.89,
+            "endSec": 22.8,
+            "text": "Over a year just to get ready for this."
+          },
+          {
+            "startSec": 22.8,
+            "endSec": 24.3,
+            "text": "What have we brought to the table this year for Super Bowl?"
+          },
+          {
+            "startSec": 24.3,
+            "endSec": 41.5,
+            "text": "Chris, we brought over 150 law enforcement professionals, more than six aircraft, a non-intrusive inspection equipment scanning everything going into the stadium. And then we've got Border Patrol agents also coming in from all over the country, uh, augmenting the Minneapolis police department on game day."
+          },
+          {
+            "startSec": 41.5,
+            "endSec": 42.54,
+            "text": "Awesome, Chief."
+          },
+          {
+            "startSec": 42.54,
+            "endSec": 48.01,
+            "text": "Over the next week we're going to bring you stories about what's just taking place for CBP to secure the Super Bowl."
+          },
+          {
+            "startSec": 48.01,
+            "endSec": 49.6,
+            "text": "Tomorrow, we're talking air security."
+          },
+          {
+            "startSec": 49.6,
+            "endSec": 53.47,
+            "text": "Continue us to follow us at CBP's countdown to kickoff."
+          }
+        ],
+        "bestMomentSec": 24.5
+      }
+    },
+    "aroll-4": {
+      "kind": "video",
+      "assetId": "aroll-4",
+      "file": "aroll-4.mp4",
+      "keyMomentScore": 0,
+      "localTime": "0000:00:00 00:00:00",
+      "analysis": {
+        "itemId": "aroll-4",
+        "file": "aroll-4.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 16.5,
+            "shotType": "MEDIUM_SHOT",
+            "camera": "MAIN",
+            "role": "A_ROLL",
+            "description": "An officer stands in front of a helicopter and speaks to the camera.",
+            "subjects": [
+              "officer"
+            ],
+            "emotion": "happy",
+            "quality": 1,
+            "usable": true,
+            "reason": "Good framing and audio quality."
+          },
+          {
+            "startSec": 16.5,
+            "endSec": 24.3,
+            "shotType": "WIDE_SHOT",
+            "camera": "DRONE",
+            "role": "B_ROLL",
+            "description": "Aerial view of a stadium with helicopters flying around.",
+            "subjects": [
+              "stadium",
+              "helicopters"
+            ],
+            "emotion": "neutral",
+            "quality": 1,
+            "usable": true,
+            "reason": "High quality cinematic shot."
+          },
+          {
+            "startSec": 24.3,
+            "endSec": 26.6,
+            "shotType": "MEDIUM_SHOT",
+            "camera": "INTERIOR",
+            "role": "B_ROLL",
+            "description": "View from inside the helicopter cockpit.",
+            "subjects": [
+              "pilot",
+              "co-pilot"
+            ],
+            "emotion": "neutral",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear shot of cockpit activity."
+          },
+          {
+            "startSec": 26.6,
+            "endSec": 32.2,
+            "shotType": "WIDE_SHOT",
+            "camera": "DRONE",
+            "role": "B_ROLL",
+            "description": "Aerial view of the stadium and nearby helicopters.",
+            "subjects": [
+              "stadium",
+              "helicopters"
+            ],
+            "emotion": "neutral",
+            "quality": 1,
+            "usable": true,
+            "reason": "Good aerial perspective."
+          },
+          {
+            "startSec": 32.2,
+            "endSec": 37,
+            "shotType": "MEDIUM_SHOT",
+            "camera": "INTERIOR",
+            "role": "B_ROLL",
+            "description": "Internal view of the helicopter cockpit.",
+            "subjects": [
+              "pilot",
+              "co-pilot"
+            ],
+            "emotion": "neutral",
+            "quality": 1,
+            "usable": true,
+            "reason": "Well-captured pilot interaction."
+          },
+          {
+            "startSec": 37,
+            "endSec": 43.1,
+            "shotType": "WIDE_SHOT",
+            "camera": "DRONE",
+            "role": "B_ROLL",
+            "description": "Another aerial shot of the stadium from a different angle.",
+            "subjects": [
+              "stadium"
+            ],
+            "emotion": "neutral",
+            "quality": 1,
+            "usable": true,
+            "reason": "Good composition."
+          },
+          {
+            "startSec": 43.1,
+            "endSec": 53.66,
+            "shotType": "MEDIUM_SHOT",
+            "camera": "MAIN",
+            "role": "A_ROLL",
+            "description": "Officer speaks from inside the open door of the helicopter.",
+            "subjects": [
+              "officer"
+            ],
+            "emotion": "friendly",
+            "quality": 1,
+            "usable": true,
+            "reason": "Great conclusion shot."
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0,
+            "endSec": 8,
+            "text": "It's day two out here at Super Bowl 52 in Minneapolis, Minnesota, and today we're talking air security with Air Marine Operations."
+          },
+          {
+            "startSec": 8,
+            "endSec": 16.5,
+            "text": "Well, most of you are going to be home Super Bowl Sunday watching the game, so will we, from 1,000 feet in the air. Let's go for a ride."
+          },
+          {
+            "startSec": 24.3,
+            "endSec": 26.6,
+            "text": "12549, contact departure, we'll see you."
+          },
+          {
+            "startSec": 33,
+            "endSec": 37,
+            "text": "I'm the other behind us right now, but as Su says, I'm at the buildings there, it's fairly tight."
+          },
+          {
+            "startSec": 37,
+            "endSec": 43.1,
+            "text": "Okay, 3.9, .9."
+          },
+          {
+            "startSec": 43.1,
+            "endSec": 53.66,
+            "text": "To learn more about how U.S. Customs and Border Protection is securing the Super Bowl, check us out at www.cbp.gov on CBP's Countdown to Kickoff."
+          }
+        ],
+        "bestMomentSec": 43.1
+      }
+    },
+    "aroll-5": {
+      "kind": "video",
+      "assetId": "aroll-5",
+      "file": "aroll-5.mp4",
+      "keyMomentScore": 0,
+      "localTime": "0000:00:00 00:00:00",
+      "analysis": {
+        "itemId": "aroll-5",
+        "file": "aroll-5.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 19.3,
+            "shotType": "MEDIUM_SHOT",
+            "camera": "STATIONARY",
+            "role": "A_ROLL",
+            "description": "Two officers standing and talking to camera",
+            "subjects": [
+              "Officer 1",
+              "Officer 2"
+            ],
+            "emotion": "Professional",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear shot of the main subjects"
+          },
+          {
+            "startSec": 19.3,
+            "endSec": 28.5,
+            "shotType": "MEDIUM_SHOT",
+            "camera": "HANDHELD",
+            "role": "B_ROLL",
+            "description": "Vehicles passing through scanners in a large tent",
+            "subjects": [
+              "Vehicles"
+            ],
+            "emotion": "Neutral",
+            "quality": 0.8,
+            "usable": true,
+            "reason": "Clear visuals of the operation"
+          },
+          {
+            "startSec": 28.5,
+            "endSec": 39.2,
+            "shotType": "MEDIUM_SHOT",
+            "camera": "STATIONARY",
+            "role": "A_ROLL",
+            "description": "Officers finishing their talking points",
+            "subjects": [
+              "Officer 1",
+              "Officer 2"
+            ],
+            "emotion": "Professional",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear concluding shot of the main subjects"
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0,
+            "endSec": 12.3,
+            "text": "Welcome back to CBP Countdown to Kickoff. There's 4 days left to Super Bowl, and the big push now is to get all the equipment into U.S. Bank Stadium. Joining me now is Supervisor Lee Takaki with the Office of Field Operations. Lee, how are you?"
+          },
+          {
+            "startSec": 12.3,
+            "endSec": 13.9,
+            "text": "Very well Chris."
+          },
+          {
+            "startSec": 13.9,
+            "endSec": 17.6,
+            "text": "What types of things are you guys scanning to get into the stadium for the big day on Sunday?"
+          },
+          {
+            "startSec": 17.6,
+            "endSec": 28.5,
+            "text": "Well Chris, it's pretty much everything going into the stadium. All the vehicles, containers, so pretty much everything that's going to be using the game. We got the platforms, the confetti, even the liquid celebration after the game's done."
+          },
+          {
+            "startSec": 28.5,
+            "endSec": 39.2,
+            "text": "So, not just are we securing the Super Bowl by air, but we're securing it by everything going in. Make sure to follow us on CBP.gov for more information on Super Bowl 52."
+          }
+        ],
+        "bestMomentSec": 29.5
+      }
+    },
+    "aroll-6": {
+      "kind": "video",
+      "assetId": "aroll-6",
+      "file": "aroll-6.mp4",
+      "keyMomentScore": 0,
+      "localTime": "0000:00:00 00:00:00",
+      "analysis": {
+        "itemId": "aroll-6",
+        "file": "aroll-6.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 16.92,
+            "shotType": "medium shot",
+            "camera": "main camera",
+            "role": "A_ROLL",
+            "description": "The man stands in front of a stadium and talks to the camera.",
+            "subjects": [
+              "man"
+            ],
+            "emotion": "serious",
+            "quality": 1,
+            "usable": true,
+            "reason": "good framing and lighting"
+          },
+          {
+            "startSec": 16.92,
+            "endSec": 20.35,
+            "shotType": "low angle shot",
+            "camera": "point of view",
+            "role": "B_ROLL",
+            "description": "Looking inside a cardboard box from the bottom perspective",
+            "subjects": [
+              "cardboard box"
+            ],
+            "emotion": "neutral",
+            "quality": 0.8,
+            "usable": true,
+            "reason": "good framing"
+          },
+          {
+            "startSec": 20.35,
+            "endSec": 31.89,
+            "shotType": "medium shot",
+            "camera": "main camera",
+            "role": "A_ROLL",
+            "description": "The man stands in front of a stadium and shows the contents of the box to the camera.",
+            "subjects": [
+              "man",
+              "rings"
+            ],
+            "emotion": "informative",
+            "quality": 1,
+            "usable": true,
+            "reason": "good framing and lighting"
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0,
+            "endSec": 2.5,
+            "text": "Three days to CBP's countdown to kickoff."
+          },
+          {
+            "startSec": 2.5,
+            "endSec": 15,
+            "text": "We've talked air security and cargo security of everything going into U.S. Bank Stadium, but what most Americans don't know is the security we have to do leading up for counterfeit goods trying to get into Minneapolis. Take this box for instance, to see what we found just last month."
+          },
+          {
+            "startSec": 20.5,
+            "endSec": 23,
+            "text": "Wow, 51 counterfeit Super Bowl rings."
+          },
+          {
+            "startSec": 23,
+            "endSec": 31.5,
+            "text": "If you want to learn more about what CBP is doing to secure the Super Bowl, follow us at cbp.gov on Countdown to Kickoff."
+          }
+        ],
+        "bestMomentSec": 21
+      }
+    },
+    "aroll-7": {
+      "kind": "video",
+      "assetId": "aroll-7",
+      "file": "aroll-7.mp4",
+      "keyMomentScore": 0,
+      "localTime": "0000:00:00 00:00:00",
+      "analysis": {
+        "itemId": "aroll-7",
+        "file": "aroll-7.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 4.67,
+            "shotType": "close-up",
+            "camera": "interior",
+            "role": "A_ROLL",
+            "description": "Customs officer speaking directly into the camera inside the helicopter",
+            "subjects": [
+              "customs officer"
+            ],
+            "emotion": "serious",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear shot of the subject speaking"
+          },
+          {
+            "startSec": 4.67,
+            "endSec": 8.71,
+            "shotType": "close-up",
+            "camera": "interior",
+            "role": "B_ROLL",
+            "description": "View of the two pilots in the cockpit of the helicopter",
+            "subjects": [
+              "pilots"
+            ],
+            "emotion": "neutral",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear shot of the cockpit"
+          },
+          {
+            "startSec": 8.71,
+            "endSec": 11.69,
+            "shotType": "extreme long shot",
+            "camera": "exterior",
+            "role": "B_ROLL",
+            "description": "Aerial view of the US Bank Stadium and helicopters flying nearby",
+            "subjects": [
+              "helicopter",
+              "stadium"
+            ],
+            "emotion": "neutral",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear aerial shot"
+          },
+          {
+            "startSec": 11.69,
+            "endSec": 14.53,
+            "shotType": "close-up",
+            "camera": "interior",
+            "role": "A_ROLL",
+            "description": "Customs officer speaking directly into the camera inside the helicopter",
+            "subjects": [
+              "customs officer"
+            ],
+            "emotion": "serious",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear shot of the subject speaking"
+          },
+          {
+            "startSec": 14.53,
+            "endSec": 18.23,
+            "shotType": "medium shot",
+            "camera": "interior",
+            "role": "B_ROLL",
+            "description": "Side view of the pilot navigating in the cockpit",
+            "subjects": [
+              "pilot"
+            ],
+            "emotion": "focused",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear shot of the pilot"
+          },
+          {
+            "startSec": 18.23,
+            "endSec": 23.31,
+            "shotType": "close-up",
+            "camera": "interior",
+            "role": "A_ROLL",
+            "description": "Customs officer speaking directly into the camera inside the helicopter",
+            "subjects": [
+              "customs officer"
+            ],
+            "emotion": "serious",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear shot of the subject speaking"
+          },
+          {
+            "startSec": 23.31,
+            "endSec": 25.59,
+            "shotType": "extreme long shot",
+            "camera": "exterior",
+            "role": "B_ROLL",
+            "description": "Aerial view of the US Bank Stadium and helicopter flying nearby",
+            "subjects": [
+              "helicopter",
+              "stadium"
+            ],
+            "emotion": "neutral",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear aerial shot"
+          },
+          {
+            "startSec": 25.59,
+            "endSec": 35.21,
+            "shotType": "close-up",
+            "camera": "interior",
+            "role": "A_ROLL",
+            "description": "Customs officer speaking directly into the camera inside the helicopter",
+            "subjects": [
+              "customs officer"
+            ],
+            "emotion": "serious",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear shot of the subject speaking"
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0,
+            "endSec": 4.54,
+            "text": "U.S. Customs and Border Protection's count down to kickoff, 48 hours until game time."
+          },
+          {
+            "startSec": 5.06,
+            "endSec": 11.23,
+            "text": "And U.S. Customs and Border Protection's Air and Marine Operations is high above U.S. Bank Stadium today, taking a look at the no-fly zone."
+          },
+          {
+            "startSec": 11.23,
+            "endSec": 15.08,
+            "text": "Most Americans don't realize the no-fly zone they put into effect over the U.S. Bank Stadium during game day."
+          },
+          {
+            "startSec": 18.23,
+            "endSec": 25.42,
+            "text": "The no-fly zone this year will take effect at 3:30 in the afternoon and last until midnight in a 32-mile radius around the stadium."
+          },
+          {
+            "startSec": 25.42,
+            "endSec": 35.21,
+            "text": "To learn more how CBP securing Super Bowl 52 here in Minneapolis, Minnesota, check us out at CBP.gov on countdown to kickoff."
+          }
+        ],
+        "bestMomentSec": 13
+      }
+    }
+  },
+  "candidates": [
+    {
+      "candidateId": "aroll-3#s0@0.83c0",
+      "itemId": "aroll-3",
+      "kind": "video",
+      "chapterIndex": 0,
+      "inSec": 0.83,
+      "outSec": 5.08,
+      "lengthSec": 4.25,
+      "hasSpeech": true,
+      "speechSegments": [
+        {
+          "startSec": 0.83,
+          "endSec": 5.08,
+          "text": "It's Monday here in Minneapolis, Minnesota for Super Bowl 52."
+        }
+      ],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 1,
+      "energy": 0,
+      "description": "speech to camera: Two officials standing in a facility discussing Super Bowl 52 security preparations."
+    },
+    {
+      "candidateId": "aroll-4#s0@0c0",
+      "itemId": "aroll-4",
+      "kind": "video",
+      "chapterIndex": 0,
+      "inSec": 0,
+      "outSec": 8,
+      "lengthSec": 8,
+      "hasSpeech": true,
+      "speechSegments": [
+        {
+          "startSec": 0,
+          "endSec": 8,
+          "text": "It's day two out here at Super Bowl 52 in Minneapolis, Minnesota, and today we're talking air security with Air Marine Operations."
+        }
+      ],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 1,
+      "emotion": 0.85,
+      "energy": 0,
+      "description": "speech to camera: An officer stands in front of a helicopter and speaks to the camera."
+    },
+    {
+      "candidateId": "aroll-6#s1@16.92c0",
+      "itemId": "aroll-6",
+      "kind": "video",
+      "chapterIndex": 0,
+      "inSec": 16.92,
+      "outSec": 20.35,
+      "lengthSec": 3.43,
+      "hasSpeech": false,
+      "speechSegments": [],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 0.8,
+      "energy": 0,
+      "description": "Looking inside a cardboard box from the bottom perspective"
+    },
+    {
+      "candidateId": "aroll-7#s0@0c0",
+      "itemId": "aroll-7",
+      "kind": "video",
+      "chapterIndex": 0,
+      "inSec": 0,
+      "outSec": 4.54,
+      "lengthSec": 4.54,
+      "hasSpeech": true,
+      "speechSegments": [
+        {
+          "startSec": 0,
+          "endSec": 4.54,
+          "text": "U.S. Customs and Border Protection's count down to kickoff, 48 hours until game time."
+        }
+      ],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 1,
+      "energy": 0,
+      "description": "speech to camera: Customs officer speaking directly into the camera inside the helicopter"
+    }
+  ],
+  "trackId": "lyria-reflective",
+  "timeOf": {
+    "aroll-3": {
+      "chapter": 0,
+      "localTime": "0000:00:00 00:00:00",
+      "score": 0
+    },
+    "aroll-4": {
+      "chapter": 0,
+      "localTime": "0000:00:00 00:00:00",
+      "score": 0
+    },
+    "aroll-5": {
+      "chapter": 0,
+      "localTime": "0000:00:00 00:00:00",
+      "score": 0
+    },
+    "aroll-6": {
+      "chapter": 0,
+      "localTime": "0000:00:00 00:00:00",
+      "score": 0
+    },
+    "aroll-7": {
+      "chapter": 0,
+      "localTime": "0000:00:00 00:00:00",
+      "score": 0
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "embeddinggemma-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {"run": "node --expose-gc run.mjs"},
+  "dependencies": {
+    "@huggingface/transformers": "^4.3.1",
+    "sharp": "^0.35.5"
+  }
+}

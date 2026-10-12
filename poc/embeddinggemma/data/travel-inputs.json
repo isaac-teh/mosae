@@ -1,0 +1,3307 @@
+{
+  "config": {
+    "name": "travel",
+    "set": "trip",
+    "duration": "1m",
+    "cadence": "playful",
+    "intent": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships."
+  },
+  "transport": {
+    "model": "gemini-3.1-flash-lite",
+    "temperature": "SDK default",
+    "mediaResolution": "MEDIA_RESOLUTION_LOW"
+  },
+  "proposal": {
+    "schemaVersion": 1,
+    "id": "compare-travel",
+    "projectId": "local-comparison",
+    "storyIntentId": "local-intent",
+    "parentProposalId": null,
+    "state": "accepted",
+    "version": 1,
+    "title": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+    "moments": [
+      {
+        "id": "d01-tokyo-photo-1510610",
+        "shotId": "d01-tokyo-photo-1510610",
+        "kind": "photo",
+        "title": "d01-tokyo-photo-1510610",
+        "description": "A lone person walking down a narrow, rain-slicked alleyway in an urban setting at night.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d01-tokyo-photo-18234078",
+        "shotId": "d01-tokyo-photo-18234078",
+        "kind": "photo",
+        "title": "d01-tokyo-photo-18234078",
+        "description": "An elevated, high-angle aerial view of the Shibuya Crossing in Tokyo, showing bustling pedestrian traffic and city streets.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d01-tokyo-photo-22493463",
+        "shotId": "d01-tokyo-photo-22493463",
+        "kind": "photo",
+        "title": "d01-tokyo-photo-22493463",
+        "description": "A bustling street scene at night in a Japanese urban area filled with glowing neon signs and a crowd of people walking.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d01-tokyo-photo-30641513",
+        "shotId": "d01-tokyo-photo-30641513",
+        "kind": "photo",
+        "title": "d01-tokyo-photo-30641513",
+        "description": "A quiet night scene on a city street in Japan featuring a person standing by a shop front and a cyclist passing by on the road.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d01-tokyo-photo-33901684",
+        "shotId": "d01-tokyo-photo-33901684",
+        "kind": "photo",
+        "title": "d01-tokyo-photo-33901684",
+        "description": "A bustling street intersection in Ginza, Tokyo, at twilight featuring modern architecture and urban traffic.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d01-tokyo-photo-7210063",
+        "shotId": "d01-tokyo-photo-7210063",
+        "kind": "photo",
+        "title": "d01-tokyo-photo-7210063",
+        "description": "A high-angle long shot of the Shibuya Crossing in Tokyo on a rainy day, crowded with pedestrians carrying umbrellas.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d01-tokyo-video-18662635",
+        "shotId": "d01-tokyo-video-18662635",
+        "kind": "video",
+        "title": "d01-tokyo-video-18662635",
+        "description": "Busy street scene in Kabukicho, Tokyo at night, crowded with tourists and bright neon lights.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 5.4
+      },
+      {
+        "id": "d01-tokyo-video-35291926",
+        "shotId": "d01-tokyo-video-35291926",
+        "kind": "video",
+        "title": "d01-tokyo-video-35291926",
+        "description": "Aerial view of Shibuya crossing at night with heavy traffic and pedestrian activity.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 7.37
+      },
+      {
+        "id": "d02-tokyo-photo-16266742",
+        "shotId": "d02-tokyo-photo-16266742",
+        "kind": "photo",
+        "title": "d02-tokyo-photo-16266742",
+        "description": "A close-up of a person holding a bowl of ramen while lifting a portion of noodles with chopsticks in a restaurant.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d02-tokyo-photo-30856693",
+        "shotId": "d02-tokyo-photo-30856693",
+        "kind": "photo",
+        "title": "d02-tokyo-photo-30856693",
+        "description": "A close-up of a bowl of ramen featuring sliced pork, a soft-boiled egg, and nori sheets on a wooden table.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d02-tokyo-photo-31317028",
+        "shotId": "d02-tokyo-photo-31317028",
+        "kind": "photo",
+        "title": "d02-tokyo-photo-31317028",
+        "description": "A bowl of ramen topped with chashu, a soft-boiled egg, narutomaki, and scallions, served with a side of sushi rolls.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d02-tokyo-photo-31393431",
+        "shotId": "d02-tokyo-photo-31393431",
+        "kind": "photo",
+        "title": "d02-tokyo-photo-31393431",
+        "description": "A close-up shot of a bowl of ramen topped with scallions, a soft-boiled egg, narutomaki, and pork, with chopsticks resting on the bowl.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d02-tokyo-video-31387250",
+        "shotId": "d02-tokyo-video-31387250",
+        "kind": "video",
+        "title": "d02-tokyo-video-31387250",
+        "description": "Close up top-down view of a bowl of ramen with pork slices, a boiled egg, green onions, and chili oil, with side plates containing extra meat and garnish.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 4.34
+      },
+      {
+        "id": "d03-tokyo-photo-17971187",
+        "shotId": "d03-tokyo-photo-17971187",
+        "kind": "photo",
+        "title": "d03-tokyo-photo-17971187",
+        "description": "A wide beach scene with families playing in the shallow water and on the sand under a cloudy sky near a forest edge.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d03-tokyo-photo-28298384",
+        "shotId": "d03-tokyo-photo-28298384",
+        "kind": "photo",
+        "title": "d03-tokyo-photo-28298384",
+        "description": "A father pushes his two young children in a stroller near a set of stone stairs leading to a traditional red building.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d03-tokyo-photo-37478100",
+        "shotId": "d03-tokyo-photo-37478100",
+        "kind": "photo",
+        "title": "d03-tokyo-photo-37478100",
+        "description": "A group of people standing on a dark sandy beach observing fish and a duck in the water.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d03-tokyo-photo-5690552",
+        "shotId": "d03-tokyo-photo-5690552",
+        "kind": "photo",
+        "title": "d03-tokyo-photo-5690552",
+        "description": "A parent and child walking hand-in-hand past a traditional storefront in Japan.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d03-tokyo-photo-712473",
+        "shotId": "d03-tokyo-photo-712473",
+        "kind": "photo",
+        "title": "d03-tokyo-photo-712473",
+        "description": "A woman and a young child walking through a large wooden gate into a sunlit courtyard.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d03-tokyo-video-34181366",
+        "shotId": "d03-tokyo-video-34181366",
+        "kind": "video",
+        "title": "d03-tokyo-video-34181366",
+        "description": "A group of people, including a child running, walking in front of a traditional Japanese shrine building.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 11.04
+      },
+      {
+        "id": "d04-tokyo-photo-29518213",
+        "shotId": "d04-tokyo-photo-29518213",
+        "kind": "photo",
+        "title": "d04-tokyo-photo-29518213",
+        "description": "A commuter train passing through an urban railroad crossing in Japan.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d04-tokyo-photo-31223297",
+        "shotId": "d04-tokyo-photo-31223297",
+        "kind": "photo",
+        "title": "d04-tokyo-photo-31223297",
+        "description": "An elevated, panoramic view overlooking a complex railway junction in an urban area with multiple trains in motion and city infrastructure in the background.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d04-tokyo-photo-37687936",
+        "shotId": "d04-tokyo-photo-37687936",
+        "kind": "photo",
+        "title": "d04-tokyo-photo-37687936",
+        "description": "A high-angle view of two trains parked at a station platform on a sunny day.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d04-tokyo-video-17371342",
+        "shotId": "d04-tokyo-video-17371342",
+        "kind": "video",
+        "title": "d04-tokyo-video-17371342",
+        "description": "A green train arriving and stopping at the platform of an underground subway station, with passengers waiting.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 22.25
+      },
+      {
+        "id": "d05-kyoto-photo-1673978",
+        "shotId": "d05-kyoto-photo-1673978",
+        "kind": "photo",
+        "title": "d05-kyoto-photo-1673978",
+        "description": "A scenic view of the Kiyomizu-dera temple in Kyoto under a bright blue sky.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d05-kyoto-photo-26946364",
+        "shotId": "d05-kyoto-photo-26946364",
+        "kind": "photo",
+        "title": "d05-kyoto-photo-26946364",
+        "description": "A vibrant orange three-story pagoda stands prominently against a cloudy sky, nestled among lush green trees.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d05-kyoto-photo-30094291",
+        "shotId": "d05-kyoto-photo-30094291",
+        "kind": "photo",
+        "title": "d05-kyoto-photo-30094291",
+        "description": "A low-angle view of a traditional wooden Japanese temple structure surrounded by autumn foliage.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d05-kyoto-photo-30612362",
+        "shotId": "d05-kyoto-photo-30612362",
+        "kind": "photo",
+        "title": "d05-kyoto-photo-30612362",
+        "description": "Low-angle view of a vibrant red Japanese pagoda roof against a clear blue sky, framed by bare winter branches.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d05-kyoto-video-32111755",
+        "shotId": "d05-kyoto-video-32111755",
+        "kind": "video",
+        "title": "d05-kyoto-video-32111755",
+        "description": "A wide view of the Kiyomizu-dera temple structure nestled in a lush green hillside in Kyoto.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 5
+      },
+      {
+        "id": "d06-kyoto-photo-31158397",
+        "shotId": "d06-kyoto-photo-31158397",
+        "kind": "photo",
+        "title": "d06-kyoto-photo-31158397",
+        "description": "A bright, sunny day at the entrance of a traditional Japanese shrine with a large vermilion torii gate.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d06-kyoto-photo-35568183",
+        "shotId": "d06-kyoto-photo-35568183",
+        "kind": "photo",
+        "title": "d06-kyoto-photo-35568183",
+        "description": "Close-up of vibrant orange torii gate columns inscribed with black Japanese kanji characters at a shrine.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d06-kyoto-photo-37722151",
+        "shotId": "d06-kyoto-photo-37722151",
+        "kind": "photo",
+        "title": "d06-kyoto-photo-37722151",
+        "description": "A stone fox statue covered in moss, wearing a vibrant red bib, situated within a traditional Japanese shrine setting.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d06-kyoto-video-20666879",
+        "shotId": "d06-kyoto-video-20666879",
+        "kind": "video",
+        "title": "d06-kyoto-video-20666879",
+        "description": "people walking through red torii gate structure",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 20.57
+      },
+      {
+        "id": "d07-kyoto-photo-27467505",
+        "shotId": "d07-kyoto-photo-27467505",
+        "kind": "photo",
+        "title": "d07-kyoto-photo-27467505",
+        "description": "Two young women wearing traditional kimono sit together in front of a dark, ornate door.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d07-kyoto-photo-5472374",
+        "shotId": "d07-kyoto-photo-5472374",
+        "kind": "photo",
+        "title": "d07-kyoto-photo-5472374",
+        "description": "Two women wearing traditional kimonos sitting by the riverside on a sunny day.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d07-kyoto-photo-5745824",
+        "shotId": "d07-kyoto-photo-5745824",
+        "kind": "photo",
+        "title": "d07-kyoto-photo-5745824",
+        "description": "Two women wearing traditional kimono walking along a historic Japanese street with wooden buildings.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d08-osaka-photo-34729040",
+        "shotId": "d08-osaka-photo-34729040",
+        "kind": "photo",
+        "title": "d08-osaka-photo-34729040",
+        "description": "A person stands on a bridge at night, taking a photo of a brightly lit canal district.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d08-osaka-photo-35181505",
+        "shotId": "d08-osaka-photo-35181505",
+        "kind": "photo",
+        "title": "d08-osaka-photo-35181505",
+        "description": "A vertical view of the Dotonbori canal in Osaka, showcasing various commercial signage and iconic building advertisements.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d08-osaka-photo-37832017",
+        "shotId": "d08-osaka-photo-37832017",
+        "kind": "photo",
+        "title": "d08-osaka-photo-37832017",
+        "description": "A busy pedestrian street entrance in Dotonbori, Osaka at sunset.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d08-osaka-video-38495752",
+        "shotId": "d08-osaka-video-38495752",
+        "kind": "video",
+        "title": "d08-osaka-video-38495752",
+        "description": "Crowded Dotonbori canal walkway at night with bright neon signs and pedestrians.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 15.43
+      },
+      {
+        "id": "d09-osaka-photo-25050466",
+        "shotId": "d09-osaka-photo-25050466",
+        "kind": "photo",
+        "title": "d09-osaka-photo-25050466",
+        "description": "A close-up view of takoyaki balls cooking in a dedicated cast iron takoyaki pan.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d09-osaka-photo-37800486",
+        "shotId": "d09-osaka-photo-37800486",
+        "kind": "photo",
+        "title": "d09-osaka-photo-37800486",
+        "description": "Two people working inside a traditional Japanese street food stall with hanging noren curtains.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d09-osaka-photo-39211145",
+        "shotId": "d09-osaka-photo-39211145",
+        "kind": "photo",
+        "title": "d09-osaka-photo-39211145",
+        "description": "Two street food vendors preparing takoyaki in a compact kiosk.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d09-osaka-photo-5905728",
+        "shotId": "d09-osaka-photo-5905728",
+        "kind": "photo",
+        "title": "d09-osaka-photo-5905728",
+        "description": "A close-up of various seafood skewers, including octopus and shrimp, displayed for sale on ice trays at a street market stall with Japanese signage.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d09-osaka-video-28995349",
+        "shotId": "d09-osaka-video-28995349",
+        "kind": "video",
+        "title": "d09-osaka-video-28995349",
+        "description": "A low-angle shot of hanging Japanese menus in a food stall.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 16.67
+      },
+      {
+        "id": "d10-osaka-photo-30218071",
+        "shotId": "d10-osaka-photo-30218071",
+        "kind": "photo",
+        "title": "d10-osaka-photo-30218071",
+        "description": "A young child prepares to blow out the candle on a chocolate raspberry birthday cake while family members watch.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d10-osaka-photo-7328322",
+        "shotId": "d10-osaka-photo-7328322",
+        "kind": "photo",
+        "title": "d10-osaka-photo-7328322",
+        "description": "A family celebrating a birthday with a cake and lit candles.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d10-osaka-photo-7600383",
+        "shotId": "d10-osaka-photo-7600383",
+        "kind": "photo",
+        "title": "d10-osaka-photo-7600383",
+        "description": "Four young children wearing party hats stand around a stool with a birthday cake in front of a Happy Birthday banner.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "d10-osaka-video-8901133",
+        "shotId": "d10-osaka-video-8901133",
+        "kind": "video",
+        "title": "d10-osaka-video-8901133",
+        "description": "A young girl in a party hat excitedly blows out candles on a birthday cake.",
+        "rationale": "Fixed accepted selection for paired comparison",
+        "previewInSec": 0,
+        "previewOutSec": 18.28
+      }
+    ],
+    "chapters": [
+      {
+        "id": "chapter-0",
+        "title": "d01-tokyo",
+        "summary": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+        "momentIds": [
+          "d01-tokyo-photo-1510610",
+          "d01-tokyo-photo-18234078",
+          "d01-tokyo-photo-22493463",
+          "d01-tokyo-photo-30641513",
+          "d01-tokyo-photo-33901684",
+          "d01-tokyo-photo-7210063",
+          "d01-tokyo-video-18662635",
+          "d01-tokyo-video-35291926"
+        ]
+      },
+      {
+        "id": "chapter-1",
+        "title": "d02-tokyo",
+        "summary": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+        "momentIds": [
+          "d02-tokyo-photo-16266742",
+          "d02-tokyo-photo-30856693",
+          "d02-tokyo-photo-31317028",
+          "d02-tokyo-photo-31393431",
+          "d02-tokyo-video-31387250"
+        ]
+      },
+      {
+        "id": "chapter-2",
+        "title": "d03-tokyo",
+        "summary": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+        "momentIds": [
+          "d03-tokyo-photo-17971187",
+          "d03-tokyo-photo-28298384",
+          "d03-tokyo-photo-37478100",
+          "d03-tokyo-photo-5690552",
+          "d03-tokyo-photo-712473",
+          "d03-tokyo-video-34181366"
+        ]
+      },
+      {
+        "id": "chapter-3",
+        "title": "d04-tokyo",
+        "summary": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+        "momentIds": [
+          "d04-tokyo-photo-29518213",
+          "d04-tokyo-photo-31223297",
+          "d04-tokyo-photo-37687936",
+          "d04-tokyo-video-17371342"
+        ]
+      },
+      {
+        "id": "chapter-4",
+        "title": "d05-kyoto",
+        "summary": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+        "momentIds": [
+          "d05-kyoto-photo-1673978",
+          "d05-kyoto-photo-26946364",
+          "d05-kyoto-photo-30094291",
+          "d05-kyoto-photo-30612362",
+          "d05-kyoto-video-32111755"
+        ]
+      },
+      {
+        "id": "chapter-5",
+        "title": "d06-kyoto",
+        "summary": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+        "momentIds": [
+          "d06-kyoto-photo-31158397",
+          "d06-kyoto-photo-35568183",
+          "d06-kyoto-photo-37722151",
+          "d06-kyoto-video-20666879"
+        ]
+      },
+      {
+        "id": "chapter-6",
+        "title": "d07-kyoto",
+        "summary": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+        "momentIds": [
+          "d07-kyoto-photo-27467505",
+          "d07-kyoto-photo-5472374",
+          "d07-kyoto-photo-5745824"
+        ]
+      },
+      {
+        "id": "chapter-7",
+        "title": "d08-osaka",
+        "summary": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+        "momentIds": [
+          "d08-osaka-photo-34729040",
+          "d08-osaka-photo-35181505",
+          "d08-osaka-photo-37832017",
+          "d08-osaka-video-38495752"
+        ]
+      },
+      {
+        "id": "chapter-8",
+        "title": "d09-osaka",
+        "summary": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+        "momentIds": [
+          "d09-osaka-photo-25050466",
+          "d09-osaka-photo-37800486",
+          "d09-osaka-photo-39211145",
+          "d09-osaka-photo-5905728",
+          "d09-osaka-video-28995349"
+        ]
+      },
+      {
+        "id": "chapter-9",
+        "title": "d10-osaka",
+        "summary": "A chronological Japan travel recap. Keep the story grounded in the available footage; do not invent family relationships.",
+        "momentIds": [
+          "d10-osaka-photo-30218071",
+          "d10-osaka-photo-7328322",
+          "d10-osaka-photo-7600383",
+          "d10-osaka-video-8901133"
+        ]
+      }
+    ],
+    "constraints": {
+      "excludedShotIds": [],
+      "deselectedMomentIds": [],
+      "mustIncludeMomentIds": [],
+      "feedback": []
+    },
+    "openQuestions": []
+  },
+  "assets": {
+    "d01-tokyo-photo-1510610": {
+      "kind": "photo",
+      "assetId": "d01-tokyo-photo-1510610",
+      "file": "d01-tokyo-photo-1510610.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:01 09:00:00",
+      "analysis": {
+        "itemId": "d01-tokyo-photo-1510610",
+        "file": "d01-tokyo-photo-1510610.jpg",
+        "kind": "photo",
+        "caption": "A lone person walking down a narrow, rain-slicked alleyway in an urban setting at night.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "pedestrian"
+            ],
+            "attributes": [
+              "carrying an umbrella",
+              "walking away from camera"
+            ]
+          }
+        ],
+        "setting": "Urban alleyway at night with glowing neon signage and wet pavement.",
+        "activities": [
+          "walking"
+        ],
+        "mood": "solitary",
+        "shotType": "full shot",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "urban",
+          "night",
+          "rain",
+          "street photography",
+          "neon",
+          "atmosphere"
+        ]
+      }
+    },
+    "d01-tokyo-photo-18234078": {
+      "kind": "photo",
+      "assetId": "d01-tokyo-photo-18234078",
+      "file": "d01-tokyo-photo-18234078.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:01 16:13:00",
+      "analysis": {
+        "itemId": "d01-tokyo-photo-18234078",
+        "file": "d01-tokyo-photo-18234078.jpg",
+        "kind": "photo",
+        "caption": "An elevated, high-angle aerial view of the Shibuya Crossing in Tokyo, showing bustling pedestrian traffic and city streets.",
+        "subjects": [
+          {
+            "peopleCount": 50,
+            "roles": [
+              "pedestrians"
+            ],
+            "attributes": [
+              "small scale",
+              "walking",
+              "diverse attire"
+            ]
+          }
+        ],
+        "setting": "Shibuya Crossing, Tokyo",
+        "activities": [
+          "crossing the street",
+          "commuting",
+          "driving"
+        ],
+        "mood": "bustling",
+        "shotType": "high-angle aerial",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "Tokyo",
+          "Shibuya",
+          "cityscape",
+          "urban",
+          "traffic",
+          "pedestrian crossing"
+        ]
+      }
+    },
+    "d01-tokyo-photo-22493463": {
+      "kind": "photo",
+      "assetId": "d01-tokyo-photo-22493463",
+      "file": "d01-tokyo-photo-22493463.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:01 11:26:00",
+      "analysis": {
+        "itemId": "d01-tokyo-photo-22493463",
+        "file": "d01-tokyo-photo-22493463.jpg",
+        "kind": "photo",
+        "caption": "A bustling street scene at night in a Japanese urban area filled with glowing neon signs and a crowd of people walking.",
+        "subjects": [
+          {
+            "peopleCount": 20,
+            "roles": [
+              "pedestrians"
+            ],
+            "attributes": [
+              "diverse clothing",
+              "casual attire",
+              "walking"
+            ]
+          }
+        ],
+        "setting": "Urban street in Japan at night, lined with illuminated commercial buildings and vertical signage.",
+        "activities": [
+          "walking",
+          "urban exploring",
+          "commuting"
+        ],
+        "mood": "energetic",
+        "shotType": "street photography",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "night life",
+          "neon",
+          "city",
+          "Japan",
+          "pedestrian",
+          "urban"
+        ]
+      }
+    },
+    "d01-tokyo-photo-30641513": {
+      "kind": "photo",
+      "assetId": "d01-tokyo-photo-30641513",
+      "file": "d01-tokyo-photo-30641513.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:01 18:39:00",
+      "analysis": {
+        "itemId": "d01-tokyo-photo-30641513",
+        "file": "d01-tokyo-photo-30641513.jpg",
+        "kind": "photo",
+        "caption": "A quiet night scene on a city street in Japan featuring a person standing by a shop front and a cyclist passing by on the road.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "pedestrian",
+              "cyclist"
+            ],
+            "attributes": [
+              "wearing dark clothing",
+              "back view"
+            ]
+          }
+        ],
+        "setting": "Urban street at night in Japan",
+        "activities": [
+          "walking",
+          "cycling",
+          "commuting"
+        ],
+        "mood": "Quiet, nocturnal, contemplative",
+        "shotType": "Medium full shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "urban",
+          "night",
+          "city",
+          "japan",
+          "street photography",
+          "moody"
+        ]
+      }
+    },
+    "d01-tokyo-photo-33901684": {
+      "kind": "photo",
+      "assetId": "d01-tokyo-photo-33901684",
+      "file": "d01-tokyo-photo-33901684.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:01 13:52:00",
+      "analysis": {
+        "itemId": "d01-tokyo-photo-33901684",
+        "file": "d01-tokyo-photo-33901684.jpg",
+        "kind": "photo",
+        "caption": "A bustling street intersection in Ginza, Tokyo, at twilight featuring modern architecture and urban traffic.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "Ginza district, Tokyo, Japan at dusk",
+        "activities": [
+          "commuting",
+          "driving",
+          "urban exploration"
+        ],
+        "mood": "energetic",
+        "shotType": "wide-angle street photography",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "Ginza",
+          "Tokyo",
+          "cityscape",
+          "twilight",
+          "traffic",
+          "urban"
+        ]
+      }
+    },
+    "d01-tokyo-photo-7210063": {
+      "kind": "photo",
+      "assetId": "d01-tokyo-photo-7210063",
+      "file": "d01-tokyo-photo-7210063.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:01 20:05:00",
+      "analysis": {
+        "itemId": "d01-tokyo-photo-7210063",
+        "file": "d01-tokyo-photo-7210063.jpg",
+        "kind": "photo",
+        "caption": "A high-angle long shot of the Shibuya Crossing in Tokyo on a rainy day, crowded with pedestrians carrying umbrellas.",
+        "subjects": [
+          {
+            "peopleCount": 50,
+            "roles": [
+              "pedestrians"
+            ],
+            "attributes": [
+              "carrying umbrellas",
+              "wearing casual clothing"
+            ]
+          }
+        ],
+        "setting": "Shibuya Crossing, Tokyo, Japan",
+        "activities": [
+          "walking",
+          "crossing the street",
+          "commuting"
+        ],
+        "mood": "busy",
+        "shotType": "high-angle long shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "Shibuya",
+          "rain",
+          "cityscape",
+          "umbrellas",
+          "Tokyo"
+        ]
+      }
+    },
+    "d01-tokyo-video-18662635": {
+      "kind": "video",
+      "assetId": "d01-tokyo-video-18662635",
+      "file": "d01-tokyo-video-18662635.mp4",
+      "keyMomentScore": 0,
+      "localTime": "2026:04:01 15:18:00+09:00",
+      "analysis": {
+        "itemId": "d01-tokyo-video-18662635",
+        "file": "d01-tokyo-video-18662635.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 5.4,
+            "shotType": "wide shot",
+            "camera": "handheld",
+            "role": "B_ROLL",
+            "description": "Busy street scene in Kabukicho, Tokyo at night, crowded with tourists and bright neon lights.",
+            "subjects": [
+              "tourists",
+              "pedestrians"
+            ],
+            "emotion": "excitement",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear, vibrant shot capturing the atmosphere of Tokyo nightlife."
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0,
+            "endSec": 5.4,
+            "text": "I'm like tourist."
+          }
+        ],
+        "bestMomentSec": 2.5
+      }
+    },
+    "d01-tokyo-video-35291926": {
+      "kind": "video",
+      "assetId": "d01-tokyo-video-35291926",
+      "file": "d01-tokyo-video-35291926.mp4",
+      "keyMomentScore": 0,
+      "localTime": "2026:04:01 10:31:00+09:00",
+      "analysis": {
+        "itemId": "d01-tokyo-video-35291926",
+        "file": "d01-tokyo-video-35291926.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 7.37,
+            "shotType": "long shot",
+            "camera": "fixed",
+            "role": "B_ROLL",
+            "description": "Aerial view of Shibuya crossing at night with heavy traffic and pedestrian activity.",
+            "subjects": [
+              "Shibuya Crossing",
+              "Traffic",
+              "Pedestrians"
+            ],
+            "emotion": "neutral",
+            "quality": 0.8,
+            "usable": true,
+            "reason": "Clear, stable shot capturing the iconic busy environment of Tokyo at night."
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0,
+            "endSec": 7.37,
+            "text": "The Shibuya Crossing is bustling with life and traffic under the neon lights of Tokyo tonight."
+          }
+        ],
+        "bestMomentSec": 3.5
+      }
+    },
+    "d02-tokyo-photo-16266742": {
+      "kind": "photo",
+      "assetId": "d02-tokyo-photo-16266742",
+      "file": "d02-tokyo-photo-16266742.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:02 17:44:00",
+      "analysis": {
+        "itemId": "d02-tokyo-photo-16266742",
+        "file": "d02-tokyo-photo-16266742.jpg",
+        "kind": "photo",
+        "caption": "A close-up of a person holding a bowl of ramen while lifting a portion of noodles with chopsticks in a restaurant.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "diner"
+            ],
+            "attributes": [
+              "manicured white nails",
+              "wearing gray sleeves",
+              "wearing a beaded bracelet"
+            ]
+          }
+        ],
+        "setting": "dimly lit ramen restaurant with blurred neon signage in the background",
+        "activities": [
+          "eating ramen",
+          "using chopsticks"
+        ],
+        "mood": "cozy and appetizing",
+        "shotType": "close-up",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "ramen",
+          "food photography",
+          "chopsticks",
+          "dining out",
+          "Japanese cuisine"
+        ]
+      }
+    },
+    "d02-tokyo-photo-30856693": {
+      "kind": "photo",
+      "assetId": "d02-tokyo-photo-30856693",
+      "file": "d02-tokyo-photo-30856693.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:02 12:57:00",
+      "analysis": {
+        "itemId": "d02-tokyo-photo-30856693",
+        "file": "d02-tokyo-photo-30856693.jpg",
+        "kind": "photo",
+        "caption": "A close-up of a bowl of ramen featuring sliced pork, a soft-boiled egg, and nori sheets on a wooden table.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "restaurant",
+        "activities": [
+          "dining"
+        ],
+        "mood": "cozy",
+        "shotType": "close-up",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "ramen",
+          "food",
+          "dinner",
+          "japanese cuisine"
+        ]
+      }
+    },
+    "d02-tokyo-photo-31317028": {
+      "kind": "photo",
+      "assetId": "d02-tokyo-photo-31317028",
+      "file": "d02-tokyo-photo-31317028.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:02 19:10:00",
+      "analysis": {
+        "itemId": "d02-tokyo-photo-31317028",
+        "file": "d02-tokyo-photo-31317028.jpg",
+        "kind": "photo",
+        "caption": "A bowl of ramen topped with chashu, a soft-boiled egg, narutomaki, and scallions, served with a side of sushi rolls.",
+        "subjects": [],
+        "setting": "A dark, minimalist dining table surface.",
+        "activities": [
+          "food photography",
+          "dining"
+        ],
+        "mood": "calm and appetizing",
+        "shotType": "close-up",
+        "aesthetics": 4.5,
+        "keyMomentScore": 3,
+        "tags": [
+          "ramen",
+          "japanese cuisine",
+          "sushi",
+          "food",
+          "dinner"
+        ]
+      }
+    },
+    "d02-tokyo-photo-31393431": {
+      "kind": "photo",
+      "assetId": "d02-tokyo-photo-31393431",
+      "file": "d02-tokyo-photo-31393431.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:02 14:23:00",
+      "analysis": {
+        "itemId": "d02-tokyo-photo-31393431",
+        "file": "d02-tokyo-photo-31393431.jpg",
+        "kind": "photo",
+        "caption": "A close-up shot of a bowl of ramen topped with scallions, a soft-boiled egg, narutomaki, and pork, with chopsticks resting on the bowl.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "dining table",
+        "activities": [
+          "eating",
+          "dining"
+        ],
+        "mood": "appetizing",
+        "shotType": "close-up",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "ramen",
+          "food",
+          "Japanese cuisine",
+          "noodles",
+          "chopsticks"
+        ]
+      }
+    },
+    "d02-tokyo-video-31387250": {
+      "kind": "video",
+      "assetId": "d02-tokyo-video-31387250",
+      "file": "d02-tokyo-video-31387250.mp4",
+      "keyMomentScore": 0,
+      "localTime": "2026:04:02 09:36:00+09:00",
+      "analysis": {
+        "itemId": "d02-tokyo-video-31387250",
+        "file": "d02-tokyo-video-31387250.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 4.34,
+            "shotType": "top-down",
+            "camera": "static",
+            "role": "B_ROLL",
+            "description": "Close up top-down view of a bowl of ramen with pork slices, a boiled egg, green onions, and chili oil, with side plates containing extra meat and garnish.",
+            "subjects": [
+              "ramen bowl"
+            ],
+            "emotion": "neutral",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear shot of the food"
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0,
+            "endSec": 4.34,
+            "text": "A delicious bowl of steaming hot ramen with pork and egg."
+          }
+        ],
+        "bestMomentSec": 2.17
+      }
+    },
+    "d03-tokyo-photo-17971187": {
+      "kind": "photo",
+      "assetId": "d03-tokyo-photo-17971187",
+      "file": "d03-tokyo-photo-17971187.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:03 11:02:00",
+      "analysis": {
+        "itemId": "d03-tokyo-photo-17971187",
+        "file": "d03-tokyo-photo-17971187.jpg",
+        "kind": "photo",
+        "caption": "A wide beach scene with families playing in the shallow water and on the sand under a cloudy sky near a forest edge.",
+        "subjects": [
+          {
+            "peopleCount": 20,
+            "roles": [
+              "adults",
+              "children"
+            ],
+            "attributes": [
+              "casual summer attire",
+              "swimwear",
+              "scattered"
+            ]
+          }
+        ],
+        "setting": "A sandy beach bordered by a pine forest and mountains under an overcast sky.",
+        "activities": [
+          "swimming",
+          "wading",
+          "playing on sand",
+          "walking"
+        ],
+        "mood": "Relaxed and leisurely",
+        "shotType": "wide shot",
+        "aesthetics": 3,
+        "keyMomentScore": 3,
+        "tags": [
+          "beach",
+          "family",
+          "vacation",
+          "seashore",
+          "overcast"
+        ]
+      }
+    },
+    "d03-tokyo-photo-28298384": {
+      "kind": "photo",
+      "assetId": "d03-tokyo-photo-28298384",
+      "file": "d03-tokyo-photo-28298384.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:03 18:15:00",
+      "analysis": {
+        "itemId": "d03-tokyo-photo-28298384",
+        "file": "d03-tokyo-photo-28298384.jpg",
+        "kind": "photo",
+        "caption": "A father pushes his two young children in a stroller near a set of stone stairs leading to a traditional red building.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "father",
+              "young son",
+              "young daughter"
+            ],
+            "attributes": [
+              "casual summer clothing",
+              "wearing sneakers",
+              "carrying shopping bags",
+              "seated in stroller"
+            ]
+          }
+        ],
+        "setting": "Outdoor path near a park with a traditional building with red walls and stone steps.",
+        "activities": [
+          "strolling",
+          "walking"
+        ],
+        "mood": "calm",
+        "shotType": "full shot",
+        "aesthetics": 4,
+        "keyMomentScore": 4,
+        "tags": [
+          "family",
+          "parenting",
+          "stroller",
+          "outdoors",
+          "daytime"
+        ]
+      }
+    },
+    "d03-tokyo-photo-37478100": {
+      "kind": "photo",
+      "assetId": "d03-tokyo-photo-37478100",
+      "file": "d03-tokyo-photo-37478100.jpg",
+      "keyMomentScore": 1,
+      "localTime": "2026:04:03 13:28:00",
+      "analysis": {
+        "itemId": "d03-tokyo-photo-37478100",
+        "file": "d03-tokyo-photo-37478100.jpg",
+        "kind": "photo",
+        "caption": "A group of people standing on a dark sandy beach observing fish and a duck in the water.",
+        "subjects": [
+          {
+            "peopleCount": 4,
+            "roles": [
+              "adults",
+              "child"
+            ],
+            "attributes": [
+              "casual attire",
+              "crouching",
+              "leaning towards water"
+            ]
+          }
+        ],
+        "setting": "Lake shore with volcanic sand, a wooden pier, and mountains in the background.",
+        "activities": [
+          "feeding animals",
+          "wildlife observation"
+        ],
+        "mood": "Curious and peaceful",
+        "shotType": "Eye-level long shot",
+        "aesthetics": 4,
+        "keyMomentScore": 5,
+        "tags": [
+          "nature",
+          "family",
+          "lake",
+          "wildlife",
+          "daytime"
+        ]
+      }
+    },
+    "d03-tokyo-photo-5690552": {
+      "kind": "photo",
+      "assetId": "d03-tokyo-photo-5690552",
+      "file": "d03-tokyo-photo-5690552.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:03 20:41:00",
+      "analysis": {
+        "itemId": "d03-tokyo-photo-5690552",
+        "file": "d03-tokyo-photo-5690552.jpg",
+        "kind": "photo",
+        "caption": "A parent and child walking hand-in-hand past a traditional storefront in Japan.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "parent",
+              "child"
+            ],
+            "attributes": [
+              "casual clothing",
+              "walking",
+              "holding hands"
+            ]
+          }
+        ],
+        "setting": "An exterior street-level view of a traditional Japanese shop with wooden architecture and blue fabric curtains.",
+        "activities": [
+          "walking",
+          "holding hands"
+        ],
+        "mood": "peaceful",
+        "shotType": "full shot",
+        "aesthetics": 4,
+        "keyMomentScore": 4,
+        "tags": [
+          "Japan",
+          "street",
+          "architecture",
+          "parenting",
+          "traditional"
+        ]
+      }
+    },
+    "d03-tokyo-photo-712473": {
+      "kind": "photo",
+      "assetId": "d03-tokyo-photo-712473",
+      "file": "d03-tokyo-photo-712473.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:03 15:54:00",
+      "analysis": {
+        "itemId": "d03-tokyo-photo-712473",
+        "file": "d03-tokyo-photo-712473.jpg",
+        "kind": "photo",
+        "caption": "A woman and a young child walking through a large wooden gate into a sunlit courtyard.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "woman",
+              "child"
+            ],
+            "attributes": [
+              "back-facing",
+              "casual clothing",
+              "hat worn by adult"
+            ]
+          }
+        ],
+        "setting": "Traditional wooden temple or park gate with stone steps.",
+        "activities": [
+          "walking",
+          "entering"
+        ],
+        "mood": "Serene and warm",
+        "shotType": "wide shot",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "architecture",
+          "outdoors",
+          "backlit",
+          "nature",
+          "family"
+        ]
+      }
+    },
+    "d03-tokyo-video-34181366": {
+      "kind": "video",
+      "assetId": "d03-tokyo-video-34181366",
+      "file": "d03-tokyo-video-34181366.mp4",
+      "keyMomentScore": 0,
+      "localTime": "2026:04:03 10:07:00+09:00",
+      "analysis": {
+        "itemId": "d03-tokyo-video-34181366",
+        "file": "d03-tokyo-video-34181366.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 11.04,
+            "shotType": "long shot",
+            "camera": "fixed",
+            "role": "B_ROLL",
+            "description": "A group of people, including a child running, walking in front of a traditional Japanese shrine building.",
+            "subjects": [
+              "child",
+              "tourists"
+            ],
+            "emotion": "neutral",
+            "quality": 0.6,
+            "usable": true,
+            "reason": "Clear view of visitors at a shrine."
+          }
+        ],
+        "transcript": [],
+        "bestMomentSec": 3
+      }
+    },
+    "d04-tokyo-photo-29518213": {
+      "kind": "photo",
+      "assetId": "d04-tokyo-photo-29518213",
+      "file": "d04-tokyo-photo-29518213.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:04 17:20:00",
+      "analysis": {
+        "itemId": "d04-tokyo-photo-29518213",
+        "file": "d04-tokyo-photo-29518213.jpg",
+        "kind": "photo",
+        "caption": "A commuter train passing through an urban railroad crossing in Japan.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "Urban railroad crossing in Japan with residential and commercial buildings in the background.",
+        "activities": [
+          "Train passing through a crossing"
+        ],
+        "mood": "Urban, quiet, routine",
+        "shotType": "Eye-level landscape shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "train",
+          "railroad crossing",
+          "urban",
+          "Japan",
+          "infrastructure",
+          "commuting"
+        ]
+      }
+    },
+    "d04-tokyo-photo-31223297": {
+      "kind": "photo",
+      "assetId": "d04-tokyo-photo-31223297",
+      "file": "d04-tokyo-photo-31223297.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:04 12:33:00",
+      "analysis": {
+        "itemId": "d04-tokyo-photo-31223297",
+        "file": "d04-tokyo-photo-31223297.jpg",
+        "kind": "photo",
+        "caption": "An elevated, panoramic view overlooking a complex railway junction in an urban area with multiple trains in motion and city infrastructure in the background.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "Urban railway tracks and metropolitan cityscape",
+        "activities": [
+          "Trains passing through a station junction",
+          "Commuter traffic in the distance"
+        ],
+        "mood": "Busy, industrial, calm",
+        "shotType": "High-angle, wide-shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "trains",
+          "cityscape",
+          "railway",
+          "urban",
+          "transportation",
+          "japan"
+        ]
+      }
+    },
+    "d04-tokyo-photo-37687936": {
+      "kind": "photo",
+      "assetId": "d04-tokyo-photo-37687936",
+      "file": "d04-tokyo-photo-37687936.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:04 19:46:00",
+      "analysis": {
+        "itemId": "d04-tokyo-photo-37687936",
+        "file": "d04-tokyo-photo-37687936.jpg",
+        "kind": "photo",
+        "caption": "A high-angle view of two trains parked at a station platform on a sunny day.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "A rural or suburban train station with elevated tracks and mountains in the background.",
+        "activities": [
+          "Trains parked at a station"
+        ],
+        "mood": "Calm and peaceful",
+        "shotType": "High-angle wide shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "train station",
+          "travel",
+          "transportation",
+          "daytime",
+          "outdoors",
+          "scenery"
+        ]
+      }
+    },
+    "d04-tokyo-video-17371342": {
+      "kind": "video",
+      "assetId": "d04-tokyo-video-17371342",
+      "file": "d04-tokyo-video-17371342.mp4",
+      "keyMomentScore": 0,
+      "localTime": "2026:04:04 14:59:00+09:00",
+      "analysis": {
+        "itemId": "d04-tokyo-video-17371342",
+        "file": "d04-tokyo-video-17371342.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 22.25,
+            "shotType": "long shot",
+            "camera": "static",
+            "role": "B_ROLL",
+            "description": "A green train arriving and stopping at the platform of an underground subway station, with passengers waiting.",
+            "subjects": [
+              "train",
+              "station platform",
+              "passengers"
+            ],
+            "emotion": "neutral",
+            "quality": 1,
+            "usable": true,
+            "reason": "This is a high quality shot of a train arriving at the station."
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0.5,
+            "endSec": 2.5,
+            "text": "The train is entering the station."
+          }
+        ],
+        "bestMomentSec": 1.5
+      }
+    },
+    "d05-kyoto-photo-1673978": {
+      "kind": "photo",
+      "assetId": "d05-kyoto-photo-1673978",
+      "file": "d05-kyoto-photo-1673978.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:05 09:12:00",
+      "analysis": {
+        "itemId": "d05-kyoto-photo-1673978",
+        "file": "d05-kyoto-photo-1673978.jpg",
+        "kind": "photo",
+        "caption": "A scenic view of the Kiyomizu-dera temple in Kyoto under a bright blue sky.",
+        "subjects": [
+          {
+            "peopleCount": 5,
+            "roles": [
+              "visitors",
+              "tourists"
+            ],
+            "attributes": [
+              "standing at the top of the stairs",
+              "distant",
+              "unidentifiable"
+            ]
+          }
+        ],
+        "setting": "Kiyomizu-dera temple, Kyoto, Japan",
+        "activities": [
+          "sightseeing",
+          "visiting a historic landmark"
+        ],
+        "mood": "serene and majestic",
+        "shotType": "wide-angle low-angle shot",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "architecture",
+          "travel",
+          "temple",
+          "Japan",
+          "Kyoto",
+          "blue sky",
+          "landmark"
+        ]
+      }
+    },
+    "d05-kyoto-photo-26946364": {
+      "kind": "photo",
+      "assetId": "d05-kyoto-photo-26946364",
+      "file": "d05-kyoto-photo-26946364.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:05 16:25:00",
+      "analysis": {
+        "itemId": "d05-kyoto-photo-26946364",
+        "file": "d05-kyoto-photo-26946364.jpg",
+        "kind": "photo",
+        "caption": "A vibrant orange three-story pagoda stands prominently against a cloudy sky, nestled among lush green trees.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "visitors"
+            ],
+            "attributes": [
+              "standing on balcony",
+              "small scale"
+            ]
+          }
+        ],
+        "setting": "Temple grounds with traditional architecture and dense foliage",
+        "activities": [
+          "sightseeing",
+          "visiting a landmark"
+        ],
+        "mood": "Serene and majestic",
+        "shotType": "Eye-level long shot",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "pagoda",
+          "Japan",
+          "architecture",
+          "travel",
+          "temple"
+        ]
+      }
+    },
+    "d05-kyoto-photo-30094291": {
+      "kind": "photo",
+      "assetId": "d05-kyoto-photo-30094291",
+      "file": "d05-kyoto-photo-30094291.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:05 11:38:00",
+      "analysis": {
+        "itemId": "d05-kyoto-photo-30094291",
+        "file": "d05-kyoto-photo-30094291.jpg",
+        "kind": "photo",
+        "caption": "A low-angle view of a traditional wooden Japanese temple structure surrounded by autumn foliage.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "tourists"
+            ],
+            "attributes": [
+              "partially visible",
+              "standing on balcony"
+            ]
+          }
+        ],
+        "setting": "An ancient Japanese temple complex during autumn.",
+        "activities": [
+          "sightseeing"
+        ],
+        "mood": "Serene and cultural",
+        "shotType": "Low-angle architectural shot",
+        "aesthetics": 5,
+        "keyMomentScore": 3,
+        "tags": [
+          "Japan",
+          "Temple",
+          "Architecture",
+          "Autumn",
+          "Travel",
+          "Heritage"
+        ]
+      }
+    },
+    "d05-kyoto-photo-30612362": {
+      "kind": "photo",
+      "assetId": "d05-kyoto-photo-30612362",
+      "file": "d05-kyoto-photo-30612362.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:05 18:51:00",
+      "analysis": {
+        "itemId": "d05-kyoto-photo-30612362",
+        "file": "d05-kyoto-photo-30612362.jpg",
+        "kind": "photo",
+        "caption": "Low-angle view of a vibrant red Japanese pagoda roof against a clear blue sky, framed by bare winter branches.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "Outdoor temple grounds, winter",
+        "activities": [
+          "sightseeing"
+        ],
+        "mood": "Serene and architectural",
+        "shotType": "Low-angle architectural shot",
+        "aesthetics": 5,
+        "keyMomentScore": 3,
+        "tags": [
+          "pagoda",
+          "architecture",
+          "temple",
+          "japan",
+          "winter",
+          "blue sky"
+        ]
+      }
+    },
+    "d05-kyoto-video-32111755": {
+      "kind": "video",
+      "assetId": "d05-kyoto-video-32111755",
+      "file": "d05-kyoto-video-32111755.mp4",
+      "keyMomentScore": 0,
+      "localTime": "2026:04:05 13:04:00+09:00",
+      "analysis": {
+        "itemId": "d05-kyoto-video-32111755",
+        "file": "d05-kyoto-video-32111755.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 5,
+            "shotType": "long shot",
+            "camera": "static",
+            "role": "B_ROLL",
+            "description": "A wide view of the Kiyomizu-dera temple structure nestled in a lush green hillside in Kyoto.",
+            "subjects": [
+              "temple",
+              "trees",
+              "tourists"
+            ],
+            "emotion": "peaceful",
+            "quality": 1,
+            "usable": true,
+            "reason": "Clear shot of the landmark architecture."
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0,
+            "endSec": 5,
+            "text": "The Kiyomizu-dera temple in Kyoto is a beautiful example of ancient Japanese architecture, surrounded by deep green forests."
+          }
+        ],
+        "bestMomentSec": 2.5
+      }
+    },
+    "d06-kyoto-photo-31158397": {
+      "kind": "photo",
+      "assetId": "d06-kyoto-photo-31158397",
+      "file": "d06-kyoto-photo-31158397.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:06 20:17:00",
+      "analysis": {
+        "itemId": "d06-kyoto-photo-31158397",
+        "file": "d06-kyoto-photo-31158397.jpg",
+        "kind": "photo",
+        "caption": "A bright, sunny day at the entrance of a traditional Japanese shrine with a large vermilion torii gate.",
+        "subjects": [
+          {
+            "peopleCount": 15,
+            "roles": [
+              "visitors",
+              "tourists"
+            ],
+            "attributes": [
+              "wearing casual winter clothing",
+              "standing in front of a shrine"
+            ]
+          }
+        ],
+        "setting": "Outdoor shrine entrance with a large torii gate",
+        "activities": [
+          "visiting a temple",
+          "walking",
+          "sightseeing"
+        ],
+        "mood": "pleasant",
+        "shotType": "wide-angle shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "shrine",
+          "japan",
+          "torii",
+          "travel",
+          "sunny"
+        ]
+      }
+    },
+    "d06-kyoto-photo-35568183": {
+      "kind": "photo",
+      "assetId": "d06-kyoto-photo-35568183",
+      "file": "d06-kyoto-photo-35568183.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:06 15:30:00",
+      "analysis": {
+        "itemId": "d06-kyoto-photo-35568183",
+        "file": "d06-kyoto-photo-35568183.jpg",
+        "kind": "photo",
+        "caption": "Close-up of vibrant orange torii gate columns inscribed with black Japanese kanji characters at a shrine.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "Shinto shrine torii gate tunnel",
+        "activities": [
+          "viewing architecture"
+        ],
+        "mood": "serene and spiritual",
+        "shotType": "extreme close-up",
+        "aesthetics": 5,
+        "keyMomentScore": 3,
+        "tags": [
+          "torii",
+          "shrine",
+          "japan",
+          "kanji",
+          "traditional",
+          "orange",
+          "architecture"
+        ]
+      }
+    },
+    "d06-kyoto-photo-37722151": {
+      "kind": "photo",
+      "assetId": "d06-kyoto-photo-37722151",
+      "file": "d06-kyoto-photo-37722151.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:06 10:43:00",
+      "analysis": {
+        "itemId": "d06-kyoto-photo-37722151",
+        "file": "d06-kyoto-photo-37722151.jpg",
+        "kind": "photo",
+        "caption": "A stone fox statue covered in moss, wearing a vibrant red bib, situated within a traditional Japanese shrine setting.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [
+              "statue"
+            ],
+            "attributes": [
+              "fox-shaped",
+              "stone-material",
+              "moss-covered",
+              "wearing-red-bib"
+            ]
+          }
+        ],
+        "setting": "Shinto shrine grounds with blurred red torii gates in the background.",
+        "activities": [
+          "standing"
+        ],
+        "mood": "Serene and spiritual",
+        "shotType": "Medium close-up",
+        "aesthetics": 4.5,
+        "keyMomentScore": 4,
+        "tags": [
+          "fox",
+          "inari",
+          "shrine",
+          "sculpture",
+          "moss",
+          "japan",
+          "spiritual"
+        ]
+      }
+    },
+    "d06-kyoto-video-20666879": {
+      "kind": "video",
+      "assetId": "d06-kyoto-video-20666879",
+      "file": "d06-kyoto-video-20666879.mp4",
+      "keyMomentScore": 0,
+      "localTime": "2026:04:06 17:56:00+09:00",
+      "analysis": {
+        "itemId": "d06-kyoto-video-20666879",
+        "file": "d06-kyoto-video-20666879.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 20.57,
+            "shotType": "long shot",
+            "camera": "fixed",
+            "role": "B_ROLL",
+            "description": "people walking through red torii gate structure",
+            "subjects": [
+              "people",
+              "red torii gates"
+            ],
+            "emotion": "serene",
+            "quality": 1,
+            "usable": true,
+            "reason": "good capture of the scene"
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0,
+            "endSec": 20.57,
+            "text": "The audio consists of people talking in the background but it's not intelligible"
+          }
+        ],
+        "bestMomentSec": 10.28
+      }
+    },
+    "d07-kyoto-photo-27467505": {
+      "kind": "photo",
+      "assetId": "d07-kyoto-photo-27467505",
+      "file": "d07-kyoto-photo-27467505.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:07 12:09:00",
+      "analysis": {
+        "itemId": "d07-kyoto-photo-27467505",
+        "file": "d07-kyoto-photo-27467505.jpg",
+        "kind": "photo",
+        "caption": "Two young women wearing traditional kimono sit together in front of a dark, ornate door.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "friends",
+              "women"
+            ],
+            "attributes": [
+              "wearing kimono",
+              "hair accessories",
+              "smiling",
+              "carrying handbags"
+            ]
+          }
+        ],
+        "setting": "Outdoor, in front of a traditional gate or building entrance.",
+        "activities": [
+          "sitting",
+          "posing for photo",
+          "talking"
+        ],
+        "mood": "joyful",
+        "shotType": "medium shot",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "kimono",
+          "tradition",
+          "friendship",
+          "culture",
+          "portrait"
+        ]
+      }
+    },
+    "d07-kyoto-photo-5472374": {
+      "kind": "photo",
+      "assetId": "d07-kyoto-photo-5472374",
+      "file": "d07-kyoto-photo-5472374.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:07 19:22:00",
+      "analysis": {
+        "itemId": "d07-kyoto-photo-5472374",
+        "file": "d07-kyoto-photo-5472374.jpg",
+        "kind": "photo",
+        "caption": "Two women wearing traditional kimonos sitting by the riverside on a sunny day.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "women"
+            ],
+            "attributes": [
+              "wearing kimonos",
+              "hair styled in buns",
+              "seen from behind"
+            ]
+          }
+        ],
+        "setting": "grassy riverbank with a stone embankment in the background",
+        "activities": [
+          "sitting",
+          "observing the river"
+        ],
+        "mood": "serene",
+        "shotType": "wide shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "kimono",
+          "river",
+          "summer",
+          "outdoors",
+          "tradition"
+        ]
+      }
+    },
+    "d07-kyoto-photo-5745824": {
+      "kind": "photo",
+      "assetId": "d07-kyoto-photo-5745824",
+      "file": "d07-kyoto-photo-5745824.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:07 14:35:00",
+      "analysis": {
+        "itemId": "d07-kyoto-photo-5745824",
+        "file": "d07-kyoto-photo-5745824.jpg",
+        "kind": "photo",
+        "caption": "Two women wearing traditional kimono walking along a historic Japanese street with wooden buildings.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "pedestrians"
+            ],
+            "attributes": [
+              "wearing traditional kimono",
+              "walking away from camera"
+            ]
+          }
+        ],
+        "setting": "historic Japanese street with traditional wooden buildings and stone pavement",
+        "activities": [
+          "walking",
+          "sightseeing"
+        ],
+        "mood": "peaceful",
+        "shotType": "full-body shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "japan",
+          "kimono",
+          "travel",
+          "architecture",
+          "street photography"
+        ]
+      }
+    },
+    "d08-osaka-photo-34729040": {
+      "kind": "photo",
+      "assetId": "d08-osaka-photo-34729040",
+      "file": "d08-osaka-photo-34729040.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:08 09:48:00",
+      "analysis": {
+        "itemId": "d08-osaka-photo-34729040",
+        "file": "d08-osaka-photo-34729040.jpg",
+        "kind": "photo",
+        "caption": "A person stands on a bridge at night, taking a photo of a brightly lit canal district.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "photographer"
+            ],
+            "attributes": [
+              "male",
+              "short hair",
+              "wearing blue button-up shirt",
+              "wearing blue shorts",
+              "wearing dark sneakers",
+              "carrying a floral print drawstring backpack",
+              "holding a camera to eye"
+            ]
+          }
+        ],
+        "setting": "An urban pedestrian bridge overlooking a river canal at night, lined with vibrant neon signs and crowded walkways.",
+        "activities": [
+          "taking photographs",
+          "sightseeing"
+        ],
+        "mood": "observational",
+        "shotType": "back view",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "nightlife",
+          "urban",
+          "canal",
+          "neon",
+          "travel",
+          "photography"
+        ]
+      }
+    },
+    "d08-osaka-photo-35181505": {
+      "kind": "photo",
+      "assetId": "d08-osaka-photo-35181505",
+      "file": "d08-osaka-photo-35181505.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:08 16:01:00",
+      "analysis": {
+        "itemId": "d08-osaka-photo-35181505",
+        "file": "d08-osaka-photo-35181505.jpg",
+        "kind": "photo",
+        "caption": "A vertical view of the Dotonbori canal in Osaka, showcasing various commercial signage and iconic building advertisements.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "Dotonbori canal area in Osaka, Japan during daytime.",
+        "activities": [
+          "cityscape sightseeing",
+          "urban photography"
+        ],
+        "mood": "bustling",
+        "shotType": "wide-angle exterior shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "Dotonbori",
+          "Osaka",
+          "Japan",
+          "urban",
+          "canalside",
+          "advertising",
+          "city architecture"
+        ]
+      }
+    },
+    "d08-osaka-photo-37832017": {
+      "kind": "photo",
+      "assetId": "d08-osaka-photo-37832017",
+      "file": "d08-osaka-photo-37832017.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:08 11:14:00",
+      "analysis": {
+        "itemId": "d08-osaka-photo-37832017",
+        "file": "d08-osaka-photo-37832017.jpg",
+        "kind": "photo",
+        "caption": "A busy pedestrian street entrance in Dotonbori, Osaka at sunset.",
+        "subjects": [
+          {
+            "peopleCount": 20,
+            "roles": [
+              "pedestrians"
+            ],
+            "attributes": [
+              "casual clothing",
+              "diverse",
+              "walking"
+            ]
+          }
+        ],
+        "setting": "Dotonbori Street, Osaka, Japan, at sunset.",
+        "activities": [
+          "walking",
+          "touring",
+          "shopping"
+        ],
+        "mood": "bustling",
+        "shotType": "wide-angle street shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "Dotonbori",
+          "Osaka",
+          "street photography",
+          "sunset",
+          "urban",
+          "Japan"
+        ]
+      }
+    },
+    "d08-osaka-video-38495752": {
+      "kind": "video",
+      "assetId": "d08-osaka-video-38495752",
+      "file": "d08-osaka-video-38495752.mp4",
+      "keyMomentScore": 0,
+      "localTime": "2026:04:08 18:27:00+09:00",
+      "analysis": {
+        "itemId": "d08-osaka-video-38495752",
+        "file": "d08-osaka-video-38495752.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 15.43,
+            "shotType": "long shot",
+            "camera": "fixed",
+            "role": "B_ROLL",
+            "description": "Crowded Dotonbori canal walkway at night with bright neon signs and pedestrians.",
+            "subjects": [
+              "pedestrians",
+              "cityscape"
+            ],
+            "emotion": "energetic",
+            "quality": 0.8,
+            "usable": true,
+            "reason": "Clear view of the Dotonbori atmosphere with lively activity."
+          }
+        ],
+        "transcript": [],
+        "bestMomentSec": 7.5
+      }
+    },
+    "d09-osaka-photo-25050466": {
+      "kind": "photo",
+      "assetId": "d09-osaka-photo-25050466",
+      "file": "d09-osaka-photo-25050466.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:09 13:40:00",
+      "analysis": {
+        "itemId": "d09-osaka-photo-25050466",
+        "file": "d09-osaka-photo-25050466.jpg",
+        "kind": "photo",
+        "caption": "A close-up view of takoyaki balls cooking in a dedicated cast iron takoyaki pan.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "Outdoor or kitchen cooking environment",
+        "activities": [
+          "cooking",
+          "baking"
+        ],
+        "mood": "anticipatory",
+        "shotType": "close-up",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "takoyaki",
+          "food",
+          "cooking",
+          "japanese cuisine",
+          "street food",
+          "pan"
+        ]
+      }
+    },
+    "d09-osaka-photo-37800486": {
+      "kind": "photo",
+      "assetId": "d09-osaka-photo-37800486",
+      "file": "d09-osaka-photo-37800486.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:09 20:53:00",
+      "analysis": {
+        "itemId": "d09-osaka-photo-37800486",
+        "file": "d09-osaka-photo-37800486.jpg",
+        "kind": "photo",
+        "caption": "Two people working inside a traditional Japanese street food stall with hanging noren curtains.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "cook",
+              "staff"
+            ],
+            "attributes": [
+              "wearing aprons",
+              "casual clothing",
+              "working in kitchen"
+            ]
+          }
+        ],
+        "setting": "An enclosed, compact Japanese food stall or shop with a hanging curtain featuring calligraphy.",
+        "activities": [
+          "working",
+          "food preparation"
+        ],
+        "mood": "Quiet, industrious, authentic",
+        "shotType": "Medium full shot",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "Japan",
+          "street food",
+          "noren",
+          "stall",
+          "daily life",
+          "work"
+        ]
+      }
+    },
+    "d09-osaka-photo-39211145": {
+      "kind": "photo",
+      "assetId": "d09-osaka-photo-39211145",
+      "file": "d09-osaka-photo-39211145.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": "2026:04:09 15:06:00",
+      "analysis": {
+        "itemId": "d09-osaka-photo-39211145",
+        "file": "d09-osaka-photo-39211145.jpg",
+        "kind": "photo",
+        "caption": "Two street food vendors preparing takoyaki in a compact kiosk.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "cooks",
+              "vendors"
+            ],
+            "attributes": [
+              "wearing white aprons",
+              "working in a kitchen",
+              "focused on food preparation"
+            ]
+          }
+        ],
+        "setting": "A small street food stall with metal cooking equipment.",
+        "activities": [
+          "cooking takoyaki",
+          "pouring batter",
+          "operating a takoyaki griddle"
+        ],
+        "mood": "diligent",
+        "shotType": "high-angle shot",
+        "aesthetics": 4,
+        "keyMomentScore": 4,
+        "tags": [
+          "street food",
+          "cooking",
+          "takoyaki",
+          "small business",
+          "culinary"
+        ]
+      }
+    },
+    "d09-osaka-photo-5905728": {
+      "kind": "photo",
+      "assetId": "d09-osaka-photo-5905728",
+      "file": "d09-osaka-photo-5905728.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": "2026:04:09 10:19:00",
+      "analysis": {
+        "itemId": "d09-osaka-photo-5905728",
+        "file": "d09-osaka-photo-5905728.jpg",
+        "kind": "photo",
+        "caption": "A close-up of various seafood skewers, including octopus and shrimp, displayed for sale on ice trays at a street market stall with Japanese signage.",
+        "subjects": [
+          {
+            "peopleCount": 0,
+            "roles": [],
+            "attributes": []
+          }
+        ],
+        "setting": "Street market stall food display",
+        "activities": [
+          "food display",
+          "street vending"
+        ],
+        "mood": "commercial",
+        "shotType": "close-up",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "seafood",
+          "street food",
+          "Japanese market",
+          "octopus skewers",
+          "shrimp skewers",
+          "food display"
+        ]
+      }
+    },
+    "d09-osaka-video-28995349": {
+      "kind": "video",
+      "assetId": "d09-osaka-video-28995349",
+      "file": "d09-osaka-video-28995349.mp4",
+      "keyMomentScore": 0,
+      "localTime": "2026:04:09 17:32:00+09:00",
+      "analysis": {
+        "itemId": "d09-osaka-video-28995349",
+        "file": "d09-osaka-video-28995349.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 4,
+            "shotType": "close-up",
+            "camera": "static",
+            "role": "B_ROLL",
+            "description": "A low-angle shot of hanging Japanese menus in a food stall.",
+            "subjects": [
+              "menu signs"
+            ],
+            "emotion": "neutral",
+            "quality": 0.8,
+            "usable": true,
+            "reason": "Clear shot of the menu board."
+          },
+          {
+            "startSec": 4,
+            "endSec": 16.67,
+            "shotType": "medium-shot",
+            "camera": "static",
+            "role": "B_ROLL",
+            "description": "A cook wearing a mask uses a blowtorch to sear meat on a flat-top grill.",
+            "subjects": [
+              "cook",
+              "meat"
+            ],
+            "emotion": "focused",
+            "quality": 1,
+            "usable": true,
+            "reason": "The focus is sharp and the action is visually engaging."
+          }
+        ],
+        "transcript": [],
+        "bestMomentSec": 9
+      }
+    },
+    "d10-osaka-photo-30218071": {
+      "kind": "photo",
+      "assetId": "d10-osaka-photo-30218071",
+      "file": "d10-osaka-photo-30218071.jpg",
+      "keyMomentScore": 1,
+      "localTime": "2026:04:10 12:45:00",
+      "analysis": {
+        "itemId": "d10-osaka-photo-30218071",
+        "file": "d10-osaka-photo-30218071.jpg",
+        "kind": "photo",
+        "caption": "A young child prepares to blow out the candle on a chocolate raspberry birthday cake while family members watch.",
+        "subjects": [
+          {
+            "peopleCount": 5,
+            "roles": [
+              "child",
+              "adult",
+              "family members"
+            ],
+            "attributes": [
+              "young",
+              "casual attire",
+              "watchful"
+            ]
+          }
+        ],
+        "setting": "indoor dining room",
+        "activities": [
+          "birthday celebration",
+          "blowing out candles",
+          "eating cake"
+        ],
+        "mood": "festive",
+        "shotType": "medium shot",
+        "aesthetics": 4,
+        "keyMomentScore": 5,
+        "tags": [
+          "birthday",
+          "cake",
+          "family",
+          "childhood",
+          "celebration",
+          "raspberry cake",
+          "indoor"
+        ]
+      }
+    },
+    "d10-osaka-photo-7328322": {
+      "kind": "photo",
+      "assetId": "d10-osaka-photo-7328322",
+      "file": "d10-osaka-photo-7328322.jpg",
+      "keyMomentScore": 1,
+      "localTime": "2026:04:10 19:58:00",
+      "analysis": {
+        "itemId": "d10-osaka-photo-7328322",
+        "file": "d10-osaka-photo-7328322.jpg",
+        "kind": "photo",
+        "caption": "A family celebrating a birthday with a cake and lit candles.",
+        "subjects": [
+          {
+            "peopleCount": 4,
+            "roles": [
+              "father",
+              "mother",
+              "child",
+              "infant"
+            ],
+            "attributes": [
+              "dressed casually",
+              "facing cake",
+              "focused"
+            ]
+          }
+        ],
+        "setting": "Indoor home setting with birthday decorations.",
+        "activities": [
+          "blowing out birthday candles",
+          "celebrating birthday"
+        ],
+        "mood": "Celebratory",
+        "shotType": "Medium shot",
+        "aesthetics": 4,
+        "keyMomentScore": 5,
+        "tags": [
+          "family",
+          "birthday",
+          "cake",
+          "candles",
+          "celebration",
+          "domestic"
+        ]
+      }
+    },
+    "d10-osaka-photo-7600383": {
+      "kind": "photo",
+      "assetId": "d10-osaka-photo-7600383",
+      "file": "d10-osaka-photo-7600383.jpg",
+      "keyMomentScore": 1,
+      "localTime": "2026:04:10 14:11:00",
+      "analysis": {
+        "itemId": "d10-osaka-photo-7600383",
+        "file": "d10-osaka-photo-7600383.jpg",
+        "kind": "photo",
+        "caption": "Four young children wearing party hats stand around a stool with a birthday cake in front of a Happy Birthday banner.",
+        "subjects": [
+          {
+            "peopleCount": 4,
+            "roles": [
+              "children"
+            ],
+            "attributes": [
+              "wearing birthday party hats",
+              "standing"
+            ]
+          }
+        ],
+        "setting": "Indoors against a neutral-colored wall with white wainscoting.",
+        "activities": [
+          "celebrating birthday",
+          "looking at cake"
+        ],
+        "mood": "festive",
+        "shotType": "full-body shot",
+        "aesthetics": 4,
+        "keyMomentScore": 5,
+        "tags": [
+          "birthday",
+          "cake",
+          "celebration",
+          "children",
+          "party"
+        ]
+      }
+    },
+    "d10-osaka-video-8901133": {
+      "kind": "video",
+      "assetId": "d10-osaka-video-8901133",
+      "file": "d10-osaka-video-8901133.mp4",
+      "keyMomentScore": 0,
+      "localTime": "2026:04:10 09:24:00+09:00",
+      "analysis": {
+        "itemId": "d10-osaka-video-8901133",
+        "file": "d10-osaka-video-8901133.mp4",
+        "kind": "video",
+        "shots": [
+          {
+            "startSec": 0,
+            "endSec": 18.28,
+            "shotType": "medium shot",
+            "camera": "static",
+            "role": "B_ROLL",
+            "description": "A young girl in a party hat excitedly blows out candles on a birthday cake.",
+            "subjects": [
+              "young girl"
+            ],
+            "emotion": "joyful",
+            "quality": 0.8,
+            "usable": true,
+            "reason": "Clear, festive birthday scene."
+          }
+        ],
+        "transcript": [
+          {
+            "startSec": 0,
+            "endSec": 18.28,
+            "text": "The girl laughs and blows out the candles on her birthday cake."
+          }
+        ],
+        "bestMomentSec": 3.5
+      }
+    }
+  },
+  "candidates": [
+    {
+      "candidateId": "d01-tokyo-photo-1510610#still@c0",
+      "itemId": "d01-tokyo-photo-1510610",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 1,
+      "description": "A lone person walking down a narrow, rain-slicked alleyway in an urban setting at night.. Urban alleyway at night with glowing neon signage and wet pavement.. solitary. walking"
+    },
+    {
+      "candidateId": "d01-tokyo-photo-18234078#still@c0",
+      "itemId": "d01-tokyo-photo-18234078",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "An elevated, high-angle aerial view of the Shibuya Crossing in Tokyo, showing bustling pedestrian traffic and city streets.. Shibuya Crossing, Tokyo. bustling. crossing the street. commuting. driving"
+    },
+    {
+      "candidateId": "d01-tokyo-photo-22493463#still@c0",
+      "itemId": "d01-tokyo-photo-22493463",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "A bustling street scene at night in a Japanese urban area filled with glowing neon signs and a crowd of people walking.. Urban street in Japan at night, lined with illuminated commercial buildings and vertical signage.. energetic. walking. urban exploring. commuting"
+    },
+    {
+      "candidateId": "d01-tokyo-photo-30641513#still@c0",
+      "itemId": "d01-tokyo-photo-30641513",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "emotion": 0.65,
+      "description": "A quiet night scene on a city street in Japan featuring a person standing by a shop front and a cyclist passing by on the road.. Urban street at night in Japan. Quiet, nocturnal, contemplative. walking. cycling. commuting"
+    },
+    {
+      "candidateId": "d01-tokyo-photo-33901684#still@c0",
+      "itemId": "d01-tokyo-photo-33901684",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 1,
+      "description": "A bustling street intersection in Ginza, Tokyo, at twilight featuring modern architecture and urban traffic.. Ginza district, Tokyo, Japan at dusk. energetic. commuting. driving. urban exploration"
+    },
+    {
+      "candidateId": "d01-tokyo-photo-7210063#still@c0",
+      "itemId": "d01-tokyo-photo-7210063",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "A high-angle long shot of the Shibuya Crossing in Tokyo on a rainy day, crowded with pedestrians carrying umbrellas.. Shibuya Crossing, Tokyo, Japan. busy. walking. crossing the street. commuting"
+    },
+    {
+      "candidateId": "d01-tokyo-video-18662635#s0@0c0",
+      "itemId": "d01-tokyo-video-18662635",
+      "kind": "video",
+      "chapterIndex": 0,
+      "inSec": 0,
+      "outSec": 5.4,
+      "lengthSec": 5.4,
+      "hasSpeech": true,
+      "speechSegments": [
+        {
+          "startSec": 0,
+          "endSec": 5.4,
+          "text": "I'm like tourist."
+        }
+      ],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 1,
+      "energy": 0,
+      "description": "Busy street scene in Kabukicho, Tokyo at night, crowded with tourists and bright neon lights."
+    },
+    {
+      "candidateId": "d01-tokyo-video-35291926#s0@0c0",
+      "itemId": "d01-tokyo-video-35291926",
+      "kind": "video",
+      "chapterIndex": 0,
+      "inSec": 0,
+      "outSec": 7.37,
+      "lengthSec": 7.37,
+      "hasSpeech": true,
+      "speechSegments": [
+        {
+          "startSec": 0,
+          "endSec": 7.37,
+          "text": "The Shibuya Crossing is bustling with life and traffic under the neon lights of Tokyo tonight."
+        }
+      ],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 0.8,
+      "energy": 0,
+      "description": "Aerial view of Shibuya crossing at night with heavy traffic and pedestrian activity."
+    },
+    {
+      "candidateId": "d02-tokyo-photo-16266742#still@c1",
+      "itemId": "d02-tokyo-photo-16266742",
+      "kind": "photo",
+      "chapterIndex": 1,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 1,
+      "description": "A close-up of a person holding a bowl of ramen while lifting a portion of noodles with chopsticks in a restaurant.. dimly lit ramen restaurant with blurred neon signage in the background. cozy and appetizing. eating ramen. using chopsticks"
+    },
+    {
+      "candidateId": "d02-tokyo-photo-30856693#still@c1",
+      "itemId": "d02-tokyo-photo-30856693",
+      "kind": "photo",
+      "chapterIndex": 1,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "A close-up of a bowl of ramen featuring sliced pork, a soft-boiled egg, and nori sheets on a wooden table.. restaurant. cozy. dining"
+    },
+    {
+      "candidateId": "d02-tokyo-photo-31317028#still@c1",
+      "itemId": "d02-tokyo-photo-31317028",
+      "kind": "photo",
+      "chapterIndex": 1,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.9,
+      "emotion": 0.65,
+      "description": "A bowl of ramen topped with chashu, a soft-boiled egg, narutomaki, and scallions, served with a side of sushi rolls.. A dark, minimalist dining table surface.. calm and appetizing. food photography. dining"
+    },
+    {
+      "candidateId": "d02-tokyo-photo-31393431#still@c1",
+      "itemId": "d02-tokyo-photo-31393431",
+      "kind": "photo",
+      "chapterIndex": 1,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "A close-up shot of a bowl of ramen topped with scallions, a soft-boiled egg, narutomaki, and pork, with chopsticks resting on the bowl.. dining table. appetizing. eating. dining"
+    },
+    {
+      "candidateId": "d02-tokyo-video-31387250#s0@0c1",
+      "itemId": "d02-tokyo-video-31387250",
+      "kind": "video",
+      "chapterIndex": 1,
+      "inSec": 0,
+      "outSec": 4.34,
+      "lengthSec": 4.34,
+      "hasSpeech": true,
+      "speechSegments": [
+        {
+          "startSec": 0,
+          "endSec": 4.34,
+          "text": "A delicious bowl of steaming hot ramen with pork and egg."
+        }
+      ],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 1,
+      "energy": 0,
+      "description": "Close up top-down view of a bowl of ramen with pork slices, a boiled egg, green onions, and chili oil, with side plates containing extra meat and garnish."
+    },
+    {
+      "candidateId": "d03-tokyo-photo-17971187#still@c2",
+      "itemId": "d03-tokyo-photo-17971187",
+      "kind": "photo",
+      "chapterIndex": 2,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.6,
+      "energy": 0.75,
+      "description": "A wide beach scene with families playing in the shallow water and on the sand under a cloudy sky near a forest edge.. A sandy beach bordered by a pine forest and mountains under an overcast sky.. Relaxed and leisurely. swimming. wading. playing on sand. walking"
+    },
+    {
+      "candidateId": "d03-tokyo-photo-28298384#still@c2",
+      "itemId": "d03-tokyo-photo-28298384",
+      "kind": "photo",
+      "chapterIndex": 2,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "emotion": 0.65,
+      "description": "A father pushes his two young children in a stroller near a set of stone stairs leading to a traditional red building.. Outdoor path near a park with a traditional building with red walls and stone steps.. calm. strolling. walking"
+    },
+    {
+      "candidateId": "d03-tokyo-photo-37478100#still@c2",
+      "itemId": "d03-tokyo-photo-37478100",
+      "kind": "photo",
+      "chapterIndex": 2,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "emotion": 0.65,
+      "description": "A group of people standing on a dark sandy beach observing fish and a duck in the water.. Lake shore with volcanic sand, a wooden pier, and mountains in the background.. Curious and peaceful. feeding animals. wildlife observation"
+    },
+    {
+      "candidateId": "d03-tokyo-photo-5690552#still@c2",
+      "itemId": "d03-tokyo-photo-5690552",
+      "kind": "photo",
+      "chapterIndex": 2,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "emotion": 0.65,
+      "description": "A parent and child walking hand-in-hand past a traditional storefront in Japan.. An exterior street-level view of a traditional Japanese shop with wooden architecture and blue fabric curtains.. peaceful. walking. holding hands"
+    },
+    {
+      "candidateId": "d03-tokyo-photo-712473#still@c2",
+      "itemId": "d03-tokyo-photo-712473",
+      "kind": "photo",
+      "chapterIndex": 2,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 1,
+      "emotion": 0.85,
+      "description": "A woman and a young child walking through a large wooden gate into a sunlit courtyard.. Traditional wooden temple or park gate with stone steps.. Serene and warm. walking. entering"
+    },
+    {
+      "candidateId": "d03-tokyo-video-34181366#s0@0.15c2",
+      "itemId": "d03-tokyo-video-34181366",
+      "kind": "video",
+      "chapterIndex": 2,
+      "inSec": 0.15,
+      "outSec": 2.15,
+      "lengthSec": 2,
+      "hasSpeech": false,
+      "speechSegments": [],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 0.6,
+      "energy": 0,
+      "description": "A group of people, including a child running, walking in front of a traditional Japanese shrine building."
+    },
+    {
+      "candidateId": "d04-tokyo-photo-29518213#still@c3",
+      "itemId": "d04-tokyo-photo-29518213",
+      "kind": "photo",
+      "chapterIndex": 3,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "emotion": 0.65,
+      "description": "A commuter train passing through an urban railroad crossing in Japan.. Urban railroad crossing in Japan with residential and commercial buildings in the background.. Urban, quiet, routine. Train passing through a crossing"
+    },
+    {
+      "candidateId": "d04-tokyo-photo-31223297#still@c3",
+      "itemId": "d04-tokyo-photo-31223297",
+      "kind": "photo",
+      "chapterIndex": 3,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "emotion": 0.65,
+      "description": "An elevated, panoramic view overlooking a complex railway junction in an urban area with multiple trains in motion and city infrastructure in the background.. Urban railway tracks and metropolitan cityscape. Busy, industrial, calm. Trains passing through a station junction. Commuter traffic in the distance"
+    },
+    {
+      "candidateId": "d04-tokyo-photo-37687936#still@c3",
+      "itemId": "d04-tokyo-photo-37687936",
+      "kind": "photo",
+      "chapterIndex": 3,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "emotion": 0.65,
+      "description": "A high-angle view of two trains parked at a station platform on a sunny day.. A rural or suburban train station with elevated tracks and mountains in the background.. Calm and peaceful. Trains parked at a station"
+    },
+    {
+      "candidateId": "d04-tokyo-video-17371342#s0@0.5c3",
+      "itemId": "d04-tokyo-video-17371342",
+      "kind": "video",
+      "chapterIndex": 3,
+      "inSec": 0.5,
+      "outSec": 2.5,
+      "lengthSec": 2,
+      "hasSpeech": true,
+      "speechSegments": [
+        {
+          "startSec": 0.5,
+          "endSec": 2.5,
+          "text": "The train is entering the station."
+        }
+      ],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 1,
+      "energy": 0,
+      "description": "A green train arriving and stopping at the platform of an underground subway station, with passengers waiting."
+    },
+    {
+      "candidateId": "d05-kyoto-photo-1673978#still@c4",
+      "itemId": "d05-kyoto-photo-1673978",
+      "kind": "photo",
+      "chapterIndex": 4,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 1,
+      "description": "A scenic view of the Kiyomizu-dera temple in Kyoto under a bright blue sky.. Kiyomizu-dera temple, Kyoto, Japan. serene and majestic. sightseeing. visiting a historic landmark"
+    },
+    {
+      "candidateId": "d05-kyoto-photo-26946364#still@c4",
+      "itemId": "d05-kyoto-photo-26946364",
+      "kind": "photo",
+      "chapterIndex": 4,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 1,
+      "description": "A vibrant orange three-story pagoda stands prominently against a cloudy sky, nestled among lush green trees.. Temple grounds with traditional architecture and dense foliage. Serene and majestic. sightseeing. visiting a landmark"
+    },
+    {
+      "candidateId": "d05-kyoto-photo-30094291#still@c4",
+      "itemId": "d05-kyoto-photo-30094291",
+      "kind": "photo",
+      "chapterIndex": 4,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 1,
+      "description": "A low-angle view of a traditional wooden Japanese temple structure surrounded by autumn foliage.. An ancient Japanese temple complex during autumn.. Serene and cultural. sightseeing"
+    },
+    {
+      "candidateId": "d05-kyoto-photo-30612362#still@c4",
+      "itemId": "d05-kyoto-photo-30612362",
+      "kind": "photo",
+      "chapterIndex": 4,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 1,
+      "description": "Low-angle view of a vibrant red Japanese pagoda roof against a clear blue sky, framed by bare winter branches.. Outdoor temple grounds, winter. Serene and architectural. sightseeing"
+    },
+    {
+      "candidateId": "d05-kyoto-video-32111755#s0@0c4",
+      "itemId": "d05-kyoto-video-32111755",
+      "kind": "video",
+      "chapterIndex": 4,
+      "inSec": 0,
+      "outSec": 5,
+      "lengthSec": 5,
+      "hasSpeech": true,
+      "speechSegments": [
+        {
+          "startSec": 0,
+          "endSec": 5,
+          "text": "The Kiyomizu-dera temple in Kyoto is a beautiful example of ancient Japanese architecture, surrounded by deep green forests."
+        }
+      ],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 1,
+      "emotion": 0.65,
+      "energy": 0,
+      "description": "A wide view of the Kiyomizu-dera temple structure nestled in a lush green hillside in Kyoto."
+    },
+    {
+      "candidateId": "d06-kyoto-photo-31158397#still@c5",
+      "itemId": "d06-kyoto-photo-31158397",
+      "kind": "photo",
+      "chapterIndex": 5,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "A bright, sunny day at the entrance of a traditional Japanese shrine with a large vermilion torii gate.. Outdoor shrine entrance with a large torii gate. pleasant. visiting a temple. walking. sightseeing"
+    },
+    {
+      "candidateId": "d06-kyoto-photo-35568183#still@c5",
+      "itemId": "d06-kyoto-photo-35568183",
+      "kind": "photo",
+      "chapterIndex": 5,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 1,
+      "description": "Close-up of vibrant orange torii gate columns inscribed with black Japanese kanji characters at a shrine.. Shinto shrine torii gate tunnel. serene and spiritual. viewing architecture"
+    },
+    {
+      "candidateId": "d06-kyoto-photo-37722151#still@c5",
+      "itemId": "d06-kyoto-photo-37722151",
+      "kind": "photo",
+      "chapterIndex": 5,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.9,
+      "description": "A stone fox statue covered in moss, wearing a vibrant red bib, situated within a traditional Japanese shrine setting.. Shinto shrine grounds with blurred red torii gates in the background.. Serene and spiritual. standing"
+    },
+    {
+      "candidateId": "d07-kyoto-photo-27467505#still@c6",
+      "itemId": "d07-kyoto-photo-27467505",
+      "kind": "photo",
+      "chapterIndex": 6,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 1,
+      "emotion": 0.85,
+      "description": "Two young women wearing traditional kimono sit together in front of a dark, ornate door.. Outdoor, in front of a traditional gate or building entrance.. joyful. sitting. posing for photo. talking"
+    },
+    {
+      "candidateId": "d07-kyoto-photo-5472374#still@c6",
+      "itemId": "d07-kyoto-photo-5472374",
+      "kind": "photo",
+      "chapterIndex": 6,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "Two women wearing traditional kimonos sitting by the riverside on a sunny day.. grassy riverbank with a stone embankment in the background. serene. sitting. observing the river"
+    },
+    {
+      "candidateId": "d07-kyoto-photo-5745824#still@c6",
+      "itemId": "d07-kyoto-photo-5745824",
+      "kind": "photo",
+      "chapterIndex": 6,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "emotion": 0.65,
+      "description": "Two women wearing traditional kimono walking along a historic Japanese street with wooden buildings.. historic Japanese street with traditional wooden buildings and stone pavement. peaceful. walking. sightseeing"
+    },
+    {
+      "candidateId": "d08-osaka-photo-34729040#still@c7",
+      "itemId": "d08-osaka-photo-34729040",
+      "kind": "photo",
+      "chapterIndex": 7,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "A person stands on a bridge at night, taking a photo of a brightly lit canal district.. An urban pedestrian bridge overlooking a river canal at night, lined with vibrant neon signs and crowded walkways.. observational. taking photographs. sightseeing"
+    },
+    {
+      "candidateId": "d08-osaka-photo-35181505#still@c7",
+      "itemId": "d08-osaka-photo-35181505",
+      "kind": "photo",
+      "chapterIndex": 7,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "A vertical view of the Dotonbori canal in Osaka, showcasing various commercial signage and iconic building advertisements.. Dotonbori canal area in Osaka, Japan during daytime.. bustling. cityscape sightseeing. urban photography"
+    },
+    {
+      "candidateId": "d08-osaka-photo-37832017#still@c7",
+      "itemId": "d08-osaka-photo-37832017",
+      "kind": "photo",
+      "chapterIndex": 7,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "A busy pedestrian street entrance in Dotonbori, Osaka at sunset.. Dotonbori Street, Osaka, Japan, at sunset.. bustling. walking. touring. shopping"
+    },
+    {
+      "candidateId": "d08-osaka-video-38495752#s0@0.15c7",
+      "itemId": "d08-osaka-video-38495752",
+      "kind": "video",
+      "chapterIndex": 7,
+      "inSec": 0.15,
+      "outSec": 2.15,
+      "lengthSec": 2,
+      "hasSpeech": false,
+      "speechSegments": [],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 0.8,
+      "energy": 0,
+      "description": "Crowded Dotonbori canal walkway at night with bright neon signs and pedestrians."
+    },
+    {
+      "candidateId": "d09-osaka-photo-25050466#still@c8",
+      "itemId": "d09-osaka-photo-25050466",
+      "kind": "photo",
+      "chapterIndex": 8,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "A close-up view of takoyaki balls cooking in a dedicated cast iron takoyaki pan.. Outdoor or kitchen cooking environment. anticipatory. cooking. baking"
+    },
+    {
+      "candidateId": "d09-osaka-photo-37800486#still@c8",
+      "itemId": "d09-osaka-photo-37800486",
+      "kind": "photo",
+      "chapterIndex": 8,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "emotion": 0.65,
+      "description": "Two people working inside a traditional Japanese street food stall with hanging noren curtains.. An enclosed, compact Japanese food stall or shop with a hanging curtain featuring calligraphy.. Quiet, industrious, authentic. working. food preparation"
+    },
+    {
+      "candidateId": "d09-osaka-photo-39211145#still@c8",
+      "itemId": "d09-osaka-photo-39211145",
+      "kind": "photo",
+      "chapterIndex": 8,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "Two street food vendors preparing takoyaki in a compact kiosk.. A small street food stall with metal cooking equipment.. diligent. cooking takoyaki. pouring batter. operating a takoyaki griddle"
+    },
+    {
+      "candidateId": "d09-osaka-photo-5905728#still@c8",
+      "itemId": "d09-osaka-photo-5905728",
+      "kind": "photo",
+      "chapterIndex": 8,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "energy": 0.75,
+      "description": "A close-up of various seafood skewers, including octopus and shrimp, displayed for sale on ice trays at a street market stall with Japanese signage.. Street market stall food display. commercial. food display. street vending"
+    },
+    {
+      "candidateId": "d09-osaka-video-28995349#s0@0.15c8",
+      "itemId": "d09-osaka-video-28995349",
+      "kind": "video",
+      "chapterIndex": 8,
+      "inSec": 0.15,
+      "outSec": 2.15,
+      "lengthSec": 2,
+      "hasSpeech": false,
+      "speechSegments": [],
+      "windowScore": 0,
+      "highlightScore": 0,
+      "loudPeak": 0,
+      "quality": 0.8,
+      "energy": 0,
+      "description": "A low-angle shot of hanging Japanese menus in a food stall."
+    },
+    {
+      "candidateId": "d10-osaka-photo-30218071#still@c9",
+      "itemId": "d10-osaka-photo-30218071",
+      "kind": "photo",
+      "chapterIndex": 9,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "A young child prepares to blow out the candle on a chocolate raspberry birthday cake while family members watch.. indoor dining room. festive. birthday celebration. blowing out candles. eating cake"
+    },
+    {
+      "candidateId": "d10-osaka-photo-7328322#still@c9",
+      "itemId": "d10-osaka-photo-7328322",
+      "kind": "photo",
+      "chapterIndex": 9,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "emotion": 0.85,
+      "description": "A family celebrating a birthday with a cake and lit candles.. Indoor home setting with birthday decorations.. Celebratory. blowing out birthday candles. celebrating birthday"
+    },
+    {
+      "candidateId": "d10-osaka-photo-7600383#still@c9",
+      "itemId": "d10-osaka-photo-7600383",
+      "kind": "photo",
+      "chapterIndex": 9,
+      "minHoldSec": 1.5,
+      "maxHoldSec": 2.2,
+      "quality": 0.8,
+      "description": "Four young children wearing party hats stand around a stool with a birthday cake in front of a Happy Birthday banner.. Indoors against a neutral-colored wall with white wainscoting.. festive. celebrating birthday. looking at cake"
+    }
+  ],
+  "trackId": "lyria-journey",
+  "timeOf": {
+    "d01-tokyo-photo-1510610": {
+      "chapter": 0,
+      "localTime": "2026:04:01 09:00:00",
+      "score": 0.8
+    },
+    "d01-tokyo-photo-18234078": {
+      "chapter": 0,
+      "localTime": "2026:04:01 16:13:00",
+      "score": 0.6
+    },
+    "d01-tokyo-photo-22493463": {
+      "chapter": 0,
+      "localTime": "2026:04:01 11:26:00",
+      "score": 0.6
+    },
+    "d01-tokyo-photo-30641513": {
+      "chapter": 0,
+      "localTime": "2026:04:01 18:39:00",
+      "score": 0.6
+    },
+    "d01-tokyo-photo-33901684": {
+      "chapter": 0,
+      "localTime": "2026:04:01 13:52:00",
+      "score": 0.8
+    },
+    "d01-tokyo-photo-7210063": {
+      "chapter": 0,
+      "localTime": "2026:04:01 20:05:00",
+      "score": 0.6
+    },
+    "d01-tokyo-video-18662635": {
+      "chapter": 0,
+      "localTime": "2026:04:01 15:18:00+09:00",
+      "score": 0
+    },
+    "d01-tokyo-video-35291926": {
+      "chapter": 0,
+      "localTime": "2026:04:01 10:31:00+09:00",
+      "score": 0
+    },
+    "d02-tokyo-photo-16266742": {
+      "chapter": 1,
+      "localTime": "2026:04:02 17:44:00",
+      "score": 0.8
+    },
+    "d02-tokyo-photo-30856693": {
+      "chapter": 1,
+      "localTime": "2026:04:02 12:57:00",
+      "score": 0.6
+    },
+    "d02-tokyo-photo-31317028": {
+      "chapter": 1,
+      "localTime": "2026:04:02 19:10:00",
+      "score": 0.6
+    },
+    "d02-tokyo-photo-31393431": {
+      "chapter": 1,
+      "localTime": "2026:04:02 14:23:00",
+      "score": 0.6
+    },
+    "d02-tokyo-video-31387250": {
+      "chapter": 1,
+      "localTime": "2026:04:02 09:36:00+09:00",
+      "score": 0
+    },
+    "d03-tokyo-photo-17971187": {
+      "chapter": 2,
+      "localTime": "2026:04:03 11:02:00",
+      "score": 0.6
+    },
+    "d03-tokyo-photo-28298384": {
+      "chapter": 2,
+      "localTime": "2026:04:03 18:15:00",
+      "score": 0.8
+    },
+    "d03-tokyo-photo-37478100": {
+      "chapter": 2,
+      "localTime": "2026:04:03 13:28:00",
+      "score": 1
+    },
+    "d03-tokyo-photo-5690552": {
+      "chapter": 2,
+      "localTime": "2026:04:03 20:41:00",
+      "score": 0.8
+    },
+    "d03-tokyo-photo-712473": {
+      "chapter": 2,
+      "localTime": "2026:04:03 15:54:00",
+      "score": 0.8
+    },
+    "d03-tokyo-video-34181366": {
+      "chapter": 2,
+      "localTime": "2026:04:03 10:07:00+09:00",
+      "score": 0
+    },
+    "d04-tokyo-photo-29518213": {
+      "chapter": 3,
+      "localTime": "2026:04:04 17:20:00",
+      "score": 0.6
+    },
+    "d04-tokyo-photo-31223297": {
+      "chapter": 3,
+      "localTime": "2026:04:04 12:33:00",
+      "score": 0.6
+    },
+    "d04-tokyo-photo-37687936": {
+      "chapter": 3,
+      "localTime": "2026:04:04 19:46:00",
+      "score": 0.6
+    },
+    "d04-tokyo-video-17371342": {
+      "chapter": 3,
+      "localTime": "2026:04:04 14:59:00+09:00",
+      "score": 0
+    },
+    "d05-kyoto-photo-1673978": {
+      "chapter": 4,
+      "localTime": "2026:04:05 09:12:00",
+      "score": 0.8
+    },
+    "d05-kyoto-photo-26946364": {
+      "chapter": 4,
+      "localTime": "2026:04:05 16:25:00",
+      "score": 0.8
+    },
+    "d05-kyoto-photo-30094291": {
+      "chapter": 4,
+      "localTime": "2026:04:05 11:38:00",
+      "score": 0.6
+    },
+    "d05-kyoto-photo-30612362": {
+      "chapter": 4,
+      "localTime": "2026:04:05 18:51:00",
+      "score": 0.6
+    },
+    "d05-kyoto-video-32111755": {
+      "chapter": 4,
+      "localTime": "2026:04:05 13:04:00+09:00",
+      "score": 0
+    },
+    "d06-kyoto-photo-31158397": {
+      "chapter": 5,
+      "localTime": "2026:04:06 20:17:00",
+      "score": 0.6
+    },
+    "d06-kyoto-photo-35568183": {
+      "chapter": 5,
+      "localTime": "2026:04:06 15:30:00",
+      "score": 0.6
+    },
+    "d06-kyoto-photo-37722151": {
+      "chapter": 5,
+      "localTime": "2026:04:06 10:43:00",
+      "score": 0.8
+    },
+    "d06-kyoto-video-20666879": {
+      "chapter": 5,
+      "localTime": "2026:04:06 17:56:00+09:00",
+      "score": 0
+    },
+    "d07-kyoto-photo-27467505": {
+      "chapter": 6,
+      "localTime": "2026:04:07 12:09:00",
+      "score": 0.8
+    },
+    "d07-kyoto-photo-5472374": {
+      "chapter": 6,
+      "localTime": "2026:04:07 19:22:00",
+      "score": 0.6
+    },
+    "d07-kyoto-photo-5745824": {
+      "chapter": 6,
+      "localTime": "2026:04:07 14:35:00",
+      "score": 0.6
+    },
+    "d08-osaka-photo-34729040": {
+      "chapter": 7,
+      "localTime": "2026:04:08 09:48:00",
+      "score": 0.6
+    },
+    "d08-osaka-photo-35181505": {
+      "chapter": 7,
+      "localTime": "2026:04:08 16:01:00",
+      "score": 0.6
+    },
+    "d08-osaka-photo-37832017": {
+      "chapter": 7,
+      "localTime": "2026:04:08 11:14:00",
+      "score": 0.6
+    },
+    "d08-osaka-video-38495752": {
+      "chapter": 7,
+      "localTime": "2026:04:08 18:27:00+09:00",
+      "score": 0
+    },
+    "d09-osaka-photo-25050466": {
+      "chapter": 8,
+      "localTime": "2026:04:09 13:40:00",
+      "score": 0.6
+    },
+    "d09-osaka-photo-37800486": {
+      "chapter": 8,
+      "localTime": "2026:04:09 20:53:00",
+      "score": 0.6
+    },
+    "d09-osaka-photo-39211145": {
+      "chapter": 8,
+      "localTime": "2026:04:09 15:06:00",
+      "score": 0.8
+    },
+    "d09-osaka-photo-5905728": {
+      "chapter": 8,
+      "localTime": "2026:04:09 10:19:00",
+      "score": 0.6
+    },
+    "d09-osaka-video-28995349": {
+      "chapter": 8,
+      "localTime": "2026:04:09 17:32:00+09:00",
+      "score": 0
+    },
+    "d10-osaka-photo-30218071": {
+      "chapter": 9,
+      "localTime": "2026:04:10 12:45:00",
+      "score": 1
+    },
+    "d10-osaka-photo-7328322": {
+      "chapter": 9,
+      "localTime": "2026:04:10 19:58:00",
+      "score": 1
+    },
+    "d10-osaka-photo-7600383": {
+      "chapter": 9,
+      "localTime": "2026:04:10 14:11:00",
+      "score": 1
+    },
+    "d10-osaka-video-8901133": {
+      "chapter": 9,
+      "localTime": "2026:04:10 09:24:00+09:00",
+      "score": 0
+    }
+  }
+}
