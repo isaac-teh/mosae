@@ -70,12 +70,13 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
       {(() => {
         const fromIndex = reorderPreview ? timeline.videoClips.findIndex((clip) => clipId(clip) === reorderPreview.clipId) : -1;
         const displayClips = reorderPreview && fromIndex >= 0 ? reorderSlots(timeline.videoClips, fromIndex, reorderPreview.toIndex) : timeline.videoClips;
-        return displayClips.map((clip, index) => {
+        return displayClips.map((clip) => {
         const id = clipId(clip);
         const selected = selectedClipId === id;
         const lifted = reorderPreview?.clipId === id;
         const idForSource = shotId(clip) ?? "";
         const isVideo = "source" in clip && clip.source.kind === "video";
+        const typeColor = "kind" in clip ? "#6D5A3E" : isVideo ? "#4F5B46" : "#36566A";
         const uri = isVideo ? thumbnails[idForSource] : sources[idForSource];
         const duration = clip.durationSec;
         const start = clip.startSec;
@@ -84,14 +85,14 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
           style={{ position: "absolute", zIndex: 20, left: edge === "start" ? -22 : undefined, right: edge === "end" ? -22 : undefined, top: 7, height: 44, width: 44, borderRadius: 22, backgroundColor: "transparent", borderWidth: 0, alignItems: "center", justifyContent: "center", ...(Platform.OS === "web" ? ({ touchAction: "none" } as unknown as ViewStyle) : {}) }}><View pointerEvents="none" style={{ height: 34, width: 12, borderRadius: 6, backgroundColor: "#F5C842", borderWidth: 1, borderColor: "#2B2B20" }} /></Pressable>;
         const end = Math.min(timeline.durationSec, start + duration);
         const width = Math.max(1, (end - start) * pixelsPerSecond);
-        return <View key={id} className="transition-all duration-200" style={{ position: "absolute", zIndex: lifted ? 30 : selected ? 10 : 1, left: lifted && reorderPreview ? reorderPreview.pointerContentX - width / 2 : timeToX(start, pixelsPerSecond, leadingPadding), width, top: 0, height: 58, borderWidth: 2, borderRadius: 7, overflow: "visible", borderColor: selected ? "#FF8F70" : "transparent", backgroundColor: index % 2 ? "#294655" : "#E8E2D5", transform: lifted ? [{ scale: 1.04 }] : undefined, boxShadow: lifted ? "0px 8px 22px rgba(0,0,0,0.35)" : undefined, elevation: lifted ? 8 : 0 }}>
+        return <View key={id} className="transition-all duration-200" style={{ position: "absolute", zIndex: lifted ? 30 : selected ? 10 : 1, left: lifted && reorderPreview ? reorderPreview.pointerContentX - width / 2 : timeToX(start, pixelsPerSecond, leadingPadding), width, top: 0, height: 58, borderWidth: 2, borderRadius: 7, overflow: "visible", borderColor: selected ? "#FF8F70" : typeColor, backgroundColor: typeColor, transform: lifted ? [{ scale: 1.04 }] : undefined, boxShadow: lifted ? "0px 8px 22px rgba(0,0,0,0.35)" : undefined, elevation: lifted ? 8 : 0 }}>
           <Pressable role="button" accessibilityLabel={`Select clip ${id}`} aria-pressed={selected} data-timeline-slot="true"
             onPointerDown={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), event)} onPointerMove={onSlotPointerMove} onPointerUp={(event: any) => onSlotPointerUp(event, true)} onPointerCancel={(event: any) => onSlotPointerUp(event, false)}
             onTouchStart={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), { ...event.nativeEvent, currentTarget: event.currentTarget, pointerId: 0 })}
             onContextMenu={(event: any) => event.preventDefault()}
             onDragStart={(event: any) => event.preventDefault()}
             onPress={(event: any) => { event?.stopPropagation?.(); onSelect(id, start); }}
-            style={{ width: Math.max(1, duration * pixelsPerSecond), height: "100%", overflow: "hidden", borderRadius: 5, backgroundColor: "transparent", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none", ...(Platform.OS === "web" ? ({ touchAction: "pan-x" } as unknown as ViewStyle) : {}) }}
+            style={{ width, height: "100%", overflow: "hidden", borderRadius: 5, backgroundColor: "transparent", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none", ...(Platform.OS === "web" ? ({ touchAction: "pan-x" } as unknown as ViewStyle) : {}) }}
             {...({ draggable: false } as any)}>
             {uri && isVideo ? <View pointerEvents="none" accessibilityLabel="Video filmstrip frames" style={{ position: "absolute", inset: 0, flexDirection: "row", overflow: "hidden" }}>
               {Array.from({ length: Math.max(1, Math.ceil(width / 48)) }, (_, frame) => <Image key={frame} source={{ uri }} accessibilityLabel="Video thumbnail frame" data-video-frame="true" resizeMode="cover" {...({ draggable: false } as any)} style={{ width: 48, height: "100%", borderRightWidth: 1, borderRightColor: "rgba(255,255,255,0.35)", pointerEvents: "none" }} />)}
@@ -435,7 +436,16 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
     </View>
     <View ref={viewportRef} className="relative overflow-hidden" style={{ touchAction: "pan-x", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
       <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} style={{ width: "100%" }}>
-        <TimelineRows timeline={timeline} sources={sources} thumbnails={thumbnails} selectedClipId={selectedClipId} selectedAudioClipId={selectedAudioClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => { if (suppressNextPress.current) return; if (id === selectedClipId) onDeselect(); else onSelect(id, start); }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} onSelectAudio={onSelectAudio} onAddClip={onAddClip} />
+      <TimelineRows timeline={timeline} sources={sources} thumbnails={thumbnails} selectedClipId={selectedClipId} selectedAudioClipId={selectedAudioClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => {
+        if (suppressNextPress.current) return;
+        if (id === selectedClipId) { onDeselect(); return; }
+        const tapped = timeline.videoClips.find((clip) => clipId(clip) === id);
+        const selected = selectedClipId ? timeline.videoClips.find((clip) => clipId(clip) === selectedClipId) : undefined;
+        const seekSec = tapped && selected && tapped.startSec < selected.startSec
+          ? Math.max(tapped.startSec, tapped.startSec + tapped.durationSec - 1 / timeline.fps)
+          : start;
+        onSelect(id, seekSec);
+      }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} onSelectAudio={onSelectAudio} onAddClip={onAddClip} />
       </ScrollView>
 
       <Pressable role="button" accessibilityLabel="Add clip" onPress={onAddClip} style={{ position: "absolute", zIndex: 21, right: 8, top: 105, width: 44, height: 44, borderRadius: 22, backgroundColor: "#F7F6F2", alignItems: "center", justifyContent: "center", boxShadow: "0px 4px 12px rgba(0,0,0,0.45)", elevation: 8 }}><Text className="font-sans text-[25px] leading-[28px] text-[#172027]">+</Text></Pressable>
