@@ -29,6 +29,17 @@ function mergeSummary(current: ProjectSummary | null, next: ProjectSummary): Pro
   };
 }
 
+function missedPersonNames(text: string): string[] {
+  const chunks = text.split(/\s*(?:,|\band\b)\s*/i).map((part) => part.trim()).filter(Boolean);
+  return chunks.map((part) => part
+    .replace(/^(?:i\s+think\s+)?(?:there\s+(?:is|'s)|there's)\s+/i, "")
+    .replace(/^(?:rename|change|edit)\s+/i, "")
+    .replace(/^(?:(?:also|someone\s+(?:else|is\s+missing)|somebody\s+else|another\s+person|one\s+more(?:\s+person)?|you\s+missed|i\s+(?:missed|forgot)|we\s+forgot|forgot|missing|missed)(?:\s+(?:was|is|named|called))?\s*)/i, "")
+    .replace(/^(?:someone|somebody|anyone|also\s+)+/i, "")
+    .replace(/^[,.:;\s]+|[,.:;\s]+$/g, "")
+    .trim()).filter((part) => part && !/^(?:someone|somebody|anyone|someone\s+else|somebody\s+else|another\s+person|one\s+more(?:\s+person)?|you\s+missed|i\s+(?:missed|forgot)|we\s+forgot|forgot|missing|missed|also)$/i.test(part));
+}
+
 export function durationsForCadence(options: DirectionOptions, cadenceId: string): DurationChoice[] {
   const maximum = options.maximumDurationSecByCadence?.[cadenceId] ?? options.maximumDurationSec ?? Infinity;
   const standard = options.durations.filter(({ id, seconds }) => id !== "short" && seconds <= maximum);
@@ -200,11 +211,18 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const mergedSummary = mergeSummary(summaryRef.current, nextSummary);
     summaryRef.current = mergedSummary;
     setSummary(mergedSummary);
-    if (acceptedFlow) setInput((current) => ({ ...current, flow: acceptedFlow, missedPeople: current.missedPeople ?? acceptedFlow.missedPeople?.map((person) => ({ ...person, momentCount: 0 })), missedPersonTagging: current.missedPersonTagging ?? (acceptedFlow.missedPeople?.length ? { ...acceptedFlow.missedPeople[0]!, momentCount: 0 } : undefined),
+    if (acceptedFlow) setInput((current) => {
+      const missedPeople = current.missedPeople ?? acceptedFlow.missedPeople?.map((person) => ({
+        ...person,
+        momentCount: acceptedFlow.people.some((stored) => stored.personId === person.personId && stored.manualShotAdds.length > 0) ? 1 : 0,
+      }));
+      const nextMissedPerson = missedPeople?.find((person) => person.momentCount === 0);
+      return { ...current, flow: acceptedFlow, missedPeople, missedPersonTagging: current.missedPersonTagging ?? (nextMissedPerson ? { personId: nextMissedPerson.personId, name: nextMissedPerson.name, momentCount: 0 } : undefined),
       intent: current.intent ?? (acceptedFlow.story.answer ? { text: acceptedFlow.story.answer } : null),
       ...(acceptedFlow.story.storySummary ? { storySummary: acceptedFlow.story.storySummary } : {}),
       ...(acceptedFlow.story.mentionedPeople.length ? { mentionedPeople: acceptedFlow.story.mentionedPeople } : {}),
-      people: current.people?.map((person) => { const stored = acceptedFlow.people.find((entry) => entry.personId === person.personId); return stored ? { ...person, name: person.name ?? stored.name, role: person.role ?? stored.role, skipped: person.skipped || stored.skipped } : person; }) ?? current.people }));
+      people: current.people?.map((person) => { const stored = acceptedFlow.people.find((entry) => entry.personId === person.personId); return stored ? { ...person, name: person.name ?? stored.name, role: person.role ?? stored.role, skipped: person.skipped || stored.skipped } : person; }) ?? current.people };
+    });
     if (activeFilmId.current) pollFilmRef.current(activeFilmId.current);
     const mapped = people?.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
@@ -716,12 +734,21 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const chipAnswer = relation ? answer.replace(/^my\s+/i, "My ").replace(/^me$/i, "Me").replace(/^friend$/i, "Friend").replace(/^family$/i, "Family") : "Type a name";
         return actions.setPerson(activePerson.personId, chipAnswer, relation ? undefined : answer);
       }
-      const missedIntent = /\b(?:miss(?:ed|ing)? someone|miss(?:ed|ing)? anyone|one more(?: person)?|there(?:'s| is) one more|another person)\b/i.test(answer);
       const summaryVisible = state.items.some((item) => item.kind === "people-summary");
-      const personEditIntent = /^(?:rename|change|edit|nots+this|that'ss+not|that’ss+not)\b/i.test(answer);
-      if ((state.items.some((item) => item.kind === "anyone-else") && !personEditIntent) || (state.step === "people" && summaryVisible && !personEditIntent) || (missedIntent && !personEditIntent)) {
-        const names = text.split(/\s*(?:,|\band\b)\s*/i).map((name) => name.trim()).filter(Boolean);
-        const cleaned = names.map((name) => name.replace(/^(?:there is one more|there's one more|you missed someone|you missed anyone|one more person|another person)\s*/i, "").trim()).filter((name) => name && !/^(?:there is one more|there's one more|you missed someone|you missed anyone|one more person|another person)$/i.test(name));
+      const anyoneElseVisible = state.items.some((item) => item.kind === "anyone-else");
+      const missedTaggingVisible = state.items.some((item) => item.kind === "missed-person") || Boolean(input.missedPersonTagging);
+      const missedFlowActive = summaryVisible || anyoneElseVisible || missedTaggingVisible;
+      const clearConfirmation = /^(?:yes|yeah|yep|ok|okay|looks good|that's everyone|that’s everyone|everyone|no one else|nobody else|no one(?: was missed)?|nobody(?: was missed)?|none)$/i.test(answer.replace(/[.!?]+$/, "").trim());
+      if (missedFlowActive && clearConfirmation) {
+        await actions.confirmPeopleSummary();
+        return;
+      }
+      if (missedFlowActive) {
+        const cleaned = missedPersonNames(answer);
+        if (!cleaned.length) {
+          setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { question: answer, reply: "Who did I miss? Type their name." }] }));
+          return;
+        }
         const added = cleaned.map((name, index) => ({ personId: `p-missed-${Date.now()}-${index}`, name, momentCount: 0 }));
         if (added.length) {
           const all = [...(input.missedPeople ?? []), ...added];

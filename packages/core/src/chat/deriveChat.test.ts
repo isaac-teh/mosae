@@ -112,6 +112,14 @@ describe("deriveChat state table", () => {
     expect(resumed.items.find((item) => item.id === "missed-select-missed-1")).toMatchObject({ text: "Help me select 1 photo of Grandma." });
     expect(resumed.items.find((item) => item.id === "missed-tag-missed-1")).toMatchObject({ kind: "missed-person", name: "Grandma" });
   });
+  it("automatically asks again after a missed person is tagged, including stale refreshed counts", () => {
+    const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false,
+      people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }, { personId: "missed-1", name: "Grandma", role: "other", skipped: false, momentCount: 1, sampleShotIds: [], days: [] }],
+      missedPeople: [{ personId: "missed-1", name: "Grandma", momentCount: 0 }], plan: null });
+    expect(state.items.find((item) => item.id === "anyone-else")).toMatchObject({ text: "Did I miss anyone else? Type the names of who were missed in the box below." });
+    expect(state.items.some((item) => item.id === "missed-name-missed-1")).toBe(false);
+    expect(state.items.findIndex((item) => item.id === "anyone-else")).toBeGreaterThan(state.items.findIndex((item) => item.id === "people-summary"));
+  });
   it("keeps answered mid-flow exchanges before later people and film-option prompts", () => {
     const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: true, interpTurns: [{ question: "There is one more", reply: "I didn't catch that." }], direction: { confirmed: false, pace: "gentle", lengthSec: 90, focus: "family" } });
     expect(state.items.findIndex((item) => item.id === "interp-question-1")).toBeLessThan(state.items.findIndex((item) => item.id === "direction-question"));
