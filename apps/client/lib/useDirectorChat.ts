@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState as useReactState, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
-import { directionFocus, deriveChat, canConfirmStory, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type DurationChoice, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
+import { directionFocus, deriveChat, canConfirmStory, getSetAsideSummary, getStoryRepository, type ChatInput, type ChatState, type Direction, type DirectionOptions, type DurationChoice, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
 import { mapShapingProgress } from "./shapingProgress";
@@ -416,26 +416,15 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const previousEdit = peopleEdits.current.get(personId);
       peopleEdits.current.set(personId, { name: role === "Skip" ? null : personName ?? null, role: roleValue, skipped: role === "Skip" });
       const updated = people.map((person) => person.personId === personId ? { ...person, role: roleValue, name: personName ?? null, skipped: role === "Skip" } : person);
-      const duplicate = personName && role !== "Skip" ? matchExistingPersonAnswer(personName, people.filter((person) => person.personId !== personId)) : null;
-      const target = duplicate ? people.find((person) => person.personId === duplicate.personId) : undefined;
-      const source = updated.find((person) => person.personId === personId);
-      const duplicateEvent = duplicate && target && source ? { id: `merge-followup-${personId}`, personId, targetPersonId: target.personId, answer: duplicate.answer, targetName: target.name ?? duplicate.answer, sampleFaces: (target.sampleFaces ?? []).slice(0, 2).map((face) => face.uri), questionFaces: (source.sampleFaces ?? []).slice(0, 2).map((face) => face.uri), momentCount: source.momentCount, ...(duplicate.mode === "automatic" ? { automatic: true } : {}) } : undefined;
-      if (duplicate?.mode === "confirm") {
-        const event = duplicateEvent!;
-        setInput((current) => ({ ...current, people: updated, mergeEvents: [...(current.mergeEvents ?? []).filter(({ id }) => id !== event.id), event] }));
-        personSaving.current = false;
-        return;
-      }
       setInput((current) => ({ ...current, people: updated, pendingResponse: "person" }));
       try {
         await commitFlowAction({ type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, confirmed: role !== "Skip", skipped: role === "Skip" });
-        const merge = duplicate?.mode === "automatic" ? [{ fromPersonId: personId, toPersonId: duplicate.personId }] : [];
-        const castPeople = merge.length ? updated.filter((person) => person.personId !== personId) : updated;
-        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(merge.length ? { merges: merge } : {}), ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        const castPeople = updated;
+        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
         if (result?.proposalId) proposalId.current = result.proposalId;
-        setInput((current) => ({ ...current, people: castPeople, pendingResponse: undefined, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: false, ...(duplicateEvent ? { mergeEvents: [...(current.mergeEvents ?? []).filter(({ id }) => id !== duplicateEvent.id), duplicateEvent] } : {}) }));
+        setInput((current) => ({ ...current, people: castPeople, pendingResponse: undefined, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: false }));
         setError(null);
       } catch (cause) {
         if (previousEdit) peopleEdits.current.set(personId, previousEdit);
@@ -523,7 +512,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
         if (result?.proposalId) proposalId.current = result.proposalId;
-        setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}) }));
+        setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: true } : {}) }));
+        const nextPlan = revisedPlan ?? input.plan;
+        if (nextPlan && input.summary?.ready.plan) await loadDirectionOptions(nextPlan.planId);
       } catch (cause) { setError(reportFailure(cause)); }
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
@@ -705,7 +696,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       } catch (cause) { setError(reportFailure(cause)); }
       finally { interpretInFlight.current = false; }
     },
-    async confirmInterpret() { if (pendingInterpret) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary); },
+    async confirmInterpret() {
+      if (pendingInterpret?.mentionedPeople || pendingInterpret?.storySummary) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary);
+    },
     answerOccasion(text: string, storyText?: string) {
       if (occasionSaving.current) return;
       const questionUploadComplete = state.items.find((item) => item.kind === "occasion-question")?.uploadComplete;
