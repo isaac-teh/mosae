@@ -5,7 +5,7 @@ import { faceCropGeometry, imageSizeFromLoadEvent, type FaceBbox } from "../../l
 import { StableUriImage } from "../StableUriImage";
 
 type FacePreview = { shotId: string; uri: string; bbox: FaceBbox };
-type ChatPersonQuestionProps = { momentCount: number; samples: FacePreview[]; days: number[]; chips: string[]; question?: string; onPick: (role: string) => void; onTypeName: () => void; onSkip: () => void };
+type ChatPersonQuestionProps = { momentCount: number; samples: FacePreview[]; days: number[]; chips: string[]; question?: string; onPick: (role: string) => void; onTypeName: () => void; onSkip: () => void; onTagIt: () => void };
 
 function FacePreviewTile({ sample, index }: { sample: FacePreview; index: number }) {
   const size = 72;
@@ -33,7 +33,7 @@ function daysLabel(days: number[]): string {
   return ` · Day ${list}`;
 }
 
-export function ChatPersonQuestion({ momentCount, samples, days, chips, question, onPick, onTypeName, onSkip }: ChatPersonQuestionProps) {
+export function ChatPersonQuestion({ momentCount, samples, days, chips, question, onPick, onTypeName, onSkip, onTagIt }: ChatPersonQuestionProps) {
   const roleChips = chips.includes("Type a name") ? chips.slice(0, 4) : [...chips.slice(0, 3), "Type a name"];
   return <View className="w-full flex-col gap-3">
     <Text className="text-body font-sans text-ink">{question ?? `One person appears in ${momentCount} moments. Who is this?`}</Text>
@@ -42,5 +42,6 @@ export function ChatPersonQuestion({ momentCount, samples, days, chips, question
     <View className="flex-row flex-wrap gap-2">{roleChips.map((chip) => <FocusChip key={chip} label={chip} onPress={() => chip === "Type a name" ? onTypeName() : onPick(chip)} />)}
       <Button label="Skip" variant="quiet" size="sm" onPress={onSkip} />
     </View>
+    <Button label="Not the same person? Tag it" variant="quiet" size="sm" onPress={onTagIt} />
   </View>;
 }

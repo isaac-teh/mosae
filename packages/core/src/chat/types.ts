@@ -37,7 +37,6 @@ export type ChatInput = {
   storySummary?: string;
   people: { personId: string; name: string | null; role: string | null; ageBand?: PersonAgeBand; skipped: boolean; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;
   peopleConfirmed: boolean;
-  personIdentityConfirmedIds?: string[];
   missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string }[];
   missedPersonTagging?: { personId: string; name: string } | null;
   peopleSummaryConfirmed?: boolean;
@@ -61,7 +60,8 @@ export type ChatItem =
   | { kind: "you"; id: string; text: string }
   | { kind: "typing"; id: string; text: string }
   | { kind: "preparing-videos"; id: string; text: string; progress: number }
-  | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; questionText?: string; phase: "identify" | "name" }
+  | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; questionText?: string }
+  | { kind: "person-confirm"; id: string; personId: string; label: string; text: string; momentCount: number; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[] }
   | { kind: "merge-followup"; id: string; text: string; answer: string; photos: string[]; response?: "Yes, same person" | "No, another person" }
   | { kind: "anyone-else"; id: string; text?: string }
   | { kind: "missed-person"; id: string; personId: string; name: string }

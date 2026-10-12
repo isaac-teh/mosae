@@ -504,11 +504,12 @@ describe("Director chat", () => {
     mocks.repo.getPeople.mockImplementation(async () => reads++ === 0 ? null : people);
     await renderScreen();
     await click("A trip");
-    await waitFor(() => expect(hasText("Is this the same person in all of these?")).toBe(true));
-    expect(host.querySelectorAll('button[aria-label="Yes"]')).toHaveLength(1);
-    expect(host.querySelectorAll('button[aria-label="No, let me tag"]')).toHaveLength(1);
-    await click("Yes");
-    expect(hasText("What's their name?")).toBe(true);
+    await waitFor(() => expect(hasText("Who's this? They're in")).toBe(true));
+    expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Type a name"]')).toBeTruthy();
+    await click("Type a name");
+    expect(host.querySelector('input[aria-label="Person name"]')).toBeTruthy();
+    expect((host.querySelector('input[aria-label="Person name"]') as HTMLInputElement | null)?.placeholder).toBe("What's their name?");
     expect(host.querySelectorAll('[data-face-preview="true"]').length).toBeGreaterThan(0);
   });
 
@@ -531,7 +532,7 @@ describe("Director chat", () => {
     await click("A trip");
     await click("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", role: "child", name: "My daughter" })]) })));
-    expect(hasText("Is this the same person in all of these?")).toBe(true);
+    expect(hasText("Who's this? They're in")).toBe(true);
   });
 
   it("confirms a story-mentioned son on the top face cluster and saves Yes as My son", async () => {
@@ -540,46 +541,48 @@ describe("Director chat", () => {
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "My son children day celebration"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("→"); await click("Yes, that's right");
     await waitFor(() => expect(hasText("A Children's Day celebration for your son — lovely!")).toBe(true));
-    await waitFor(() => expect(hasText("Is this the same person in all of these?")).toBe(true));
-    expect(host.querySelectorAll('[data-face-preview="true"]')).toHaveLength(4);
-    expect([...host.querySelectorAll('img[alt^="Person photo "]')].map((image) => image.getAttribute("src"))).toEqual(["https://thumb.test/a", "https://thumb.test/b", "https://thumb.test/c", "https://thumb.test/d"]);
+    await waitFor(() => expect(hasText("Is this your son?")).toBe(true));
+    expect(host.querySelectorAll('[data-face-preview="true"]')).toHaveLength(2);
+    expect([...host.querySelectorAll('img[alt^="Person photo "]')].map((image) => image.getAttribute("src"))).toEqual(["https://thumb.test/a", "https://thumb.test/b"]);
     expect(host.querySelector('img[alt="Photo 1"]')).toBeNull();
-    expect(host.querySelectorAll('button[aria-label="Yes"]')).toHaveLength(1);
-    expect(host.querySelectorAll('button[aria-label="No, let me tag"]')).toHaveLength(1);
-    expect(host.querySelectorAll('button[aria-label="Skip"]')).toHaveLength(0);
+    expect(host.querySelector('button[aria-label="Yes"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Someone else"]')).toBeTruthy();
     await click("Yes");
-    expect(host.querySelector('button[aria-label="Skip this person"]')).toBeTruthy();
-    await click("My son");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "My son", role: "child" })]) })));
   });
 
   it("runs story, per-person photo review and tagging, summary, options, and preview in order", async () => {
-    setup({ readyPlan: true });
+    setup({ readyPlan: true, people: [...people, { personId: "person-3", name: null, role: null, ageBand: "adult", momentCount: 5, sampleShotIds: [], sampleFaces: [], days: [2] }] });
     await renderScreen();
     await click("A trip");
 
-    expect(hasText("Is this the same person in all of these?")).toBe(true);
-    expect(host.querySelectorAll('button[aria-label="Yes"]')).toHaveLength(1);
-    expect(host.querySelectorAll('button[aria-label="No, let me tag"]')).toHaveLength(1);
+    expect(hasText("Who's this? They're in")).toBe(true);
+    expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Type a name"]')).toBeTruthy();
     expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(0);
     expect(host.querySelector('button[aria-label="A trip"]')).toBeNull();
 
-    await click("Yes");
-    expect(hasText("What's their name?")).toBe(true);
+    await click("Type a name");
+    expect(host.querySelector('input[aria-label="Person name"]')).toBeTruthy();
+    expect((host.querySelector('input[aria-label="Person name"]') as HTMLInputElement | null)?.placeholder).toBe("What's their name?");
     await click("My daughter");
-    await waitFor(() => expect(hasText("Is this the same person in all of these?")).toBe(true));
-    expect(host.querySelectorAll('button[aria-label="Yes"]')).toHaveLength(1);
+    await waitFor(() => expect(hasText("Who's this? They're in")).toBe(true));
+    expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy();
 
-    await click("No, let me tag");
+    await click("Not the same person? Tag it");
     expect(mocks.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: "/tag-moments", params: expect.objectContaining({ personId: "person-2", source: "identity" }) }));
-    mocks.params = { completedPersonId: "person-2", completedPersonName: "this person", completedMomentCount: "3", completedIdentity: "true" };
+    mocks.params = { completedPersonId: "person-2", completedPersonName: "this person", completedMomentCount: "3" };
     await renderScreen();
-    await waitFor(() => expect(hasText("What's their name?")).toBe(true));
+    await waitFor(() => expect(hasText("Who's this? They're in")).toBe(true));
+    expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy();
     expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(0);
+    await click("Type a name");
 
     const personName = host.querySelector('input[aria-label="Person name"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(personName, "Noah"); personName.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("Save name");
+    await waitFor(() => expect(hasText("Who's this? They're in 5 of your moments.")).toBe(true));
+    await click("Me");
     await waitFor(() => expect(hasText("Did I miss anyone?")).toBe(true));
     await click("That's everyone");
     await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
@@ -601,8 +604,8 @@ describe("Director chat", () => {
     const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "My son children day celebration"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("→"); await click("Yes, that's right");
-    expect(hasText("Is this the same person in all of these?")).toBe(true);
-    await click("Yes");
+    expect(hasText("Is this your son?")).toBe(true);
+    await click("Someone else");
     expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
   });
 
@@ -638,15 +641,12 @@ describe("Director chat", () => {
 
   it("keeps self answers available and automatically merges the repeated answer in identity-first order", async () => {
     setup({ people: [{ ...people[0], ageBand: "adult" }, { ...people[1], ageBand: "adult" }] }); await renderScreen(); await click("A trip");
-    expect(host.querySelector('button[aria-label="Yes"]')).toBeTruthy();
-    expect(host.querySelector('button[aria-label="Me"]')).toBeNull();
-    await click("Yes");
+    expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy();
     await click("Me");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(host.querySelector('button[aria-label="Yes"]')).toBeTruthy());
-    await click("Yes");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy());
     await click("Me");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(2));
     expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ merges: [{ fromPersonId: "person-2", toPersonId: "person-1" }] }));
@@ -670,7 +670,7 @@ describe("Director chat", () => {
     let resolveCast!: (value: any) => void;
     mocks.confirmCast.mockImplementation(() => new Promise((resolve) => { resolveCast = resolve; }));
     await renderScreen(); await click("A trip");
-    await click("Yes"); await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
+    await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
     const chip = host.querySelector('button[aria-label="My daughter"]')!;
     await act(async () => {
       chip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -687,7 +687,7 @@ describe("Director chat", () => {
     setup({ readyPlan: true });
     mocks.confirmCast.mockRejectedValueOnce(new Error("offline"));
     await renderScreen(); await click("A trip");
-    await click("Yes"); await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
+    await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
     await click("My daughter");
     await waitFor(() => expect(hasText("I couldn't do that. Try again?")).toBe(true));
     expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
@@ -696,19 +696,19 @@ describe("Director chat", () => {
   it("shows face previews and only the inline Skip once the person question appears", async () => {
     setup({ people: [{ ...people[0], momentCount: 12 }, { ...people[1], momentCount: 9 }] }); await renderScreen(); await click("A trip");
     expect(host.querySelectorAll('img[alt^="Person photo "]')).toHaveLength(4);
-    expect(hasText("Is this the same person in all of these?")).toBe(true);
-    expect(host.querySelectorAll('button[aria-label="Yes"]')).toHaveLength(1);
-    expect(host.querySelectorAll('button[aria-label="No, let me tag"]')).toHaveLength(1);
-    await click("Yes");
-    expect(hasText("What's their name?")).toBe(true);
-    expect(host.querySelector('button[aria-label="Skip this person"]')).toBeTruthy();
+    expect(hasText("Who's this? They're in")).toBe(true);
+    expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Type a name"]')).toBeTruthy();
+    await click("Type a name");
+    expect(host.querySelector('input[aria-label="Person name"]')).toBeTruthy();
+    expect((host.querySelector('input[aria-label="Person name"]') as HTMLInputElement | null)?.placeholder).toBe("What's their name?");
+    expect(host.querySelector('button[aria-label="Skip"]')).toBeTruthy();
   });
 
   it("Skip on the person question advances past the people step", async () => {
     setup(); await renderScreen();
     await click("A trip");
-    await click("Yes");
-    await click("Skip this person");
+    await click("Skip");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
     expect(hasText("Skip")).toBe(true);
     expect(hasText("Family")).toBe(false);
