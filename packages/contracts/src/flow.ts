@@ -17,6 +17,7 @@ export const DirectorFlowSchema = z.strictObject({
   story: z.object({ answer: z.string().nullable(), storySummary: z.string().nullable(), mentionedPeople: z.array(z.string()) }),
   people: z.array(FlowPersonSchema),
   peopleSummaryConfirmed: z.boolean().optional(),
+  missedPeople: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1) })).optional(),
 });
 
 const AtomicFlowActionSchema = z.discriminatedUnion("type", [
@@ -26,6 +27,7 @@ const AtomicFlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("move-photo"), faceId: z.string().min(1), personId: z.string().nullable() }),
   z.object({ type: z.literal("merge"), personId: z.string().min(1), targetPersonId: z.string().min(1) }),
   z.object({ type: z.literal("people-summary-confirmed"), confirmed: z.boolean() }),
+  z.object({ type: z.literal("missed-people"), people: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1) })).max(100) }),
   z.object({ type: z.literal("undo") }),
 ]);
 

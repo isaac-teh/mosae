@@ -105,6 +105,18 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.id === "person-question-p1")).toMatchObject({ photos: ["face-crop.jpg"], faceSamples: [{ uri: "face-crop.jpg" }] });
     expect(state.items.find((item) => item.id === "person-answer-p1")?.kind).toBe("you");
   });
+  it("offers missed-person entry after the confirmed people summary and restores its tagging card", () => {
+    const summaryState = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: true, people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], plan: null });
+    expect(summaryState.items.some((item) => item.kind === "anyone-else")).toBe(true);
+    const resumed = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: true, people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], missedPeople: [{ personId: "missed-1", name: "Grandma", momentCount: 0 }], missedPersonTagging: { personId: "missed-1", name: "Grandma" }, plan: null });
+    expect(resumed.items.find((item) => item.id === "missed-select-missed-1")).toMatchObject({ text: "Help me select 1 photo of Grandma." });
+    expect(resumed.items.find((item) => item.id === "missed-tag-missed-1")).toMatchObject({ kind: "missed-person", name: "Grandma" });
+  });
+  it("keeps answered mid-flow exchanges before later people and film-option prompts", () => {
+    const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: true, interpTurns: [{ question: "There is one more", reply: "I didn't catch that." }], direction: { confirmed: false, pace: "gentle", lengthSec: 90, focus: "family" } });
+    expect(state.items.findIndex((item) => item.id === "interp-question-1")).toBeLessThan(state.items.findIndex((item) => item.id === "direction-question"));
+    expect(state.items.findIndex((item) => item.id === "interp-reply-1")).toBeLessThan(state.items.findIndex((item) => item.id === "direction"));
+  });
   it("spells people counts through ten in the intro", () => {
     const people = Array.from({ length: 4 }, (_, index) => ({ personId: `p${index}`, name: null, role: null, skipped: false, momentCount: 6 - index, sampleShotIds: [], days: [] }));
     const mergeEvents = ["p4", "p5"].map((personId) => ({ id: `merge-${personId}`, personId, targetPersonId: "p0", answer: "Mia", targetName: "Mia", sampleFaces: [], momentCount: 2 }));

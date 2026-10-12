@@ -93,6 +93,7 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
     return { ...flow, people: flow.people.map((person) => person.personId === action.personId ? { ...person, mergedInto: action.targetPersonId, skipped: true } : person) };
   }
   if (action.type === "people-summary-confirmed") return { ...flow, peopleSummaryConfirmed: action.confirmed };
+  if (action.type === "missed-people") return { ...flow, missedPeople: action.people };
   return flow;
 }
 
