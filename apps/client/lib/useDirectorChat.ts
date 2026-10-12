@@ -436,14 +436,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       }
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
-    confirmPersonIdentity(personId: string) {
-      setInput((current) => ({ ...current, personIdentityConfirmedIds: [...new Set([...(current.personIdentityConfirmedIds ?? []), personId])] }));
-    },
     reopenPeople() {
       const person = input.people?.find((entry) => !entry.skipped);
       if (!person) return;
       peopleEdits.current.set(person.personId, { name: null, role: null, skipped: false });
-      setInput((current) => ({ ...current, people: (current.people ?? []).map((entry) => entry.personId === person.personId ? { ...entry, name: null } : entry), personIdentityConfirmedIds: (current.personIdentityConfirmedIds ?? []).filter((id) => id !== person.personId), peopleConfirmed: false, peopleSummaryConfirmed: undefined }));
+      setInput((current) => ({ ...current, people: (current.people ?? []).map((entry) => entry.personId === person.personId ? { ...entry, name: null } : entry), peopleConfirmed: false, peopleSummaryConfirmed: undefined }));
     },
     async resolvePersonMerge(eventId: string, samePerson: boolean) {
       const event = input.mergeEvents?.find(({ id }) => id === eventId);
