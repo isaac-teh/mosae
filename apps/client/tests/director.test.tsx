@@ -588,8 +588,14 @@ describe("Director chat", () => {
     await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
     await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
     expect(host.querySelector('button[aria-label="Change"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Skip for now"]')).toBeNull();
+    expect(hasText("Three people appear often in your moments. Who is this?")).toBe(true);
+    expect(hasText("Who's this? They're in 212 of your moments.")).toBe(true);
+    expect(hasText("Noah")).toBe(true);
     await click("Confirm");
 
+    expect(hasText("Who's this? They're in 212 of your moments.")).toBe(true);
+    expect(hasText("Noah")).toBe(true);
     await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
     await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
