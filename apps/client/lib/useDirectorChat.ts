@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState as useReactState, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
-import { directionFocus, deriveChat, canConfirmStory, getSetAsideSummary, getStoryRepository, type ChatInput, type ChatState, type Direction, type DirectionOptions, type DurationChoice, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
+import { directionFocus, deriveChat, canConfirmStory, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type DurationChoice, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
 import { mapShapingProgress } from "./shapingProgress";
@@ -416,11 +416,13 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const previousEdit = peopleEdits.current.get(personId);
       peopleEdits.current.set(personId, { name: role === "Skip" ? null : personName ?? null, role: roleValue, skipped: role === "Skip" });
       const updated = people.map((person) => person.personId === personId ? { ...person, role: roleValue, name: personName ?? null, skipped: role === "Skip" } : person);
+      const duplicate = personName && role !== "Skip" ? matchExistingPersonAnswer(personName, people.filter((person) => person.personId !== personId)) : null;
+      const automaticMerge = duplicate?.mode === "automatic" ? duplicate : null;
+      const castPeople = automaticMerge ? updated.filter((person) => person.personId !== personId) : updated;
       setInput((current) => ({ ...current, people: updated, pendingResponse: "person" }));
       try {
         await commitFlowAction({ type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, confirmed: role !== "Skip", skipped: role === "Skip" });
-        const castPeople = updated;
-        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(automaticMerge ? { merges: [{ fromPersonId: personId, toPersonId: automaticMerge.personId }] } : {}), ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
         if (result?.proposalId) proposalId.current = result.proposalId;

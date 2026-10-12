@@ -636,7 +636,7 @@ describe("Director chat", () => {
     expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ proposalId: "proposal-2" }));
   });
 
-  it("asks each detected person separately even when the same role is chosen", async () => {
+  it("keeps self answers available and automatically merges the repeated answer in identity-first order", async () => {
     setup({ people: [{ ...people[0], ageBand: "adult" }, { ...people[1], ageBand: "adult" }] }); await renderScreen(); await click("A trip");
     expect(host.querySelector('button[aria-label="Yes"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Me"]')).toBeNull();
@@ -646,10 +646,11 @@ describe("Director chat", () => {
     await click("Me");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(host.querySelector('button[aria-label="Yes"]')).toBeTruthy());
+    await click("Yes");
     await click("Me");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(2));
-    expect(mocks.confirmCast.mock.calls[1]?.[1]).not.toHaveProperty("merges");
-    expect(hasText("Did I miss anyone?")).toBe(true);
+    expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ merges: [{ fromPersonId: "person-2", toPersonId: "person-1" }] }));
+    await waitFor(() => expect(hasText("Did I miss anyone?")).toBe(true));
   });
 
   it("does not send a second cast edit while the first one is still pending", async () => {
