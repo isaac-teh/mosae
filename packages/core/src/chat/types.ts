@@ -39,6 +39,7 @@ export type ChatInput = {
   peopleConfirmed: boolean;
   missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string }[];
   missedPersonTagging?: { personId: string; name: string } | null;
+  taggedPerson?: { personId: string; name: string; photos: string[] };
   peopleSummaryConfirmed?: boolean;
   dismissedPersonSuggestionIds?: string[];
   plan: StoryPlan | null;

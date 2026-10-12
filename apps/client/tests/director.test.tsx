@@ -585,8 +585,7 @@ describe("Director chat", () => {
     await click("Save name");
     await waitFor(() => expect(hasText("Who's this? They're in 5 of your moments.")).toBe(true));
     await click("Me");
-    await waitFor(() => expect(hasText("Did I miss anyone?")).toBe(true));
-    await click("That's everyone");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
     await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
     expect(host.querySelector('button[aria-label="Change"]')).toBeTruthy();
     await click("Confirm");
@@ -644,8 +643,7 @@ describe("Director chat", () => {
     setup({ readyPlan: true, people: [{ ...people[0], role: null }] }); await renderScreen();
     await click("A trip");
     await click("My daughter");
-    await waitFor(() => expect(hasText("Did I miss anyone?")).toBe(true));
-    await click("That's everyone");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
     await click("Confirm");
     await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
     await click("Looks good");
@@ -658,8 +656,7 @@ describe("Director chat", () => {
     await click("A trip");
     await click("My daughter");
     await click("My partner");
-    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
-    await click("That's everyone");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
     await click("Confirm");
 
     await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
@@ -687,7 +684,7 @@ describe("Director chat", () => {
     expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ proposalId: "proposal-2" }));
   });
 
-  it("keeps self answers available and automatically merges the repeated answer in identity-first order", async () => {
+  it("asks before merging a repeated self answer", async () => {
     setup({ people: [{ ...people[0], ageBand: "adult" }, { ...people[1], ageBand: "adult" }] }); await renderScreen(); await click("A trip");
     expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
@@ -697,8 +694,10 @@ describe("Director chat", () => {
     await waitFor(() => expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy());
     await click("Me");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(2));
-    expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ merges: [{ fromPersonId: "person-2", toPersonId: "person-1" }] }));
-    await waitFor(() => expect(hasText("Did I miss anyone?")).toBe(true));
+    expect(mocks.confirmCast.mock.calls[1]?.[1]).not.toHaveProperty("merges");
+    await waitFor(() => expect(hasText("Same Me as before?")).toBe(true));
+    await click("Yes, same person");
+    expect(mocks.confirmCast.mock.calls[2]?.[1]).toEqual(expect.objectContaining({ merges: [{ fromPersonId: "person-2", toPersonId: "person-1" }] }));
   });
 
   it("does not send a second cast edit while the first one is still pending", async () => {
@@ -892,8 +891,6 @@ describe("Director chat", () => {
     await act(async () => chat.actions.setPerson("person-2", "My mum"));
     expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-3")).toBe(true);
     await act(async () => chat.actions.setPerson("person-3", "My dad"));
-    expect(chat.state.items.some((item) => item.kind === "anyone-else")).toBe(true);
-    await act(async () => chat.actions.confirmPeople());
     expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true);
   });
 
@@ -950,7 +947,7 @@ describe("Director chat", () => {
     expect(chat.pendingInterpret).toBeNull();
     expect(mocks.repo.interpret).toHaveBeenCalledTimes(interpretCalls);
     expect(mocks.confirmCast).toHaveBeenLastCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Kara" })]) }));
-    expect(chat.state.items.some((item) => item.kind === "you" && item.text === "Kara")).toBe(true);
+    expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true);
   });
 
   it("applies a pending person interpretation from the confirmation button action", async () => {
@@ -981,7 +978,7 @@ describe("Director chat", () => {
     expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
   });
 
-  it("advances after selecting a photo and confirming people without returning to story upload", async () => {
+  it("shows the people summary after the last existing person is answered", async () => {
     setup();
     let chat!: ReturnType<typeof useDirectorChat>;
     function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
@@ -989,15 +986,7 @@ describe("Director chat", () => {
     await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
     await act(async () => chat.actions.setPerson("person-1", "Type a name", "Emily"));
     await act(async () => chat.actions.setPerson("person-2", "My son"));
-    await act(async () => chat.actions.send("Emily"));
-    const missedAction = chat.state.items.find((item) => item.kind === "missed-person");
-    expect(missedAction?.kind).toBe("missed-person");
-    expect(chat.state.items.filter((item) => item.kind === "missed-person" && item.personId === missedAction?.personId)).toHaveLength(1);
-    if (missedAction?.kind !== "missed-person") throw new Error("Expected missed person tag action");
-    await act(async () => chat.actions.completeMissedPerson(missedAction.personId, "Emily", 1, "https://thumb.test/emily"));
-    expect(chat.state.items.some((item) => item.kind === "missed-person" && item.personId === missedAction.personId)).toBe(false);
-    await act(async () => chat.actions.confirmPeople());
-    expect(chat.state.step).toBe("people");
+    expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true);
     await act(async () => chat.actions.confirmPeopleSummary());
     expect(chat.state.step).toBe("moments");
     expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);

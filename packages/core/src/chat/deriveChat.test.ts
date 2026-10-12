@@ -375,6 +375,22 @@ describe("deriveChat state table", () => {
     expect(state.items.findIndex((item) => item.id === "merge-p2")).toBeGreaterThan(state.items.findIndex((item) => item.id === "person-answer-p2"));
   });
 
+  it("holds the next identity question until the repeated-name merge is answered", () => {
+    const state = deriveChat({ ...base(), people: [
+      { personId: "p1", name: "Me", role: "parent", skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
+      { personId: "p2", name: "Me", role: "parent", skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
+      { personId: "p3", name: null, role: null, skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
+    ], peopleConfirmed: false, plan: null, mergeEvents: [{ id: "merge-p2", personId: "p2", targetPersonId: "p1", answer: "Me", targetName: "Me", sampleFaces: ["face-1"], momentCount: 3 }] });
+    expect(state.items.find((item) => item.kind === "merge-followup")).toBeTruthy();
+    expect(state.items.find((item) => item.kind === "person")).toBeUndefined();
+  });
+
+  it("returns to the same identity question with the newly tagged photo", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, taggedPerson: { personId: "p1", name: "this person", photos: ["tagged.jpg"] } });
+    expect(state.items.find((item) => item.id === "tagged-person-p1")).toMatchObject({ text: "Got it — these are the photos of this person.", photos: ["tagged.jpg"] });
+    expect(state.items.find((item) => item.kind === "person")).toMatchObject({ personId: "p1" });
+  });
+
   it("retains the answered merge exchange after its source person is merged out of the refreshed cast", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "My daughter", role: "child", skipped: false, momentCount: 7, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, mergeEvents: [{ id: "merge-p2", personId: "p2", targetPersonId: "p1", answer: "My daughter", targetName: "My daughter", sampleFaces: ["face-1"], momentCount: 3, response: "Yes, same person" }] });
     expect(state.items).toContainEqual({ kind: "you", id: "person-answer-p2", text: "My daughter" });

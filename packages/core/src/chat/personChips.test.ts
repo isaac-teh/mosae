@@ -38,12 +38,12 @@ describe("personAnswerChips", () => {
     expect(personAnswerChips(undefined, ["Family"])).toContain("Family");
   });
 
-  it("requires confirmation for repeated family labels and names, auto-merges Me and partner, and ignores Friend or Family", () => {
+  it("requires confirmation for every repeated name, including Me and partner, and ignores Friend or Family", () => {
     const people = [{ personId: "first", name: "My Daughter" }, { personId: "named", name: "Ava" }];
     expect(matchExistingPersonAnswer("My daughter", people)).toEqual({ personId: "first", mode: "confirm", answer: "My daughter" });
     expect(matchExistingPersonAnswer(" ava ", people)).toEqual({ personId: "named", mode: "confirm", answer: "ava" });
-    expect(matchExistingPersonAnswer("Me", [{ personId: "self", name: "Me" }])).toEqual({ personId: "self", mode: "automatic", answer: "Me" });
-    expect(matchExistingPersonAnswer("My partner", [{ personId: "partner", name: "My partner" }])).toEqual({ personId: "partner", mode: "automatic", answer: "My partner" });
+    expect(matchExistingPersonAnswer("Me", [{ personId: "self", name: "Me" }])).toEqual({ personId: "self", mode: "confirm", answer: "Me" });
+    expect(matchExistingPersonAnswer("My partner", [{ personId: "partner", name: "My partner" }])).toEqual({ personId: "partner", mode: "confirm", answer: "My partner" });
     expect(matchExistingPersonAnswer("Friend", [{ personId: "friend", name: "Friend" }])).toBeNull();
     expect(matchExistingPersonAnswer("Family", [{ personId: "family", name: "Family" }])).toBeNull();
   });
