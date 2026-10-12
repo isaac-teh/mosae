@@ -513,9 +513,13 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
         if (result?.proposalId) proposalId.current = result.proposalId;
-        setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: true } : {}) }));
+        const setAside = revisedPlan ? getSetAsideSummary(revisedPlan) : null;
+        const momentsConfirmed = setAside
+          ? setAside.blurry + setAside.duplicates === 0
+          : input.momentsConfirmed;
+        setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, momentsConfirmed, ...(revisedPlan ? { plan: revisedPlan } : {}) }));
         const nextPlan = revisedPlan ?? input.plan;
-        if (nextPlan && input.summary?.ready.plan) await loadDirectionOptions(nextPlan.planId);
+        if (momentsConfirmed && nextPlan && input.summary?.ready.plan) await loadDirectionOptions(nextPlan.planId);
       } catch (cause) { setError(reportFailure(cause)); }
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
