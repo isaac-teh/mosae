@@ -95,11 +95,11 @@ export default function DirectorScreen() {
   const [uploadFailuresAcknowledged, setUploadFailuresAcknowledged] = useState(false);
   const localMediaPending = Boolean(preparationProgress) || Boolean(uploadProgress && (uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles || uploadProgress.finishedFiles === 0)) || Boolean((uploadFailure || uploadProgress?.failedFiles) && !uploadFailuresAcknowledged);
   const localUpload = uploadProgress || preparationProgress ? { total: uploadProgress?.totalFiles ?? preparationProgress!.totalFiles, settled: uploadProgress?.finishedFiles ?? 0, failed: uploadProgress?.failedFiles ?? 0, photos: pendingPhotos.length, clips: (ownsPendingMedia ? pendingMedia : []).length - pendingPhotos.length } : undefined;
-  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged, ...(localUpload ? { localUpload } : {}) });
+  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged, ...(localUpload ? { localUpload } : {}), ...(params.completedPersonId && params.completedPersonName && params.completedSampleUri ? { taggedPerson: { personId: params.completedPersonId, name: params.completedPersonName, photos: [params.completedSampleUri] }, taggedMomentCount: Number(params.completedMomentCount ?? 0) } : {}) });
   useEffect(() => {
     if (!params.completedPersonId || !params.completedPersonName) return;
     if (params.completedIsMissed === "true") void actions.completeMissedPerson(params.completedPersonId, params.completedPersonName, Number(params.completedMomentCount ?? 0), params.completedSampleUri);
-    else actions.updatePersonTagCount(params.completedPersonId, Number(params.completedMomentCount ?? 0), params.completedSampleUri);
+    else actions.updatePersonTagCount(params.completedPersonId, Number(params.completedMomentCount ?? 0), params.completedSampleUri, params.completedPersonName);
     router.setParams({ completedPersonId: undefined, completedPersonName: undefined, completedMomentCount: undefined, completedIsMissed: undefined, completedSampleUri: undefined });
   }, [params.completedPersonId, params.completedPersonName, params.completedMomentCount, params.completedIsMissed, params.completedSampleUri]);
   useEffect(() => { setUploadFailuresAcknowledged(false); }, [uploadProgress?.failedFiles, preparationProgress?.totalFiles]);

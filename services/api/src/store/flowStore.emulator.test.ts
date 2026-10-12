@@ -28,6 +28,16 @@ describe("project flow record (emulator)", () => {
     expect(moved.people[0]?.manualShotAdds).toEqual(["s1"]);
   });
 
+  it("persists summary confirmation as an idempotent flow action", async () => {
+    const projectId = crypto.randomUUID();
+    await adminDb.doc(`projects/${projectId}`).set({ userId: "owner" });
+    const action = { type: "people-summary-confirmed" as const, confirmed: true };
+    const confirmed = await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "summary-confirm", action });
+    expect(confirmed.peopleSummaryConfirmed).toBe(true);
+    expect(await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "summary-confirm", action })).toEqual(confirmed);
+    expect((await readFlow(adminDb, "owner", projectId)).peopleSummaryConfirmed).toBe(true);
+  });
+
   it("applies a batch in one revision and replays it idempotently", async () => {
     const projectId = crypto.randomUUID();
     await adminDb.doc(`projects/${projectId}`).set({ userId: "owner" });
