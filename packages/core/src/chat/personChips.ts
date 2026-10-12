@@ -27,7 +27,7 @@ export function matchExistingPersonAnswer(answer: string, people: readonly { per
   if (!normalized || /^(friend|family)$/.test(normalized)) return null;
   const match = people.find((person) => person.name?.trim().replace(/^my\s+/i, "").toLocaleLowerCase() === normalized);
   if (!match) return null;
-  return { personId: match.personId, mode: /^(me|partner)$/.test(normalized) ? "automatic" : "confirm", answer: answer.trim() };
+  return { personId: match.personId, mode: "confirm", answer: answer.trim() };
 }
 
 export function orderPeopleByMergeSimilarity<T extends { personId: string; momentCount: number; similarPersonId?: string; similarity?: number }>(people: readonly T[]): T[] {

@@ -99,7 +99,7 @@ export default function DirectorScreen() {
   useEffect(() => {
     if (!params.completedPersonId || !params.completedPersonName) return;
     if (params.completedIsMissed === "true") void actions.completeMissedPerson(params.completedPersonId, params.completedPersonName, Number(params.completedMomentCount ?? 0), params.completedSampleUri);
-    else actions.updatePersonTagCount(params.completedPersonId, Number(params.completedMomentCount ?? 0));
+    else actions.updatePersonTagCount(params.completedPersonId, Number(params.completedMomentCount ?? 0), params.completedSampleUri);
     router.setParams({ completedPersonId: undefined, completedPersonName: undefined, completedMomentCount: undefined, completedIsMissed: undefined, completedSampleUri: undefined });
   }, [params.completedPersonId, params.completedPersonName, params.completedMomentCount, params.completedIsMissed, params.completedSampleUri]);
   useEffect(() => { setUploadFailuresAcknowledged(false); }, [uploadProgress?.failedFiles, preparationProgress?.totalFiles]);
