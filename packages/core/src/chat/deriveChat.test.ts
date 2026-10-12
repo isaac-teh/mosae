@@ -112,6 +112,14 @@ describe("deriveChat state table", () => {
     expect(resumed.items.find((item) => item.id === "missed-select-missed-1")).toMatchObject({ text: "Help me select 1 photo of Grandma." });
     expect(resumed.items.find((item) => item.id === "missed-tag-missed-1")).toMatchObject({ kind: "missed-person", name: "Grandma" });
   });
+  it("renders the missed-person clarification as a visible user and director exchange", () => {
+    const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: true,
+      people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }],
+      interpTurns: [{ question: "There is someone else", reply: "Who did I miss? Type their name." }],
+    });
+    expect(state.items).toContainEqual({ kind: "you", id: "missed-clarification-question-1", text: "There is someone else" });
+    expect(state.items).toContainEqual({ kind: "mosae", id: "missed-clarification-reply-1", text: "Who did I miss? Type their name." });
+  });
   it("automatically asks again after a missed person is tagged, including stale refreshed counts", () => {
     const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false,
       people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }, { personId: "missed-1", name: "Grandma", role: "other", skipped: false, momentCount: 1, sampleShotIds: [], days: [] }],

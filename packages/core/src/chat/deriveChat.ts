@@ -270,6 +270,10 @@ export function deriveChat(input: ChatInput): ChatState {
       } else if (!(input.mergeEvents ?? []).some((event) => !event.response)) {
         add({ kind: "anyone-else", id: "anyone-else", text: (input.missedPeople ?? []).length ? "Did I miss anyone else? Type the names of who were missed in the box below." : "Did I miss anyone? Type the names of who were missed in the box below." });
       }
+      input.interpTurns?.forEach((turn, index) => {
+        add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
+        if (turn.reply) add({ kind: "mosae", id: `missed-clarification-reply-${index + 1}`, text: turn.reply });
+      });
     }
     return { items, step, confirmed, placeholder };
   }
@@ -304,6 +308,10 @@ export function deriveChat(input: ChatInput): ChatState {
     }
     const hasUntaggedMissedPerson = (input.missedPeople ?? []).some(({ personId, momentCount }) => momentCount === 0 && !knownPersonIds.has(personId));
     if (!hasUntaggedMissedPerson && !input.missedPersonTagging) add({ kind: "anyone-else", id: "anyone-else", text: (input.missedPeople ?? []).length ? "Did I miss anyone else? Type the names of who were missed in the box below." : "Did I miss anyone? Type the names of who were missed in the box below." });
+    input.interpTurns?.forEach((turn, index) => {
+      add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
+      if (turn.reply) add({ kind: "mosae", id: `missed-clarification-reply-${index + 1}`, text: turn.reply });
+    });
   };
   const people = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
   const orderedHistory = [
