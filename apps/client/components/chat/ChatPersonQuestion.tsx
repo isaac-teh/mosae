@@ -7,11 +7,10 @@ import { StableUriImage } from "../StableUriImage";
 type FacePreview = { shotId: string; uri: string; bbox: FaceBbox };
 type ChatPersonQuestionProps = { momentCount: number; samples: FacePreview[]; days: number[]; chips: string[]; question?: string; onPick: (role: string) => void; onTypeName: () => void; onSkip: () => void; onTagIt: () => void };
 
-function FacePreviewTile({ sample, index }: { sample: FacePreview; index: number }) {
-  const size = 72;
+function FacePreviewTile({ sample, index, size = 72, rounded = false }: { sample: FacePreview; index: number; size?: number; rounded?: boolean }) {
   const [sourceSize, setSourceSize] = useState<{ width: number; height: number } | null>(null);
   const crop = sourceSize ? faceCropGeometry(sample.bbox, sourceSize.width, sourceSize.height, size) : null;
-  return <View data-face-preview="true" className="h-[72px] w-[72px] overflow-hidden rounded-md bg-surface-sunken">
+  return <View data-face-preview="true" className={`overflow-hidden bg-surface-sunken ${rounded ? "rounded-full" : "rounded-md"}`} style={{ width: size, height: size }}>
     <StableUriImage uri={sample.uri} accessibilityLabel={`Person photo ${index + 1}`} resizeMode={crop ? "stretch" : "cover"} onLoad={(event: any) => {
       // The crop restyles the image, which fires onLoad again on web; measure once.
       if (sourceSize) return;
@@ -22,8 +21,8 @@ function FacePreviewTile({ sample, index }: { sample: FacePreview; index: number
   </View>;
 }
 
-export function FacePreviewStrip({ samples, limit = 4 }: { samples: FacePreview[]; limit?: number }) {
-  return <View className="flex-row gap-2">{samples.slice(0, limit).map((sample, index) => <FacePreviewTile key={`${sample.shotId}-${index}`} sample={sample} index={index} />)}</View>;
+export function FacePreviewStrip({ samples, limit = 4, size, rounded = false }: { samples: FacePreview[]; limit?: number; size?: number; rounded?: boolean }) {
+  return <View className="flex-row gap-2">{samples.slice(0, limit).map((sample, index) => <FacePreviewTile key={`${sample.shotId}-${index}`} sample={sample} index={index} size={size} rounded={rounded} />)}</View>;
 }
 
 function daysLabel(days: number[]): string {

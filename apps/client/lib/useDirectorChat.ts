@@ -459,6 +459,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         targetName: priorPerson.name ?? duplicate.answer,
         sampleFaces: (priorPerson.sampleFaces ?? []).slice(0, 2).map((face) => face.uri),
         questionFaces: (updated.find((person) => person.personId === personId)?.sampleFaces ?? []).slice(0, 2).map((face) => face.uri),
+        faceSamples: [...(priorPerson.sampleFaces ?? []).slice(0, 1), ...(updated.find((person) => person.personId === personId)?.sampleFaces ?? []).slice(0, 1)],
         momentCount: updated.find((person) => person.personId === personId)?.momentCount ?? 0,
       } : null;
       const castPeople = updated;
@@ -561,7 +562,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         return { ...current, people: updatedPeople, missedPeople, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null };
       });
     },
-    updatePersonTagCount(personId: string, momentCount: number, sampleUri?: string, name?: string) {
+    updatePersonTagCount(personId: string, momentCount: number, sampleUri?: string, name?: string | null) {
       personTagCounts.current.set(personId, momentCount);
       const person = input.people?.find((entry) => entry.personId === personId);
       if (sampleUri) taggedPersonRef.current = { personId, name: person?.name ?? (name === "this person" ? "" : name ?? ""), photos: [sampleUri] };

@@ -1,6 +1,6 @@
 export type TaggedPersonResult = {
   personId: string;
-  name: string;
+  name: string | null;
   momentCount: number;
   isMissed: boolean;
   sampleUri?: string;

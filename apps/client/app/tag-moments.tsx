@@ -10,7 +10,7 @@ type Row = { key: string; title: string; count: number } | { key: string; moment
 export default function TagMomentsScreen() {
   const router = useRouter();
   const story = useStoryFlow();
-  const { projectId, personId, name, source } = useLocalSearchParams<{ projectId: string; personId: string; name: string; source?: string }>();
+  const { projectId, personId, name, faceUri, source } = useLocalSearchParams<{ projectId: string; personId: string; name: string; faceUri?: string; source?: string }>();
   const [moments, setMoments] = useState<ProjectMoment[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -32,9 +32,10 @@ export default function TagMomentsScreen() {
     setSaving(true); setError(null);
     try {
       const previous = new Set(moments.filter((item) => item.personIds.includes(personId)).map((item) => item.shotId));
-      if (story.flow.repository !== "fixture") await savePersonMoments(projectId, personId, name, [...selected].filter((id) => !previous.has(id)), [...previous].filter((id) => !selected.has(id)));
-      const sampleUri = moments.find((moment) => selected.has(moment.shotId))?.thumbnailUrl;
-      setTaggedPersonResult({ personId, name, momentCount: selected.size, isMissed: source === "missed", ...(sampleUri ? { sampleUri } : {}) });
+      const personName = source === "missed" ? name : name.toLocaleLowerCase() === "this person" ? null : name;
+      if (story.flow.repository !== "fixture") await savePersonMoments(projectId, personId, personName, [...selected].filter((id) => !previous.has(id)), [...previous].filter((id) => !selected.has(id)));
+      const sampleUri = faceUri || moments.find((moment) => selected.has(moment.shotId))?.thumbnailUrl;
+      setTaggedPersonResult({ personId, name: personName ?? "", momentCount: selected.size, isMissed: source === "missed", ...(sampleUri ? { sampleUri } : {}) });
       router.back();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save these tags"); }
     finally { setSaving(false); }
