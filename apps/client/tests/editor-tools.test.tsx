@@ -333,7 +333,7 @@ describe("editor tool operations", () => {
     expect(mockScrollTo).toHaveBeenLastCalledWith({ x: 120, animated: false });
   });
 
-  it("uses the tapped clip's rendered timeline start when selection scrolls", async () => {
+  it("uses the tapped clip's explicit startSec when selecting it", async () => {
     mockScrollTo.mockClear();
     const staleStarts = { ...timeline, videoClips: clips.map((clip, index) => index === 2 ? { ...clip, startSec: 0 } : clip) };
     function Harness() {
@@ -345,7 +345,7 @@ describe("editor tool operations", () => {
     await click("Select clip c");
     expect(host.querySelector('[aria-label="Select clip c"]')?.getAttribute("aria-pressed")).toBe("true");
     expect(host.querySelector('[aria-label="Timeline playhead"]')?.getAttribute("style")).toContain("left: 49px");
-    expect(mockScrollTo).toHaveBeenLastCalledWith({ x: 240, animated: false });
+    expect(mockScrollTo).not.toHaveBeenCalled();
   });
 
   it("uses one scale for ruler ticks, chapters, clip bounds and the music bar", async () => {
@@ -364,6 +364,17 @@ describe("editor tool operations", () => {
     expect(musicTrack.getAttribute("style")).toContain("width: 360px");
     expect(Boolean(musicTrack.compareDocumentPosition(photoClip) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(host.querySelector('[aria-label="Select music Sandcastle Days"]')).toBeNull();
+  });
+
+  it("positions overlapping clips by startSec and clips the last edge at film end", async () => {
+    const overlapping: Timeline = {
+      ...timeline,
+      videoClips: clips.map((clip, index) => ({ ...clip, startSec: [0, 2.5, 5][index]!, durationSec: 4 })),
+    };
+    await render(<TimelineStrip timeline={overlapping} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} />);
+    const last = host.querySelector('[aria-label="Select clip c"]')!.parentElement!;
+    expect(last.getAttribute("style")).toContain("left: 250px");
+    expect(last.getAttribute("style")).toContain("width: 160px");
   });
 
   it("aligns the music bar with the clips and ends at the shorter soundtrack or film end", async () => {

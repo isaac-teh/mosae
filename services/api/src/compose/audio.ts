@@ -126,17 +126,28 @@ export function buildAudioClips(
       const crossfadeSec = Math.min(0.5, joinSec, tailDuration);
       audioClips.push({ order: order++, sourceCandidateId: soundtrackId, startSec: 0, endSec: joinSec + crossfadeSec, kind: "music", gain: musicGain, sourceInSec: 0, sourceOutSec: joinSec + crossfadeSec, fadeInSec: Math.min(1, timelineDurationSec * 0.05), fadeOutSec: crossfadeSec });
       audioClips.push({ order: order++, sourceCandidateId: soundtrackId, startSec: joinSec, endSec: timelineDurationSec, kind: "music", gain: musicGain, sourceInSec: outroSourceIn, sourceOutSec: trackDuration, fadeInSec: crossfadeSec, fadeOutSec: fadeDuration });
+    } else if (trackDuration > 0 && trackDuration < timelineDurationSec) {
+      // Repeat short soundtracks with a small overlap so the film never has a
+      // silent tail. Each source range remains within the actual audio file.
+      const crossfadeSec = Math.min(0.5, trackDuration / 4);
+      const stepSec = Math.max(trackDuration - crossfadeSec, trackDuration * 0.75);
+      for (let startSec = 0; startSec < timelineDurationSec; startSec += stepSec) {
+        const endSec = Math.min(timelineDurationSec, startSec + trackDuration);
+        const isFirst = startSec === 0;
+        const isLast = endSec >= timelineDurationSec;
+        audioClips.push({
+          order: order++, sourceCandidateId: soundtrackId, startSec, endSec,
+          kind: "music", gain: musicGain, sourceInSec: 0,
+          sourceOutSec: endSec - startSec,
+          fadeInSec: isFirst ? Math.min(1, timelineDurationSec * 0.05) : crossfadeSec,
+          fadeOutSec: isLast ? fadeDuration : crossfadeSec,
+        });
+      }
     } else audioClips.push({
-      order: order++,
-      sourceCandidateId: soundtrackId,
-      startSec: 0,
-      endSec: timelineDurationSec,
-      kind: "music",
-      gain: musicGain,
-      sourceInSec: 0,
-      sourceOutSec: Math.min(timelineDurationSec, trackDuration),
-      fadeInSec: Math.min(1, timelineDurationSec * 0.05),
-      fadeOutSec: fadeDuration,
+      order: order++, sourceCandidateId: soundtrackId, startSec: 0,
+      endSec: timelineDurationSec, kind: "music", gain: musicGain,
+      sourceInSec: 0, sourceOutSec: timelineDurationSec,
+      fadeInSec: Math.min(1, timelineDurationSec * 0.05), fadeOutSec: fadeDuration,
     });
 
     // Reduce music gain under speech clips (ducking)

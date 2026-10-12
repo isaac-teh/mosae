@@ -33,9 +33,11 @@ type TimelineRowsProps = {
 };
 
 const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails, selectedClipId, selectedAudioClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, onDeselect, onSlotPointerDown, onSlotPointerMove, onSlotPointerUp, reorderPreview, onSoundtrack, onSelectAudio, onAddClip }: TimelineRowsProps) {
-  const music = timeline.audioClips.find((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
-  const musicEndSec = music ? Math.min(music.startSec + music.source.sourceOutSec - music.source.sourceInSec, timeline.durationSec) : 0;
-  const musicLeft = music ? timeToX(music.startSec, pixelsPerSecond, leadingPadding) : 0;
+  const musicClips = timeline.audioClips.filter((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
+  const music = musicClips[0];
+  const musicStartSec = musicClips.length ? Math.min(...musicClips.map((clip) => clip.startSec)) : 0;
+  const musicEndSec = musicClips.length ? Math.min(timeline.durationSec, Math.max(...musicClips.map((clip) => clip.startSec + clip.source.sourceOutSec - clip.source.sourceInSec))) : 0;
+  const musicLeft = music ? timeToX(musicStartSec, pixelsPerSecond, leadingPadding) : 0;
   const musicWidth = music ? Math.max(1, timeToX(musicEndSec, pixelsPerSecond, leadingPadding) - musicLeft) : 0;
   const tickSeconds = Array.from({ length: Math.floor(timeline.durationSec) + 1 }, (_, second) => second);
   return <View style={{ width: contentWidth }}>
@@ -68,7 +70,6 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
       {(() => {
         const fromIndex = reorderPreview ? timeline.videoClips.findIndex((clip) => clipId(clip) === reorderPreview.clipId) : -1;
         const displayClips = reorderPreview && fromIndex >= 0 ? reorderSlots(timeline.videoClips, fromIndex, reorderPreview.toIndex) : timeline.videoClips;
-        let cursor = 0;
         return displayClips.map((clip, index) => {
         const id = clipId(clip);
         const selected = selectedClipId === id;
@@ -77,12 +78,12 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
         const isVideo = "source" in clip && clip.source.kind === "video";
         const uri = isVideo ? thumbnails[idForSource] : sources[idForSource];
         const duration = clip.durationSec;
-        const start = cursor;
-        cursor = start + duration;
+        const start = clip.startSec;
         const makeHandle = (edge: "start" | "end") => <Pressable key={edge} role="button" accessibilityLabel={`Trim ${edge} of clip ${id}`} aria-pressed={selected}
           onPointerDown={(event: any) => onTrimPointerDown(clip, edge, event)} onPointerMove={onTrimPointerMove} onPointerUp={(event: any) => onTrimPointerUp(event, true)} onPointerCancel={(event: any) => onTrimPointerUp(event, false)} data-trim-handle="true"
           style={{ position: "absolute", zIndex: 20, left: edge === "start" ? -22 : undefined, right: edge === "end" ? -22 : undefined, top: 7, height: 44, width: 44, borderRadius: 22, backgroundColor: "transparent", borderWidth: 0, alignItems: "center", justifyContent: "center", ...(Platform.OS === "web" ? ({ touchAction: "none" } as unknown as ViewStyle) : {}) }}><View pointerEvents="none" style={{ height: 34, width: 12, borderRadius: 6, backgroundColor: "#F5C842", borderWidth: 1, borderColor: "#2B2B20" }} /></Pressable>;
-        const width = Math.max(1, duration * pixelsPerSecond);
+        const end = Math.min(timeline.durationSec, start + duration);
+        const width = Math.max(1, (end - start) * pixelsPerSecond);
         return <View key={id} className="transition-all duration-200" style={{ position: "absolute", zIndex: lifted ? 30 : selected ? 10 : 1, left: lifted && reorderPreview ? reorderPreview.pointerContentX - width / 2 : timeToX(start, pixelsPerSecond, leadingPadding), width, top: 0, height: 58, borderWidth: 2, borderRadius: 7, overflow: "visible", borderColor: selected ? "#FF8F70" : "transparent", backgroundColor: index % 2 ? "#294655" : "#E8E2D5", transform: lifted ? [{ scale: 1.04 }] : undefined, boxShadow: lifted ? "0px 8px 22px rgba(0,0,0,0.35)" : undefined, elevation: lifted ? 8 : 0 }}>
           <Pressable role="button" accessibilityLabel={`Select clip ${id}`} aria-pressed={selected} data-timeline-slot="true"
             onPointerDown={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), event)} onPointerMove={onSlotPointerMove} onPointerUp={(event: any) => onSlotPointerUp(event, true)} onPointerCancel={(event: any) => onSlotPointerUp(event, false)}
