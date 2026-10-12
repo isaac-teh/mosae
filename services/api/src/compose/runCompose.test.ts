@@ -7,6 +7,7 @@ import { estimateUsd } from "../gemini/client.js";
 import { buildCandidates } from "./buildCandidates.js";
 import { holdsFor } from "./brief.js";
 import { readFileSync } from "node:fs";
+import { validateTimeline } from "./validateTimeline.js";
 
 describe("applyUserOrder", () => {
   const clips = ["m1", "m2", "m3"].map((itemId) => ({ itemId }));
@@ -369,6 +370,26 @@ describe("runCompose — founder video coverage rules", () => {
     expect(clips.map((clip) => clip.source.shotId).sort()).toEqual(videos.map((video) => video.shotId).sort());
     expect(result.droppedPicks.some((drop) => drop.includes("video share limit"))).toBe(false);
     expect(clips.reduce((sum, clip) => sum + clip.durationSec, 0) / result.timeline.durationSec).toBeGreaterThan(0.5);
+  });
+});
+
+describe("runCompose — chapter markers after short collage reflow", () => {
+  it.each(["few", "lots"] as const)("keeps 22-photo short films valid with %s collages", async (collageAmount) => {
+    const moments = Array.from({ length: 22 }, (_, index) => ({ id: `beach-${index}`, shotId: `beach-shot-${index}`, kind: "photo" as const, title: `Beach ${index}`, description: "family beach day", rationale: "" }));
+    const chapters = [0, 1].map((part) => ({ id: `day-${part}`, title: `Day ${part + 1}`, summary: "Beach day", momentIds: moments.slice(part * 11, part * 11 + 11).map(({ id }) => id) }));
+    const proposal = makeProposal({ moments, chapters, constraints: { excludedShotIds: [], deselectedMomentIds: [], mustIncludeMomentIds: [], feedback: [] } });
+    const assets = new Map(moments.map(({ id }, index) => [id, { kind: "photo" as const, assetId: id, eventId: index < 11 ? "beach-day-1" : "beach-day-2", localTime: `2026-07-${index < 11 ? "01" : "02"}T10:${String(index % 11).padStart(2, "0")}:00`, analysis: { caption: "Family at the beach", mood: "joyful", keyMomentScore: 0.7 }, dHash: "0000000000000000" }]));
+    const result = await runCompose(makeJob({ proposal, durationId: "short", durationSec: 30, cadenceId: "playful", collageAmount }), makeDeps({
+      assets,
+      generateStructured: async () => ({ clips: moments.map(({ id }) => ({ candidateId: `${id}#still@c0`, holdSec: 2, transition: "cut", audio: "mute" })), musicCues: [] }),
+    }));
+    if (!result.ok) throw new Error(result.reasons.join("; "));
+    const candidateList = buildCandidates(chapters.map((chapter, index) => ({ index, itemIds: chapter.momentIds })), assets, holdsFor("playful"), 6, "playful");
+    const candidateMap = new Map(candidateList.map((candidate) => [candidate.candidateId, { ...candidate, minHoldSec: 0, maxHoldSec: Infinity }]));
+    expect(validateTimeline(result.timeline, { chapters: chapters.map((chapter, index) => ({ index, itemIds: chapter.momentIds })), shotIds: new Set(moments.map(({ shotId }) => shotId)), candidates: candidateMap, soundtrackIds: new Set(), targetSec: result.timeline.durationSec, fps: 30 })).toEqual([]);
+    expect(safeParseTimeline(result.timeline).ok).toBe(true);
+    expect(result.timeline.chapters.every((chapter) => chapter.startSec < result.timeline.durationSec)).toBe(true);
+    expect(result.timeline.chapters.map((chapter) => chapter.startSec)).toEqual([...result.timeline.chapters.map((chapter) => chapter.startSec)].sort((a, b) => a - b));
   });
 });
 

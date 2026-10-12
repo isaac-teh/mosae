@@ -199,7 +199,7 @@ describe("runPlan", () => {
     expect(initial.toolDeclarations.map((tool) => tool.name)).toEqual(["searchShots", "getShotDetails", "getTranscript"]);
   });
 
-  it("appends actionable diagnostics and accepts one repaired submission inside the same budget", async () => {
+  it("fills eligible working-set omissions before validating proposal coverage", async () => {
     const thinSubmission: ProposalSubmission = {
       ...validSubmission,
       moments: validSubmission.moments.slice(0, 4),
@@ -216,15 +216,14 @@ describe("runPlan", () => {
     const result = await runPlan(job, { model: script.model, tools: tools() });
 
     expect(result.ok).toBe(true);
-    expect(script.inputs[1]?.messages.at(-1)?.content).toMatch(/must_include_shots.*p5.*add/i);
-    if (result.ok) expect(result.usage.modelTurns).toBe(2);
+    expect(script.inputs).toHaveLength(1);
+    if (result.ok) expect(result.proposal.moments.map((moment) => moment.shotId)).toContain("p5");
   });
 
-  it("returns a user-visible non-retryable failure when the one repair is still invalid", async () => {
+  it("returns a retryable validation failure with concrete diagnostics after the repair", async () => {
     const invalid: ProposalSubmission = {
       ...validSubmission,
-      moments: validSubmission.moments.slice(0, 2),
-      chapters: [{ title: "Thin", summary: "", momentIds: ["p1", "p2"] }],
+      moments: validSubmission.moments.map((moment, index) => index === 0 ? { ...moment, kind: "video" as const } : moment),
     };
     const script = scripted([
       { type: "submit", submission: invalid },
@@ -236,7 +235,7 @@ describe("runPlan", () => {
     expect(result).toMatchObject({
       ok: false,
       code: "validation_failed",
-      retryable: false,
+      retryable: true,
     });
     if (!result.ok) {
       expect(result.reason).toMatch(/couldn't build a valid story plan.*try again/i);
@@ -299,8 +298,7 @@ describe("runPlan", () => {
   it("does not grant a fresh model-turn allowance to validation repair", async () => {
     const invalid: ProposalSubmission = {
       ...validSubmission,
-      moments: validSubmission.moments.slice(0, 2),
-      chapters: [{ title: "Thin", summary: "", momentIds: ["p1", "p2"] }],
+      moments: validSubmission.moments.map((moment, index) => index === 0 ? { ...moment, kind: "video" as const } : moment),
     };
     const script = scripted([
       { type: "submit", submission: invalid },
@@ -394,7 +392,7 @@ describe("runPlan", () => {
     expect(result).toMatchObject({
       ok: false,
       code: "validation_failed",
-      retryable: false,
+      retryable: true,
     });
     if (!result.ok) {
       expect(result.reason).toMatch(/couldn't build a valid story plan.*try again/i);

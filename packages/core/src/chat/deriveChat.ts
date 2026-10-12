@@ -24,7 +24,7 @@ function storyAcknowledgement(text: string, storySummary?: string, mentionedPeop
   const relation = mentionedPerson(text, [], mentionedPeople);
   if (relation && storySummary && !cleaned.toLocaleLowerCase().includes(relation.phrase.replace(/^your\s+/, ""))) {
     cleaned = `A ${cleaned[0]!.toLocaleLowerCase()}${cleaned.slice(1)} for ${relation.phrase}`;
-  } else if (relation && !storySummary) {
+  } else if (relation && !storySummary && /^My\s+/i.test(relation.label)) {
     const withoutPerson = cleaned.replace(/\b(?:my\s+)?(?:son(?:'s)?|daughter(?:'s)?|wife|husband|mum|mom|mother|dad|father|partner)\b/i, "").trim();
     if (withoutPerson) cleaned = `A ${withoutPerson[0]!.toLocaleLowerCase()}${withoutPerson.slice(1)} for ${relation.phrase}`;
   }
@@ -139,10 +139,12 @@ export function deriveChat(input: ChatInput): ChatState {
   const mediaLabel = photos > 0 && clips > 0 ? "photos and clips" : photos > 0 ? `photo${photos === 1 ? "" : "s"}` : `clip${clips === 1 ? "" : "s"}`;
   const mediaCount = uploadTotal || photos + clips;
   const addUploadIntro = () => add({ kind: "mosae", id: "upload-intro", text: uploadComplete && failedCount > 0 ? `I uploaded ${Math.min(uploadDone, uploadTotal)} of your ${mediaCount} ${mediaLabel}; ${failedCount} couldn't upload.` : uploadComplete ? `Your ${mediaCount} ${mediaLabel} ${mediaCount === 1 && photos + clips === 1 ? "is" : "are"} uploaded.` : `I'm bringing in your ${mediaCount} ${mediaLabel}. Then I'll look through them.` });
-  const questionUploadComplete = input.earlyOccasionQuestionUploadComplete ?? uploadComplete;
+  const questionUploadComplete = uploadComplete;
   const addOccasionQuestion = () => add({ kind: "occasion-question", id: "occasion-question", uploadComplete: questionUploadComplete });
   const acknowledgementText = (text: string, storySummary?: string, mentionedPeople?: string[]) => {
-    const acknowledgement = storyAcknowledgement(text, storySummary, mentionedPeople);
+    // Keep this anchored to the user's answer; later interpretation can refine
+    // the story summary without rewriting the acknowledgement in chat history.
+    const acknowledgement = storyAcknowledgement(text, undefined, mentionedPeople);
     const waiting = !uploadComplete ? ` I'm still bringing in your ${mediaLabel} — hang on a moment.`
       : !understoodComplete ? " I'm looking through them now — almost there."
       : facesApplicable && !facesComplete ? " Now I'm finding the people in them."
@@ -281,6 +283,13 @@ export function deriveChat(input: ChatInput): ChatState {
     const countLabel = countWords[introCount] ?? String(introCount);
     add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments. Who is this?` });
   }
+  if (input.peopleConfirmed && input.peopleSummaryConfirmed === true) {
+    const historyPeople = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
+    const countWords = ["zero", "one", "two", "three", "four", "five"];
+    const count = peopleIntroCount(historyPeople, mergeEvents);
+    const label = countWords[count] ?? String(count);
+    add({ kind: "mosae", id: "people-intro", text: `${count === 1 ? "One person appears" : `${label[0]!.toLocaleUpperCase()}${label.slice(1)} people appear`} often in your moments. Who is this?` });
+  }
   const people = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
   const orderedHistory = [
     ...people.map((person) => ({ kind: "person" as const, person, momentCount: person.momentCount })),
@@ -314,7 +323,7 @@ export function deriveChat(input: ChatInput): ChatState {
 
   if (!input.plan || !input.summary.ready.plan) {
     step = "moments";
-    add({ kind: "typing", id: "plan-wait", text: "Picking the strongest moments" });
+    if (!input.planFailed) add({ kind: "typing", id: "plan-wait", text: "Picking the strongest moments" });
     return { items, step, confirmed, placeholder };
   }
 

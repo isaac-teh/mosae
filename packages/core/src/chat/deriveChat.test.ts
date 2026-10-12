@@ -97,6 +97,18 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.id === "people-summary-message")).toMatchObject({ text: "Thanks. I've tagged Mia in your moments." });
     expect(state.items.find((item) => item.kind === "people-summary")).toMatchObject({ people: [{ personId: "p1", name: "Mia", momentCount: 3 }] });
   });
+  it("keeps the people intro and face crops in history after summary confirmation", () => {
+    const state = deriveChat({ ...base(), intent: { text: "A trip" }, peopleConfirmed: true, peopleSummaryConfirmed: true, people: [
+      { personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: ["scene"], sampleFaces: [{ shotId: "face", uri: "face-crop.jpg", bbox: [0, 0, 1, 1] }], days: [] },
+    ] });
+    expect(state.items.find((item) => item.id === "people-intro")).toBeTruthy();
+    expect(state.items.find((item) => item.id === "person-question-p1")).toMatchObject({ photos: ["face-crop.jpg"] });
+    expect(state.items.find((item) => item.id === "person-answer-p1")?.kind).toBe("you");
+  });
+  it("keeps the original story acknowledgement when the interpreted summary changes", () => {
+    const state = deriveChat({ ...base(), intent: { text: "A trip" }, storySummary: "Our trip", people: [], peopleConfirmed: false });
+    expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ text: "A trip — lovely!" });
+  });
   it("asks the story question while uploads are pending and preserves an early answer", () => {
     const early = deriveChat({ ...base(), summary: { ...summary, total: 4, photos: 3, clips: 1, processed: { ingested: 1, understood: 0, faces: 0 }, ready: { summary: false, faces: false, plan: false } }, intent: null, earlyOccasionAnswer: "A birthday celebration" });
     expect(early.items.find(item => item.kind === "upload-status")).toMatchObject({ photos: 3, clips: 1, uploadTotal: 4, uploadDone: 1, understood: 0 });
@@ -175,11 +187,11 @@ describe("deriveChat state table", () => {
     expect(looking.items.find(item => item.id === "story-acknowledgement")).toMatchObject({ text: "A trip — lovely! Now I'm finding the people in them." });
   });
 
-  it("keeps the occasion question wording the user saw before answering", () => {
-    const historical = deriveChat({ ...base(), intent: null, earlyOccasionQuestionUploadComplete: false, localUpload: { total: 4, settled: 4, failed: 0, photos: 4, clips: 0 } });
-    expect(historical.items.find(item => item.id === "occasion-question")).toMatchObject({ uploadComplete: false });
-    const afterAnswer = deriveChat({ ...base(), earlyOccasionQuestionUploadComplete: false, localUpload: { total: 4, settled: 4, failed: 0, photos: 4, clips: 0 } });
-    expect(afterAnswer.items.find(item => item.id === "occasion-message")).toMatchObject({ text: "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?" });
+  it("re-evaluates the occasion prompt wording after uploads complete", () => {
+    const historical = deriveChat({ ...base(), intent: null, localUpload: { total: 4, settled: 4, failed: 0, photos: 4, clips: 0 } });
+    expect(historical.items.find(item => item.id === "occasion-question")).toMatchObject({ uploadComplete: true });
+    const afterAnswer = deriveChat({ ...base(), localUpload: { total: 4, settled: 4, failed: 0, photos: 4, clips: 0 } });
+    expect(afterAnswer.items.find(item => item.id === "occasion-message")).toMatchObject({ text: "Tell me a little about them. Is it a trip, a birthday celebration, or something else?" });
   });
 
   it("gates occasion on local transfer, server story readiness and acknowledged failures", () => {
@@ -353,7 +365,7 @@ describe("deriveChat state table", () => {
 
   it("uses a normalized interpret summary and named person when both are available", () => {
     const state = deriveChat({ ...base(), intent: { text: "Mia's Children's Day party" }, storySummary: "Children's Day celebration", mentionedPeople: ["Mia"], people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
-    expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ text: "A Children's Day celebration for Mia — lovely!" });
+    expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ text: "Mia's Children's Day party — lovely!" });
     expect(state.items.find((item) => item.kind === "person-confirm")).toMatchObject({ text: "Is this Mia?" });
   });
 

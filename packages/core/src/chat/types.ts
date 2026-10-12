@@ -26,7 +26,6 @@ export type ChatInput = {
   localUpload?: { total: number; settled: number; failed: number; photos: number; clips: number };
   earlyOccasionAnswer?: string;
   earlyOccasionStoryText?: string;
-  earlyOccasionQuestionUploadComplete?: boolean;
   interpTurns?: { question: string; reply?: string }[];
   interpReplying?: boolean;
   pendingResponse?: "occasion" | "person";
@@ -43,6 +42,7 @@ export type ChatInput = {
   peopleSummaryConfirmed?: boolean;
   dismissedPersonSuggestionIds?: string[];
   plan: StoryPlan | null;
+  planFailed?: boolean;
   momentsConfirmed: boolean;
   conflict: { shotIds: string[]; message: string } | null;
   direction: { aspect?: "9:16" | "16:9"; confirmed: boolean; pace: "gentle" | "lively"; lengthSec: number; focus: string; collageAmount?: "few" | "lots" | "none"; motionFeel?: "calm" | "playful" } | null;
