@@ -1075,6 +1075,28 @@ describe("Director chat", () => {
     expect(chat.state.items.some((item) => item.kind === "you" && item.text === "A trip")).toBe(true);
   });
 
+  it("routes a free-typed missed name after summary confirmation and restores it from flow after refresh", async () => {
+    setup({ readyPlan: true, people: [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }] });
+    const personFlow = (person: any) => ({ personId: person.personId, name: person.name, role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
+    let flow: any = { revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map(personFlow), peopleSummaryConfirmed: false };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => {
+      flow = { ...flow, revision: flow.revision + 1, ...(action.type === "missed-people" ? { missedPeople: action.people } : { peopleSummaryConfirmed: action.confirmed }) };
+      return flow;
+    });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true));
+    await act(async () => chat.actions.confirmPeopleSummary());
+    await act(async () => chat.actions.send("Grandma"));
+    expect(mocks.repo.interpret).not.toHaveBeenCalled();
+    expect(mocks.repo.mutateFlow).toHaveBeenLastCalledWith("project-1", expect.any(String), { type: "missed-people", people: [{ personId: expect.stringMatching(/^p-missed-/), name: "Grandma" }] });
+    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Grandma.")).toBe(true);
+    await act(async () => { await chat.retry(); });
+    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Grandma.")).toBe(true));
+  });
+
   it("shows the retry message when interpretation fails and keeps the occasion reply usable", async () => {
     setup({ interpret: async () => { throw new Error("offline"); } }); await renderScreen();
     const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;

@@ -200,7 +200,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const mergedSummary = mergeSummary(summaryRef.current, nextSummary);
     summaryRef.current = mergedSummary;
     setSummary(mergedSummary);
-    if (acceptedFlow) setInput((current) => ({ ...current, flow: acceptedFlow,
+    if (acceptedFlow) setInput((current) => ({ ...current, flow: acceptedFlow, missedPeople: current.missedPeople ?? acceptedFlow.missedPeople?.map((person) => ({ ...person, momentCount: 0 })), missedPersonTagging: current.missedPersonTagging ?? (acceptedFlow.missedPeople?.length ? { ...acceptedFlow.missedPeople[0]!, momentCount: 0 } : undefined),
       intent: current.intent ?? (acceptedFlow.story.answer ? { text: acceptedFlow.story.answer } : null),
       ...(acceptedFlow.story.storySummary ? { storySummary: acceptedFlow.story.storySummary } : {}),
       ...(acceptedFlow.story.mentionedPeople.length ? { mentionedPeople: acceptedFlow.story.mentionedPeople } : {}),
@@ -716,10 +716,18 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const chipAnswer = relation ? answer.replace(/^my\s+/i, "My ").replace(/^me$/i, "Me").replace(/^friend$/i, "Friend").replace(/^family$/i, "Family") : "Type a name";
         return actions.setPerson(activePerson.personId, chipAnswer, relation ? undefined : answer);
       }
-      if (state.step === "people" && state.items.some((item) => item.kind === "anyone-else")) {
+      const missedIntent = /\b(?:miss(?:ed|ing)? someone|miss(?:ed|ing)? anyone|one more(?: person)?|there(?:'s| is) one more|another person)\b/i.test(answer);
+      const summaryVisible = state.items.some((item) => item.kind === "people-summary");
+      const personEditIntent = /^(?:rename|change|edit|nots+this|that'ss+not|that’ss+not)\b/i.test(answer);
+      if ((state.items.some((item) => item.kind === "anyone-else") && !personEditIntent) || (state.step === "people" && summaryVisible && !personEditIntent) || (missedIntent && !personEditIntent)) {
         const names = text.split(/\s*(?:,|\band\b)\s*/i).map((name) => name.trim()).filter(Boolean);
-        const added = names.map((name, index) => ({ personId: `p-missed-${Date.now()}-${index}`, name, momentCount: 0 }));
-        if (added.length) setInput((current) => ({ ...current, missedPeople: [...(current.missedPeople ?? []), ...added], missedPersonTagging: added[0]! }));
+        const cleaned = names.map((name) => name.replace(/^(?:there is one more|there's one more|you missed someone|you missed anyone|one more person|another person)\s*/i, "").trim()).filter((name) => name && !/^(?:there is one more|there's one more|you missed someone|you missed anyone|one more person|another person)$/i.test(name));
+        const added = cleaned.map((name, index) => ({ personId: `p-missed-${Date.now()}-${index}`, name, momentCount: 0 }));
+        if (added.length) {
+          const all = [...(input.missedPeople ?? []), ...added];
+          try { await commitFlowAction({ type: "missed-people", people: all.map(({ personId, name }) => ({ personId, name })) }); } catch (cause) { setError(reportFailure(cause)); return; }
+          setInput((current) => ({ ...current, missedPeople: all, missedPersonTagging: added[0]! }));
+        }
         return;
       }
       if (!input.intent) {
@@ -769,7 +777,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       try {
         const step = state.step === "people" || state.step === "moments" || state.step === "direction" ? state.step : "occasion";
         const result = await repository.interpret(projectId, { step, text, context: { summary, people: (input.people ?? []).map(({ personId, name, role }) => ({ personId, name, role })) } });
-        if (result.change.kind === "unclear") { setPendingInterpret({ reply: result.reply || UNCLEAR, text }); return; }
+        if (result.change.kind === "unclear") {
+          setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { question: text.trim(), reply: result.reply || UNCLEAR }] }));
+          return;
+        }
         const interpretedPeople = result.change.kind === "occasion" && Array.isArray(result.change.mentionedPeople)
           ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
         const storySummary = result.change.kind === "occasion" && typeof result.change.storyText === "string" ? result.change.storyText : undefined;
