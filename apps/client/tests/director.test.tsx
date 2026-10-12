@@ -682,7 +682,8 @@ describe("Director chat", () => {
     await click("My daughter");
     expect(mocks.confirmCast).toHaveBeenCalledTimes(1);
     expect(hasText("Saving your answer")).toBe(true);
-    expect(host.querySelector('button[aria-label="Friend"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="Friend"]')).toBeTruthy();
+    expect(hasText("Who's this? They're in 90 of your moments.")).toBe(true);
     await act(async () => resolveCast({ cast: { people: [] }, proposalId: "proposal-2" }));
   });
 
@@ -869,20 +870,76 @@ describe("Director chat", () => {
     expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true);
   });
 
-  it("does not route a typed person correction through occasion confirmation or rename", async () => {
-    setup({ interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
+  it("uses typed text on an active person card as that person's name", async () => {
+    setup();
     let chat!: ReturnType<typeof useDirectorChat>;
     function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
     await act(async () => root.render(<Harness />));
     await waitFor(() => expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(true));
     await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
     await waitFor(() => expect(chat.state.step).toBe("people"));
-    await act(async () => chat.actions.send("Actually her name is Emma"));
-    await waitFor(() => expect(mocks.repo.interpret).toHaveBeenCalled());
-    const planCallsBeforeConfirmation = mocks.repo.createPlan.mock.calls.length;
+    await act(async () => chat.actions.send("  Kara  "));
+    expect(mocks.repo.interpret).not.toHaveBeenCalled();
+    expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Kara" })]) }));
+    expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-1")).toBe(false);
+    expect(chat.state.items.some((item) => item.kind === "you" && item.text === "Kara")).toBe(true);
+    expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-2")).toBe(true);
+  });
+
+  it("confirms a pending person interpretation when the user types yes", async () => {
+    setup({ readyPlan: true, interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    await act(async () => chat.actions.setPerson("person-1", "My daughter"));
+    await act(async () => chat.actions.setPerson("person-2", "My son"));
+    await act(async () => chat.actions.confirmPeople());
+    await act(async () => chat.actions.confirmPeopleSummary());
+    await act(async () => chat.actions.send("Rename Emma"));
+    expect(chat.pendingInterpret?.change?.kind).toBe("person");
+    await act(async () => chat.actions.send("Yes"));
+    expect(chat.pendingInterpret).toBeNull();
+    expect(mocks.confirmCast).toHaveBeenLastCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Emma", role: "child" })]) }));
+  });
+
+  it("uses non-confirmation text as the active person's answer while an interpretation is pending", async () => {
+    setup({ readyPlan: true, interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    await act(async () => chat.actions.setPerson("person-1", "My daughter"));
+    await act(async () => chat.actions.setPerson("person-2", "My son"));
+    await act(async () => chat.actions.confirmPeople());
+    await act(async () => chat.actions.confirmPeopleSummary());
+    await act(async () => chat.actions.send("Rename Emma"));
+    expect(chat.pendingInterpret?.change?.kind).toBe("person");
+
+    await act(async () => chat.actions.reopenPeople());
+    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-1")).toBe(true));
+    const interpretCalls = mocks.repo.interpret.mock.calls.length;
+    await act(async () => chat.actions.send("Kara"));
+    expect(chat.pendingInterpret).toBeNull();
+    expect(mocks.repo.interpret).toHaveBeenCalledTimes(interpretCalls);
+    expect(mocks.confirmCast).toHaveBeenLastCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Kara" })]) }));
+    expect(chat.state.items.some((item) => item.kind === "you" && item.text === "Kara")).toBe(true);
+  });
+
+  it("applies a pending person interpretation from the confirmation button action", async () => {
+    setup({ readyPlan: true, interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    await act(async () => chat.actions.setPerson("person-1", "My daughter"));
+    await act(async () => chat.actions.setPerson("person-2", "My son"));
+    await act(async () => chat.actions.confirmPeople());
+    await act(async () => chat.actions.confirmPeopleSummary());
+    await act(async () => chat.actions.send("Rename Emma"));
     await act(async () => chat.actions.confirmInterpret());
-    expect(mocks.confirmCast).not.toHaveBeenCalled();
-    expect(mocks.repo.createPlan).toHaveBeenCalledTimes(planCallsBeforeConfirmation);
+    expect(chat.pendingInterpret).toBeNull();
+    expect(mocks.confirmCast).toHaveBeenLastCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Emma", role: "child" })]) }));
   });
 
   it("keeps a named person when a later refresh returns a stale unnamed row", async () => {

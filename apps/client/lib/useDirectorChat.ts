@@ -411,7 +411,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       personSaving.current = true;
       setError(null);
       const people = input.people ?? [];
-      const roleValue = role === "child" || role === "My daughter" || role === "My son" ? "child" : role === "other" || role === "Skip" ? "other" : "parent";
+      const normalizedRole = role.trim().toLocaleLowerCase();
+      const roleValue = role === "child" || /^(my\s+)?(daughter|son)$/.test(normalizedRole) ? "child" : role === "other" || /^(friend|family|skip)$/.test(normalizedRole) ? "other" : "parent";
       const personName = name ?? (role === "Skip" ? undefined : role);
       const previousEdit = peopleEdits.current.get(personId);
       peopleEdits.current.set(personId, { name: role === "Skip" ? null : personName ?? null, role: roleValue, skipped: role === "Skip" });
@@ -420,6 +421,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const automaticMerge = duplicate?.mode === "automatic" ? duplicate : null;
       const castPeople = automaticMerge ? updated.filter((person) => person.personId !== personId) : updated;
       setInput((current) => ({ ...current, people: updated, pendingResponse: "person" }));
+      setPendingInterpret(null);
       try {
         await commitFlowAction({ type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, confirmed: role !== "Skip", skipped: role === "Skip" });
         const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(automaticMerge ? { merges: [{ fromPersonId: personId, toPersonId: automaticMerge.personId }] } : {}), ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
@@ -632,8 +634,20 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       router.push({ pathname: "/editor", params: { projectId: projectId || "fixture", planId: film.planId, generationId: film.filmId, request: text.trim(), ...(storyFlow ?? {}) } } as any);
     },
     async send(text: string) {
-      if (!text.trim()) return;
+      const answer = text.trim();
+      if (!answer) return;
       if (interpretInFlight.current) return;
+      if (pendingInterpret) {
+        if (/^(yes|yeah|yep|ok|okay|correct|that's right|that’s right)$/i.test(answer)) { await actions.confirmInterpret(); return; }
+        if (/^(no|nope|not quite)$/i.test(answer)) { actions.discardInterpret(); return; }
+        actions.discardInterpret();
+      }
+      const activePerson = state.items.find((item) => item.kind === "person");
+      if (activePerson?.kind === "person") {
+        const relation = /^(my\s+(?:son|daughter|wife|husband|mum|mom|mother|dad|father|partner)|me|friend|family)$/i.test(answer);
+        const chipAnswer = relation ? answer.replace(/^my\s+/i, "My ").replace(/^me$/i, "Me").replace(/^friend$/i, "Friend").replace(/^family$/i, "Family") : "Type a name";
+        return actions.setPerson(activePerson.personId, chipAnswer, relation ? undefined : answer);
+      }
       if (state.step === "people" && state.items.some((item) => item.kind === "anyone-else")) {
         const names = text.split(/\s*(?:,|\band\b)\s*/i).map((name) => name.trim()).filter(Boolean);
         const added = names.map((name, index) => ({ personId: `p-missed-${Date.now()}-${index}`, name, momentCount: 0 }));
@@ -691,12 +705,19 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const interpretedPeople = result.change.kind === "occasion" && Array.isArray(result.change.mentionedPeople)
           ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
         const storySummary = result.change.kind === "occasion" && typeof result.change.storyText === "string" ? result.change.storyText : undefined;
-        setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
+        if (result.change.kind === "person") setPendingInterpret({ reply: result.reply, text, change: result.change });
+        else if (result.change.kind === "occasion") setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
       } catch (cause) { setError(reportFailure(cause)); }
       finally { interpretInFlight.current = false; }
     },
     async confirmInterpret() {
       if (pendingInterpret?.mentionedPeople || pendingInterpret?.storySummary) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary);
+      if (pendingInterpret?.change?.kind === "person") {
+        const personId = pendingInterpret.change.personId ?? state.items.find((item) => item.kind === "person")?.personId;
+        if (!personId) return setPendingInterpret(null);
+        const change = pendingInterpret.change;
+        return actions.setPerson(personId, change.role ?? "Type a name", change.name ?? (change.role ? undefined : pendingInterpret.text.trim()));
+      }
     },
     answerOccasion(text: string, storyText?: string) {
       if (occasionSaving.current) return;

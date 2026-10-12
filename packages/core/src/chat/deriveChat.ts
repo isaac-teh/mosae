@@ -228,7 +228,6 @@ export function deriveChat(input: ChatInput): ChatState {
     }
     if (input.pendingResponse === "person") {
       add({ kind: "typing", id: "person-save-wait", text: "Saving your answer" });
-      return { items, step, confirmed, placeholder };
     }
     if (unanswered) {
       const mention = people[0]?.personId === unanswered.personId ? mentionedPerson(input.intent.text, people, input.mentionedPeople) : null;
