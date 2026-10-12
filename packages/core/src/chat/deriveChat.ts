@@ -256,17 +256,15 @@ export function deriveChat(input: ChatInput): ChatState {
     return { items, step, confirmed, placeholder };
   }
 
-  if (input.peopleConfirmed && input.peopleSummaryConfirmed === false) {
-    step = "people";
-    const named = mainPeople(input.people ?? [], input.summary?.photos ?? 0).filter((person) => !person.skipped && person.name).map((person) => ({ personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri }));
-    const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-    if (named.length === 1) add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged ${named[0]!.name} in your moments.` });
-    else add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged all ${words[named.length] ?? named.length} in your moments.` });
-    add({ kind: "people-summary", id: "people-summary", people: named });
-    return { items, step, confirmed, placeholder };
-  }
-
+  const showPeopleSummary = input.peopleConfirmed && input.peopleSummaryConfirmed === false;
   const mergeEvents = input.mergeEvents ?? [];
+  if (showPeopleSummary) {
+    step = "people";
+    const people = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
+    const countWords = ["zero", "one", "two", "three", "four", "five"];
+    const countLabel = countWords[people.length] ?? String(people.length);
+    add({ kind: "mosae", id: "people-intro", text: `${people.length === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments. Who is this?` });
+  }
   for (const event of mergeEvents.filter(({ personId }) => !input.people?.some((person) => person.personId === personId))) {
     add({ kind: "mosae", id: `person-question-${event.personId}`, text: `Who's this? They're in ${event.momentCount} of your moments.`, photos: (event.questionFaces ?? event.sampleFaces).slice(0, 2) });
     add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
@@ -277,9 +275,18 @@ export function deriveChat(input: ChatInput): ChatState {
       if (person.skipped || person.name) {
         add({ kind: "mosae", id: `person-question-${person.personId}`, text: `Who's this? They're in ${person.momentCount} of your moments.`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri) });
         add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+        if (showPeopleSummary && input.taggedPerson?.personId === person.personId) add({ kind: "mosae", id: `tagged-person-${person.personId}`, text: "Got it — these are the photos of this person.", photos: input.taggedPerson.photos });
         for (const event of input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? []) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), response: event.response });
       }
     });
+  }
+  if (showPeopleSummary) {
+    const named = mainPeople(input.people ?? [], input.summary?.photos ?? 0).filter((person) => !person.skipped && person.name).map((person) => ({ personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri }));
+    const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    if (named.length === 1) add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged ${named[0]!.name} in your moments.` });
+    else add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged all ${words[named.length] ?? named.length} in your moments.` });
+    add({ kind: "people-summary", id: "people-summary", people: named });
+    return { items, step, confirmed, placeholder };
   }
   confirmed = 2;
 

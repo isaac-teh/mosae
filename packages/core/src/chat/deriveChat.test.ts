@@ -326,8 +326,17 @@ describe("deriveChat state table", () => {
     expect(person1Name.items.find((item) => item.kind === "person") as Extract<ChatItem, { kind: "person" }>).toMatchObject({ personId: "p1", questionText: "Who's this? They're in 4 of your moments." });
     const person2 = deriveChat({ ...base(), people: [{ ...people[0], name: "Mia" }, { ...people[1], name: null }], peopleConfirmed: false,  });
     expect(person2.items.find((item) => item.kind === "person") as Extract<ChatItem, { kind: "person" }>).toMatchObject({ personId: "p2", questionText: "Who's this? They're in 2 of your moments." });
-    const named = [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }];
-    const summaryState = deriveChat({ ...base(), people: named, peopleConfirmed: true, peopleSummaryConfirmed: false });
+    const named = [
+      { ...people[0], name: "Mia", sampleFaces: [{ shotId: "s1", uri: "face-mia.jpg", bbox: [0, 0, 1, 1] as [number, number, number, number] }] },
+      { ...people[1], name: "Noah", sampleFaces: [{ shotId: "s2", uri: "face-noah.jpg", bbox: [0, 0, 1, 1] as [number, number, number, number] }] },
+    ];
+    const summaryState = deriveChat({ ...base(), people: named, peopleConfirmed: true, peopleSummaryConfirmed: false, taggedPerson: { personId: "p1", name: "Mia", photos: ["tagged-mia.jpg"] }, mergeEvents: [{ id: "merge-p2", personId: "p2", targetPersonId: "p1", answer: "My daughter", targetName: "Mia", sampleFaces: ["face-mia.jpg"], momentCount: 2, response: "Yes, same person" }] });
+    const historyIds = ["occasion-answer", "people-intro", "person-question-p1", "person-answer-p1", "tagged-person-p1", "person-question-p2", "person-answer-p2", "merge-p2", "people-summary-message", "people-summary"];
+    expect(summaryState.items.map((item) => item.id).filter((id) => historyIds.includes(id))).toEqual(historyIds);
+    expect(summaryState.items.find((item) => item.id === "person-question-p1")).toMatchObject({ photos: ["face-mia.jpg"] });
+    expect(summaryState.items.findIndex((item) => item.id === "people-intro")).toBeLessThan(summaryState.items.findIndex((item) => item.id === "person-question-p1"));
+    expect(summaryState.items.findIndex((item) => item.id === "merge-p2")).toBeLessThan(summaryState.items.findIndex((item) => item.id === "people-summary"));
+    expect(summaryState.items.find((item) => item.kind === "people-summary")).toMatchObject({ people: [{ personId: "p1", sampleUri: "face-mia.jpg" }, { personId: "p2", sampleUri: "face-noah.jpg" }] });
     expect(summaryState.items.find((item) => item.kind === "people-summary")?.kind).toBe("people-summary");
     const options = deriveChat({ ...base(), people: named, peopleConfirmed: true, peopleSummaryConfirmed: true, direction: { confirmed: false, pace: "gentle", lengthSec: 90, focus: "family" } });
     expect(options.step).toBe("direction");
