@@ -80,6 +80,7 @@ export default function DirectorScreen() {
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
   const actionPendingScroll = useRef(false);
   const userScrolledUp = useRef(false);
+  const userDragging = useRef(false);
   const previewUrls = useRef<PendingPreviewUrls | null>(null);
   if (!previewUrls.current) previewUrls.current = new PendingPreviewUrls();
   const previewUnmountVersion = useRef(0);
@@ -96,18 +97,18 @@ export default function DirectorScreen() {
   const [uploadFailuresAcknowledged, setUploadFailuresAcknowledged] = useState(false);
   const localMediaPending = Boolean(preparationProgress) || Boolean(uploadProgress && (uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles || uploadProgress.finishedFiles === 0)) || Boolean((uploadFailure || uploadProgress?.failedFiles) && !uploadFailuresAcknowledged);
   const localUpload = uploadProgress || preparationProgress ? { total: uploadProgress?.totalFiles ?? preparationProgress!.totalFiles, settled: uploadProgress?.finishedFiles ?? 0, failed: uploadProgress?.failedFiles ?? 0, photos: pendingPhotos.length, clips: (ownsPendingMedia ? pendingMedia : []).length - pendingPhotos.length } : undefined;
-  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged, ...(localUpload ? { localUpload } : {}), ...(params.completedPersonId && params.completedPersonName && params.completedSampleUri ? { taggedPerson: { personId: params.completedPersonId, name: params.completedPersonName, photos: [params.completedSampleUri] }, taggedMomentCount: Number(params.completedMomentCount ?? 0) } : {}) });
+  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged, ...(localUpload ? { localUpload } : {}), ...(params.completedPersonId && params.completedSampleUri ? { taggedPerson: { personId: params.completedPersonId, name: params.completedPersonName ?? "", photos: [params.completedSampleUri] }, taggedMomentCount: Number(params.completedMomentCount ?? 0) } : {}) });
   const tagActions = useRef(actions);
   tagActions.current = actions;
   useFocusEffect(useCallback(() => {
     const result = consumeTaggedPersonResult();
     if (!result) return;
-    if (result.isMissed) void tagActions.current.completeMissedPerson(result.personId, result.name, result.momentCount, result.sampleUri);
+    if (result.isMissed) void tagActions.current.completeMissedPerson(result.personId, result.name ?? "", result.momentCount, result.sampleUri);
     else tagActions.current.updatePersonTagCount(result.personId, result.momentCount, result.sampleUri, result.name);
   }, []));
   useEffect(() => {
-    if (!params.completedPersonId || !params.completedPersonName) return;
-    if (params.completedIsMissed === "true") void actions.completeMissedPerson(params.completedPersonId, params.completedPersonName, Number(params.completedMomentCount ?? 0), params.completedSampleUri);
+    if (!params.completedPersonId) return;
+    if (params.completedIsMissed === "true") void actions.completeMissedPerson(params.completedPersonId, params.completedPersonName ?? "", Number(params.completedMomentCount ?? 0), params.completedSampleUri);
     else actions.updatePersonTagCount(params.completedPersonId, Number(params.completedMomentCount ?? 0), params.completedSampleUri, params.completedPersonName);
     router.setParams({ completedPersonId: undefined, completedPersonName: undefined, completedMomentCount: undefined, completedIsMissed: undefined, completedSampleUri: undefined });
   }, [params.completedPersonId, params.completedPersonName, params.completedMomentCount, params.completedIsMissed, params.completedSampleUri]);
@@ -281,13 +282,13 @@ export default function DirectorScreen() {
   return <View className="flex-1 bg-surface">
     <MediaPicker ref={mediaPicker} onFiles={(files) => { void replaceMissingMedia(files); }} />
     <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} />
-    <ScrollView ref={chatScroll} accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 py-6" contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { userScrolledUp.current = false; }} onScroll={(event: any) => {
+    <ScrollView ref={chatScroll} accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 py-6" contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { userDragging.current = true; }} onScroll={(event: any) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      if (contentOffset && contentSize && layoutMeasurement) userScrolledUp.current = contentOffset.y + layoutMeasurement.height < contentSize.height - 32;
-    }} onContentSizeChange={() => { if (!userScrolledUp.current) requestAnimationFrame(() => chatScroll.current?.scrollToEnd({ animated: false })); }} scrollEventThrottle={16} style={{ flex: 1, minHeight: 0 }}>
+      if (userDragging.current && contentOffset && contentSize && layoutMeasurement) userScrolledUp.current = contentOffset.y + layoutMeasurement.height < contentSize.height - 32;
+    }} onScrollEndDrag={() => { userDragging.current = false; }} onMomentumScrollEnd={() => { userDragging.current = false; }} onContentSizeChange={() => { if (!userScrolledUp.current) requestAnimationFrame(() => chatScroll.current?.scrollToEnd({ animated: false })); }} scrollEventThrottle={16} style={{ flex: 1, minHeight: 0 }}>
       {state.items.map((item) => {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveConflict(choice as "keep" | "leave"))} />;
-        if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} photos={item.photos} />;
+        if (item.kind === "mosae") return <ChatMessage key={item.id} from="mosae" text={item.text} photos={item.photos} faceSamples={item.faceSamples} />;
         if (item.kind === "upload-status") {
           const uploadProgressValue = item.uploadTotal ? item.uploadDone / item.uploadTotal : 0;
           const understoodProgressValue = item.understoodTotal ? Math.min(item.understood, item.understoodTotal) / item.understoodTotal : 0;
@@ -357,7 +358,7 @@ export default function DirectorScreen() {
         </View>;
         if (item.kind === "occasion-question") return pendingInterpret ? null : <View key={item.id} className="gap-2"><ChatMessage from="mosae" text={item.uploadComplete ? "Tell me a little about them. Is it a trip, a birthday celebration, or something else?" : "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?"} /><View className="flex-row flex-wrap gap-2"><Pressable role="button" aria-label="A trip" onPress={() => scrollAfterAction(() => actions.answerOccasion("A trip", projectSummary?.country ? `${projectSummary.country} trip` : "Our trip"))} className="active:scale-[0.97] active:bg-surface-sunken rounded-pill border border-line-strong px-4 py-2" style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })}><Text className="font-sans text-caption text-ink">A trip</Text></Pressable><Pressable role="button" aria-label="A birthday celebration" onPress={() => scrollAfterAction(() => actions.answerOccasion("A birthday celebration", "Birthday celebration"))} className="active:scale-[0.97] active:bg-surface-sunken rounded-pill border border-line-strong px-4 py-2" style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })}><Text className="font-sans text-caption text-ink">A birthday celebration</Text></Pressable></View><Text className="font-sans text-caption text-ink-muted">Something else? Type it in the box below.</Text></View>;
         if (item.kind === "person") return <View key={item.id} className="gap-3">
-          <ChatPersonQuestion momentCount={item.momentCount} samples={item.sampleFaces} days={item.days} question={item.questionText} chips={personAnswerChips(item.ageBand, people.filter((person) => person.personId !== item.personId).map((person) => person.name ?? ""))} onPick={(role) => scrollAfterAction(() => actions.setPerson(item.personId, role))} onTypeName={() => scrollAfterAction(() => setNamingPerson(item.personId))} onSkip={() => scrollAfterAction(() => actions.setPerson(item.personId, "Skip"))} onTagIt={() => scrollAfterAction(() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: item.personId, name: "this person", source: "identity" } } as any))} />
+          <ChatPersonQuestion momentCount={item.momentCount} samples={item.sampleFaces} days={item.days} question={item.questionText} chips={personAnswerChips(item.ageBand, people.filter((person) => person.personId !== item.personId).map((person) => person.name ?? ""))} onPick={(role) => scrollAfterAction(() => actions.setPerson(item.personId, role))} onTypeName={() => scrollAfterAction(() => setNamingPerson(item.personId))} onSkip={() => scrollAfterAction(() => actions.setPerson(item.personId, "Skip"))} onTagIt={() => scrollAfterAction(() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: item.personId, name: "this person", faceUri: item.sampleFaces[0]?.uri, source: "identity" } } as any))} />
           {namingPerson === item.personId && <View className="flex-row gap-2"><TextInput accessibilityLabel="Person name" placeholder="What's their name?" value={name} onChangeText={setName} className="min-h-11 flex-1 rounded-md border border-line-strong px-3 font-sans text-ink" /><Pressable role="button" onPress={() => scrollAfterAction(() => { const answerName = name.trim(); setName(""); setNamingPerson(null); return answerName ? actions.setPerson(item.personId, "Type a name", answerName) : undefined; })} style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })} className="active:scale-[0.97] active:bg-surface-sunken min-h-11 justify-center px-3"><Text className="font-sans-semibold text-action">Save name</Text></Pressable></View>}
         </View>;
         if (item.kind === "person-confirm") return <View key={item.id} className="gap-3">
@@ -367,7 +368,7 @@ export default function DirectorScreen() {
         </View>;
         if (item.kind === "merge-followup") return <View key={item.id} className="gap-3">
           <ChatMessage from="mosae" text={item.text} />
-          <View className="flex-row gap-2">{item.photos.slice(0, 2).map((uri, index) => <StableUriImage key={`${item.id}-${index}`} uri={uri} accessibilityLabel={`Previously identified person ${index + 1}`} className="size-[72px] rounded-md" />)}</View>
+          {item.faceSamples?.length ? <FacePreviewStrip samples={item.faceSamples} limit={2} /> : <View className="flex-row gap-2">{item.photos.slice(0, 2).map((uri, index) => <StableUriImage key={`${item.id}-${index}`} uri={uri} accessibilityLabel={`Previously identified person ${index + 1}`} className="size-[72px] rounded-md" />)}</View>}
           {item.response
             ? <ChatMessage from="you" text={item.response === "No, another person" ? `No, another ${item.text.replace(/^Same | as before\?$/g, "")}` : item.response} />
             : <ChatProposal question={item.answer} replies={[{ id: "same", label: "Yes, same person" }, { id: "different", label: `No, another ${item.text.replace(/^Same | as before\?$/g, "")}` }]} onReply={(choice) => scrollAfterAction(() => actions.resolvePersonMerge(item.id, choice === "same"))} />}
@@ -377,7 +378,7 @@ export default function DirectorScreen() {
         if (item.kind === "people-summary") return <View key={item.id} className="gap-3">
           <View className="overflow-hidden rounded-md border border-line bg-surface-raised">{item.people.map((person) => <View key={person.personId} className="flex-row items-center gap-2 border-b border-line p-3">
             <Pressable role="button" accessibilityLabel={`Review ${person.name}`} onPress={() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: person.personId, name: person.name } } as any)} style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })} className="active:scale-[0.97] active:bg-surface-sunken flex-1 flex-row items-center gap-3">
-              {person.sampleUri ? <StableUriImage uri={person.sampleUri} accessibilityLabel={`${person.name} face`} className="size-12 rounded-full" /> : <View className="size-12 rounded-full bg-surface-sunken" />}
+              {person.sampleFace ? <FacePreviewStrip samples={[person.sampleFace]} limit={1} size={48} rounded /> : person.sampleUri ? <StableUriImage uri={person.sampleUri} accessibilityLabel={`${person.name} face`} className="size-12 rounded-full" /> : <View className="size-12 rounded-full bg-surface-sunken" />}
               <View className="flex-1"><Text className="font-sans-semibold text-label text-ink">{person.name}</Text><Text className="font-sans text-caption text-ink-muted">Tagged in {person.momentCount} {person.momentCount === 1 ? "moment" : "moments"}</Text></View><Text className="text-heading text-ink-muted">›</Text>
             </Pressable>
             <Pressable role="button" accessibilityLabel={`Change ${person.name}`} onPress={() => scrollAfterAction(() => actions.reopenPerson(person.personId))} className="min-h-11 justify-center px-2"><Text className="font-sans-semibold text-caption text-action">Change</Text></Pressable>

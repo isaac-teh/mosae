@@ -51,22 +51,22 @@ export type ChatInput = {
   notes: string[];
   filmWait?: { elapsedSec: number; videoCount: number };
   lateVideoDismissals?: string[];
-  mergeEvents?: { id: string; personId: string; targetPersonId: string; answer: string; targetName: string; sampleFaces: string[]; questionFaces?: string[]; momentCount: number; automatic?: boolean; response?: "Yes, same person" | "No, another person" }[];
+  mergeEvents?: { id: string; personId: string; targetPersonId: string; answer: string; targetName: string; sampleFaces: string[]; questionFaces?: string[]; faceSamples?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; momentCount: number; automatic?: boolean; response?: "Yes, same person" | "No, another person" }[];
 };
 
 export type ChatItem =
   | { kind: "upload-status"; id: string; photos: number; clips: number; uploadTotal: number; uploadDone: number; uploadFailed: number; understood: number; understoodTotal: number; uploadComplete: boolean; understandingActive: boolean; understoodComplete: boolean; facesApplicable: boolean; facesComplete: boolean }
   | { kind: "occasion-question"; id: string; uploadComplete: boolean }
-  | { kind: "mosae"; id: string; text: string; facts?: string[]; photos?: string[] }
+  | { kind: "mosae"; id: string; text: string; facts?: string[]; photos?: string[]; faceSamples?: { shotId: string; uri: string; bbox: [number, number, number, number] }[] }
   | { kind: "you"; id: string; text: string }
   | { kind: "typing"; id: string; text: string }
   | { kind: "preparing-videos"; id: string; text: string; progress: number }
   | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; questionText?: string }
   | { kind: "person-confirm"; id: string; personId: string; label: string; text: string; momentCount: number; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[] }
-  | { kind: "merge-followup"; id: string; text: string; answer: string; photos: string[]; response?: "Yes, same person" | "No, another person" }
+  | { kind: "merge-followup"; id: string; text: string; answer: string; photos: string[]; faceSamples?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; response?: "Yes, same person" | "No, another person" }
   | { kind: "anyone-else"; id: string; text?: string }
   | { kind: "missed-person"; id: string; personId: string; name: string }
-  | { kind: "people-summary"; id: string; people: { personId: string; name: string; momentCount: number; sampleUri?: string }[] }
+  | { kind: "people-summary"; id: string; people: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleFace?: { shotId: string; uri: string; bbox: [number, number, number, number] } }[] }
   | { kind: "set-aside"; id: string; blurry: number; duplicates: number; blurryPhotos: { shotId: string; uri: string }[]; blurryMore: number; duplicatePhotos: { shotId: string; uri: string }[]; duplicateMore: number }
   | { kind: "moments"; id: string; suggestedShotIds: string[] }
   | { kind: "direction"; id: string; aspect: "9:16" | "16:9"; orientation?: NonNullable<ProjectSummary["orientation"]>; pace: string; lengthSec: number; focus: string; momentCount: number }

@@ -102,8 +102,15 @@ describe("deriveChat state table", () => {
       { personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: ["scene"], sampleFaces: [{ shotId: "face", uri: "face-crop.jpg", bbox: [0, 0, 1, 1] }], days: [] },
     ] });
     expect(state.items.find((item) => item.id === "people-intro")).toBeTruthy();
-    expect(state.items.find((item) => item.id === "person-question-p1")).toMatchObject({ photos: ["face-crop.jpg"] });
+    expect(state.items.find((item) => item.id === "person-question-p1")).toMatchObject({ photos: ["face-crop.jpg"], faceSamples: [{ uri: "face-crop.jpg" }] });
     expect(state.items.find((item) => item.id === "person-answer-p1")?.kind).toBe("you");
+  });
+  it("spells people counts through ten in the intro", () => {
+    const people = Array.from({ length: 4 }, (_, index) => ({ personId: `p${index}`, name: null, role: null, skipped: false, momentCount: 6 - index, sampleShotIds: [], days: [] }));
+    const mergeEvents = ["p4", "p5"].map((personId) => ({ id: `merge-${personId}`, personId, targetPersonId: "p0", answer: "Mia", targetName: "Mia", sampleFaces: [], momentCount: 2 }));
+    const state = deriveChat({ ...base(), people, mergeEvents, peopleConfirmed: false, plan: null });
+    const intro = state.items.find((item) => item.id === "people-intro");
+    expect(intro?.kind === "mosae" ? intro.text : "").toBe("Six people appear often in your moments. Who is this?");
   });
   it("keeps the original story acknowledgement when the interpreted summary changes", () => {
     const state = deriveChat({ ...base(), intent: { text: "A trip" }, storySummary: "Our trip", people: [], peopleConfirmed: false });
