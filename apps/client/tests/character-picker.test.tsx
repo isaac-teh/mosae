@@ -113,38 +113,27 @@ describe("Character Picker", () => {
       moves: [{ faceId: "f-kid-2", personId: "p-kid" }],
       proposalId: "plan-1",
     });
-    expect(boundary.mutateProjectFlow).toHaveBeenCalledTimes(1);
-    expect(boundary.mutateProjectFlow.mock.calls[0]?.[1]).toMatchObject({
-      type: "batch",
-      actions: expect.arrayContaining([
-        expect.objectContaining({ type: "person", personId: "p-dad", skipped: true }),
-        expect.objectContaining({ type: "person", personId: "p-kid", name: "Mia" }),
-        expect.objectContaining({ type: "move-photo", faceId: "f-kid-2", personId: "p-kid" }),
-      ]),
-    });
+    expect(boundary.mutateProjectFlow).not.toHaveBeenCalled();
     expect(boundary.navigate).toHaveBeenCalledWith({ path: "/review-moments", params: { planId: "plan-2" } });
   });
 
-  it("can remove a face from a person and merge people", async () => {
+  it("does not expose Fix people merge, remove, or undo controls", async () => {
     await render(); await flush();
-    await clickByAriaLabel("Move A parent photo 1 to someone else");
-    await clickByAriaLabel("Remove photo from person");
-    await clickByAriaLabel("Same person as A parent");
+    expect(host.querySelector('[aria-label="Remove photo from person"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Same person as A parent"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Undo last change"]')).toBeNull();
     await clickByAriaLabel("Looks right"); await flush();
-    expect((boundary.confirmCast.mock.calls as any[][])[0]![1]).toMatchObject({
-      people: [{ personId: "p-dad" }],
-      moves: expect.arrayContaining([{ faceId: "f-dad", personId: null }]),
-      merges: [{ fromPersonId: "p-kid", toPersonId: "p-dad" }],
-    });
+    expect((boundary.confirmCast.mock.calls as any[][])[0]![1]).not.toHaveProperty("merges");
+    expect(boundary.mutateProjectFlow).not.toHaveBeenCalled();
   });
 
-  it("offers an explicit remake choice after people are changed on an existing film", async () => {
+  it("does not offer a remake action after the picker is saved", async () => {
     boundary.params = { ...boundary.params, afterFilm: "true" };
     await render(); await flush();
     await type("Emma", 0);
     await clickByAriaLabel("Looks right"); await flush();
-    expect(host.textContent).toContain("Remake the film with these changes?");
-    expect(boundary.navigate).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain("Remake the film with these changes?");
+    expect(boundary.navigate).toHaveBeenCalledWith({ path: "/review-moments", params: { planId: "plan-2" } });
   });
 
   it("drops a left-out person from the focus", async () => {

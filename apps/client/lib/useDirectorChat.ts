@@ -417,25 +417,16 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       peopleEdits.current.set(personId, { name: role === "Skip" ? null : personName ?? null, role: roleValue, skipped: role === "Skip" });
       const updated = people.map((person) => person.personId === personId ? { ...person, role: roleValue, name: personName ?? null, skipped: role === "Skip" } : person);
       const duplicate = personName && role !== "Skip" ? matchExistingPersonAnswer(personName, people.filter((person) => person.personId !== personId)) : null;
-      const target = duplicate ? people.find((person) => person.personId === duplicate.personId) : undefined;
-      const source = updated.find((person) => person.personId === personId);
-      const duplicateEvent = duplicate && target && source ? { id: `merge-followup-${personId}`, personId, targetPersonId: target.personId, answer: duplicate.answer, targetName: target.name ?? duplicate.answer, sampleFaces: (target.sampleFaces ?? []).slice(0, 2).map((face) => face.uri), questionFaces: (source.sampleFaces ?? []).slice(0, 2).map((face) => face.uri), momentCount: source.momentCount, ...(duplicate.mode === "automatic" ? { automatic: true } : {}) } : undefined;
-      if (duplicate?.mode === "confirm") {
-        const event = duplicateEvent!;
-        setInput((current) => ({ ...current, people: updated, mergeEvents: [...(current.mergeEvents ?? []).filter(({ id }) => id !== event.id), event] }));
-        personSaving.current = false;
-        return;
-      }
+      const automaticMerge = duplicate?.mode === "automatic" ? duplicate : null;
+      const castPeople = automaticMerge ? updated.filter((person) => person.personId !== personId) : updated;
       setInput((current) => ({ ...current, people: updated, pendingResponse: "person" }));
       try {
         await commitFlowAction({ type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, confirmed: role !== "Skip", skipped: role === "Skip" });
-        const merge = duplicate?.mode === "automatic" ? [{ fromPersonId: personId, toPersonId: duplicate.personId }] : [];
-        const castPeople = merge.length ? updated.filter((person) => person.personId !== personId) : updated;
-        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(merge.length ? { merges: merge } : {}), ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(automaticMerge ? { merges: [{ fromPersonId: personId, toPersonId: automaticMerge.personId }] } : {}), ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
         if (result?.proposalId) proposalId.current = result.proposalId;
-        setInput((current) => ({ ...current, people: castPeople, pendingResponse: undefined, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: false, ...(duplicateEvent ? { mergeEvents: [...(current.mergeEvents ?? []).filter(({ id }) => id !== duplicateEvent.id), duplicateEvent] } : {}) }));
+        setInput((current) => ({ ...current, people: castPeople, pendingResponse: undefined, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: false }));
         setError(null);
       } catch (cause) {
         if (previousEdit) peopleEdits.current.set(personId, previousEdit);
@@ -444,6 +435,15 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         setError(reportFailure(cause));
       }
       finally { if (isCurrentProject()) personSaving.current = false; }
+    },
+    confirmPersonIdentity(personId: string) {
+      setInput((current) => ({ ...current, personIdentityConfirmedIds: [...new Set([...(current.personIdentityConfirmedIds ?? []), personId])] }));
+    },
+    reopenPeople() {
+      const person = input.people?.find((entry) => !entry.skipped);
+      if (!person) return;
+      peopleEdits.current.set(person.personId, { name: null, role: null, skipped: false });
+      setInput((current) => ({ ...current, people: (current.people ?? []).map((entry) => entry.personId === person.personId ? { ...entry, name: null } : entry), personIdentityConfirmedIds: (current.personIdentityConfirmedIds ?? []).filter((id) => id !== person.personId), peopleConfirmed: false, peopleSummaryConfirmed: undefined }));
     },
     async resolvePersonMerge(eventId: string, samePerson: boolean) {
       const event = input.mergeEvents?.find(({ id }) => id === eventId);
@@ -514,7 +514,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
         if (result?.proposalId) proposalId.current = result.proposalId;
-        setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}) }));
+        setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: true } : {}) }));
+        const nextPlan = revisedPlan ?? input.plan;
+        if (nextPlan && input.summary?.ready.plan) await loadDirectionOptions(nextPlan.planId);
       } catch (cause) { setError(reportFailure(cause)); }
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
@@ -692,18 +694,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const interpretedPeople = result.change.kind === "occasion" && Array.isArray(result.change.mentionedPeople)
           ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
         const storySummary = result.change.kind === "occasion" && typeof result.change.storyText === "string" ? result.change.storyText : undefined;
-        setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}), ...(result.change.kind === "person" ? { change: result.change } : {}) });
+        setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
       } catch (cause) { setError(reportFailure(cause)); }
       finally { interpretInFlight.current = false; }
     },
     async confirmInterpret() {
-      if (!pendingInterpret) return;
-      const change = pendingInterpret.change;
-      if (change?.kind === "person" && change.personId && change.name) {
-        setPendingInterpret(null);
-        return actions.setPerson(change.personId, change.role ?? "other", change.name);
-      }
-      if (pendingInterpret.mentionedPeople || pendingInterpret.storySummary) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary);
+      if (pendingInterpret?.mentionedPeople || pendingInterpret?.storySummary) return actions.confirmOccasion(pendingInterpret.text, undefined, pendingInterpret.mentionedPeople, pendingInterpret.storySummary);
     },
     answerOccasion(text: string, storyText?: string) {
       if (occasionSaving.current) return;
