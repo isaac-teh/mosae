@@ -121,13 +121,14 @@ describe("Director chat", () => {
     mocks.repo.getFlow = vi.fn(async () => flow);
     mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, peopleSummaryConfirmed: action.confirmed }; return flow; });
     await renderScreen();
-    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Change Mia"]')).toBeTruthy();
     await click("Change Mia");
     await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
     await click("My daughter");
-    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
-    await click("Confirm");
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    await click("That's everyone");
     await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), { type: "people-summary-confirmed", confirmed: true }));
     await act(async () => root.unmount());
     root = createRoot(host);
@@ -660,15 +661,14 @@ describe("Director chat", () => {
     await click("Save name");
     await waitFor(() => expect(hasText("Who's this? They're in 5 of your moments.")).toBe(true));
     await click("Me");
-    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
-    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
     expect(host.querySelector('button[aria-label="Change"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Change Noah"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Skip for now"]')).toBeNull();
     expect(hasText("Three people appear often in your moments. Who is this?")).toBe(true);
     expect(hasText("Who's this? They're in 212 of your moments.")).toBe(true);
     expect(hasText("Noah")).toBe(true);
-    await click("Confirm");
+    await click("That's everyone");
 
     expect(hasText("Who's this? They're in 212 of your moments.")).toBe(true);
     expect(hasText("Noah")).toBe(true);
@@ -725,8 +725,8 @@ describe("Director chat", () => {
     setup({ readyPlan: true, people: [{ ...people[0], role: null }] }); await renderScreen();
     await click("A trip");
     await click("My daughter");
-    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
-    await click("Confirm");
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    await click("That's everyone");
     await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
     await click("Looks good");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-2"));
@@ -738,8 +738,8 @@ describe("Director chat", () => {
     await click("A trip");
     await click("My daughter");
     await click("My partner");
-    await waitFor(() => expect(host.querySelector('button[aria-label="Confirm"]')).toBeTruthy());
-    await click("Confirm");
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    await click("That's everyone");
 
     await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
     expect(hasText("Tap on the photos to view.")).toBe(true);
@@ -1110,6 +1110,7 @@ describe("Director chat", () => {
     expect(mocks.repo.interpret).not.toHaveBeenCalled();
     if (message === "There is someone else" || message === "another person" || message === "one more" || message === "I forgot someone" || message === "someone is missing" || message === "you missed someone") {
       expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Who did I miss? Type their name.")).toBe(true);
+      expect(chat.state.items.some((item) => item.kind === "you" && item.text === message)).toBe(true);
       expect(flow.missedPeople).toBeUndefined();
     } else {
       expect(flow.missedPeople).toEqual([{ personId: expect.stringMatching(/^p-missed-/), name: "Grandma" }]);
@@ -1140,6 +1141,25 @@ describe("Director chat", () => {
     expect(flow.peopleSummaryConfirmed).toBe(true);
     expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(false);
     expect(mocks.repo.interpret).not.toHaveBeenCalled();
+  });
+
+  it("keeps the missed-person clarification visible across refresh and accepts a name", async () => {
+    setup({ readyPlan: true, people: [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }] });
+    let flow: any = { revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map((person) => ({ personId: person.personId, name: person.personId === "person-1" ? "Mia" : "Noah", role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })), peopleSummaryConfirmed: true };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, ...(action.type === "missed-people" ? { missedPeople: action.people } : { peopleSummaryConfirmed: action.confirmed }) }; return flow; });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "anyone-else")).toBe(true));
+    await act(async () => chat.actions.send("There is someone else"));
+    expect(chat.state.items.some((item) => item.kind === "you" && item.text === "There is someone else")).toBe(true);
+    await act(async () => { await chat.retry(); });
+    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Who did I miss? Type their name.")).toBe(true);
+    await act(async () => chat.actions.send("Grandma"));
+    expect(flow.missedPeople).toEqual([{ personId: expect.stringMatching(/^p-missed-/), name: "Grandma" }]);
+    expect(chat.state.items.some((item) => item.kind === "you" && item.text === "There is someone else")).toBe(true);
+    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Grandma.")).toBe(true);
   });
 
   it("shows the retry message when interpretation fails and keeps the occasion reply usable", async () => {

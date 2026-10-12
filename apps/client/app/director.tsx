@@ -384,7 +384,6 @@ export default function DirectorScreen() {
             <Pressable role="button" accessibilityLabel={`Change ${person.name}`} onPress={() => scrollAfterAction(() => actions.reopenPerson(person.personId))} className="min-h-11 justify-center px-2"><Text className="font-sans-semibold text-caption text-action">Change</Text></Pressable>
           </View>)}</View>
           <Text className="font-sans text-caption text-ink-muted">Tap a person to check their moments.</Text>
-          <ChatProposal replies={[{ id: "right", label: "Confirm" }]} onReply={() => scrollAfterAction(actions.confirmPeopleSummary)} />
         </View>;
         return null;
       })}
