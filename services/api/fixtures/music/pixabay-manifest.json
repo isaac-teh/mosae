@@ -222,5 +222,68 @@
     "description": "Upbeat, polished and optimistic.",
     "sourceId": "606229",
     "artist": "atlasaudio"
+  },
+  "u_1tlkhq87qk-summer-adventures-231267.mp3": {
+    "mood": "playful",
+    "name": "Summer Adventures",
+    "description": "Bright upbeat pop with vocals.",
+    "sourceId": "231267",
+    "artist": "u_1tlkhq87qk"
+  },
+  "ashermusiccreator-beyond-the-horizon-231945.mp3": {
+    "mood": "celebratory",
+    "name": "Beyond the Horizon",
+    "description": "Uplifting vocal pop with an open feel.",
+    "sourceId": "231945",
+    "artist": "ashermusiccreator"
+  },
+  "u_ljqd8oawp1-whip-it-out-479291.mp3": {
+    "mood": "energetic",
+    "name": "Night Groove",
+    "description": "Confident vocal R&B pop with a driving beat.",
+    "sourceId": "479291",
+    "artist": "u_ljqd8oawp1"
+  },
+  "saavane-romantic-pop-song-be-mine-by-monet-138496.mp3": {
+    "mood": "tender",
+    "name": "Be Mine",
+    "description": "Romantic pop song with female vocals.",
+    "sourceId": "138496",
+    "artist": "saavane"
+  },
+  "feniceartist-quickie-life-221881.mp3": {
+    "mood": "playful",
+    "name": "Quick Life",
+    "description": "Light latin pop with vocals.",
+    "sourceId": "221881",
+    "artist": "feniceartist"
+  },
+  "saavane-dale-reggaeton-song-with-lyrics-236817.mp3": {
+    "mood": "energetic",
+    "name": "Dale",
+    "description": "Reggaeton with sung lyrics, upbeat and danceable.",
+    "sourceId": "236817",
+    "artist": "saavane"
+  },
+  "mcdd30-lo-fi-vocal-soft-my-love-115603.mp3": {
+    "mood": "tender",
+    "name": "My Love",
+    "description": "Soft lo-fi with gentle vocals.",
+    "sourceId": "115603",
+    "artist": "mcdd30"
+  },
+  "ashir-music-kaise-bhula-dun-ashir-acoustic-hindi-new-sad-song-250585.mp3": {
+    "mood": "reflective",
+    "name": "Kaise Bhula Dun",
+    "description": "Acoustic Hindi ballad, wistful vocals.",
+    "sourceId": "250585",
+    "artist": "ashir-music"
+  },
+  "ashir-music-romantic-song-tera-roothna-by-ashir-hindi-top-trending-viral-song-231771.mp3": {
+    "mood": "tender",
+    "name": "Tera Roothna",
+    "description": "Romantic Hindi pop song with vocals.",
+    "sourceId": "231771",
+    "artist": "ashir-music"
   }
 }
