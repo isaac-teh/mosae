@@ -1,0 +1,884 @@
+{
+  "config": {
+    "name": "beach",
+    "set": "trip1",
+    "duration": "30s",
+    "cadence": "tender",
+    "intent": "A tender family beach memory. Emphasize connection and the daughter having fun."
+  },
+  "transport": {
+    "model": "gemini-3.1-flash-lite",
+    "temperature": "SDK default",
+    "mediaResolution": "MEDIA_RESOLUTION_LOW"
+  },
+  "proposal": {
+    "schemaVersion": 1,
+    "id": "compare-beach",
+    "projectId": "local-comparison",
+    "storyIntentId": "local-intent",
+    "parentProposalId": null,
+    "state": "accepted",
+    "version": 1,
+    "title": "A tender family beach memory. Emphasize connection and the daughter having fun.",
+    "moments": [
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133873",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133873",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133873",
+        "description": "A couple in matching white clothing embracing on a sandy beach by the ocean.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133876",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133876",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133876",
+        "description": "A family moment on the beach where a father gives his daughter a piggyback ride while kissing his wife.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133877",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133877",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133877",
+        "description": "A family of three forming a heart shape with their hands and arms on a beach.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133878",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133878",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133878",
+        "description": "A family of three standing on a beach at sunset, embracing each other while smiling at the camera.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133880",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133880",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133880",
+        "description": "A family of three enjoying a bright day on a sandy beach.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133884",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133884",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133884",
+        "description": "A family of three sitting together on a sandy beach during a sunny day.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133885",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133885",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133885",
+        "description": "A family of three sharing a tender moment on the beach, with parents kissing their young daughter on her cheeks.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133887",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133887",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133887",
+        "description": "A family of three walking hand-in-hand along a sandy beach during the day.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133888",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133888",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133888",
+        "description": "A family of three standing on a sandy beach holding hands with arms outstretched under a clear blue sky.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133920",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133920",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133920",
+        "description": "A family of three standing on a grassy lawn in front of a luxury resort.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133922",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133922",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133922",
+        "description": "A young girl smiling while standing on a grassy lawn in front of a modern resort building.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      },
+      {
+        "id": "pexels-vo-van-ti-n-2037497312-34133923",
+        "shotId": "pexels-vo-van-ti-n-2037497312-34133923",
+        "kind": "photo",
+        "title": "pexels-vo-van-ti-n-2037497312-34133923",
+        "description": "A woman and a young girl holding hands and running together across a grassy lawn at a resort.",
+        "rationale": "Fixed accepted selection for paired comparison"
+      }
+    ],
+    "chapters": [
+      {
+        "id": "chapter-0",
+        "title": "all",
+        "summary": "A tender family beach memory. Emphasize connection and the daughter having fun.",
+        "momentIds": [
+          "pexels-vo-van-ti-n-2037497312-34133873",
+          "pexels-vo-van-ti-n-2037497312-34133876",
+          "pexels-vo-van-ti-n-2037497312-34133877",
+          "pexels-vo-van-ti-n-2037497312-34133878",
+          "pexels-vo-van-ti-n-2037497312-34133880",
+          "pexels-vo-van-ti-n-2037497312-34133884",
+          "pexels-vo-van-ti-n-2037497312-34133885",
+          "pexels-vo-van-ti-n-2037497312-34133887",
+          "pexels-vo-van-ti-n-2037497312-34133888",
+          "pexels-vo-van-ti-n-2037497312-34133920",
+          "pexels-vo-van-ti-n-2037497312-34133922",
+          "pexels-vo-van-ti-n-2037497312-34133923"
+        ]
+      }
+    ],
+    "constraints": {
+      "excludedShotIds": [],
+      "deselectedMomentIds": [],
+      "mustIncludeMomentIds": [],
+      "feedback": []
+    },
+    "openQuestions": []
+  },
+  "assets": {
+    "pexels-vo-van-ti-n-2037497312-34133873": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133873",
+      "file": "pexels-vo-van-ti-n-2037497312-34133873.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133873",
+        "file": "pexels-vo-van-ti-n-2037497312-34133873.jpg",
+        "kind": "photo",
+        "caption": "A couple in matching white clothing embracing on a sandy beach by the ocean.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "couple",
+              "partners"
+            ],
+            "attributes": [
+              "smiling",
+              "wearing white",
+              "barefoot"
+            ]
+          }
+        ],
+        "setting": "A scenic beach with ocean waves and a distant coastline.",
+        "activities": [
+          "embracing",
+          "walking",
+          "posing for a portrait"
+        ],
+        "mood": "romantic",
+        "shotType": "full-body shot",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "beach",
+          "vacation",
+          "couple",
+          "romance",
+          "summer"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133876": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133876",
+      "file": "pexels-vo-van-ti-n-2037497312-34133876.jpg",
+      "keyMomentScore": 1,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133876",
+        "file": "pexels-vo-van-ti-n-2037497312-34133876.jpg",
+        "kind": "photo",
+        "caption": "A family moment on the beach where a father gives his daughter a piggyback ride while kissing his wife.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "father",
+              "mother",
+              "daughter"
+            ],
+            "attributes": [
+              "caucasian",
+              "wearing white clothing",
+              "father has arm tattoos",
+              "father wearing fedora",
+              "outdoors"
+            ]
+          }
+        ],
+        "setting": "Sandy beach with ocean waves in the background.",
+        "activities": [
+          "piggyback ride",
+          "kissing"
+        ],
+        "mood": "Affectionate",
+        "shotType": "Medium full shot",
+        "aesthetics": 4.5,
+        "keyMomentScore": 5,
+        "tags": [
+          "family",
+          "beach",
+          "vacation",
+          "love",
+          "piggyback",
+          "summer"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133877": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133877",
+      "file": "pexels-vo-van-ti-n-2037497312-34133877.jpg",
+      "keyMomentScore": 1,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133877",
+        "file": "pexels-vo-van-ti-n-2037497312-34133877.jpg",
+        "kind": "photo",
+        "caption": "A family of three forming a heart shape with their hands and arms on a beach.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "father",
+              "mother",
+              "daughter"
+            ],
+            "attributes": [
+              "smiling",
+              "wearing white clothing",
+              "barefoot",
+              "man wearing fedora"
+            ]
+          }
+        ],
+        "setting": "Sandy beach by the ocean during the day.",
+        "activities": [
+          "forming a heart gesture",
+          "posing for a photo"
+        ],
+        "mood": "happy",
+        "shotType": "full body",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "family",
+          "beach",
+          "vacation",
+          "heart gesture",
+          "portrait"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133878": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133878",
+      "file": "pexels-vo-van-ti-n-2037497312-34133878.jpg",
+      "keyMomentScore": 1,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133878",
+        "file": "pexels-vo-van-ti-n-2037497312-34133878.jpg",
+        "kind": "photo",
+        "caption": "A family of three standing on a beach at sunset, embracing each other while smiling at the camera.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "father",
+              "mother",
+              "daughter"
+            ],
+            "attributes": [
+              "wearing white clothing",
+              "barefoot",
+              "man wearing hat"
+            ]
+          }
+        ],
+        "setting": "beachfront with ocean in the background",
+        "activities": [
+          "posing for a portrait",
+          "embracing"
+        ],
+        "mood": "happy and loving",
+        "shotType": "full-length portrait",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "family",
+          "beach",
+          "sunset",
+          "portrait",
+          "vacation"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133880": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133880",
+      "file": "pexels-vo-van-ti-n-2037497312-34133880.jpg",
+      "keyMomentScore": 1,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133880",
+        "file": "pexels-vo-van-ti-n-2037497312-34133880.jpg",
+        "kind": "photo",
+        "caption": "A family of three enjoying a bright day on a sandy beach.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "father",
+              "mother",
+              "daughter"
+            ],
+            "attributes": [
+              "wearing white clothing",
+              "barefoot",
+              "father wearing fedora"
+            ]
+          }
+        ],
+        "setting": "A sandy beach near the ocean under a clear sky during the day.",
+        "activities": [
+          "father holding daughter in arms",
+          "family interaction",
+          "standing on shore"
+        ],
+        "mood": "joyful and intimate",
+        "shotType": "full body",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "family",
+          "beach",
+          "vacation",
+          "sunlight",
+          "ocean"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133884": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133884",
+      "file": "pexels-vo-van-ti-n-2037497312-34133884.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133884",
+        "file": "pexels-vo-van-ti-n-2037497312-34133884.jpg",
+        "kind": "photo",
+        "caption": "A family of three sitting together on a sandy beach during a sunny day.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "father",
+              "mother",
+              "daughter"
+            ],
+            "attributes": [
+              "smiling",
+              "dressed in white",
+              "family unit"
+            ]
+          }
+        ],
+        "setting": "A scenic sandy beach at the ocean shore with waves in the background.",
+        "activities": [
+          "posing for a photograph",
+          "sitting on the sand"
+        ],
+        "mood": "Joyful and peaceful",
+        "shotType": "Medium shot",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "family",
+          "beach",
+          "vacation",
+          "ocean",
+          "portrait"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133885": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133885",
+      "file": "pexels-vo-van-ti-n-2037497312-34133885.jpg",
+      "keyMomentScore": 1,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133885",
+        "file": "pexels-vo-van-ti-n-2037497312-34133885.jpg",
+        "kind": "photo",
+        "caption": "A family of three sharing a tender moment on the beach, with parents kissing their young daughter on her cheeks.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "father",
+              "mother",
+              "daughter"
+            ],
+            "attributes": [
+              "wearing white clothing",
+              "father wearing a fedora",
+              "daughter laughing",
+              "parents showing affection"
+            ]
+          }
+        ],
+        "setting": "Sandy beach by the ocean during the day",
+        "activities": [
+          "kissing on cheek",
+          "posing for a portrait",
+          "sitting on the sand"
+        ],
+        "mood": "Joyful and loving",
+        "shotType": "Medium shot",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "family",
+          "beach",
+          "affection",
+          "candid",
+          "white outfits",
+          "vacation"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133887": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133887",
+      "file": "pexels-vo-van-ti-n-2037497312-34133887.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133887",
+        "file": "pexels-vo-van-ti-n-2037497312-34133887.jpg",
+        "kind": "photo",
+        "caption": "A family of three walking hand-in-hand along a sandy beach during the day.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "mother",
+              "child",
+              "father"
+            ],
+            "attributes": [
+              "wearing white clothing",
+              "barefoot",
+              "smiling",
+              "casual attire"
+            ]
+          }
+        ],
+        "setting": "A scenic beach with ocean waves and a clear blue sky.",
+        "activities": [
+          "walking",
+          "holding hands"
+        ],
+        "mood": "joyful and peaceful",
+        "shotType": "full-body shot",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "family",
+          "beach",
+          "vacation",
+          "outdoor",
+          "summer"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133888": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133888",
+      "file": "pexels-vo-van-ti-n-2037497312-34133888.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133888",
+        "file": "pexels-vo-van-ti-n-2037497312-34133888.jpg",
+        "kind": "photo",
+        "caption": "A family of three standing on a sandy beach holding hands with arms outstretched under a clear blue sky.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "father",
+              "mother",
+              "daughter"
+            ],
+            "attributes": [
+              "dressed in white",
+              "smiling",
+              "holding hands"
+            ]
+          }
+        ],
+        "setting": "Sunny beach with waves and ocean in the background",
+        "activities": [
+          "standing",
+          "posing for a photo",
+          "holding hands"
+        ],
+        "mood": "joyful",
+        "shotType": "full-body shot",
+        "aesthetics": 5,
+        "keyMomentScore": 4,
+        "tags": [
+          "family",
+          "beach",
+          "vacation",
+          "summer",
+          "ocean"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133920": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133920",
+      "file": "pexels-vo-van-ti-n-2037497312-34133920.jpg",
+      "keyMomentScore": 0.8,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133920",
+        "file": "pexels-vo-van-ti-n-2037497312-34133920.jpg",
+        "kind": "photo",
+        "caption": "A family of three standing on a grassy lawn in front of a luxury resort.",
+        "subjects": [
+          {
+            "peopleCount": 3,
+            "roles": [
+              "father",
+              "mother",
+              "daughter"
+            ],
+            "attributes": [
+              "wearing white clothing",
+              "smiling",
+              "posing together"
+            ]
+          }
+        ],
+        "setting": "An expansive green lawn in front of a large, modern tiered resort building at dusk.",
+        "activities": [
+          "posing for a photograph"
+        ],
+        "mood": "Joyful and serene",
+        "shotType": "Full body shot",
+        "aesthetics": 4.5,
+        "keyMomentScore": 4,
+        "tags": [
+          "family",
+          "vacation",
+          "resort",
+          "tropical",
+          "golden hour"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133922": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133922",
+      "file": "pexels-vo-van-ti-n-2037497312-34133922.jpg",
+      "keyMomentScore": 0.6,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133922",
+        "file": "pexels-vo-van-ti-n-2037497312-34133922.jpg",
+        "kind": "photo",
+        "caption": "A young girl smiling while standing on a grassy lawn in front of a modern resort building.",
+        "subjects": [
+          {
+            "peopleCount": 1,
+            "roles": [
+              "child"
+            ],
+            "attributes": [
+              "long dark hair",
+              "wearing white dress",
+              "barefoot",
+              "smiling"
+            ]
+          }
+        ],
+        "setting": "Outdoor green lawn with a large modern resort building in the background.",
+        "activities": [
+          "posing",
+          "smiling"
+        ],
+        "mood": "happy",
+        "shotType": "full body",
+        "aesthetics": 4,
+        "keyMomentScore": 3,
+        "tags": [
+          "resort",
+          "child",
+          "vacation",
+          "summer",
+          "outdoors"
+        ]
+      }
+    },
+    "pexels-vo-van-ti-n-2037497312-34133923": {
+      "kind": "photo",
+      "assetId": "pexels-vo-van-ti-n-2037497312-34133923",
+      "file": "pexels-vo-van-ti-n-2037497312-34133923.jpg",
+      "keyMomentScore": 1,
+      "localTime": null,
+      "analysis": {
+        "itemId": "pexels-vo-van-ti-n-2037497312-34133923",
+        "file": "pexels-vo-van-ti-n-2037497312-34133923.jpg",
+        "kind": "photo",
+        "caption": "A woman and a young girl holding hands and running together across a grassy lawn at a resort.",
+        "subjects": [
+          {
+            "peopleCount": 2,
+            "roles": [
+              "mother",
+              "daughter"
+            ],
+            "attributes": [
+              "wearing white dresses",
+              "barefoot",
+              "smiling",
+              "long dark hair"
+            ]
+          }
+        ],
+        "setting": "An expansive green lawn in front of a large modern resort building with palm trees.",
+        "activities": [
+          "running",
+          "holding hands"
+        ],
+        "mood": "joyful",
+        "shotType": "full-body shot",
+        "aesthetics": 5,
+        "keyMomentScore": 5,
+        "tags": [
+          "family",
+          "vacation",
+          "resort",
+          "outdoors",
+          "summer"
+        ]
+      }
+    }
+  },
+  "candidates": [
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133873#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133873",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 1,
+      "description": "A couple in matching white clothing embracing on a sandy beach by the ocean.. A scenic beach with ocean waves and a distant coastline.. romantic. embracing. walking. posing for a portrait"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133876#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133876",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 0.9,
+      "description": "A family moment on the beach where a father gives his daughter a piggyback ride while kissing his wife.. Sandy beach with ocean waves in the background.. Affectionate. piggyback ride. kissing"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133877#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133877",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 1,
+      "emotion": 0.85,
+      "description": "A family of three forming a heart shape with their hands and arms on a beach.. Sandy beach by the ocean during the day.. happy. forming a heart gesture. posing for a photo"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133878#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133878",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 1,
+      "emotion": 0.85,
+      "description": "A family of three standing on a beach at sunset, embracing each other while smiling at the camera.. beachfront with ocean in the background. happy and loving. posing for a portrait. embracing"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133880#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133880",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 1,
+      "emotion": 0.85,
+      "description": "A family of three enjoying a bright day on a sandy beach.. A sandy beach near the ocean under a clear sky during the day.. joyful and intimate. father holding daughter in arms. family interaction. standing on shore"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133884#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133884",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 1,
+      "emotion": 0.85,
+      "description": "A family of three sitting together on a sandy beach during a sunny day.. A scenic sandy beach at the ocean shore with waves in the background.. Joyful and peaceful. posing for a photograph. sitting on the sand"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133885#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133885",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 1,
+      "emotion": 0.85,
+      "description": "A family of three sharing a tender moment on the beach, with parents kissing their young daughter on her cheeks.. Sandy beach by the ocean during the day. Joyful and loving. kissing on cheek. posing for a portrait. sitting on the sand"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133887#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133887",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 1,
+      "emotion": 0.85,
+      "description": "A family of three walking hand-in-hand along a sandy beach during the day.. A scenic beach with ocean waves and a clear blue sky.. joyful and peaceful. walking. holding hands"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133888#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133888",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 1,
+      "emotion": 0.85,
+      "description": "A family of three standing on a sandy beach holding hands with arms outstretched under a clear blue sky.. Sunny beach with waves and ocean in the background. joyful. standing. posing for a photo. holding hands"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133920#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133920",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 0.9,
+      "emotion": 0.85,
+      "description": "A family of three standing on a grassy lawn in front of a luxury resort.. An expansive green lawn in front of a large, modern tiered resort building at dusk.. Joyful and serene. posing for a photograph"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133922#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133922",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 0.8,
+      "emotion": 0.85,
+      "description": "A young girl smiling while standing on a grassy lawn in front of a modern resort building.. Outdoor green lawn with a large modern resort building in the background.. happy. posing. smiling"
+    },
+    {
+      "candidateId": "pexels-vo-van-ti-n-2037497312-34133923#still@c0",
+      "itemId": "pexels-vo-van-ti-n-2037497312-34133923",
+      "kind": "photo",
+      "chapterIndex": 0,
+      "minHoldSec": 2.2,
+      "maxHoldSec": 3.2,
+      "quality": 1,
+      "emotion": 0.85,
+      "energy": 0.75,
+      "description": "A woman and a young girl holding hands and running together across a grassy lawn at a resort.. An expansive green lawn in front of a large modern resort building with palm trees.. joyful. running. holding hands"
+    }
+  ],
+  "trackId": "lyria-tender",
+  "timeOf": {
+    "pexels-vo-van-ti-n-2037497312-34133873": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 0.8
+    },
+    "pexels-vo-van-ti-n-2037497312-34133876": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 1
+    },
+    "pexels-vo-van-ti-n-2037497312-34133877": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 1
+    },
+    "pexels-vo-van-ti-n-2037497312-34133878": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 1
+    },
+    "pexels-vo-van-ti-n-2037497312-34133880": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 1
+    },
+    "pexels-vo-van-ti-n-2037497312-34133884": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 0.8
+    },
+    "pexels-vo-van-ti-n-2037497312-34133885": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 1
+    },
+    "pexels-vo-van-ti-n-2037497312-34133887": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 0.8
+    },
+    "pexels-vo-van-ti-n-2037497312-34133888": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 0.8
+    },
+    "pexels-vo-van-ti-n-2037497312-34133920": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 0.8
+    },
+    "pexels-vo-van-ti-n-2037497312-34133922": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 0.6
+    },
+    "pexels-vo-van-ti-n-2037497312-34133923": {
+      "chapter": 0,
+      "localTime": null,
+      "score": 1
+    }
+  }
+}
