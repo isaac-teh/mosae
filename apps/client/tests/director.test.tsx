@@ -591,6 +591,8 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Change"]')).toBeTruthy();
     await click("Confirm");
 
+    await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
+    await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
     expect(hasText("Length")).toBe(false);
     expect(host.querySelector('button[aria-label="Fix people"]')).toBeNull();
@@ -645,8 +647,33 @@ describe("Director chat", () => {
     await waitFor(() => expect(hasText("Did I miss anyone?")).toBe(true));
     await click("That's everyone");
     await click("Confirm");
+    await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
+    await click("Looks good");
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-2"));
     expect(host.querySelector('button[aria-label="Sounds good"]')).toBeTruthy();
+  });
+
+  it("shows the set-aside review after confirming the people summary and defers direction options", async () => {
+    setup({ readyPlan: true }); await renderScreen();
+    await click("A trip");
+    await click("My daughter");
+    await click("My partner");
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    await click("That's everyone");
+    await click("Confirm");
+
+    await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
+    expect(hasText("Tap on the photos to view.")).toBe(true);
+    expect(host.querySelectorAll('img[alt="Near-duplicates photo"]')).toHaveLength(4);
+    expect(hasText("+116")).toBe(true);
+    expect(hasText("Looks good")).toBe(true);
+    expect(host.querySelector('button[aria-label="Sounds good"]')).toBeNull();
+    expect(mocks.repo.getDirectionOptions).not.toHaveBeenCalled();
+
+    await click("Looks good");
+    await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-2"));
+    expect(host.querySelector('[aria-label="Filtered photos"]')).toBeNull();
+    expect(host.textContent).toContain("Looks good");
   });
 
   it("uses each returned proposal ID for the next cast edit", async () => {
