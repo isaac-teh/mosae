@@ -224,6 +224,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const confirmedStory = resume.storyText ?? (nextSummary.country ? `Yes, our ${nextSummary.country} trip` : `Yes, that's our story`);
         const hasGeneration = Boolean(resume.generationId);
         const hasFlowRecord = typeof repository.getFlow === "function";
+        const allFlowPeopleAnswered = nextSummary.ready.faces && mapped !== null && (mapped.length === 0 || mapped.every((person) => {
+          const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
+          return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto));
+        }));
+        const peopleSummaryConfirmed = acceptedFlow?.peopleSummaryConfirmed === true || (hasFlowRecord && acceptedFlow?.peopleSummaryConfirmed === undefined && (hasGeneration || allFlowPeopleAnswered));
         const setAside = getSetAsideSummary(plan);
         const needsFilteredPhotoReview = setAside.blurry + setAside.duplicates > 0;
         const isFilmReady = Boolean(film) && (resume.generationStatus === "playable" || resume.generationStatus === "rendering" || resume.generationStatus === "saved");
@@ -240,11 +245,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
             const local = current.people?.find((item) => item.personId === person.personId);
             return local?.name || local?.skipped ? { ...person, ...local } : person;
           }) ?? null : current.people,
-          peopleConfirmed: hasFlowRecord ? nextSummary.ready.faces && mapped !== null && (mapped.length === 0 || mapped.every((person) => {
-            const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
-            return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto));
-          })) : Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)),
-          peopleSummaryConfirmed: hasFlowRecord ? acceptedFlow?.peopleSummaryConfirmed === true : undefined,
+          peopleConfirmed: hasFlowRecord ? allFlowPeopleAnswered : Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)),
+          peopleSummaryConfirmed: hasFlowRecord ? peopleSummaryConfirmed : undefined,
           plan,
           directionNote: plan?.directionRecommendation ?? "For these moments, I’d suggest this.",
           momentsConfirmed: hasGeneration || Boolean(plan && !needsFilteredPhotoReview),
@@ -268,7 +270,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     }) ?? null : current.people, peopleConfirmed: typeof repository.getFlow !== "function" ? current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) : nextSummary.ready.faces && mapped !== null && (mapped.length === 0 || mapped.every((person) => {
       const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
       return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto));
-    })), peopleSummaryConfirmed: typeof repository.getFlow === "function" ? acceptedFlow?.peopleSummaryConfirmed === true : current.peopleSummaryConfirmed }));
+    })), peopleSummaryConfirmed: typeof repository.getFlow !== "function" ? current.peopleSummaryConfirmed : acceptedFlow?.peopleSummaryConfirmed === true || (acceptedFlow?.peopleSummaryConfirmed === undefined && (current.peopleSummaryConfirmed === true || Boolean(current.generation) || (nextSummary.ready.faces && mapped !== null && mapped.length > 0 && mapped.every((person) => {
+      const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
+      return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto));
+    })))) }));
     setResumeLoaded(true);
     if (proposalId.current && nextSummary.ready.plan && !planLoad.current && !currentPlan.current) {
       planLoad.current = true;

@@ -132,6 +132,16 @@ describe("Director chat", () => {
     expect(hasText("Thanks. I've tagged all")).toBe(false);
     expect(host.querySelector('[aria-label="Filtered photos"]')).toBeTruthy();
   });
+
+  it("treats a legacy flow without summary confirmation as past people when a generation exists", async () => {
+    setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: "film-1", generationStatus: "playable" }) });
+    const personFlow = (personId: string, name: string) => ({ personId, name, role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
+    mocks.repo.getFlow = vi.fn(async () => ({ revision: 6, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map((person) => personFlow(person.personId, "Mia")) }));
+    await renderScreen();
+    await waitFor(() => expect(hasText("Film ready")).toBe(true));
+    expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
+    expect(hasText("Thanks. I've tagged all")).toBe(false);
+  });
   it("defaults to the suggested soundtrack but keeps an existing explicit pick", () => {
     const options = [{ id: "first", name: "First", description: "" }, { id: "suggested", name: "Suggested", description: "", suggested: true }];
     expect(defaultSoundtrackId(null, options)).toBe("suggested");
