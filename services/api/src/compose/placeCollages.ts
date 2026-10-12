@@ -213,10 +213,17 @@ export function placeCollages(timeline: Timeline, sources: Map<string, CollageSo
       return dimensions?.width && dimensions.height ? dimensions.width / dimensions.height : source.width && source.height ? source.width / source.height : timeline.aspect === "16:9" ? 16 / 9 : 9 / 16;
     });
     const frameAspect = timeline.aspect === "16:9" ? 16 / 9 : 9 / 16;
+    const landscapeCount = sourceAspects.filter((aspect) => aspect > 1).length;
+    const portraitCount = sourceAspects.filter((aspect) => aspect < 1).length;
+    const wideTopPrior = frameAspect > 1 && landscapeCount === 1 && portraitCount === 2;
     const score = (layoutId: string) => {
       const slots = collageSlotAspects(layoutId, layoutId, group.length, frameAspect);
       const assignment = assignCollageSlots(sourceAspects, slots);
-      return assignment.reduce((sum, slotIndex, sourceIndex) => sum + Math.abs(Math.log(sourceAspects[sourceIndex]! / (slots[slotIndex] ?? sourceAspects[sourceIndex]!))), 0);
+      const mismatch = assignment.reduce((sum, slotIndex, sourceIndex) => sum + Math.abs(Math.log(sourceAspects[sourceIndex]! / (slots[slotIndex] ?? sourceAspects[sourceIndex]!))), 0);
+      // In a wide film, one landscape plus two portraits reads best with the
+      // landscape leading the frame and portraits below, even when a uniform
+      // grid has a marginally smaller raw crop score.
+      return mismatch - (wideTopPrior && layoutId === "grid-wide-top" ? 2 : 0);
     };
     const bestScore = Math.min(...choices.map((combo) => score(combo.layoutId)));
     const bestChoices = choices.filter((combo) => score(combo.layoutId) <= bestScore + 0.08);

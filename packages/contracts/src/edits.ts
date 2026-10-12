@@ -267,12 +267,12 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         const layoutChange = op.op === "setCollageLayout" ? op : nextOp?.op === "setCollageLayout" && nextOp.clipId === op.clipId ? nextOp : null;
         const motionChange = op.op === "setCollageMotion" ? op : nextOp?.op === "setCollageMotion" && nextOp.clipId === op.clipId ? nextOp : null;
         const isLayoutMotionPair = Boolean(layoutChange && motionChange && ((op.op === "setCollageLayout" && nextOp?.op === "setCollageMotion") || (op.op === "setCollageMotion" && nextOp?.op === "setCollageLayout")));
-        const next = isLayoutMotionPair ? { ...spec, layoutId: layoutChange!.layoutId, motionId: motionChange!.motionId, slots: spec.slots.map((slot) => ({ ...slot, crop: undefined })) }
-          : op.op === "setCollageLayout" ? { ...spec, layoutId: op.layoutId, slots: spec.slots.map((slot) => ({ ...slot, crop: undefined })) }
+        const next = isLayoutMotionPair ? { ...spec, layoutId: layoutChange!.layoutId, motionId: motionChange!.motionId, slots: spec.slots.map((slot) => slot.manualCrop ? slot : ({ ...slot, crop: undefined })) }
+          : op.op === "setCollageLayout" ? { ...spec, layoutId: op.layoutId, slots: spec.slots.map((slot) => slot.manualCrop ? slot : ({ ...slot, crop: undefined })) }
           : op.op === "setCollageMotion" ? { ...spec, motionId: op.motionId }
           : op.op === "setCollageEffect" ? { ...spec, effectId: op.effectId }
           : op.op === "replaceCollageSlot" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { slotId: slot.slotId, shotId: op.shotId, kind: op.kind } : slot) }
-          : op.op === "setCollageCrop" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { ...slot, crop: op.crop } : slot) }
+          : op.op === "setCollageCrop" ? { ...spec, slots: spec.slots.map((slot) => slot.slotId === op.slotId ? { ...slot, crop: op.crop, manualCrop: true } : slot) }
           : op.op === "addCollageSlot" ? { ...spec, slots: [...spec.slots, { slotId: op.slotId, shotId: op.shotId, kind: op.kind }] }
           : { ...spec, slots: spec.slots.filter((slot) => slot.slotId !== op.slotId) };
         const changed = collageWithSpec(item.clip, next as CollageClip["spec"]);

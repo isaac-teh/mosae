@@ -93,11 +93,19 @@ export function collageSlotAspects(layoutId: string, variant: string, slotCount:
 
 /** Minimum total log-aspect mismatch; source order breaks equal-cost ties. */
 export function assignCollageSlots(sourceAspects: number[], slotAspects: number[]): number[] {
-  const n=Math.min(sourceAspects.length,slotAspects.length), used=new Set<number>(), result=Array(sourceAspects.length).fill(-1);
-  for(let i=0;i<n;i++) {
-    let best=-1, cost=Infinity;
-    for(let j=0;j<n;j++) if(!used.has(j)) { const c=Math.abs(Math.log(sourceAspects[i]!/slotAspects[j]!)); if(c<cost){cost=c;best=j;} }
-    result[i]=best; used.add(best);
-  }
-  return result;
+  const n=Math.min(sourceAspects.length,slotAspects.length);
+  const memo=new Map<string,{cost:number; slots:number[]}>();
+  const solve=(sourceIndex:number,mask:number):{cost:number;slots:number[]}=>{
+    if(sourceIndex>=n)return {cost:0,slots:[]};
+    const key=`${sourceIndex}:${mask}`,cached=memo.get(key);if(cached)return cached;
+    let best={cost:Infinity,slots:[] as number[]};
+    for(let slotIndex=0;slotIndex<n;slotIndex++)if(!(mask&(1<<slotIndex))){
+      const next=solve(sourceIndex+1,mask|(1<<slotIndex));
+      const cost=Math.abs(Math.log(sourceAspects[sourceIndex]!/slotAspects[slotIndex]!))+next.cost;
+      if(cost<best.cost-1e-12)best={cost,slots:[slotIndex,...next.slots]};
+    }
+    memo.set(key,best);return best;
+  };
+  const result=solve(0,0).slots;
+  return [...result,...Array.from({length:sourceAspects.length-n},(_,index)=>n+index)];
 }

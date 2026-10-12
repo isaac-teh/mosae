@@ -67,6 +67,8 @@ const slotSchema = z.strictObject({
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
   empty: z.literal(true).optional(),
+  /** True only for an explicit user crop; automatic focus crops stay recomputable. */
+  manualCrop: z.literal(true).optional(),
   crop: z.strictObject({
     x: z.number().min(0).max(1),
     y: z.number().min(0).max(1),

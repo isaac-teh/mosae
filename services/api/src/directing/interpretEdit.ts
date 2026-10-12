@@ -1,4 +1,4 @@
-import { ALLOWED_COMBOS, COLLAGE_EFFECTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, EditOpSchema, applyEdits, type EditOp, type Timeline } from "@mosae/contracts";
+import { ALLOWED_COMBOS, COLLAGE_EFFECTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, EditOpSchema, applyEdits, assignCollageSlots, collageSlotAspects, type EditOp, type Timeline } from "@mosae/contracts";
 import type { GenerateOptions } from "../gemini/client.js";
 import { MODELS } from "../gemini/pricing.js";
 import { DemoLimitReached } from "../gemini/errors.js";
@@ -246,7 +246,7 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
     if (ops.length > 20 || !ops.length) return { kind: "unsupported", reply: fallbackReply, ops: [] };
     if (invalidContextOp && ops.some((op) => op.op === "addCollageSlot")) return { kind: "clarify", reply: "Which unused photos from this project should I add to the collage?", ops: [] };
     if (invalidContextOp) return { kind: "unsupported", reply: "I couldn't apply that because it refers to a clip or source outside the available project context.", ops: [] };
-    const capacityFit = fitAddedCollageSlots(req.timeline, ops);
+    const capacityFit = fitAddedCollageSlots(req.timeline, ops, req.groundedContext?.candidates ?? []);
     if (capacityFit.clarify) return { kind: "clarify", reply: capacityFit.clarify, ops: [] };
     const fittedOps = capacityFit.ops;
     const applied = applyEdits(req.timeline, fittedOps);
@@ -271,7 +271,20 @@ function usedShotIdsForTimeline(timeline: Timeline): Set<string> {
   return new Set(timeline.videoClips.flatMap((clip) => "kind" in clip ? clip.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId]));
 }
 
-function fitAddedCollageSlots(timeline: Timeline, ops: EditOp[]): { ops: EditOp[]; clarify?: string } {
+function fitAddedCollageSlots(timeline: Timeline, ops: EditOp[], candidates: NonNullable<InterpretEditRequest["groundedContext"]>["candidates"] = []): { ops: EditOp[]; clarify?: string } {
+  const candidateByShot = new Map(candidates.map((candidate) => [candidate.shotId, candidate]));
+  const frameAspect = timeline.aspect === "16:9" ? 16 / 9 : 9 / 16;
+  const sourceAspect = (slot: { shotId?: string; width?: number; height?: number }) => {
+    const candidate = slot.shotId ? candidateByShot.get(slot.shotId) : undefined;
+    const width = slot.width ?? candidate?.width, height = slot.height ?? candidate?.height;
+    return width && height ? width / height : frameAspect;
+  };
+  const layoutCost = (layoutId: string, slots: Array<{ shotId?: string; width?: number; height?: number }>) => {
+    const sourceAspects = slots.map(sourceAspect);
+    const targets = collageSlotAspects(layoutId, layoutId, slots.length, frameAspect);
+    const assignment = assignCollageSlots(sourceAspects, targets);
+    return assignment.reduce((sum, slotIndex, sourceIndex) => sum + Math.abs(Math.log(sourceAspects[sourceIndex]! / (targets[slotIndex] ?? sourceAspects[sourceIndex]!))), 0);
+  };
   const fitted: EditOp[] = [];
   for (const op of ops) {
     if (op.op === "addCollageSlot") {
@@ -282,12 +295,13 @@ function fitAddedCollageSlots(timeline: Timeline, ops: EditOp[]): { ops: EditOp[
         if (target && "kind" in target && !addResult.ok && /This layout holds up to \d+ photos/.test(addResult.error)) {
           const needed = target.spec.slots.length + 1;
           const videoCount = target.spec.slots.filter((slot) => slot.kind === "video").length + (op.kind === "video" ? 1 : 0);
+          const previewSlots = [...target.spec.slots, { slotId: op.slotId, shotId: op.shotId, kind: op.kind }];
           const choices = ALLOWED_COMBOS.flatMap((combo) => {
             const layout = COLLAGE_LAYOUTS.find((item) => item.id === combo.layoutId)!;
             return layout.maxSlots >= needed && layout.maxVideoCells >= videoCount && layout.aspect.some((aspect) => aspect === before.timeline.aspect)
-              ? [{ ...combo, maxSlots: layout.maxSlots, sameMotion: combo.motionId === target.spec.motionId }]
+              ? [{ ...combo, maxSlots: layout.maxSlots, sameMotion: combo.motionId === target.spec.motionId, fit: layoutCost(layout.id, previewSlots) }]
               : [];
-          }).sort((a, b) => Number(b.sameMotion) - Number(a.sameMotion) || a.maxSlots - b.maxSlots || a.layoutId.localeCompare(b.layoutId));
+          }).sort((a, b) => a.fit - b.fit || Number(b.sameMotion) - Number(a.sameMotion) || a.maxSlots - b.maxSlots || a.layoutId.localeCompare(b.layoutId));
           const selected = choices[0];
           if (!selected) return { ops: [], clarify: "That collage is full - add these as a new collage instead?" };
           fitted.push({ op: "setCollageLayout", clipId: op.clipId, layoutId: selected.layoutId });
@@ -296,6 +310,21 @@ function fitAddedCollageSlots(timeline: Timeline, ops: EditOp[]): { ops: EditOp[
       }
     }
     fitted.push(op);
+  }
+  const planned = applyEdits(timeline, fitted);
+  if (!planned.ok) return { ops: fitted };
+  const affected = new Set(fitted.flatMap((op) => ["addCollageSlot", "replaceCollageSlot", "setCollageLayout", "setCollageSpec"].includes(op.op) && "clipId" in op ? [op.clipId] : []));
+  for (const clip of planned.timeline.videoClips) {
+    if (!("kind" in clip) || !affected.has(clip.clipId)) continue;
+    const enriched = clip.spec.slots.map((slot) => {
+      const candidate = slot.shotId ? candidateByShot.get(slot.shotId) : undefined;
+      return { ...slot, ...(slot.width || !candidate?.width ? {} : { width: candidate.width }), ...(slot.height || !candidate?.height ? {} : { height: candidate.height }) };
+    });
+    const aspects = collageSlotAspects(clip.spec.layoutId, clip.spec.layoutId, enriched.length, frameAspect);
+    const assignment = assignCollageSlots(enriched.map(sourceAspect), aspects);
+    const ordered = enriched.map((slot, sourceIndex) => ({ slot, sourceIndex })).sort((a, b) => assignment[a.sourceIndex]! - assignment[b.sourceIndex]!).map(({ slot }) => slot);
+    const changed = ordered.some((slot, index) => slot.slotId !== clip.spec.slots[index]?.slotId || slot.width !== clip.spec.slots[index]?.width || slot.height !== clip.spec.slots[index]?.height);
+    if (changed) fitted.push({ op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, slots: ordered } });
   }
   return { ops: fitted };
 }

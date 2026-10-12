@@ -32,6 +32,10 @@ const STILL_MOTION_BY_LAYOUT: Record<CollageSpec["layoutId"], CollageSpec["motio
 const sampleSources = process.env.MOSAE_COLLAGE_STILL_PLACEHOLDERS === "1"
   ? PLACEHOLDER_PHOTOS.map((file) => staticFile(file.replace(/^\//, "")))
   : TRIP_PHOTO_FILES.map((file) => staticFile(file));
+const mixedOrientationSpec = createCollageSpec("grid-wide-top", {
+  seed: "mixed-orientation-fixture",
+  slots: ["/photos/photo-a.svg", "/photos/photo-landscape.svg", "/photos/photo-b.svg"].map((src, index) => ({ slotId: `mixed-${index + 1}`, src: staticFile(src.slice(1)), kind: "photo" as const })),
+});
 
 export function specForLayout(
   layoutId: CollageSpec["layoutId"],
@@ -82,6 +86,7 @@ const Root: React.FC = () => <>
     width={WIDTH}
     height={HEIGHT}
   />)}
+  <Composition id="Collage-mixed-orientation" component={Collage} defaultProps={{ spec: mixedOrientationSpec }} durationInFrames={FRAMES} fps={FPS} width={1280} height={720} />
   {ALLOWED_COMBOS.filter((combo) => combo.motionId === STILL_MOTION_BY_LAYOUT[combo.layoutId]).map(({ layoutId, motionId }) => (
     <Composition
       key={layoutId}

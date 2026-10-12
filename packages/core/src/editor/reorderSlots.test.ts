@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reorderSlots } from "./reorderSlots";
+import { reassignCollageSlots, reorderSlots } from "./reorderSlots";
 
 describe("reorderSlots", () => {
   it("moves an item forward without mutating the source", () => {
@@ -16,5 +16,15 @@ describe("reorderSlots", () => {
   it("leaves the order alone for no-op or invalid source indexes", () => {
     expect(reorderSlots(["a", "b"], 1, 1)).toEqual(["a", "b"]);
     expect(reorderSlots(["a", "b"], 4, 0)).toEqual(["a", "b"]);
+  });
+
+  it("moves portrait and landscape photos to better fitting collage cells", () => {
+    const slots = [
+      { slotId: "landscape", width: 1600, height: 900 },
+      { slotId: "portrait", width: 900, height: 1600 },
+      { slotId: "landscape-2", width: 1600, height: 900 },
+    ];
+    const result = reassignCollageSlots(slots, "grid-tall-left", 16 / 9);
+    expect(result.map((slot) => slot.slotId)).toEqual(["portrait", "landscape", "landscape-2"]);
   });
 });

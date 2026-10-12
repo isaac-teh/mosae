@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
-import { COLLAGE_GRID_VARIANTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, ALLOWED_COMBOS, collageGridRects, type CollageGridVariant, type EditOp, type Timeline } from "@mosae/contracts";
+import { reassignCollageSlots } from "@mosae/core";
+import { COLLAGE_GRID_VARIANTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, ALLOWED_COMBOS, assignCollageSlots, collageGridRects, collageSlotAspects, type CollageGridVariant, type EditOp, type Timeline } from "@mosae/contracts";
 
 import { demoImage } from "@/lib/demoAssets";
 
@@ -59,6 +60,14 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
   const minCount = Math.min(...COLLAGE_LAYOUTS.map((layout) => layout.minSlots));
   const maxCount = Math.max(...COLLAGE_LAYOUTS.map((layout) => layout.maxSlots));
   const layoutOptions = COLLAGE_LAYOUTS.filter((layout) => count >= layout.minSlots && count <= layout.maxSlots && (layout.aspect as readonly string[]).includes(aspect) && ALLOWED_COMBOS.some((combo) => combo.layoutId === layout.id)).sort((a, b) => {
+    const frameAspect = Number(aspect.split(":")[0]) / Number(aspect.split(":")[1]);
+    const sources = clip.spec.slots.map((slot) => slot.width && slot.height ? slot.width / slot.height : frameAspect);
+    const fit = (layoutId: string) => {
+      const targets = collageSlotAspects(layoutId, layoutId, count, frameAspect);
+      return assignCollageSlots(sources, targets).reduce((sum, target, index) => sum + Math.abs(Math.log(sources[index]! / (targets[target] ?? sources[index]!))), 0);
+    };
+    const fitDelta = fit(a.id) - fit(b.id);
+    if (Math.abs(fitDelta) > 0.08) return fitDelta;
     const aIndex = COLLAGE_GRID_VARIANTS.findIndex((variant) => variant.id === a.id);
     const bIndex = COLLAGE_GRID_VARIANTS.findIndex((variant) => variant.id === b.id);
     return (aIndex < 0 ? COLLAGE_GRID_VARIANTS.length : aIndex) - (bIndex < 0 ? COLLAGE_GRID_VARIANTS.length : bIndex);
@@ -67,11 +76,20 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
     ? COLLAGE_LAYOUTS.filter((layout) => LIBRARY_IDS.has(layout.id) && (layout.aspect as readonly string[]).includes(aspect))
     : layoutOptions.filter((layout) => !LIBRARY_IDS.has(layout.id));
   const motionOptions = COLLAGE_MOTIONS.filter((motion) => ALLOWED_COMBOS.some((combo) => combo.layoutId === layoutId && combo.motionId === motion.id));
+  const slotsForLayout = (layout: string, slots: Collage["spec"]["slots"]) => {
+    const frameAspect = Number(aspect.split(":")[0]) / Number(aspect.split(":")[1]);
+    return reassignCollageSlots(slots, layout, frameAspect).map((slot) => {
+      if (slot.manualCrop) return slot;
+      const { crop: _automaticCrop, ...withoutAutomaticCrop } = slot;
+      return withoutAutomaticCrop;
+    });
+  };
   const chooseLayout = (nextLayoutId: typeof COLLAGE_LAYOUTS[number]["id"]) => {
     const allowedMotions = ALLOWED_COMBOS.filter((combo) => combo.layoutId === nextLayoutId).map((combo) => combo.motionId);
     const nextMotionId = allowedMotions.includes(motionId) ? motionId : allowedMotions[0];
     setSelection({ clipId: clip.clipId, baseLayoutId: clip.spec.layoutId, baseMotionId: clip.spec.motionId, layoutId: nextLayoutId, motionId: nextMotionId });
-    onApply({ op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, layoutId: nextLayoutId, motionId: nextMotionId } });
+    const slots = slotsForLayout(nextLayoutId, clip.spec.slots);
+    onApply({ op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, layoutId: nextLayoutId, motionId: nextMotionId, slots } });
   };
   const setPhotoCount = (nextCount: number) => {
     if (nextCount < minCount || nextCount > maxCount || nextCount === count) return;
@@ -88,7 +106,7 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
       usedIds.add(id);
       slots.push({ slotId: id, kind: "photo", empty: true });
     }
-    onApply({ op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, layoutId: layout.id, motionId, slots } });
+    onApply({ op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, layoutId: layout.id, motionId, slots: slotsForLayout(layout.id, slots) } });
   };
   const handleTouchStart = (event: any) => {
     suppressHandleClick.current = false;
