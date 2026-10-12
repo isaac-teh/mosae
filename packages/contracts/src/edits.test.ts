@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyEdits, mergeOps, type EditOp } from "./edits.js";
 import { parseTimeline, type Timeline } from "./timeline.js";
+import { refitSoundtrackToDuration } from "./soundtrack.js";
 
 const cut = { kind: "cut" as const, durationSec: 0 };
 const firstCut: Timeline = parseTimeline({
@@ -75,6 +76,26 @@ describe("applyEdits", () => {
       expect(result.timeline.durationSec).toBe(10);
       expect(result.timeline.audioClips[0].source).toMatchObject({ kind: "soundtrack", sourceOutSec: 10 });
     }
+  });
+
+  it("extends music after an edit grows the film", () => {
+    const result = applyEdits(firstCut, [{ op: "add", shotId: "new-shot", kind: "photo", afterClipId: "c1", durationSec: 2 }]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.timeline.durationSec).toBe(12);
+      const music = result.timeline.audioClips.find((clip) => clip.role === "music")!;
+      expect(music.source).toMatchObject({ kind: "soundtrack", sourceOutSec: 12 });
+      expect(music.fadeOutSec).toBeCloseTo(0.6);
+    }
+  });
+
+  it("loops at the real source boundary when reflow grows the film beyond the soundtrack end", () => {
+    const grown = { ...firstCut, durationSec: 12 };
+    const refitted = refitSoundtrackToDuration(grown, new Map([["soft-piano", 10]]));
+    const music = refitted.audioClips.filter((clip) => clip.role === "music");
+    expect(Math.max(...music.map((clip) => clip.startSec + clip.source.sourceOutSec - clip.source.sourceInSec))).toBe(12);
+    expect(music.some((clip) => clip.source.kind === "soundtrack" && clip.source.sourceInSec === 0 && clip.source.sourceOutSec > 0)).toBe(true);
+    expect(music.at(-1)?.fadeOutSec).toBeCloseTo(0.6);
   });
 
   it("refits soundtrack and overlapping audio clips when a duration edit shortens the film", () => {

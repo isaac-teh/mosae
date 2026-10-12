@@ -1,4 +1,4 @@
-import { reflow, safeParseTimeline, syncCollageDurations, type ClipPlan } from "@mosae/contracts";
+import { reflow, refitSoundtrackToDuration, safeParseTimeline, syncCollageDurations, type ClipPlan } from "@mosae/contracts";
 import { DURATION_SECONDS } from "@mosae/contracts";
 import { buildCandidates } from "./buildCandidates.js";
 import { allocateBudget } from "./budget.js";
@@ -950,6 +950,7 @@ export async function runCompose(
   // Structural parse is the last gate on both paths. A repair that drops a clip
   // can leave the timeline structurally invalid, so it is not exempt from this.
   syncCollageDurations(final);
+  final = refitSoundtrackToDuration(final, new Map(musicLibrary.map((track) => [track.id, track.analysis?.durationSec ?? track.durationSec])));
   const parsedResult = safeParseTimeline(final);
   if (!parsedResult.ok) {
     return { ok: false, reasons: [`structural validation failed: ${parsedResult.errors.join("; ")} AUDIO=${JSON.stringify(final.audioClips.map((clip) => ({ id: clip.id, role: clip.role, startSec: clip.startSec, source: clip.source })))}`] };

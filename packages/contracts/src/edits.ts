@@ -2,6 +2,7 @@ import { z } from "zod";
 import { COLLAGE_LAYOUTS, CollageSpecSchema } from "./collage.js";
 import { ALLOWED_COMBOS } from "./collageCombos.js";
 import { safeParseTimeline, type AudioClip, type Caption, type CollageClip, type Timeline, type VideoClip } from "./timeline.js";
+import { refitSoundtrackToDuration } from "./soundtrack.js";
 
 const clipId = z.string().min(1);
 const shotId = z.string().min(1);
@@ -322,7 +323,7 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
   }
   const result = safeParseTimeline({ ...buildTimeline(base.timeline, work, soundtrackId, musicGains), aspect });
   if (!result.ok) return { ok: false, error: result.errors.join("; "), opIndex: Math.max(0, ops.length - 1) };
-  return { ok: true, timeline: result.timeline, leftOutShotIds };
+  return { ok: true, timeline: refitSoundtrackToDuration(result.timeline), leftOutShotIds };
 }
 
 export function mergeOps(ops: EditOp[]): EditOp[] {

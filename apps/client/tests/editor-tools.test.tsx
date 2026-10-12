@@ -333,7 +333,7 @@ describe("editor tool operations", () => {
     expect(mockScrollTo).toHaveBeenLastCalledWith({ x: 120, animated: false });
   });
 
-  it("uses the tapped clip's rendered timeline start when selection scrolls", async () => {
+  it("uses the tapped clip's explicit startSec when selecting it", async () => {
     mockScrollTo.mockClear();
     const staleStarts = { ...timeline, videoClips: clips.map((clip, index) => index === 2 ? { ...clip, startSec: 0 } : clip) };
     function Harness() {
@@ -345,7 +345,40 @@ describe("editor tool operations", () => {
     await click("Select clip c");
     expect(host.querySelector('[aria-label="Select clip c"]')?.getAttribute("aria-pressed")).toBe("true");
     expect(host.querySelector('[aria-label="Timeline playhead"]')?.getAttribute("style")).toContain("left: 49px");
-    expect(mockScrollTo).toHaveBeenLastCalledWith({ x: 240, animated: false });
+    expect(mockScrollTo).not.toHaveBeenCalled();
+  });
+
+  it("seeks to the end of a clip tapped left of the current selection and selects it", async () => {
+    const seeks: number[] = [];
+    function Harness() {
+      const [playhead, setPlayhead] = React.useState(6);
+      const [selected, setSelected] = React.useState<string | null>("c");
+      return <TimelineStrip timeline={timeline} sources={{}} selectedClipId={selected} playheadSec={playhead} onSelect={(id, seconds) => { setSelected(id); seeks.push(seconds); setPlayhead(seconds); }} onScrub={setPlayhead} />;
+    }
+    await render(<Harness />);
+    await click("Select clip a");
+    expect(seeks.at(-1)).toBeCloseTo(3 - 1 / timeline.fps);
+    expect(host.querySelector('[aria-label="Select clip a"]')?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("seeks to the start of a clip tapped right of the current selection", async () => {
+    const seeks: number[] = [];
+    function Harness() {
+      const [playhead, setPlayhead] = React.useState(0);
+      const [selected, setSelected] = React.useState<string | null>("a");
+      return <TimelineStrip timeline={timeline} sources={{}} selectedClipId={selected} playheadSec={playhead} onSelect={(id, seconds) => { setSelected(id); seeks.push(seconds); setPlayhead(seconds); }} onScrub={setPlayhead} />;
+    }
+    await render(<Harness />);
+    await click("Select clip c");
+    expect(seeks.at(-1)).toBe(6);
+    expect(host.querySelector('[aria-label="Select clip c"]')?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("uses the clip start when there is no previous selection", async () => {
+    const onSelect = vi.fn();
+    await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={onSelect} onScrub={() => {}} />);
+    await click("Select clip b");
+    expect(onSelect).toHaveBeenCalledWith("b", 3);
   });
 
   it("uses one scale for ruler ticks, chapters, clip bounds and the music bar", async () => {
@@ -364,6 +397,36 @@ describe("editor tool operations", () => {
     expect(musicTrack.getAttribute("style")).toContain("width: 360px");
     expect(Boolean(musicTrack.compareDocumentPosition(photoClip) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(host.querySelector('[aria-label="Select music Sandcastle Days"]')).toBeNull();
+  });
+
+  it("positions overlapping clips by startSec and clips the last edge at film end", async () => {
+    const overlapping: Timeline = {
+      ...timeline,
+      videoClips: clips.map((clip, index) => ({ ...clip, startSec: [0, 2.5, 5][index]!, durationSec: 4 })),
+    };
+    await render(<TimelineStrip timeline={overlapping} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} />);
+    const last = host.querySelector('[aria-label="Select clip c"]')!.parentElement!;
+    expect(last.getAttribute("style")).toContain("left: 250px");
+    expect(last.getAttribute("style")).toContain("width: 160px");
+    expect(host.querySelector('[aria-label="Select clip c"]')?.getAttribute("style")).toContain("width: 160px");
+  });
+
+  it("uses stable type colours and keeps orange as the selected border", async () => {
+    const withTypes: Timeline = {
+      ...timeline,
+      videoClips: [clips[0]!, videoClip, collage],
+      durationSec: 15,
+    };
+    await render(<TimelineStrip timeline={withTypes} sources={{}} selectedClipId="video-1" playheadSec={0} onSelect={() => {}} onScrub={() => {}} />);
+    const photo = host.querySelector('[aria-label="Select clip a"]')!.parentElement!.getAttribute("style")!;
+    const video = host.querySelector('[aria-label="Select clip video-1"]')!.parentElement!.getAttribute("style")!;
+    const collageStyle = host.querySelector('[aria-label="Select clip collage-1"]')!.parentElement!.getAttribute("style")!;
+    expect(photo).toContain("background-color: rgb(54, 86, 106)");
+    expect(video).toContain("background-color: rgb(79, 91, 70)");
+    expect(collageStyle).toContain("background-color: rgb(109, 90, 62)");
+    expect(new Set([photo.match(/background-color: [^;]+/)![0], video.match(/background-color: [^;]+/)![0], collageStyle.match(/background-color: [^;]+/)![0]]).size).toBe(3);
+    expect(video).toContain("border-color: rgb(255, 143, 112)");
+    expect(photo).toContain("border-color: rgb(54, 86, 106)");
   });
 
   it("aligns the music bar with the clips and ends at the shorter soundtrack or film end", async () => {

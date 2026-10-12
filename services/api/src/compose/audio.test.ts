@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { buildAudioClips, type AudioClip } from "./audio.js";
 import type { AssembledClip } from "./assemble.js";
 import { loadLibrary } from "../music/library.js";
+import * as musicLibrary from "../music/library.js";
 
 const holds = { base: 3.5, min: 2, max: 6 };
 
@@ -90,6 +91,18 @@ describe("buildAudioClips — speech and ambient", () => {
 });
 
 describe("buildAudioClips — music track", () => {
+  it("loops a short soundtrack to the film end and fades out on the final segment", () => {
+    const librarySpy = vi.spyOn(musicLibrary, "loadLibrary").mockReturnValue([{ id: "short-track", name: "Short", description: "", cadence: "tender", file: "short.mp3", durationSec: 5, bpm: 100, beatsSec: [] }]);
+    try {
+      const result = buildAudioClips([makePhotoClip("photo1", "mute")], "short-track", 12).filter((clip) => clip.kind === "music");
+      expect(result.length).toBeGreaterThan(1);
+      expect(Math.max(...result.map((clip) => clip.endSec))).toBe(12);
+      expect(result.every((clip) => clip.sourceOutSec! - clip.sourceInSec! <= 5)).toBe(true);
+      expect(result.at(-1)?.fadeOutSec).toBe(1);
+    } finally {
+      librarySpy.mockRestore();
+    }
+  });
   it("one music clip spans the film when soundtrackId is provided", () => {
     const clips = [makePhotoClip("photo1", "keep")];
     const duration = holds.base;
