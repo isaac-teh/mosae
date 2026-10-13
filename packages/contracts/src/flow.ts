@@ -19,10 +19,12 @@ export const DirectorFlowSchema = z.strictObject({
   story: z.object({ answer: z.string().nullable(), storySummary: z.string().nullable(), mentionedPeople: z.array(z.string()) }),
   people: z.array(FlowPersonSchema),
   missedAnswer: z.string().optional(),
+  missedReply: z.string().optional(),
+  missedClarifications: z.array(z.object({ question: z.string(), reply: z.string() })).optional(),
   peopleSummaryConfirmed: z.boolean().optional(),
   peopleProgress: z.object({ completedPersonIds: z.array(z.string().min(1)) }).optional(),
   missedPeopleConfirmed: z.boolean().optional(),
-  missedPeople: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional() })).optional(),
+  missedPeople: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional(), skipped: z.boolean().optional() })).optional(),
 });
 
 const AtomicFlowActionSchema = z.discriminatedUnion("type", [
@@ -35,7 +37,8 @@ const AtomicFlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("people-summary-confirmed"), confirmed: z.boolean() }),
   z.object({ type: z.literal("people-progress"), completedPersonIds: z.array(z.string().min(1)).max(100) }),
   z.object({ type: z.literal("missed-people-confirmed"), confirmed: z.boolean() }),
-  z.object({ type: z.literal("missed-people"), people: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional() })).max(100), answer: z.string().optional() }),
+  z.object({ type: z.literal("missed-people"), people: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional(), skipped: z.boolean().optional() })).max(100), answer: z.string().optional(), reply: z.string().nullable().optional() }),
+  z.object({ type: z.literal("missed-clarification-turn"), question: z.string(), reply: z.string() }),
   z.object({ type: z.literal("undo") }),
 ]);
 

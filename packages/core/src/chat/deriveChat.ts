@@ -24,6 +24,20 @@ function peopleIntroCount(people: { personId: string }[], mergeEvents: NonNullab
   return people.length + mergeEvents.filter(({ personId }) => !present.has(personId)).length;
 }
 
+function announcedPeople(people: NonNullable<ChatInput["people"]>, photos: number) {
+  return mainPeople(people.filter((person) => !person.personId.startsWith("p-missed-")), photos);
+}
+
+function orderByProgress<T extends { momentCount: number; personId: string }>(entries: T[], input: ChatInput): T[] {
+  const completed = input.proceededPersonIds ?? input.flow?.peopleProgress?.completedPersonIds ?? [];
+  const order = new Map(completed.map((personId, index) => [personId, index]));
+  return entries.sort((a, b) => {
+    const aIndex = order.get(a.personId), bIndex = order.get(b.personId);
+    if (aIndex !== undefined || bIndex !== undefined) return (aIndex ?? Number.MAX_SAFE_INTEGER) - (bIndex ?? Number.MAX_SAFE_INTEGER);
+    return b.momentCount - a.momentCount;
+  });
+}
+
 function storyAcknowledgement(text: string, storySummary?: string, mentionedPeople?: string[]): string {
   let cleaned = (storySummary?.trim() || text.trim()).replace(/\s+/g, " ").replace(/children\s+day/gi, "Children's Day");
   const tripToPlace = /^a\s+trip\s+to\s+(.+)$/i.exec(cleaned);
@@ -118,6 +132,15 @@ export function deriveChat(input: ChatInput): ChatState {
   if (input.flow?.story.answer && !input.intent) input = { ...input, intent: { text: input.flow.story.answer }, storySummary: input.flow.story.storySummary ?? undefined, mentionedPeople: input.flow.story.mentionedPeople };
   if (input.proceededPersonIds === undefined && input.flow?.peopleProgress) input = { ...input, proceededPersonIds: input.flow.peopleProgress.completedPersonIds };
   if (input.missedPeopleConfirmed === undefined && input.flow?.missedPeopleConfirmed !== undefined) input = { ...input, missedPeopleConfirmed: input.flow.missedPeopleConfirmed };
+  if (input.peopleSummaryConfirmed === undefined && input.flow?.peopleSummaryConfirmed !== undefined) input = { ...input, peopleSummaryConfirmed: input.flow.peopleSummaryConfirmed };
+  if (input.missedAnswer === undefined && input.flow?.missedAnswer !== undefined) input = { ...input, missedAnswer: input.flow.missedAnswer };
+  if (input.missedReply === undefined && input.flow?.missedReply !== undefined) input = { ...input, missedReply: input.flow.missedReply };
+  if (input.missedPeople === undefined && input.flow?.missedPeople) input = { ...input, missedPeople: input.flow.missedPeople.map((person) => {
+    const stored = input.flow!.people.find((entry) => entry.personId === person.personId);
+    return { personId: person.personId, name: person.name, momentCount: stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0, ...(person.samplePhotoUris ? { sampleUris: person.samplePhotoUris } : {}), ...(person.skipped ? { skipped: true } : {}) };
+  }) };
+  if (!input.interpTurns?.some((turn) => turn.stage === "missed") && input.flow?.missedClarifications?.length) input = { ...input, interpTurns: [...(input.interpTurns ?? []), ...input.flow.missedClarifications.map((turn) => ({ ...turn, stage: "missed" as const }))] };
+  const missedFlowHistory = input.missedPeopleConfirmed !== undefined || input.missedAnswer !== undefined || input.flow?.missedPeopleConfirmed !== undefined;
   const items: ChatItem[] = [];
   let step: ChatState["step"] = "occasion";
   let confirmed: ChatState["confirmed"] = 0;
@@ -171,7 +194,7 @@ export function deriveChat(input: ChatInput): ChatState {
   // inline (their question, then a "Thinking" bubble or the model's reply) without changing step.
   // Rendered in both !input.intent branches so questions answer during faces/confirm too.
   const addInterp = () => {
-    input.interpTurns?.filter((turn) => !turn.personId && !turn.stage).forEach((turn, i) => {
+    input.interpTurns?.filter((turn) => !turn.personId && !turn.stage && !missedFlowHistory).forEach((turn, i) => {
       add({ kind: "you", id: `interp-question-${i + 1}`, text: turn.question });
       if (turn.reply) add({ kind: "mosae", id: `interp-reply-${i + 1}`, text: turn.reply });
       else if (input.interpReplying && i === input.interpTurns!.length - 1) {
@@ -231,7 +254,7 @@ export function deriveChat(input: ChatInput): ChatState {
       return { items, step, confirmed, placeholder };
     }
 
-    const people = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
+    const people = announcedPeople(input.people ?? [], input.summary?.photos ?? 0);
     const mergeEvents = input.mergeEvents ?? [];
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const introCount = peopleIntroCount(people, mergeEvents);
@@ -243,9 +266,10 @@ export function deriveChat(input: ChatInput): ChatState {
     const awaitingProceed = pendingProceedIndex >= 0 ? people[pendingProceedIndex] : null;
     const unanswered = (input.mergeEvents ?? []).some((event) => !event.response) ? null : awaitingProceed ? null : firstUnanswered >= 0 ? people[firstUnanswered] : null;
     const orderedHistory = [
-      ...people.map((person, index) => ({ kind: "person" as const, person, index, momentCount: person.momentCount })),
-      ...mergeEvents.filter(({ personId }) => !people.some((person) => person.personId === personId)).map((event) => ({ kind: "merge" as const, event, momentCount: event.momentCount })),
-    ].sort((a, b) => b.momentCount - a.momentCount);
+      ...people.map((person, index) => ({ kind: "person" as const, person, personId: person.personId, index, momentCount: person.momentCount })),
+      ...mergeEvents.filter(({ personId }) => !people.some((person) => person.personId === personId)).map((event) => ({ kind: "merge" as const, event, personId: event.personId, momentCount: event.momentCount })),
+    ];
+    orderByProgress(orderedHistory, input);
     for (const entry of orderedHistory) {
       if (entry.kind === "person") {
         if (pendingProceedIndex >= 0 ? entry.index > pendingProceedIndex : firstUnanswered >= 0 && entry.index >= firstUnanswered) continue;
@@ -299,7 +323,7 @@ export function deriveChat(input: ChatInput): ChatState {
       for (const person of (input.missedPeople ?? []).filter((person) => !people.some((known) => known.personId === person.personId))) {
         if (!input.missedAnswer) add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
         add({ kind: "mosae", id: `missed-select-${person.personId}`, text: `Help me select photos of ${person.name}.` });
-        add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name, momentCount: person.momentCount, photos: person.sampleUris?.slice(0, 4) ?? (person.sampleUri ? [person.sampleUri] : []) });
+        add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name, momentCount: person.momentCount, photos: person.sampleUris?.slice(0, 4) ?? (person.sampleUri ? [person.sampleUri] : []), ...(person.skipped ? { skipped: true } : {}) });
       }
       if (input.missedPersonTagging && !(input.missedPeople ?? []).some(({ personId }) => personId === input.missedPersonTagging!.personId)) {
         add({ kind: "mosae", id: `missed-select-${input.missedPersonTagging.personId}`, text: `Help me select 1 photo of ${input.missedPersonTagging.name}.` });
@@ -314,22 +338,22 @@ export function deriveChat(input: ChatInput): ChatState {
   }
 
   const missedPeople = input.missedPeople ?? [];
-  const taggedPersonIds = new Set((input.people ?? []).filter((person) => person.momentCount > 0).map((person) => person.personId));
-  const hasUntaggedMissedPeople = missedPeople.some((person) => person.momentCount === 0 && !taggedPersonIds.has(person.personId));
+  const hasUntaggedMissedPeople = missedPeople.some((person) => !person.skipped && person.momentCount === 0);
   const collectingMissedPeople = input.peopleConfirmed && input.missedPeopleConfirmed === false && missedPeople.length === 0;
   const taggingMissedPeople = input.peopleConfirmed && missedPeople.length > 0 && hasUntaggedMissedPeople;
   const showPeopleSummary = input.peopleConfirmed && input.peopleSummaryConfirmed !== true && !hasUntaggedMissedPeople && (input.missedPeopleConfirmed === true || missedPeople.length > 0 || input.missedPeopleConfirmed === undefined && input.peopleSummaryConfirmed === false);
+  const keepPeopleSummary = showPeopleSummary || input.peopleConfirmed && input.peopleSummaryConfirmed === true;
   const mergeEvents = input.mergeEvents ?? [];
   if (showPeopleSummary) {
     step = "people";
-    const people = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
+    const people = announcedPeople(input.people ?? [], input.summary?.photos ?? 0);
     const introCount = peopleIntroCount(people, mergeEvents);
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const countLabel = countWords[introCount] ?? String(introCount);
     add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments.` });
   }
   if (input.peopleConfirmed && input.peopleSummaryConfirmed === true) {
-    const historyPeople = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
+    const historyPeople = announcedPeople(input.people ?? [], input.summary?.photos ?? 0);
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const count = peopleIntroCount(historyPeople, mergeEvents);
     const label = countWords[count] ?? String(count);
@@ -337,22 +361,23 @@ export function deriveChat(input: ChatInput): ChatState {
   }
   const addMissedPeople = (showPrompt: boolean, canConfirm = showPrompt) => {
     if (showPrompt) add({ kind: "anyone-else", id: "anyone-else", canConfirm, text: "Did I miss anyone? Enter the names of who were missed in the box below." });
-    input.interpTurns?.forEach((turn, index) => {
+    input.interpTurns?.filter((turn) => !turn.personId && (turn.stage === "missed" || !turn.stage)).forEach((turn, index) => {
       add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
       if (turn.reply) add({ kind: "mosae", id: `missed-clarification-reply-${index + 1}`, text: turn.reply });
     });
     if (input.missedAnswer) add({ kind: "you", id: "missed-answer", text: input.missedAnswer });
+    if (input.missedReply) add({ kind: "mosae", id: "missed-reply", text: input.missedReply });
     for (const person of input.missedPeople ?? []) {
       if (!input.missedAnswer) add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
       add({ kind: "mosae", id: `missed-select-${person.personId}`, text: `Help me select photos of ${person.name}.` });
-      add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name, momentCount: person.momentCount, photos: person.sampleUris?.slice(0, 4) ?? (person.sampleUri ? [person.sampleUri] : []) });
+      add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name, momentCount: person.momentCount, photos: person.sampleUris?.slice(0, 4) ?? (person.sampleUri ? [person.sampleUri] : []), ...(person.skipped ? { skipped: true } : {}) });
     }
     if (input.missedPersonTagging && !(input.missedPeople ?? []).some(({ personId }) => personId === input.missedPersonTagging!.personId)) {
       add({ kind: "mosae", id: `missed-select-${input.missedPersonTagging.personId}`, text: `Help me select 1 photo of ${input.missedPersonTagging.name}.` });
       add({ kind: "missed-person", id: `missed-tag-${input.missedPersonTagging.personId}`, ...input.missedPersonTagging, momentCount: 0, photos: [] });
     }
   };
-  const people = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
+  const people = announcedPeople(input.people ?? [], input.summary?.photos ?? 0);
   if ((collectingMissedPeople || taggingMissedPeople) && !showPeopleSummary) {
     const introCount = peopleIntroCount(people, mergeEvents);
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
@@ -360,9 +385,10 @@ export function deriveChat(input: ChatInput): ChatState {
     add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments.` });
   }
   const orderedHistory = [
-    ...people.map((person) => ({ kind: "person" as const, person, momentCount: person.momentCount })),
-    ...mergeEvents.filter(({ personId }) => !people.some((person) => person.personId === personId)).map((event) => ({ kind: "merge" as const, event, momentCount: event.momentCount })),
-  ].sort((a, b) => b.momentCount - a.momentCount);
+    ...people.map((person) => ({ kind: "person" as const, person, personId: person.personId, momentCount: person.momentCount })),
+    ...mergeEvents.filter(({ personId }) => !people.some((person) => person.personId === personId)).map((event) => ({ kind: "merge" as const, event, personId: event.personId, momentCount: event.momentCount })),
+  ];
+  orderByProgress(orderedHistory, input);
   for (const entry of orderedHistory) {
     if (entry.kind === "merge") {
       const { event } = entry;
@@ -380,7 +406,7 @@ export function deriveChat(input: ChatInput): ChatState {
         if (turn.reply) add({ kind: "mosae", id: `person-turn-reply-${person.personId}-${index + 1}`, text: turn.reply });
       });
       if (!personTurns.some((turn) => turn.question === person.answerText)) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
-      if (!showPeopleSummary && input.peopleSummaryConfirmed !== true && !person.skipped && person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
+      if (!person.skipped && person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
       if (showPeopleSummary && input.taggedPerson?.personId === person.personId) add({ kind: "mosae", id: `tagged-person-${person.personId}`, text: "Got it — these are the photos of this person.", photos: input.taggedPerson.photos });
       for (const event of input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? []) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
     }
@@ -395,7 +421,7 @@ export function deriveChat(input: ChatInput): ChatState {
     addMissedPeople(true, false);
     return { items, step, confirmed, placeholder };
   }
-  if (showPeopleSummary) {
+  if (keepPeopleSummary) {
     // Keep the single missed-people question before the names and photo-selection
     // turns in the reconstructed transcript, then place the final summary after them.
     addMissedPeople(true, false);
@@ -403,8 +429,8 @@ export function deriveChat(input: ChatInput): ChatState {
     const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     if (named.length === 1) add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged ${named[0]!.name} in your moments.` });
     else add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged all ${words[named.length] ?? named.length} in your moments.` });
-    add({ kind: "people-summary", id: "people-summary", people: named });
-    return { items, step, confirmed, placeholder };
+    add({ kind: "people-summary", id: "people-summary", people: named, ...(input.peopleSummaryConfirmed === true ? { canConfirm: false } : {}) });
+    if (showPeopleSummary) return { items, step, confirmed, placeholder };
   }
   confirmed = 2;
 

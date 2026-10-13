@@ -34,10 +34,11 @@ export type ChatInput = {
   intent: { text: string } | null;
   mentionedPeople?: string[];
   missedAnswer?: string;
+  missedReply?: string;
   storySummary?: string;
   people: { personId: string; name: string | null; role: string | null; answerText?: string; ageBand?: PersonAgeBand; skipped: boolean; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;
   peopleConfirmed: boolean;
-  missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleUris?: string[] }[];
+  missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleUris?: string[]; skipped?: boolean }[];
   missedPersonTagging?: { personId: string; name: string } | null;
   taggedPerson?: { personId: string; name: string; photos: string[] };
   peopleSummaryConfirmed?: boolean;
@@ -69,8 +70,8 @@ export type ChatItem =
   | { kind: "person-tagged"; id: string; personId: string; name: string; pronoun: "her" | "him" | "them"; momentCount: number; canProceed?: boolean; sampleFace?: { shotId: string; uri: string; bbox: [number, number, number, number] } }
   | { kind: "merge-followup"; id: string; text: string; answer: string; photos: string[]; faceSamples?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; response?: "Yes, same person" | "No, another person" }
   | { kind: "anyone-else"; id: string; text?: string; canConfirm?: boolean }
-  | { kind: "missed-person"; id: string; personId: string; name: string; momentCount: number; photos: string[] }
-  | { kind: "people-summary"; id: string; people: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleFace?: { shotId: string; uri: string; bbox: [number, number, number, number] } }[] }
+  | { kind: "missed-person"; id: string; personId: string; name: string; momentCount: number; photos: string[]; skipped?: boolean }
+  | { kind: "people-summary"; id: string; people: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleFace?: { shotId: string; uri: string; bbox: [number, number, number, number] } }[]; canConfirm?: boolean }
   | { kind: "set-aside"; id: string; blurry: number; duplicates: number; blurryPhotos: { shotId: string; uri: string }[]; blurryMore: number; duplicatePhotos: { shotId: string; uri: string }[]; duplicateMore: number }
   | { kind: "moments"; id: string; suggestedShotIds: string[] }
   | { kind: "direction"; id: string; aspect: "9:16" | "16:9"; orientation?: NonNullable<ProjectSummary["orientation"]>; pace: string; lengthSec: number; focus: string; momentCount: number }

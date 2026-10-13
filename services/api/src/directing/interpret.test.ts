@@ -68,6 +68,22 @@ describe("interpret", () => {
     });
     expect(clarify.change).toMatchObject({ needsClarification: true, clarifyingQuestion: "What are their names?" });
   });
+  it.each([
+    ["Grandpa and Grandma", ["Grandpa", "Grandma"]],
+    ["Mum, Dad and Uncle", ["Mum", "Dad", "Uncle"]],
+    ["my son", ["Son"]],
+  ])("accepts identified role words in missed names: %s", async (text, names) => {
+    const gen = vi.fn();
+    const result = await interpret({ ...request("people", text), context: { peopleStage: "missed" } }, { generate: gen, searchShots: vi.fn() });
+    expect(result.change).toMatchObject({ kind: "person", intent: "missed", names, needsClarification: false });
+    expect(gen).not.toHaveBeenCalled();
+  });
+  it.each(["my two cousins", "some friends", "three kids"])("clarifies counts without identities: %s", async (text) => {
+    const gen = vi.fn();
+    const result = await interpret({ ...request("people", text), context: { peopleStage: "missed" } }, { generate: gen, searchShots: vi.fn() });
+    expect(result.change).toMatchObject({ kind: "person", intent: "missed", needsClarification: true, clarifyingQuestion: "What are their names?" });
+    expect(gen).not.toHaveBeenCalled();
+  });
   it("extracts a name or a normalized family role and classifies change requests", async () => {
     const single = await interpret(request("people", "Mia"), { generate: generate({ change: { kind: "person", intent: "assign", names: ["Mia"], name: "Mia", role: "other", needsClarification: false } }), searchShots: vi.fn() });
     expect(single.change).toMatchObject({ intent: "assign", name: "Mia", names: ["Mia"], needsClarification: false });

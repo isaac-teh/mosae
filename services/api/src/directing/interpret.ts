@@ -22,6 +22,22 @@ export type InterpretModelChange = Exclude<ChatChange, { kind: "moments" }> | { 
 type ModelResult = { change: InterpretModelChange; confidence?: number; reply?: string };
 
 const fallback = "I didn't catch that. Pick one below, or say it another way.";
+const relationshipLabels: Record<string, string> = {
+  son: "Son", daughter: "Daughter", child: "Child", children: "Children", wife: "Wife", husband: "Husband", partner: "Partner",
+  mum: "Mum", mom: "Mum", mother: "Mum", dad: "Dad", father: "Dad", grandma: "Grandma", grandmother: "Grandma",
+  grandpa: "Grandpa", grandfather: "Grandpa", granny: "Grandma", grandad: "Grandpa", uncle: "Uncle", aunt: "Aunt",
+  cousin: "Cousin", friend: "Friend", brother: "Brother", sister: "Sister",
+};
+function missedNameParts(text: string): { names?: string[]; needsClarification?: boolean } {
+  const cleaned = text.trim().replace(/[.!?]+$/, "").replace(/^(?:(?:i|we)\s+)?missed\s+/i, "").replace(/^also\s+/i, "");
+  if (/^(?:(?:my|some)\s+)?(?:(?:\d+|one|two|three|four|five|a\s+couple\s+of|a\s+few)\s+)?(?:cousins?|friends?|kids?|children|people|relatives|siblings?)$/i.test(cleaned)) return { needsClarification: true };
+  const names = cleaned.split(/\s*(?:,|&|\band\b)\s*/i).map((part) => {
+    const normalized = part.trim().replace(/^my\s+/i, "");
+    const label = relationshipLabels[normalized.toLocaleLowerCase()];
+    return label ?? normalized;
+  }).filter(Boolean);
+  return names.length ? { names } : {};
+}
 const baseResponseSchema = {
   type: "OBJECT",
   properties: {
@@ -77,6 +93,11 @@ export async function interpret(req: InterpretRequest, deps: {
     const exact = req.text.trim().replace(/[.!?]+$/, "").toLocaleLowerCase();
     const stage = req.context.peopleStage ?? "identify";
     const fast = (intent: PeopleIntent): InterpretResult => ({ reply: "", change: { kind: "person", personId: null, name: "", role: "other", intent, names: [], needsClarification: false } });
+    if (stage === "missed") {
+      const parsed = missedNameParts(req.text);
+      if (parsed.needsClarification) return { reply: "What are their names?", change: { kind: "person", personId: null, name: "", role: "other", intent: "missed", names: [], needsClarification: true, clarifyingQuestion: "What are their names?" } };
+      if (parsed.names?.length) return { reply: "", change: { kind: "person", personId: null, name: parsed.names[0]!, role: "other", intent: "missed", names: parsed.names, needsClarification: false } };
+    }
     if (stage === "identify") {
       const rolePatterns: [RegExp, string, "parent" | "child" | "other"][] = [
         [/^(?:that's me|that’s me|it's me|it’s me|i'm me|me|myself|i am me)$/, "Me", "other"],

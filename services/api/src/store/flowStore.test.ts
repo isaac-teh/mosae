@@ -25,4 +25,14 @@ describe("flow action application", () => {
     expect(missed.missedAnswer).toBe("Grandpa and Grandma");
     expect(missed.missedPeople?.map(({ name }) => name)).toEqual(["Grandpa", "Grandma"]);
   });
+  it("persists missed-name clarifications, duplicate replies, and explicit skips", () => {
+    const flow: DirectorFlow = { revision: 0, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: [] };
+    const clarified = applyFlowAction(flow, { type: "missed-clarification-turn", question: "my two cousins", reply: "What are their names?" });
+    expect(clarified.missedClarifications).toEqual([{ question: "my two cousins", reply: "What are their names?" }]);
+    const reply = applyFlowAction(clarified, { type: "missed-people", people: [{ personId: "g1", name: "Grandma" }], answer: "Grandpa and Grandma", reply: "Grandpa is already tagged." });
+    expect(reply.missedReply).toBe("Grandpa is already tagged.");
+    const skipped = applyFlowAction(reply, { type: "missed-people", people: [{ personId: "g1", name: "Grandma", skipped: true }], reply: null });
+    expect(skipped.missedPeople?.[0]?.skipped).toBe(true);
+    expect(skipped.missedReply).toBeUndefined();
+  });
 });
