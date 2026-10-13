@@ -33,6 +33,37 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.kind === "person-tagged")).toMatchObject({ personId: "p1", name: "Mia", momentCount: 4 });
     expect(state.items.find((item) => item.kind === "person" && item.personId === "p2")).toBeUndefined();
   });
+  it("continues through all recurring people before asking about missed people", () => {
+    const people = ["p1", "p2", "p3", "p4", "p5"].map((personId) => ({ personId, name: personId === "p1" ? "Kara" : null, role: null, skipped: false, momentCount: 8, sampleShotIds: [], days: [] }));
+    const state = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null, proceededPersonIds: ["p1"] });
+    expect(state.items.find((item) => item.kind === "person")).toMatchObject({ personId: "p2" });
+    expect(state.items.some((item) => item.kind === "anyone-else")).toBe(false);
+    for (let index = 2; index <= 5; index++) {
+      const progressed = people.map((person, personIndex) => personIndex < index ? { ...person, name: person.name ?? person.personId } : person);
+      const active = deriveChat({ ...base(), people: progressed, peopleConfirmed: false, plan: null, proceededPersonIds: progressed.slice(0, index).map(({ personId }) => personId) });
+      if (index < 5) expect(active.items.find((item) => item.kind === "person")?.personId).toBe(`p${index + 1}`);
+      else expect(active.items.some((item) => item.kind === "anyone-else")).toBe(true);
+    }
+  });
+  it("renders person clarification turns once after the question they answer", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null,
+      interpTurns: [{ personId: "p1", question: "My daughter", reply: "What is your daughter's name?" }] });
+    const ids = state.items.map(({ id }) => id);
+    expect(ids.indexOf("people-intro")).toBeLessThan(ids.indexOf("person-p1"));
+    expect(state.items.find((item) => item.kind === "person" && item.personId === "p1")).toMatchObject({ turns: [{ question: "My daughter", reply: "What is your daughter's name?" }] });
+    expect(state.items.filter(({ id }) => id.startsWith("missed-clarification")).length).toBe(0);
+    expect(state.items.some((item) => item.kind === "anyone-else")).toBe(false);
+  });
+  it("keeps clarification pairs in chronological history without duplicating them after the missed-people prompt", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "Daughter", role: "child", skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], proceededPersonIds: ["p1"], peopleConfirmed: false, plan: null,
+      interpTurns: [{ personId: "p1", question: "My daughter", reply: "What is her name?" }], missedPeople: [{ personId: "grandpa", name: "Grandpa", momentCount: 0 }] });
+    const userAnswerIds = state.items.filter((item) => item.kind === "you" && item.text === "My daughter");
+    const clarificationIds = state.items.filter((item) => item.kind === "mosae" && item.text === "What is her name?");
+    expect(userAnswerIds).toHaveLength(1);
+    expect(clarificationIds).toHaveLength(1);
+    expect(state.items.findIndex((item) => item.id.startsWith("person-turn-p1"))).toBeLessThan(state.items.findIndex((item) => item.id === "anyone-else"));
+    expect(state.items.filter((item) => item.id.startsWith("missed-clarification")).length).toBe(0);
+  });
   it("shows missed-person selections in name order and replaces pickers with returned thumbnails", () => {
     const state = deriveChat({ ...base(), people: [], peopleConfirmed: true, peopleSummaryConfirmed: true, missedPeople: [
       { personId: "grandpa", name: "Grandpa", momentCount: 2, sampleUris: ["g1", "g2"] },
@@ -68,6 +99,10 @@ describe("deriveChat state table", () => {
   it("does not describe one main person as three", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "only", name: null, role: null, skipped: false, momentCount: 6, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
     expect((state.items.find((item) => item.kind === "mosae" && item.id === "people-intro") as Extract<ChatItem, { kind: "mosae" }> | undefined)?.text).toBe("One person appears often in your moments.");
+  });
+  it("shortens conversational story acknowledgements instead of echoing the raw input", () => {
+    const state = deriveChat({ ...base(), intent: { text: "A trip. Japan in October" }, people: [], peopleConfirmed: true });
+    expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ text: "A Japan trip — lovely!" });
   });
 
   it("uses an answered flow snapshot to enter the people step before a plan exists", () => {

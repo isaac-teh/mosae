@@ -370,6 +370,7 @@ export default function DirectorScreen() {
         if (item.kind === "occasion-question") return pendingInterpret ? null : <View key={item.id} className="gap-2"><ChatMessage from="mosae" text={item.uploadComplete ? "Tell me a little about them. Is it a trip, a birthday celebration, or something else?" : "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?"} /><View className="flex-row flex-wrap gap-2"><Pressable role="button" aria-label="A trip" onPress={() => scrollAfterAction(() => actions.answerOccasion("A trip", projectSummary?.country ? `${projectSummary.country} trip` : "Our trip"))} className="active:scale-[0.97] active:bg-surface-sunken rounded-pill border border-line-strong px-4 py-2" style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })}><Text className="font-sans text-caption text-ink">A trip</Text></Pressable><Pressable role="button" aria-label="A birthday celebration" onPress={() => scrollAfterAction(() => actions.answerOccasion("A birthday celebration", "Birthday celebration"))} className="active:scale-[0.97] active:bg-surface-sunken rounded-pill border border-line-strong px-4 py-2" style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })}><Text className="font-sans text-caption text-ink">A birthday celebration</Text></Pressable></View><Text className="font-sans text-caption text-ink-muted">Something else? Type it in the box below.</Text></View>;
         if (item.kind === "person") return <View key={item.id} data-person-question={item.personId} className="gap-3">
           <ChatPersonQuestion samples={item.sampleFaces} question="Who is this?" />
+          {item.turns?.map((turn, index) => <View key={`${item.personId}-turn-${index}`} className="gap-2"><ChatMessage from="you" text={turn.question} />{turn.reply ? <ChatMessage from="mosae" text={turn.reply} /> : null}</View>)}
         </View>;
         if (item.kind === "person-tagged") return <View key={item.id} className="gap-3">
           <ChatMessage from="mosae" text={`Thanks. I've tagged ${item.pronoun} in ${item.momentCount} ${item.momentCount === 1 ? "moment" : "moments"}.`} />
@@ -377,7 +378,7 @@ export default function DirectorScreen() {
             {item.sampleFace ? <FacePreviewStrip samples={[item.sampleFace]} limit={1} size={48} rounded /> : <View className="size-12 rounded-full bg-surface-sunken" />}
             <View className="flex-1"><Text className="font-sans-semibold text-label text-ink">{item.name}</Text><Text className="font-sans text-caption text-ink-muted">Tagged in {item.momentCount} {item.momentCount === 1 ? "moment" : "moments"}</Text></View><Text className="text-heading text-ink-muted">›</Text>
           </Pressable>
-          <Button label="Proceed" disabled={saving} onPress={() => scrollAfterAction(() => actions.proceedPerson(item.personId))} />
+          <Button label="Proceed" variant="secondary" disabled={saving} onPress={() => scrollAfterAction(() => actions.proceedPerson(item.personId))} />
         </View>;
         if (item.kind === "person-confirm") return <View key={item.id} className="gap-3">
           <ChatMessage from="mosae" text={item.text} /><FacePreviewStrip samples={item.sampleFaces} limit={2} />

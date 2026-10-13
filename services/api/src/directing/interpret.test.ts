@@ -76,6 +76,25 @@ describe("interpret", () => {
     const change = await interpret({ ...request("people", "Wife is wrong"), context: { peopleStage: "summary" } }, { generate: generate({ change: { kind: "person", intent: "change", names: ["Wife"], name: "Wife", role: "other", needsClarification: false } }), searchShots: vi.fn() });
     expect(change.change).toMatchObject({ intent: "change", names: ["Wife"] });
   });
+  it.each([
+    ["My daughter", "Daughter", "child"],
+    ["my wife", "Wife", "parent"],
+    ["That's me", "Me", "other"],
+    ["it's me", "Me", "other"],
+    ["Grandpa", "Grandpa", "other"],
+  ])("fast-paths clear role answer %s", async (text, name, role) => {
+    const gen = vi.fn();
+    const result = await interpret({ ...request("people", text), context: { peopleStage: "identify" } }, { generate: gen, searchShots: vi.fn() });
+    expect(result.change).toMatchObject({ kind: "person", intent: "assign", name, names: [name], role, needsClarification: false });
+    expect(gen).not.toHaveBeenCalled();
+  });
+  it("keeps ambiguous person answers eligible for clarification and tells the model roles are complete answers", async () => {
+    const gen = generate({ change: { kind: "person", intent: "unclear", names: [], name: "", role: "other", needsClarification: true, clarifyingQuestion: "Who do you mean?" } });
+    await interpret({ ...request("people", "two kids"), context: { peopleStage: "identify" } }, { generate: gen, searchShots: vi.fn() });
+    const prompt = (gen.mock.calls[0]![0] as { contents: { text: string }[] }).contents[0]!.text;
+    expect(prompt).toContain("relationship or role by itself is a complete answer");
+    expect(prompt).toContain("Ask for clarification only when the answer is genuinely ambiguous");
+  });
   it("fast-paths exact Proceed and everyone confirmations without Gemini", async () => {
     const gen = vi.fn();
     const proceed = await interpret({ ...request("people", "Proceed"), context: { peopleStage: "tagged" } }, { generate: gen, searchShots: vi.fn() });
