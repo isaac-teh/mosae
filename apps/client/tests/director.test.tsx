@@ -207,13 +207,7 @@ describe("Director chat", () => {
     await act(async () => mocks.focusCallback?.());
     await waitFor(() => expect(hasText("Thanks. I've tagged all four in your moments.")).toBe(true));
     expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy();
-    expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), expect.objectContaining({
-      type: "batch",
-      actions: expect.arrayContaining([
-        expect.objectContaining({ type: "missed-people", people: expect.arrayContaining([expect.objectContaining({ name: "Grandpa" }), expect.objectContaining({ name: "Grandma" })]) }),
-        { type: "missed-people-confirmed", confirmed: true },
-      ]),
-    }));
+    expect(mocks.repo.mutateFlow.mock.calls.filter(([, , action]: [string, string, any]) => action.type === "missed-person-completed").map(([, , action]: [string, string, any]) => action.personId)).toEqual([grandpaId, grandmaId]);
     expect([...host.querySelectorAll('[data-from="you"]')].filter((item) => item.textContent === "Grandpa and Grandma")).toHaveLength(1);
   });
 

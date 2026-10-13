@@ -48,4 +48,20 @@ describe("flow action application", () => {
     expect(completed.missedPeople).toEqual(flow.missedPeople);
     expect(completed.people.map(({ personId, manualShotAdds }) => [personId, manualShotAdds])).toEqual([["g1", ["shot-1"]], ["g2", ["shot-2"]]]);
   });
+  it("confirms missed people only after every person has a saved tag", () => {
+    const flow: DirectorFlow = { revision: 0, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: [], missedPeople: [
+      { personId: "g1", name: "Grandpa" }, { personId: "g2", name: "Grandma" },
+    ], missedPeopleConfirmed: false };
+    const grandpaDone = applyFlowAction(flow, { type: "batch", actions: [
+      { type: "manual-shot", personId: "g1", shotId: "s1", included: true },
+      { type: "missed-person-completed", personId: "g1" },
+    ] });
+    expect(grandpaDone.missedPeopleConfirmed).toBe(false);
+    const bothDone = applyFlowAction(grandpaDone, { type: "batch", actions: [
+      { type: "manual-shot", personId: "g2", shotId: "s2", included: true },
+      { type: "missed-person-completed", personId: "g2" },
+    ] });
+    expect(bothDone.missedPeopleConfirmed).toBe(true);
+    expect(bothDone.missedPeople?.map(({ personId }) => personId)).toEqual(["g1", "g2"]);
+  });
 });

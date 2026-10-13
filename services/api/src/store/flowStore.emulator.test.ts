@@ -57,6 +57,25 @@ describe("project flow record (emulator)", () => {
     expect(replay).toEqual(batch);
   });
 
+  it("atomically completes two concurrently tagged missed people", async () => {
+    const projectId = crypto.randomUUID();
+    await adminDb.doc(`projects/${projectId}`).set({ userId: "owner" });
+    await mutateFlow(adminDb, { userId: "owner", projectId, actionId: "missed-list", action: { type: "missed-people", answer: "Grandpa and Grandma", people: [
+      { personId: "grandpa", name: "Grandpa" }, { personId: "grandma", name: "Grandma" },
+    ] } });
+    const complete = (personId: string, shotId: string) => mutateFlow(adminDb, { userId: "owner", projectId, actionId: `complete-${personId}`, action: { type: "batch", actions: [
+      { type: "manual-shot", personId, shotId, included: true },
+      { type: "missed-person-completed", personId },
+    ] } });
+    await Promise.all([complete("grandpa", "shot-grandpa"), complete("grandma", "shot-grandma")]);
+    const flow = await readFlow(adminDb, "owner", projectId);
+    expect(flow.missedPeopleConfirmed).toBe(true);
+    expect(flow.missedPeople?.map(({ personId }) => personId)).toEqual(["grandpa", "grandma"]);
+    expect(flow.people.map(({ personId, manualShotAdds }) => [personId, manualShotAdds])).toEqual([
+      ["grandpa", ["shot-grandpa"]], ["grandma", ["shot-grandma"]],
+    ]);
+  });
+
   it("undoes the latest action while advancing the revision", async () => {
     const projectId = crypto.randomUUID();
     await adminDb.doc(`projects/${projectId}`).set({ userId: "owner" });
