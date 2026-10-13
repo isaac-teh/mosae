@@ -4,6 +4,7 @@ export type TaggedPersonResult = {
   momentCount: number;
   isMissed: boolean;
   sampleUri?: string;
+  sampleUris?: string[];
 };
 
 let pendingResult: TaggedPersonResult | null = null;

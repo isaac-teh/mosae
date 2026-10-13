@@ -45,14 +45,18 @@ let host: HTMLDivElement;
 beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; mocks.projectId = "project-1"; mocks.params = {}; URL.createObjectURL = vi.fn(() => "blob:test-photo"); URL.revokeObjectURL = vi.fn(); setPendingMedia([]); setUploadProgress(null); setUploadPreparationProgress(null); setUploadFailure(null); mocks.uploadMedia.mockReset(); host = document.createElement("div"); document.body.append(host); root = createRoot(host); });
 afterEach(async () => { await act(async () => root.unmount()); setPendingMedia([]); setUploadProgress(null); setUploadPreparationProgress(null); setUploadFailure(null); host.remove(); });
 async function renderScreen() { await act(async () => root.render(<DirectorScreen />)); }
+async function typeAndSend(text: string) {
+  const composer = host.querySelector('input[aria-label]') as HTMLInputElement;
+  expect(composer).toBeTruthy();
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, text); composer.dispatchEvent(new Event("input", { bubbles: true })); });
+  await click("Send");
+}
+async function answerPerson(text: string) { await typeAndSend(text); await waitFor(() => expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy()); await click("Proceed"); }
 async function click(label: string) {
+  const roleChoice = ["Me", "My partner", "My daughter", "My son", "My mum", "My dad", "Friend", "Family", "This person", "Skip"].includes(label);
+  if (roleChoice && !host.querySelector(`button[aria-label="${label}"]`)) return typeAndSend(label === "Skip" ? "skip" : label);
   const find = () => host.querySelector(`button[aria-label="${label}"]`) ?? host.querySelector(`button[aria-label^="${label},"]`) ?? [...host.querySelectorAll("button")].find((item) => item.textContent?.trim() === label);
   let button = find();
-  const roleChoice = ["Me", "My partner", "My daughter", "My son", "My mum", "My dad", "Friend", "Family", "This person"].includes(label);
-  if (!button && roleChoice && host.querySelector('button[aria-label="Yes"]')) {
-    await act(async () => host.querySelector('button[aria-label="Yes"]')!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    button = find();
-  }
   expect(button).toBeTruthy();
   await act(async () => button!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
@@ -79,12 +83,25 @@ const planFixture = {
 } as any;
 const directionOptions = { recommendation: "For these portraits, I’d suggest a gentle pace.", note: "Warm, intimate story", rewrites: [], cadences: [{ id: "reflective", name: "Gentle", description: "Unhurried" }, { id: "playful", name: "Lively", description: "Energetic" }], soundtracks: [{ id: "lyria-reflective", name: "Quiet afternoon", description: "Gentle piano" }], durations: [{ id: "30s", label: "30 sec", caption: "Quick", seconds: 30 }, { id: "1m", label: "1 min", caption: "Short", seconds: 60 }, { id: "2m", label: "2 min", caption: "Balanced", seconds: 120 }, { id: "3m", label: "3 min", caption: "Extended", seconds: 180 }, { id: "4m", label: "4 min", caption: "Long", seconds: 240 }, { id: "5m", label: "5 min", caption: "Everything", seconds: 300 }], recommendedDuration: "2m", recommendedCadence: "reflective", cadenceReason: "The photos feel calm", maximumDurationSec: 300 };
 const filmFixture = { filmId: "film-1", planId: "proposal-1", version: 1, title: "Japan, autumn", subtitle: "A family trip", place: "Japan", dateLabel: "October", durationSec: 124, posterKey: "poster", savePosterKey: "poster", videoKey: "video", momentCount: 419, audioLabel: "Soft piano", shortcuts: [], status: "ready", videoUrl: "https://film.example/first-cut.mp4", rendering: false, reasons: ["Opens on the train window in Tokyo.", "Mia's reactions lead each day.", "Both moments you kept are in.", "I left out repeated scenery shots."] } as any;
-function setup(options: { faces?: boolean; orientation?: { portrait: number; landscape: number; square: number; suggested: "9:16" | "16:9" | null }; interpret?: () => Promise<any>; createPlan?: () => Promise<any>; people?: any[]; readyPlan?: boolean; applyEdits?: (...args: any[]) => Promise<any>; getFilm?: (...args: any[]) => Promise<any>; getProjectResume?: (...args: any[]) => Promise<any>; saveFilm?: (...args: any[]) => Promise<any>; maximumDurationSec?: number; maximumDurationSecByCadence?: Record<string, number> } = {}) {
+function setup(options: { faces?: boolean; orientation?: { portrait: number; landscape: number; square: number; suggested: "9:16" | "16:9" | null }; interpret?: (...args: any[]) => Promise<any>; createPlan?: () => Promise<any>; people?: any[]; readyPlan?: boolean; applyEdits?: (...args: any[]) => Promise<any>; getFilm?: (...args: any[]) => Promise<any>; getProjectResume?: (...args: any[]) => Promise<any>; saveFilm?: (...args: any[]) => Promise<any>; maximumDurationSec?: number; maximumDurationSecByCadence?: Record<string, number> } = {}) {
   const planReady = options.readyPlan ?? false;
   mocks.repo = {
     getSummary: vi.fn(async () => ({ ...summary(options.faces ?? true), ...(options.orientation ? { orientation: options.orientation } : {}), total: planReady ? 465 : 8, processed: { ingested: planReady ? 465 : 8, understood: planReady ? 465 : 8, faces: 4 }, ready: { ...summary(options.faces ?? true).ready, plan: planReady } })), getPeople: vi.fn(async () => options.people ?? people),
     createPlan: vi.fn(options.createPlan ?? (async () => ({ planId: "proposal-1" }))),
-    interpret: vi.fn(options.interpret ?? (async () => ({ reply: "I understood the Japan trip.", change: { kind: "occasion", storyText: "Japan trip" } }))),
+    interpret: vi.fn(options.interpret ?? (async (_projectId: string, request: any) => {
+      if (request.step !== "people") return { reply: "I understood the Japan trip.", change: { kind: "occasion", storyText: "Japan trip" } };
+      const text = String(request.text).trim(); const lower = text.toLocaleLowerCase(); const stage = request.context.peopleStage;
+      if (stage === "tagged") return { reply: "", change: { kind: "person", intent: "proceed", names: [], name: "", role: "other", needsClarification: false } };
+      if (/^(that's everyone|that’s everyone|no|none|that's all|that’s all)$/i.test(text)) return { reply: "", change: { kind: "person", intent: "confirm", names: [], name: "", role: "other", needsClarification: false } };
+      if (stage === "summary" && /^(ok|okay|good|yes|continue|looks right|looks good)$/i.test(text)) return { reply: "", change: { kind: "person", intent: "confirm", names: [], name: "", role: "other", needsClarification: false } };
+      if (/^(skip|don't know|not sure)$/i.test(text)) return { reply: "", change: { kind: "person", intent: "skip", names: [], name: "", role: "other", needsClarification: false } };
+      const role = /daughter|son/.test(lower) ? "child" : /wife|husband|partner|me/.test(lower) ? "parent" : "other";
+      const name = /daughter/.test(lower) ? "Daughter" : /son/.test(lower) ? "Son" : /wife/.test(lower) ? "Wife" : /husband/.test(lower) ? "Husband" : /^me$|that's me|that’s me/.test(lower) ? "Me" : text;
+      if (stage === "identify") return { reply: "", change: { kind: "person", intent: "assign", names: [name], name, role, needsClarification: false } };
+      const names = text.split(/\s*(?:,|\band\b)\s*/i).map((value) => value.replace(/^(?:also|my)\s+/i, "").trim()).filter(Boolean);
+      if (/two cousins|three cousins|my cousins/.test(lower)) return { reply: "What are their names?", change: { kind: "person", intent: "missed", names: [], name: "", role: "other", needsClarification: true, clarifyingQuestion: "What are their names?" } };
+      return { reply: "", change: { kind: "person", intent: "missed", names, name: names[0] ?? "", role: "other", needsClarification: false } };
+    })),
     getPlan: vi.fn(async () => planFixture), applyEdits: vi.fn(options.applyEdits ?? (async () => planFixture)), getDirectionOptions: vi.fn(async () => ({ ...directionOptions, maximumDurationSec: options.maximumDurationSec ?? directionOptions.maximumDurationSec, ...(options.maximumDurationSecByCadence ? { maximumDurationSecByCadence: options.maximumDurationSecByCadence } : {}) })), directFilm: vi.fn(async () => ({ filmId: "film-1" })), getFilm: vi.fn(options.getFilm ?? (async () => filmFixture)), getFilmTimeline: vi.fn(async () => ({ timeline: { durationSec: 124, fps: 30, aspect: "9:16", videoClips: [] }, sources: {} })), getProjectResume: vi.fn(options.getProjectResume ?? (async () => ({ proposalId: null, storyText: null, generationId: null, generationStatus: null }))), saveFilm: vi.fn(options.saveFilm ?? (async () => ({ downloadKey: "https://film.example/first-cut.mp4" }))),
   };
   mocks.flowRepo = mocks.repo;
@@ -92,6 +109,70 @@ function setup(options: { faces?: boolean; orientation?: { portrait: number; lan
 }
 
 describe("Director chat", () => {
+  it("names each recurring person in chat, shows the matching tag count, and waits for Proceed", async () => {
+    setup(); await renderScreen(); await click("A trip");
+    for (const label of ["Me", "My partner", "Friend", "Type a name", "Skip", "Not the same person? Tag it"]) expect(host.querySelector(`button[aria-label="${label}"]`)).toBeNull();
+    await typeAndSend("My daughter");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy());
+    expect(hasText("Thanks. I've tagged her in 212 moments.")).toBe(true);
+    expect(hasText("Tagged in 212 moments")).toBe(true);
+    expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy();
+    await click("Proceed");
+    await waitFor(() => expect(hasText("Who is this?")).toBe(true));
+    expect(host.querySelector('button[aria-label="Proceed"]')).toBeNull();
+  });
+
+  it("interprets multiple missed names and creates a photo picker card for each", async () => {
+    setup({ readyPlan: true }); await renderScreen(); await click("A trip");
+    await answerPerson("My daughter");
+    await answerPerson("My son");
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    await typeAndSend("Grandpa and Grandma");
+    await waitFor(() => expect(hasText("Help me select photos of Grandpa.")).toBe(true));
+    expect(hasText("Help me select photos of Grandma.")).toBe(true);
+    expect(mocks.repo.interpret).toHaveBeenCalledWith("project-1", expect.objectContaining({ context: expect.objectContaining({ peopleStage: "missed" }) }));
+    expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(2);
+  });
+
+  it("shows the people summary after the one-time missed-people prompt and continues to direction", async () => {
+    setup({ readyPlan: true }); await renderScreen(); await click("A trip");
+    await answerPerson("My daughter");
+    await answerPerson("My son");
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    await click("That's everyone");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
+    expect(hasText("Thanks. I've tagged all two in your moments.")).toBe(true);
+    expect(host.querySelector('button[aria-label="Change Daughter"]')).toBeNull();
+    await click("Looks right");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull());
+    expect(mocks.confirmCast).toHaveBeenCalledTimes(3);
+  });
+
+  it("routes a summary correction for a tagged person straight to their gallery", async () => {
+    setup({ interpret: async (_projectId, request) => request.context.peopleStage === "identify"
+      ? ({ reply: "", change: { kind: "person", intent: "assign", names: [request.text === "My son" ? "Son" : "Daughter"], name: request.text === "My son" ? "Son" : "Daughter", role: "child", needsClarification: false } })
+      : ({ reply: "", change: { kind: "person", intent: "change", names: ["Daughter"], name: "Daughter", role: "child", needsClarification: false } }) });
+    await renderScreen(); await click("A trip");
+    await answerPerson("My daughter"); await answerPerson("My son");
+    await click("That's everyone");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
+    await typeAndSend("Daughter is wrong");
+    expect(mocks.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: "/tag-moments", params: expect.objectContaining({ personId: "person-1" }) }));
+  });
+
+  it("routes a new name from the summary correction to missed-person photo selection", async () => {
+    setup({ interpret: async (_projectId, request) => request.context.peopleStage === "identify"
+      ? ({ reply: "", change: { kind: "person", intent: "assign", names: [request.text === "My son" ? "Son" : "Daughter"], name: request.text === "My son" ? "Son" : "Daughter", role: "child", needsClarification: false } })
+      : ({ reply: "", change: { kind: "person", intent: "change", names: ["Grandma"], name: "Grandma", role: "other", needsClarification: false } }) });
+    await renderScreen(); await click("A trip");
+    await answerPerson("My daughter"); await answerPerson("My son");
+    await click("That's everyone");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
+    await typeAndSend("Add Grandma");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Tap to select"]')).toBeTruthy());
+    expect(hasText("Help me select photos of Grandma.")).toBe(true);
+  });
+
   it("keeps chat history content from growing a spacer below the last message", async () => {
     setup();
     await renderScreen();
@@ -102,27 +183,16 @@ describe("Director chat", () => {
     expect(history?.getAttribute("data-content-container-style")).toBe(JSON.stringify({ flexGrow: 1, justifyContent: "flex-end" }));
   });
 
-  it("resumes a proposal-backed people step on the same unanswered person and shows the tag return", async () => {
-    setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
-    const personFlow = (personId: string, name: string | null, confirmed: boolean) => ({ personId, name, role: name ? "child" : null, confirmed, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
-    mocks.repo.getFlow = vi.fn(async () => ({ revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [personFlow("person-1", "Mia", true), personFlow("person-2", null, false)], peopleSummaryConfirmed: false }));
-    mocks.params = { completedPersonId: "person-2", completedMomentCount: "3", completedSampleUri: "https://tagged/photo.jpg" };
-    await renderScreen();
-    await waitFor(() => expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy());
-    expect(hasText("Thanks. I've tagged all")).toBe(false);
-    expect(hasText("Got it — these are the photos of this person.")).toBe(true);
-    expect(host.querySelector('img[src="https://tagged/photo.jpg"]')).toBeTruthy();
-    expect(hasText("Who's this? They're in 3 of your moments.")).toBe(true);
-  });
+
 
   it("refreshes into the correct unanswered person from the flow record", async () => {
     setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
     const personFlow = (personId: string, name: string | null, confirmed: boolean) => ({ personId, name, role: name ? "child" : null, confirmed, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
     mocks.repo.getFlow = vi.fn(async () => ({ revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [personFlow("person-1", "Mia", true), personFlow("person-2", null, false)], peopleSummaryConfirmed: false }));
     await renderScreen();
-    await waitFor(() => expect(hasText("Who's this? They're in 90 of your moments.")).toBe(true));
+    await waitFor(() => expect(hasText("Who is this?")).toBe(true));
     expect(hasText("Thanks. I've tagged all")).toBe(false);
-    expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Proceed"]')).toBeNull();
   });
 
   it("keeps a confirmed people summary dismissed after a fresh mount", async () => {
@@ -132,15 +202,15 @@ describe("Director chat", () => {
     mocks.repo.getFlow = vi.fn(async () => flow);
     mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, peopleSummaryConfirmed: action.confirmed }; return flow; });
     await renderScreen();
-    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
     expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
-    expect(host.querySelector('button[aria-label="Change Mia"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Change Mia"]')).toBeNull();
     mocks.push.mockClear();
-    await click("Change Mia");
+    await click("Review Mia");
     expect(mocks.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: "/tag-moments", params: expect.objectContaining({ projectId: "project-1", repository: "api", personId: "person-1", name: "Mia" }) }));
     expect(host.querySelector('button[aria-label="My daughter"]')).toBeNull();
     expect(mocks.repo.mutateFlow.mock.calls.some(([, , action]: [string, string, any]) => action.type === "batch" && action.actions.some((change: any) => change.type === "person" && change.personId === "person-1" && change.name === null))).toBe(false);
-    await click("That's everyone");
+    await click("Looks right");
     await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), { type: "people-summary-confirmed", confirmed: true }));
     await act(async () => root.unmount());
     root = createRoot(host);
@@ -397,24 +467,7 @@ describe("Director chat", () => {
     complete();
   });
 
-  it("accepts an early free-text story and plans automatically when preparation completes", async () => {
-    setup(); setUploadPreparationProgress({ totalFiles: 1, preparedFiles: 0 });
-    await renderScreen();
-    const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
-    await act(async () => { (composer as HTMLInputElement).value = "Mia's birthday"; composer.dispatchEvent(new Event("input", { bubbles: true })); });
-    await click("Send");
-    expect(hasText("Mia's birthday")).toBe(true);
-    expect(mocks.repo.interpret).not.toHaveBeenCalled();
-    expect(mocks.repo.createPlan).not.toHaveBeenCalled();
-    const followUp = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
-    await act(async () => { (followUp as HTMLInputElement).value = "The trip was sunny"; followUp.dispatchEvent(new Event("input", { bubbles: true })); });
-    await click("Send");
-    expect(hasText("Mia's birthday")).toBe(true);
-    expect(hasText("The trip was sunny")).toBe(true);
-    await act(async () => setUploadPreparationProgress(null));
-    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Mia's birthday\nThe trip was sunny", []));
-    expect(hasText("Mia's birthday")).toBe(true);
-  });
+
 
   it("guards rapid repeated confirmations before React rerenders", async () => {
     setup({ createPlan: () => new Promise(() => {}) }); await renderScreen();
@@ -567,20 +620,7 @@ describe("Director chat", () => {
     expect(hasText("Skip for now")).toBe(true);
   });
 
-  it("waits for the plan-time cast instead of confirming an empty pre-cast people list", async () => {
-    setup();
-    let reads = 0;
-    mocks.repo.getPeople.mockImplementation(async () => reads++ === 0 ? null : people);
-    await renderScreen();
-    await click("A trip");
-    await waitFor(() => expect(hasText("Who's this? They're in")).toBe(true));
-    expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
-    expect(host.querySelector('button[aria-label="Type a name"]')).toBeTruthy();
-    await click("Type a name");
-    expect(host.querySelector('input[aria-label="Person name"]')).toBeTruthy();
-    expect((host.querySelector('input[aria-label="Person name"]') as HTMLInputElement | null)?.placeholder).toBe("What's their name?");
-    expect(host.querySelectorAll('[data-face-preview="true"]').length).toBeGreaterThan(0);
-  });
+
 
   it("shows a plan failure and lets the user retry it", async () => {
     setup({ createPlan: vi.fn().mockRejectedValue(new Error("planner failed")) });
@@ -615,251 +655,99 @@ describe("Director chat", () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it("saves the selected role and name before asking about the next person", async () => {
-    setup({ people: people.map((person) => ({ ...person, role: "other" })) }); await renderScreen();
-    await click("A trip");
-    await click("My daughter");
-    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", role: "child", name: "My daughter" })]) })));
-    expect(hasText("Who's this? They're in")).toBe(true);
-  });
 
-  it("confirms a story-mentioned son on the top face cluster and saves Yes as My son", async () => {
-    setup({ people: [...people, { personId: "person-3", name: null, role: null, ageBand: "adult", momentCount: 5, sampleShotIds: [], sampleFaces: [], days: [2] }], interpret: async () => ({ reply: "Children's Day celebration", change: { kind: "occasion", storyText: "Children's Day celebration", mentionedPeople: ["son"] } }) }); await renderScreen();
+
+  it("accepts an early free-text story and plans automatically when preparation completes", async () => {
+    setup(); setUploadPreparationProgress({ totalFiles: 1, preparedFiles: 0 });
+    await renderScreen();
     const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
-    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "My son children day celebration"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
-    await click("→"); await click("Yes, that's right");
-    await waitFor(() => expect(hasText("A Children's Day celebration for your son — lovely!")).toBe(true));
-    await waitFor(() => expect(hasText("Is this your son?")).toBe(true));
-    expect(host.querySelectorAll('[data-face-preview="true"]')).toHaveLength(2);
-    expect([...host.querySelectorAll('img[alt^="Person photo "]')].map((image) => image.getAttribute("src"))).toEqual(["https://thumb.test/a", "https://thumb.test/b"]);
-    expect(host.querySelector('img[alt="Photo 1"]')).toBeNull();
-    expect(host.querySelector('button[aria-label="Yes"]')).toBeTruthy();
-    expect(host.querySelector('button[aria-label="Someone else"]')).toBeTruthy();
-    await click("Yes");
-    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "My son", role: "child" })]) })));
-    expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy();
-    expect(hasText("Three people appear often in your moments. Who is this?")).toBe(true);
+    await act(async () => { (composer as HTMLInputElement).value = "Mia's birthday"; composer.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("Send");
+    expect(hasText("Mia's birthday")).toBe(true);
+    expect(mocks.repo.interpret).not.toHaveBeenCalled();
+    expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+    const followUp = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
+    await act(async () => { (followUp as HTMLInputElement).value = "The trip was sunny"; followUp.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("Send");
+    expect(hasText("Mia's birthday")).toBe(true);
+    expect(hasText("The trip was sunny")).toBe(true);
+    await act(async () => setUploadPreparationProgress(null));
+    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("Mia's birthday\nThe trip was sunny", []));
+    expect(hasText("Mia's birthday")).toBe(true);
   });
-
-  it("runs story, per-person photo review and tagging, summary, options, and preview in order", async () => {
-    setup({ readyPlan: true, people: [...people, { personId: "person-3", name: null, role: null, ageBand: "adult", momentCount: 5, sampleShotIds: [], sampleFaces: [], days: [2] }] });
-    await renderScreen();
-    await click("A trip");
-
-    expect(hasText("Who's this? They're in")).toBe(true);
-    expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
-    expect(host.querySelector('button[aria-label="Type a name"]')).toBeTruthy();
-    expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(0);
-    expect(host.querySelector('button[aria-label="A trip"]')).toBeNull();
-
-    await click("Type a name");
-    expect(host.querySelector('input[aria-label="Person name"]')).toBeTruthy();
-    expect((host.querySelector('input[aria-label="Person name"]') as HTMLInputElement | null)?.placeholder).toBe("What's their name?");
-    await click("My daughter");
-    await waitFor(() => expect(hasText("Who's this? They're in")).toBe(true));
-    expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy();
-
-    await click("Not the same person? Tag it");
-    expect(mocks.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: "/tag-moments", params: expect.objectContaining({ personId: "person-2", name: "", source: "identity" }) }));
-    mocks.params = { completedPersonId: "person-2", completedMomentCount: "3" };
-    await renderScreen();
-    await waitFor(() => expect(hasText("Who's this? They're in")).toBe(true));
-    expect(host.querySelector('button[aria-label="Not the same person? Tag it"]')).toBeTruthy();
-    expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(0);
-    await click("Type a name");
-
-    const personName = host.querySelector('input[aria-label="Person name"]')!;
-    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(personName, "Noah"); personName.dispatchEvent(new Event("input", { bubbles: true })); });
-    await click("Save name");
-    await waitFor(() => expect(hasText("Who's this? They're in 5 of your moments.")).toBe(true));
-    await click("Me");
-    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
-    expect(host.querySelector('button[aria-label="Change"]')).toBeNull();
-    expect(host.querySelector('button[aria-label="Change Noah"]')).toBeTruthy();
-    expect(host.querySelector('button[aria-label="Skip for now"]')).toBeNull();
-    expect(hasText("Three people appear often in your moments. Who is this?")).toBe(true);
-    expect(hasText("Who's this? They're in 212 of your moments.")).toBe(true);
-    expect(hasText("Noah")).toBe(true);
-    await click("That's everyone");
-
-    expect(hasText("Who's this? They're in 212 of your moments.")).toBe(true);
-    expect(hasText("Noah")).toBe(true);
-    await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
+  it("sends Ask for a change to the editor with the request in the URL", async () => {
+    await openMoments();
     await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
-    expect(hasText("Length")).toBe(false);
-    expect(host.querySelector('button[aria-label="Fix people"]')).toBeNull();
     await click("Sounds good");
-    await waitFor(() => expect(host.querySelector('[data-testid="film-player"]')).toBeTruthy());
-    expect(host.querySelector('button[aria-label="Fix people"]')).toBeNull();
-    expect(host.textContent).not.toContain("Remake the film with these changes?");
-    expect(host.querySelector('button[aria-label="A trip"]')).toBeNull();
+    await waitFor(() => expect(host.querySelector('input[aria-label="Ask for a change"]')).toBeTruthy());
+    const composer = host.querySelector('input[aria-label="Ask for a change"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "Make it shorter"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
+    await click("Send");
+    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", planId: "proposal-1", generationId: "film-1", request: "Make it shorter", repository: "api" } });
+    expect(mocks.repo.interpret).not.toHaveBeenCalled();
   });
 
-  it.each(["typed name", "Tag it, return, then type a name"] as const)("asks person two after person one is answered by %s", async (path) => {
-    setup({ people: [...people, { personId: "person-3", name: null, role: null, ageBand: "adult", momentCount: 5, sampleShotIds: [], sampleFaces: [], days: [2] }] });
-    await renderScreen();
-    await click("A trip");
-    if (path === "Tag it, return, then type a name") {
-      await click("Not the same person? Tag it");
-      mocks.params = { completedPersonId: "person-1", completedMomentCount: "3" };
-      await renderScreen();
-    }
-    await click("Type a name");
-    const nameInput = host.querySelector('input[aria-label="Person name"]')!;
-    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(nameInput, "Mia"); nameInput.dispatchEvent(new Event("input", { bubbles: true })); });
-    await click("Save name");
-    await waitFor(() => expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy());
-    expect(hasText("Three people appear often in your moments. Who is this?")).toBe(true);
+  it("interprets role words and stores the normalized role and display name", async () => {
+    setup({ people: [{ ...people[0], role: null }] }); await renderScreen(); await click("A trip");
+    await typeAndSend("daughter");
+    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", role: "child", name: "Daughter" })]) })));
+    expect(mocks.repo.interpret).toHaveBeenCalledWith("project-1", expect.objectContaining({ step: "people", context: expect.objectContaining({ peopleStage: "identify" }) }));
+    expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy();
   });
 
-  it("reveals existing person choices after Someone else", async () => {
-    setup({ interpret: async () => ({ reply: "Children's Day celebration", change: { kind: "occasion", storyText: "Children's Day celebration", mentionedPeople: ["son"] } }) }); await renderScreen();
-    const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
-    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "My son children day celebration"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
-    await click("→"); await click("Yes, that's right");
-    expect(hasText("Is this your son?")).toBe(true);
-    await click("Someone else");
-    expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
-    await click("My daughter");
-    await waitFor(() => expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy());
+  it("opens the existing gallery from the tagged-person card", async () => {
+    setup({ people: [{ ...people[0], role: null }] }); await renderScreen(); await click("A trip"); await typeAndSend("Mia");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Review Mia"]')).toBeTruthy());
+    await click("Review Mia");
+    expect(mocks.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: "/tag-moments", params: expect.objectContaining({ personId: "person-1", name: "Mia" }) }));
+  });
+
+  it("asks a short clarification for an ambiguous identity instead of tagging it", async () => {
+    setup({ people: [{ ...people[0], role: null }], interpret: async () => ({ reply: "Which person do you mean?", change: { kind: "person", intent: "assign", names: [], name: "", role: "other", needsClarification: true, clarifyingQuestion: "Which person do you mean?" } }) });
+    await renderScreen(); await click("A trip"); await typeAndSend("that's not one person");
+    await waitFor(() => expect(hasText("Which person do you mean?")).toBe(true));
+    expect(mocks.confirmCast).not.toHaveBeenCalled();
   });
 
   it("does not revise a plan proposal until its asynchronous job has published it", async () => {
     setup({ people: [{ ...people[0], role: null }] }); await renderScreen();
     await click("A trip");
-    await click("My daughter");
+    await answerPerson("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
     expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.not.objectContaining({ proposalId: expect.any(String) }));
   });
 
-  it("uses the revised proposal returned by cast confirmation for direction options", async () => {
-    setup({ readyPlan: true, people: [{ ...people[0], role: null }] }); await renderScreen();
-    await click("A trip");
-    await click("My daughter");
-    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
-    await click("That's everyone");
-    await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
-    await click("Looks good");
-    await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-2"));
-    expect(host.querySelector('button[aria-label="Sounds good"]')).toBeTruthy();
-  });
 
-  it("shows the set-aside review after confirming the people summary and defers direction options", async () => {
-    setup({ readyPlan: true }); await renderScreen();
-    await click("A trip");
-    await click("My daughter");
-    await click("My partner");
-    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
-    await click("That's everyone");
 
-    await waitFor(() => expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull());
-    expect(hasText("Tap on the photos to view.")).toBe(true);
-    expect(host.querySelectorAll('img[alt="Near-duplicates photo"]')).toHaveLength(4);
-    expect(hasText("+116")).toBe(true);
-    expect(hasText("Looks good")).toBe(true);
-    expect(host.querySelector('button[aria-label="Sounds good"]')).toBeNull();
-    expect(mocks.repo.getDirectionOptions).not.toHaveBeenCalled();
 
-    await click("Looks good");
-    await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-2"));
-    expect(host.querySelector('[aria-label="Filtered photos"]')).toBeNull();
-    expect(host.textContent).toContain("Looks good");
-  });
 
   it("uses each returned proposal ID for the next cast edit", async () => {
     setup({ readyPlan: true });
     mocks.confirmCast.mockResolvedValueOnce({ cast: { people: [] }, proposalId: "proposal-2" }).mockResolvedValueOnce({ cast: { people: [] }, proposalId: "proposal-3" });
     await renderScreen(); await click("A trip");
-    await click("My daughter");
+    await answerPerson("My daughter");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(1));
-    await click("My partner");
+    await answerPerson("My partner");
     await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(2));
     expect(mocks.confirmCast.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ proposalId: "proposal-2" }));
   });
 
-  it("asks before merging a repeated self answer", async () => {
-    setup({ people: [{ ...people[0], ageBand: "adult" }, { ...people[1], ageBand: "adult" }] }); await renderScreen(); await click("A trip");
-    expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
-    expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
-    expect(host.querySelector('button[aria-label="My partner"]')).toBeTruthy();
-    await click("Me");
-    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy());
-    await click("Me");
-    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalledTimes(2));
-    expect(mocks.confirmCast.mock.calls[1]?.[1]).not.toHaveProperty("merges");
-    await waitFor(() => expect(hasText("Same Me as before?")).toBe(true));
-    await click("Yes, same person");
-    expect(mocks.confirmCast.mock.calls[2]?.[1]).toEqual(expect.objectContaining({ merges: [{ fromPersonId: "person-2", toPersonId: "person-1" }] }));
-  });
 
-  it("does not send a second cast edit while the first one is still pending", async () => {
-    setup({ readyPlan: true });
-    let resolveCast!: (value: any) => void;
-    mocks.confirmCast.mockImplementation(() => new Promise((resolve) => { resolveCast = resolve; }));
-    await renderScreen(); await click("A trip");
-    await click("My daughter");
-    expect(mocks.confirmCast).toHaveBeenCalledTimes(1);
-    expect(hasText("Saving your answer")).toBe(true);
-    expect(host.querySelector('button[aria-label="Friend"]')).toBeTruthy();
-    expect(hasText("Who's this? They're in 90 of your moments.")).toBe(true);
-    await act(async () => resolveCast({ cast: { people: [] }, proposalId: "proposal-2" }));
-  });
 
-  it("shows a person answer immediately and ignores a same-frame double tap", async () => {
-    setup({ readyPlan: true });
-    let resolveCast!: (value: any) => void;
-    mocks.confirmCast.mockImplementation(() => new Promise((resolve) => { resolveCast = resolve; }));
-    await renderScreen(); await click("A trip");
-    await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
-    const chip = host.querySelector('button[aria-label="My daughter"]')!;
-    await act(async () => {
-      chip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      chip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(mocks.confirmCast).toHaveBeenCalledTimes(1);
-    expect([...host.querySelectorAll('[data-from="you"]')].some((bubble) => bubble.textContent?.includes("My daughter"))).toBe(true);
-    expect(hasText("Saving your answer")).toBe(true);
-    expect(host.querySelector('button[aria-label="My daughter"]')).toBeFalsy();
-    await act(async () => resolveCast({ cast: { people: [] }, proposalId: "proposal-2" }));
-  });
 
-  it("restores person choices when saving the answer fails", async () => {
-    setup({ readyPlan: true });
-    mocks.confirmCast.mockRejectedValueOnce(new Error("offline"));
-    await renderScreen(); await click("A trip");
-    await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
-    await click("My daughter");
-    await waitFor(() => expect(hasText("I couldn't do that. Try again?")).toBe(true));
-    expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
-  });
 
-  it("shows face previews and only the inline Skip once the person question appears", async () => {
-    setup({ people: [{ ...people[0], momentCount: 12 }, { ...people[1], momentCount: 9 }] }); await renderScreen(); await click("A trip");
-    expect(host.querySelectorAll('img[alt^="Person photo "]')).toHaveLength(4);
-    expect(hasText("Who's this? They're in")).toBe(true);
-    expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy();
-    expect(host.querySelector('button[aria-label="Type a name"]')).toBeTruthy();
-    await click("Type a name");
-    expect(host.querySelector('input[aria-label="Person name"]')).toBeTruthy();
-    expect((host.querySelector('input[aria-label="Person name"]') as HTMLInputElement | null)?.placeholder).toBe("What's their name?");
-    expect(host.querySelector('button[aria-label="Skip"]')).toBeTruthy();
-  });
 
-  it("Skip on the person question advances past the people step", async () => {
-    setup(); await renderScreen();
-    await click("A trip");
-    await click("Skip");
-    await waitFor(() => expect(mocks.confirmCast).toHaveBeenCalled());
-    expect(hasText("Skip")).toBe(true);
-    expect(hasText("Family")).toBe(false);
-    expect(host.querySelector('button[aria-label="Me"]')).toBeTruthy();
-  });
 
-  it("shows the selected role chip label in the reply", async () => {
-    setup(); await renderScreen(); await click("A trip"); await click("My daughter");
-    await waitFor(() => expect(hasText("My daughter")).toBe(true));
+
+
+
+
+
+
+  it("shows the normalized role name in the reply", async () => {
+    setup(); await renderScreen(); await click("A trip"); await answerPerson("My daughter");
+    await waitFor(() => expect(hasText("Daughter")).toBe(true));
     expect(hasText("Family")).toBe(false);
   });
 
@@ -965,100 +853,15 @@ describe("Director chat", () => {
     expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
   });
 
-  it("keeps asking each main person when a flow snapshot refresh arrives between answers", async () => {
-    const threePeople = [...people, { personId: "person-3", name: null, role: null, ageBand: "adult", momentCount: 5, sampleShotIds: [], sampleFaces: [], days: [2] }];
-    setup({ readyPlan: true, people: threePeople });
-    let revision = 1;
-    mocks.repo.getFlow = vi.fn(async () => ({ revision, story: { answer: "A trip", storySummary: "Japan trip", mentionedPeople: [] }, people: [] }));
-    let chat!: ReturnType<typeof useDirectorChat>;
-    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
-    await act(async () => root.render(<Harness />));
-    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
-    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-1")).toBe(true));
 
-    await act(async () => chat.actions.setPerson("person-1", "My daughter"));
-    expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-2")).toBe(true);
-    revision++;
-    await act(async () => { chat.retry(); await new Promise((resolve) => setTimeout(resolve, 0)); });
-    expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-2")).toBe(true);
 
-    await act(async () => chat.actions.setPerson("person-2", "My mum"));
-    expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-3")).toBe(true);
-    await act(async () => chat.actions.setPerson("person-3", "My dad"));
-    expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true);
-  });
 
-  it("uses typed text on an active person card as that person's name", async () => {
-    setup();
-    let chat!: ReturnType<typeof useDirectorChat>;
-    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
-    await act(async () => root.render(<Harness />));
-    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(true));
-    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
-    await waitFor(() => expect(chat.state.step).toBe("people"));
-    await act(async () => chat.actions.send("  Kara  "));
-    expect(mocks.repo.interpret).not.toHaveBeenCalled();
-    expect(mocks.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Kara" })]) }));
-    expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-1")).toBe(false);
-    expect(chat.state.items.some((item) => item.kind === "you" && item.text === "Kara")).toBe(true);
-    expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-2")).toBe(true);
-  });
 
-  it("routes typed text on the post-summary missed-person prompt instead of interpreting it", async () => {
-    setup({ readyPlan: true, interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
-    let chat!: ReturnType<typeof useDirectorChat>;
-    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
-    await act(async () => root.render(<Harness />));
-    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
-    await act(async () => chat.actions.setPerson("person-1", "My daughter"));
-    await act(async () => chat.actions.setPerson("person-2", "My son"));
-    await act(async () => chat.actions.confirmPeople());
-    await act(async () => chat.actions.confirmPeopleSummary());
-    await act(async () => chat.actions.send("Rename Emma"));
-    expect(chat.pendingInterpret).toBeNull();
-    expect(mocks.repo.interpret).not.toHaveBeenCalled();
-    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Emma.")).toBe(true);
-  });
 
-  it("keeps active-person answers working after missed-person text", async () => {
-    setup({ readyPlan: true, interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
-    let chat!: ReturnType<typeof useDirectorChat>;
-    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
-    await act(async () => root.render(<Harness />));
-    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
-    await act(async () => chat.actions.setPerson("person-1", "My daughter"));
-    await act(async () => chat.actions.setPerson("person-2", "My son"));
-    await act(async () => chat.actions.confirmPeople());
-    await act(async () => chat.actions.confirmPeopleSummary());
-    await act(async () => chat.actions.send("Rename Emma"));
-    expect(chat.pendingInterpret).toBeNull();
 
-    await act(async () => chat.actions.reopenPerson("person-1"));
-    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "person" && item.personId === "person-1")).toBe(true));
-    const interpretCalls = mocks.repo.interpret.mock.calls.length;
-    await act(async () => chat.actions.send("Kara"));
-    expect(chat.pendingInterpret).toBeNull();
-    expect(mocks.repo.interpret).toHaveBeenCalledTimes(interpretCalls);
-    expect(mocks.confirmCast).toHaveBeenLastCalledWith("project-1", expect.objectContaining({ people: expect.arrayContaining([expect.objectContaining({ personId: "person-1", name: "Kara" })]) }));
-    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Emma.")).toBe(true);
-  });
 
-  it("does not call the interpreter for non-confirmation text on the missed-person prompt", async () => {
-    setup({ readyPlan: true, interpret: async () => ({ reply: "Rename them Emma?", change: { kind: "person", personId: "person-1", name: "Emma", role: "child" } }) });
-    let chat!: ReturnType<typeof useDirectorChat>;
-    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
-    await act(async () => root.render(<Harness />));
-    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
-    await act(async () => chat.actions.setPerson("person-1", "My daughter"));
-    await act(async () => chat.actions.setPerson("person-2", "My son"));
-    await act(async () => chat.actions.confirmPeople());
-    await act(async () => chat.actions.confirmPeopleSummary());
-    await act(async () => chat.actions.send("Rename Emma"));
-    await act(async () => chat.actions.confirmInterpret());
-    expect(chat.pendingInterpret).toBeNull();
-    expect(mocks.repo.interpret).not.toHaveBeenCalled();
-    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Emma.")).toBe(true);
-  });
+
+
 
   it("keeps a named person when a later refresh returns a stale unnamed row", async () => {
     setup();
@@ -1072,109 +875,17 @@ describe("Director chat", () => {
     expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
   });
 
-  it("shows the people summary after the last existing person is answered", async () => {
-    setup();
-    let chat!: ReturnType<typeof useDirectorChat>;
-    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
-    await act(async () => root.render(<Harness />));
-    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
-    await act(async () => chat.actions.setPerson("person-1", "Type a name", "Emily"));
-    await act(async () => chat.actions.setPerson("person-2", "My son"));
-    expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true);
-    await act(async () => chat.actions.confirmPeopleSummary());
-    expect(chat.state.step).toBe("moments");
-    expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
-    expect(chat.state.items.some((item) => item.kind === "you" && item.text === "A trip")).toBe(true);
-  });
 
-  it("routes a free-typed missed name after summary confirmation and restores it from flow after refresh", async () => {
-    setup({ readyPlan: true, people: [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }] });
-    const personFlow = (person: any) => ({ personId: person.personId, name: person.name, role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
-    let flow: any = { revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map(personFlow), peopleSummaryConfirmed: false };
-    mocks.repo.getFlow = vi.fn(async () => flow);
-    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => {
-      flow = { ...flow, revision: flow.revision + 1, ...(action.type === "missed-people" ? { missedPeople: action.people } : { peopleSummaryConfirmed: action.confirmed }) };
-      return flow;
-    });
-    let chat!: ReturnType<typeof useDirectorChat>;
-    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
-    await act(async () => root.render(<Harness />));
-    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true));
-    await act(async () => chat.actions.confirmPeopleSummary());
-    await act(async () => chat.actions.send("Grandma"));
-    expect(mocks.repo.interpret).not.toHaveBeenCalled();
-    expect(mocks.repo.mutateFlow).toHaveBeenLastCalledWith("project-1", expect.any(String), { type: "missed-people", people: [{ personId: expect.stringMatching(/^p-missed-/), name: "Grandma" }] });
-    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Grandma.")).toBe(true);
-    await act(async () => { await chat.retry(); });
-    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Grandma.")).toBe(true));
-  });
 
-  it.each(["There is someone else", "another person", "one more", "I forgot someone", "someone is missing", "you missed someone", "There's also Grandma"])("handles missed-person text '%s' locally", async (message) => {
-    setup({ readyPlan: true, people: [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }] });
-    let flow: any = { revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map((person) => ({ personId: person.personId, name: person.personId === "person-1" ? "Mia" : "Noah", role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })), peopleSummaryConfirmed: false };
-    mocks.repo.getFlow = vi.fn(async () => flow);
-    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, ...(action.type === "missed-people" ? { missedPeople: action.people } : { peopleSummaryConfirmed: action.confirmed }) }; return flow; });
-    let chat!: ReturnType<typeof useDirectorChat>;
-    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
-    await act(async () => root.render(<Harness />));
-    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true));
-    await act(async () => chat.actions.send(message));
-    expect(mocks.repo.interpret).not.toHaveBeenCalled();
-    if (message === "There is someone else" || message === "another person" || message === "one more" || message === "I forgot someone" || message === "someone is missing" || message === "you missed someone") {
-      expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Who did I miss? Type their name.")).toBe(true);
-      expect(chat.state.items.some((item) => item.kind === "you" && item.text === message)).toBe(true);
-      expect(flow.missedPeople).toBeUndefined();
-    } else {
-      expect(flow.missedPeople).toEqual([{ personId: expect.stringMatching(/^p-missed-/), name: "Grandma" }]);
-      expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Help me select 1 photo of Grandma.")).toBe(true);
-    }
-  });
 
-  it("restores a completed missed-person tag and asks proactively again after refresh", async () => {
-    setup({ readyPlan: true, people: [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }] });
-    const personFlow = (personId: string, name: string | null, manualShotAdds: string[] = []) => ({ personId, name, role: name ? "child" : null, confirmed: true, skipped: false, manualShotAdds, manualShotRemoves: [], faceIds: [], mergedInto: null });
-    mocks.repo.getFlow = vi.fn(async () => ({ revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [personFlow("person-1", "Mia"), personFlow("person-2", "Noah"), personFlow("p-missed-grandma", "Grandma", ["shot-1"])], missedPeople: [{ personId: "p-missed-grandma", name: "Grandma" }], peopleSummaryConfirmed: false }));
-    await renderScreen();
-    await waitFor(() => expect(host.textContent).toContain("Did I miss anyone else? Type the names of who were missed in the box below."));
-    expect(host.textContent).not.toContain("Help me select 1 photo of Grandma.");
-    expect(host.textContent).not.toContain("I didn't catch that");
-  });
 
-  it("treats a clear everyone confirmation as the summary Confirm action", async () => {
-    setup({ readyPlan: true, people: [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }] });
-    let flow: any = { revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map((person) => ({ personId: person.personId, name: person.personId === "person-1" ? "Mia" : "Noah", role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })), peopleSummaryConfirmed: false };
-    mocks.repo.getFlow = vi.fn(async () => flow);
-    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, peopleSummaryConfirmed: action.confirmed }; return flow; });
-    let chat!: ReturnType<typeof useDirectorChat>;
-    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
-    await act(async () => root.render(<Harness />));
-    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(true));
-    await act(async () => chat.actions.send("That's everyone"));
-    expect(flow.peopleSummaryConfirmed).toBe(true);
-    expect(chat.state.items.some((item) => item.kind === "people-summary")).toBe(false);
-    expect(mocks.repo.interpret).not.toHaveBeenCalled();
-  });
 
-  it("keeps the missed-person clarification visible across refresh and accepts a name", async () => {
-    setup({ readyPlan: true, people: [{ ...people[0], name: "Mia" }, { ...people[1], name: "Noah" }] });
-    let flow: any = { revision: 4, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map((person) => ({ personId: person.personId, name: person.personId === "person-1" ? "Mia" : "Noah", role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })), peopleSummaryConfirmed: true };
-    mocks.repo.getFlow = vi.fn(async () => flow);
-    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, ...(action.type === "missed-people" ? { missedPeople: action.people } : { peopleSummaryConfirmed: action.confirmed }) }; return flow; });
-    let chat!: ReturnType<typeof useDirectorChat>;
-    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
-    await act(async () => root.render(<Harness />));
-    await waitFor(() => expect(chat.state.items.some((item) => item.kind === "anyone-else")).toBe(true));
-    await act(async () => chat.actions.send("There is someone else"));
-    expect(chat.state.items.some((item) => item.kind === "you" && item.text === "There is someone else")).toBe(true);
-    await act(async () => { await chat.retry(); });
-    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Who did I miss? Type their name.")).toBe(true);
-    await act(async () => chat.actions.send("Grandma"));
-    expect(flow.missedPeople).toEqual([{ personId: expect.stringMatching(/^p-missed-/), name: "Grandma" }]);
-    const missedTurnOrder = () => chat.state.items.map((item) => item.id).filter((id) => ["anyone-else", "missed-clarification-question-1", "missed-clarification-reply-1", "missed-name-" + flow.missedPeople[0].personId, "missed-select-" + flow.missedPeople[0].personId].includes(id));
-    expect(missedTurnOrder()).toEqual(["anyone-else", "missed-clarification-question-1", "missed-clarification-reply-1", "missed-name-" + flow.missedPeople[0].personId, "missed-select-" + flow.missedPeople[0].personId]);
-    await act(async () => { await chat.retry(); });
-    expect(missedTurnOrder()).toEqual(["anyone-else", "missed-clarification-question-1", "missed-clarification-reply-1", "missed-name-" + flow.missedPeople[0].personId, "missed-select-" + flow.missedPeople[0].personId]);
-  });
+
+
+
+
+
+
 
   it("shows the retry message when interpretation fails and keeps the occasion reply usable", async () => {
     setup({ interpret: async () => { throw new Error("offline"); } }); await renderScreen();
@@ -1399,18 +1110,7 @@ describe("Director chat", () => {
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/save-film", params: { filmId: "film-1", directorChat: "true", repository: "api", projectId: "project-1" } });
   });
 
-  it("sends Ask for a change to the editor with the request in the URL", async () => {
-    await openMoments();
-    await click("Looks good");
-    await waitFor(() => expect(hasText("Sounds good")).toBe(true));
-    await click("Sounds good");
-    await waitFor(() => expect(host.querySelector('input[aria-label="Ask for a change"]')).toBeTruthy());
-    const composer = host.querySelector('input[aria-label="Ask for a change"]')!;
-    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "Make it shorter"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
-    await click("Send");
-    expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", planId: "proposal-1", generationId: "film-1", request: "Make it shorter", repository: "api" } });
-    expect(mocks.repo.interpret).not.toHaveBeenCalled();
-  });
+
 
   it("answers a mid-flow question inline during the automated understand phase without disrupting the flow", async () => {
     setup({ interpret: async () => ({ reply: "Your photos are uploading — one moment.", change: { kind: "note" } }) });

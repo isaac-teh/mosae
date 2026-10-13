@@ -203,6 +203,18 @@ describe("director chat components", () => {
     await click("Lively"); expect(onChange).toHaveBeenCalled();
   });
 
+  it("supports a multi-person focus and keeps Everyone exclusive", async () => {
+    const onChange = vi.fn();
+    await render(<ChatDirectionCard aspect="16:9" pace="gentle" focus="family" collageAmount="few" motionFeel="calm" focusOptions={[{ id: "family", label: "Everyone" }, { id: "p1", label: "Mia" }, { id: "p2", label: "Noah" }]} onChange={onChange} />);
+    await click("Mia");
+    expect(onChange).toHaveBeenLastCalledWith({ focus: "p1" });
+    await render(<ChatDirectionCard aspect="16:9" pace="gentle" focus="p1" collageAmount="few" motionFeel="calm" focusOptions={[{ id: "family", label: "Everyone" }, { id: "p1", label: "Mia" }, { id: "p2", label: "Noah" }]} onChange={onChange} />);
+    await click("Noah");
+    expect(onChange).toHaveBeenLastCalledWith({ focus: "p1,p2" });
+    await click("Everyone");
+    expect(onChange).toHaveBeenLastCalledWith({ focus: "family" });
+  });
+
   it.each([
     ["landscape", { portrait: 2, landscape: 8, suggested: "16:9" as const }, "Most of your photos are horizontal (8 of 10) — make it landscape? 🖥️", "Yes, landscape", "Portrait instead", "16:9"],
     ["mixed", { portrait: 5, landscape: 5, suggested: null }, "Your photos are a mix — which orientation do you want?", "📱 Portrait", "🖥️ Landscape", "9:16"],
