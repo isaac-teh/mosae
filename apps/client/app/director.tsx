@@ -381,7 +381,7 @@ export default function DirectorScreen() {
               {person.sampleFace ? <FacePreviewStrip samples={[person.sampleFace]} limit={1} size={48} rounded /> : person.sampleUri ? <StableUriImage uri={person.sampleUri} accessibilityLabel={`${person.name} face`} className="size-12 rounded-full" /> : <View className="size-12 rounded-full bg-surface-sunken" />}
               <View className="flex-1"><Text className="font-sans-semibold text-label text-ink">{person.name}</Text><Text className="font-sans text-caption text-ink-muted">Tagged in {person.momentCount} {person.momentCount === 1 ? "moment" : "moments"}</Text></View><Text className="text-heading text-ink-muted">›</Text>
             </Pressable>
-            <Pressable role="button" accessibilityLabel={`Change ${person.name}`} onPress={() => scrollAfterAction(() => actions.reopenPerson(person.personId))} className="min-h-11 justify-center px-2"><Text className="font-sans-semibold text-caption text-action">Change</Text></Pressable>
+            <Pressable role="button" accessibilityLabel={`Change ${person.name}`} onPress={() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: person.personId, name: person.name } } as any)} className="min-h-11 justify-center px-2"><Text className="font-sans-semibold text-caption text-action">Change</Text></Pressable>
           </View>)}</View>
           <Text className="font-sans text-caption text-ink-muted">Tap a person to check their moments.</Text>
         </View>;
