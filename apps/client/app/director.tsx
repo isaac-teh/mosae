@@ -332,9 +332,8 @@ export default function DirectorScreen() {
         }
         if (item.kind === "direction" && error === "I couldn't put your film together this time.") return null;
         if (item.kind === "direction") {
-          const { options: focusOptions, label: focusLabel } = directionFocus(people, item.focus, true);
-          const explanation = `I'll focus on ${focusLabel === "The moments" ? "the moments" : focusLabel} and the strongest scenery, and tell you what I left out.`;
-          return <View key={item.id} className="gap-4"><ChatDirectionCard aspect={item.aspect} orientation={item.orientation} pace={item.pace as "gentle" | "lively"} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={(change) => scrollAfterAction(() => actions.setDirection(change))} /><ChatMessage from="mosae" text={explanation} /><Button label="Sounds good" disabled={saving || !directionOptions} onPress={() => scrollAfterAction(actions.shapeIt)} /></View>;
+          const { options: focusOptions } = directionFocus(people, item.focus, true);
+          return <View key={item.id} className="gap-4"><ChatDirectionCard aspect={item.aspect} orientation={item.orientation} pace={item.pace as "gentle" | "lively"} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={(change) => scrollAfterAction(() => actions.setDirection(change))} /><Button label="Sounds good" disabled={saving || !directionOptions} onPress={() => scrollAfterAction(actions.shapeIt)} /></View>;
         }
         if (item.kind === "film") return <View key={item.id} className="gap-4">
           <Text accessibilityRole="header" className="font-title text-heading text-positive">Film ready</Text>

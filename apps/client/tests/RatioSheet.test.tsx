@@ -17,21 +17,21 @@ afterEach(async () => { await act(async () => root.unmount()); host.remove(); })
 describe("RatioSheet", () => {
   it("shows aspect-shaped choices and applies a new ratio immediately", async () => {
     await render(<RatioSheet visible aspect="16:9" onApply={onApply} onClose={onClose} />);
-    const vertical = host.querySelector('[aria-label="9:16 TikTok / Reels"]')!;
-    const horizontal = host.querySelector('[aria-label="16:9 YouTube"]')!;
+    const vertical = host.querySelector('[aria-label="9:16 Portrait"]')!;
+    const horizontal = host.querySelector('[aria-label="16:9 Landscape"]')!;
     expect(vertical.getAttribute("aria-selected")).toBeNull();
     expect(horizontal.getAttribute("aria-selected")).toBe("true");
     expect(host.textContent).toContain("Ratio");
     expect(vertical.querySelector("svg path")).not.toBeNull();
     expect(horizontal.querySelector("svg rect")).not.toBeNull();
-    await click("9:16 TikTok / Reels");
+    await click("9:16 Portrait");
     expect(onApply).toHaveBeenCalledOnce();
     expect(onApply).toHaveBeenCalledWith({ op: "setAspect", aspect: "9:16" });
     expect(onClose).not.toHaveBeenCalled();
   });
   it("does nothing when selecting the current ratio and closes from the check button", async () => {
     await render(<RatioSheet visible aspect="16:9" onApply={onApply} onClose={onClose} />);
-    await click("16:9 YouTube");
+    await click("16:9 Landscape");
     expect(onApply).not.toHaveBeenCalled(); expect(onClose).not.toHaveBeenCalled();
     await click("Done");
     expect(onClose).toHaveBeenCalledOnce();

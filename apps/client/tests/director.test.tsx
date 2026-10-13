@@ -160,11 +160,11 @@ describe("Director chat", () => {
   let recoveryProjectSequence = 0;
   const useFreshRecoveryProject = () => { mocks.projectId = `recovery-project-${++recoveryProjectSequence}`; };
 
-  it.each([[false, "16:9"], [true, "9:16"]] as const)("uses the YouTube suggestion until the user explicitly chooses TikTok style (%s)", async (choosePortrait, expectedAspect) => {
+  it.each([[false, "16:9"], [true, "9:16"]] as const)("uses the Landscape suggestion until the user explicitly chooses portrait (%s)", async (choosePortrait, expectedAspect) => {
     setup({ readyPlan: true, orientation: { portrait: 1, landscape: 7, square: 0, suggested: "16:9" }, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
     await renderScreen(); await waitFor(() => expect(hasText("Looks good")).toBe(true)); await click("Looks good");
-    await waitFor(() => expect(host.querySelector('button[aria-label="Yes, YouTube style"]')?.getAttribute("aria-pressed")).toBe("true"));
-    if (choosePortrait) await click("TikTok style instead");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Yes, landscape"]')?.getAttribute("aria-pressed")).toBe("true"));
+    if (choosePortrait) await click("Portrait instead");
     await click("Sounds good");
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ aspect: expectedAspect })));
   });
@@ -1254,7 +1254,8 @@ describe("Director chat", () => {
     await waitFor(() => expect(mocks.repo.getDirectionOptions).toHaveBeenCalledWith("proposal-1"));
     expect(hasText(directionOptions.recommendation)).toBe(true);
     expect(hasText("Warm, intimate story")).toBe(false);
-    expect(hasText("I'll focus on")).toBe(true);
+    expect(hasText("I'll focus on")).toBe(false);
+    expect(host.querySelector('button[aria-label="Sounds good"]')).toBeTruthy();
     expect(hasText("Length")).toBe(false);
     expect(host.querySelector('button[aria-label="4 min"]')).toBeNull();
     await click("Lively");
