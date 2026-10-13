@@ -98,6 +98,7 @@ export function createPlan(config: PlanConfig): (task: PlanTask) => Promise<Plan
     const acquired = await db.runTransaction(async (tx) => {
       const [jobSnap, projectSnap] = await Promise.all([tx.get(ref), tx.get(project)]);
       if (!jobSnap.exists || !projectSnap.exists) return "skipped" as const;
+      if (projectSnap.get("deleting") === true) return "skipped" as const;
       const job = jobSnap.data() as StoredJob;
       if (job.type !== "plan" || job.projectId !== task.projectId || String(job.version) !== task.generation) return "skipped" as const;
       if (job.status === "succeeded" || job.status === "failed") return "skipped" as const;

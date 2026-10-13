@@ -19,6 +19,7 @@ export type { EditInterpretContext, EditInterpretation, EditScope } from "./type
 export interface StoryRepository {
   watchReadiness?(projectId: string, onChange: (snapshot?: { flowRevision?: number }) => void, onError: (error: unknown) => void): () => void;
   listFilms(): Promise<FilmListItem[]>;
+  deleteProject(projectId: string): Promise<void>;
   getProjectResume(projectId: string): Promise<ProjectResumeState>;
   getSummary(projectId: string): Promise<ProjectSummary>;
   getFlow?(projectId: string): Promise<DirectorFlow>;

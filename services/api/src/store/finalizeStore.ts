@@ -80,7 +80,7 @@ export async function recordFinalize(db: Firestore, expectedBucket: string, inpu
       tx.get(assetRef),
       tx.get(taskRef),
     ]);
-    if (!project.exists || project.get("userId") !== path.userId) return { kind: "unregistered" };
+    if (!project.exists || project.get("userId") !== path.userId || project.get("deleting") === true) return { kind: "unregistered" };
     if (project.get("demo") === "trip1-v2") return { kind: "ignored_demo" };
     if (!session.exists || !entrySnap.exists) return { kind: "unregistered" };
 

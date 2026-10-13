@@ -238,6 +238,7 @@ export function createFixtureStoryRepository(opts?: FixtureOptions): StoryReposi
 
   return {
     listFilms: async () => [{ projectId: "fixture", filmId: FILM_ID, planId: PLAN_ID, title: baseFilm.title, month: "Mar 2026", duration: "2:10", posterUrl: "", justSaved: false, status: "film-ready", demo: true }],
+    deleteProject: async () => {},
     getProjectResume: async (projectId) => projectId === "fixture"
       ? { proposalId: PLAN_ID, storyText: "Yes, our Japan trip", generationId: FILM_ID, generationStatus: "playable" }
       : { proposalId: null, storyText: null, generationId: null, generationStatus: null },

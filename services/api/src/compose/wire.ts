@@ -183,6 +183,8 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
 
   return async (task) => {
     const project = db.collection("projects").doc(task.projectId);
+    const projectSnap = await project.get();
+    if (!projectSnap.exists || projectSnap.get("deleting") === true) return "skipped";
     const genRef = project.collection("generations").doc(task.generationId);
     const genSnap = await genRef.get();
     if (!genSnap.exists) return "skipped";
@@ -192,7 +194,6 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
     // attempt; a retry must not overwrite it.
     if (generation.status !== "composing") return "skipped";
 
-    const projectSnap = await project.get();
     const userId = (projectSnap.get("userId") as string | undefined) ?? "";
 
     const fail = async (reasons: string[]): Promise<ComposeTaskResult> => {

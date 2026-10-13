@@ -105,7 +105,7 @@ export async function saveIntent(
       transaction.get(project),
       transaction.get(intentRef),
     ]);
-    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) {
+    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId || projectSnap.get("deleting") === true) {
       throw new DirectingStoreError("not_found");
     }
 
@@ -149,7 +149,7 @@ export async function saveProposal(
       transaction.get(job),
       transaction.get(destination),
     ]);
-    if (!projectSnap.exists) throw new DirectingStoreError("not_found");
+    if (!projectSnap.exists || projectSnap.get("deleting") === true) throw new DirectingStoreError("not_found");
     if (
       !jobSnap.exists
       || jobSnap.get("proposalId") !== proposal.id
@@ -217,7 +217,7 @@ export async function reviseConstraints(
       transaction.get(project),
       transaction.get(sourceRef),
     ]);
-    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId || !sourceSnap.exists) {
+    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId || projectSnap.get("deleting") === true || !sourceSnap.exists) {
       throw new DirectingStoreError("not_found");
     }
     if (projectSnap.get("currentProposalId") !== input.proposalId) {
@@ -260,7 +260,7 @@ export async function acceptProposal(
       transaction.get(project),
       transaction.get(proposalDocument),
     ]);
-    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId || !proposalSnap.exists) {
+    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId || projectSnap.get("deleting") === true || !proposalSnap.exists) {
       throw new DirectingStoreError("not_found");
     }
     if (projectSnap.get("currentProposalId") !== input.proposalId) {

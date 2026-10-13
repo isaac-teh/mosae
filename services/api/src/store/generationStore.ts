@@ -108,7 +108,7 @@ export async function publishGeneration(
   return db.runTransaction(async (tx) => {
     // Verify ownership
     const projectSnap = await tx.get(db.collection("projects").doc(input.projectId));
-    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) {
+    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId || projectSnap.get("deleting") === true) {
       throw new StoreError("forbidden");
     }
 
@@ -200,7 +200,7 @@ export async function failGeneration(
   return db.runTransaction(async (tx) => {
     // Verify ownership
     const projectSnap = await tx.get(db.collection("projects").doc(input.projectId));
-    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) {
+    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId || projectSnap.get("deleting") === true) {
       throw new StoreError("forbidden");
     }
 
@@ -240,7 +240,7 @@ export async function setRenderProgress(
   return db.runTransaction(async (tx) => {
     // Verify ownership
     const projectSnap = await tx.get(db.collection("projects").doc(input.projectId));
-    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId) {
+    if (!projectSnap.exists || projectSnap.get("userId") !== input.userId || projectSnap.get("deleting") === true) {
       throw new StoreError("forbidden");
     }
 

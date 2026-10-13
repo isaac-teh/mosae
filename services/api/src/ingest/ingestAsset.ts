@@ -89,6 +89,8 @@ async function ingestOriginal(deps: IngestDeps, asset: Asset, workDir: string, t
 
   // Derivatives first, commit last: a reader that sees "ingested" can always fetch the files.
   await timed(deps, timings, "uploadDerivativesMs", async () => {
+    const stillActive = await deps.loadAsset(asset.projectId, asset.id);
+    if (!stillActive || stillActive.generation !== asset.generation || stillActive.status !== "uploaded") return;
     for (const upload of uploads) await deps.objects.upload(upload);
   });
 

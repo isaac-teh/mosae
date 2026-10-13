@@ -16,6 +16,7 @@ export type Project = {
   title: string | null;
   status: "collecting" | "processing" | "ready" | "ready_with_errors" | "failed";
   createdAt: number;
+  deleting?: boolean;
 };
 
 export type NewEntryInput = { fileName: string; contentType: string; sizeBytes: number; replacesAssetId?: string; replacesSessionId?: string };
@@ -42,7 +43,7 @@ export async function createProject(
 
 export async function getOwnedProject(db: Firestore, userId: string, projectId: string): Promise<Project | null> {
   const snap = await projectRef(db, projectId).get();
-  if (!snap.exists || snap.get("userId") !== userId) return null;
+  if (!snap.exists || snap.get("userId") !== userId || snap.get("deleting") === true) return null;
   return snap.data() as Project;
 }
 
@@ -101,6 +102,11 @@ async function requireOwner(db: Firestore, userId: string, projectId: string): P
   if (!(await getOwnedProject(db, userId, projectId))) throw new StoreError("not_found");
 }
 
+async function requireLiveOwner(tx: Transaction, db: Firestore, userId: string, projectId: string): Promise<void> {
+  const project = await tx.get(projectRef(db, projectId));
+  if (!project.exists || project.get("userId") !== userId || project.get("deleting") === true) throw new StoreError("not_found");
+}
+
 export async function openSession(
   db: Firestore,
   input: { userId: string; projectId: string; entries: NewEntryInput[]; now: number },
@@ -112,6 +118,7 @@ export async function openSession(
 
   if (input.entries.some((entry) => entry.replacesAssetId)) {
     await db.runTransaction(async (tx) => {
+      await requireLiveOwner(tx, db, input.userId, input.projectId);
       await claimReplacements(tx, db, input.projectId, entries, input.entries);
       tx.create(ref, session);
       for (const entry of entries) tx.create(ref.collection("entries").doc(entry.assetId), entry);
@@ -119,10 +126,11 @@ export async function openSession(
     return { session, entries };
   }
 
-  const batch = db.batch();
-  batch.set(ref, session);
-  for (const entry of entries) batch.set(ref.collection("entries").doc(entry.assetId), entry);
-  await batch.commit();
+  await db.runTransaction(async (tx) => {
+    await requireLiveOwner(tx, db, input.userId, input.projectId);
+    tx.create(ref, session);
+    for (const entry of entries) tx.create(ref.collection("entries").doc(entry.assetId), entry);
+  });
   return { session, entries };
 }
 
@@ -135,6 +143,7 @@ export async function addEntries(
   const entries = buildEntries(db, input.projectId, input.sessionId, input.entries);
 
   await db.runTransaction(async (tx) => {
+    await requireLiveOwner(tx, db, input.userId, input.projectId);
     const snap = await tx.get(ref);
     if (!snap.exists) throw new StoreError("not_found");
     if (!canAddEntries(snap.data() as UploadSession)) throw new StoreError("session_closed");
@@ -151,6 +160,7 @@ export async function closeSession(
   await requireOwner(db, input.userId, input.projectId);
   const ref = sessionRef(db, input.projectId, input.sessionId);
   return db.runTransaction(async (tx) => {
+    await requireLiveOwner(tx, db, input.userId, input.projectId);
     const snap = await tx.get(ref);
     if (!snap.exists) throw new StoreError("not_found");
     const session = { ...(snap.data() as UploadSession), closed: true };
@@ -172,6 +182,7 @@ export async function recordClientOutcome(
   await requireOwner(db, input.userId, input.projectId);
   const ref = sessionRef(db, input.projectId, input.sessionId).collection("entries").doc(input.assetId);
   return db.runTransaction(async (tx) => {
+    await requireLiveOwner(tx, db, input.userId, input.projectId);
     const snap = await tx.get(ref);
     if (!snap.exists) throw new StoreError("not_found");
     const { entry, changed } = applyEntryEvent(snap.data() as ManifestEntry, input.event);

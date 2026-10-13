@@ -213,6 +213,7 @@ describe("ingestAsset", () => {
     const { deps } = setup(baseAsset, {
       loadAsset: vi.fn()
         .mockResolvedValueOnce(baseAsset)
+        .mockResolvedValueOnce(baseAsset)
         .mockResolvedValueOnce({ ...baseAsset, status: "ingested" }),
       settle: vi.fn()
         .mockRejectedValueOnce(new Error("firestore down"))
