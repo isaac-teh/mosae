@@ -49,9 +49,17 @@ describe("projectStore (emulator)", () => {
     ).rejects.toMatchObject({ code: "not_found" });
   });
 
-  it("rejects more than 500 entries", async () => {
+  it("writes sessions with 600 entries across bounded transactions", async () => {
     const project = await newProject();
-    await expect(openSession(adminDb, { userId: project.userId, projectId: project.id, entries: Array.from({ length: 501 }, () => photo), now: 1 })).rejects.toMatchObject({ code: "too_many_entries" });
+    const { session, entries } = await openSession(adminDb, {
+      userId: project.userId,
+      projectId: project.id,
+      entries: Array.from({ length: 600 }, (_, index) => ({ ...photo, fileName: `IMG_${index}.jpg` })),
+      now: 1,
+    });
+    expect(entries).toHaveLength(600);
+    const stored = await adminDb.collection(`projects/${project.id}/uploadSessions/${session.id}/entries`).get();
+    expect(stored.size).toBe(600);
   });
 
   it("blocks new entries after close without finalizing pending ones", async () => {

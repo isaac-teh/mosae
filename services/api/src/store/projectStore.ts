@@ -7,7 +7,7 @@ import {
   type UploadSession,
 } from "../domain/uploadSession.js";
 
-export const MAX_ENTRIES_PER_REQUEST = 500;
+const ENTRY_WRITE_CHUNK_SIZE = 200;
 
 export type Project = {
   id: string;
@@ -48,7 +48,7 @@ export async function getOwnedProject(db: Firestore, userId: string, projectId: 
 }
 
 function buildEntries(db: Firestore, projectId: string, sessionId: string, inputs: NewEntryInput[]): ManifestEntry[] {
-  if (inputs.length === 0 || inputs.length > MAX_ENTRIES_PER_REQUEST) throw new StoreError("too_many_entries");
+  if (inputs.length === 0) throw new StoreError("too_many_entries");
   return inputs.map((input) => {
     if (validateNewEntry(input)) throw new StoreError("invalid_entry");
     const assetId = db.collection("_ids").doc().id;
@@ -116,21 +116,27 @@ export async function openSession(
   const entries = buildEntries(db, input.projectId, ref.id, input.entries);
   const session: UploadSession = { id: ref.id, projectId: input.projectId, userId: input.userId, closed: false, createdAt: input.now };
 
-  if (input.entries.some((entry) => entry.replacesAssetId)) {
-    await db.runTransaction(async (tx) => {
-      await requireLiveOwner(tx, db, input.userId, input.projectId);
-      await claimReplacements(tx, db, input.projectId, entries, input.entries);
-      tx.create(ref, session);
-      for (const entry of entries) tx.create(ref.collection("entries").doc(entry.assetId), entry);
-    });
-    return { session, entries };
-  }
-
   await db.runTransaction(async (tx) => {
     await requireLiveOwner(tx, db, input.userId, input.projectId);
     tx.create(ref, session);
-    for (const entry of entries) tx.create(ref.collection("entries").doc(entry.assetId), entry);
   });
+
+  try {
+    for (let offset = 0; offset < entries.length; offset += ENTRY_WRITE_CHUNK_SIZE) {
+      const chunk = entries.slice(offset, offset + ENTRY_WRITE_CHUNK_SIZE);
+      const inputChunk = input.entries.slice(offset, offset + ENTRY_WRITE_CHUNK_SIZE);
+      await db.runTransaction(async (tx) => {
+        await requireLiveOwner(tx, db, input.userId, input.projectId);
+        await claimReplacements(tx, db, input.projectId, chunk, inputChunk);
+        for (const entry of chunk) tx.create(ref.collection("entries").doc(entry.assetId), entry);
+      });
+      entries.splice(offset, chunk.length, ...chunk);
+    }
+  } catch (error) {
+    // Do not leave a partially-created session available for later processing.
+    await db.recursiveDelete(ref).catch(() => undefined);
+    throw error;
+  }
   return { session, entries };
 }
 
