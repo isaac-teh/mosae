@@ -7,15 +7,16 @@ vi.mock("@/lib/demoAssets", () => ({ demoImage: () => 1 }));
 
 const scrollMock = vi.hoisted(() => ({ scrollToEnd: vi.fn() }));
 vi.mock("react-native", () => {
-  const ScrollView = React.forwardRef(({ children, accessibilityLabel, onScrollBeginDrag: _onScrollBeginDrag, scrollEventThrottle: _scrollEventThrottle, contentContainerStyle: _contentContainerStyle, contentContainerClassName: _contentContainerClassName, keyboardShouldPersistTaps: _keyboardShouldPersistTaps, ...props }: any, ref: any) => {
+  const ScrollView = React.forwardRef(({ children, accessibilityLabel, onScrollBeginDrag: _onScrollBeginDrag, scrollEventThrottle: _scrollEventThrottle, contentContainerStyle, contentContainerClassName, keyboardShouldPersistTaps: _keyboardShouldPersistTaps, ...props }: any, ref: any) => {
     React.useImperativeHandle(ref, () => ({ scrollToEnd: scrollMock.scrollToEnd }), []);
-    return React.createElement("div", { ...props, "aria-label": accessibilityLabel }, children);
+    return React.createElement("div", { ...props, "aria-label": accessibilityLabel, "data-content-container-class-name": contentContainerClassName, "data-content-container-style": JSON.stringify(contentContainerStyle ?? null) }, children);
   });
   const node = (tag: string) => ({ children, onPress, onChangeText, accessibilityLabel, editable, testID, style, ...props }: any) => React.createElement(tag, { ...props, style: typeof style === "function" ? style({ pressed: false }) : style, "data-testid": testID, "aria-label": props["aria-label"] ?? accessibilityLabel, disabled: props.disabled ?? (editable === false ? true : undefined), onClick: onPress, onInput: onChangeText ? (event: any) => onChangeText(event.target.value) : undefined }, children);
   const AnimatedView = node("div");
   class Value { setValue() {} }
   const animation = { start() {}, stop() {} };
   return {
+    Platform: { OS: "web" },
     View: node("div"), ScrollView, Text: node("span"), Pressable: node("button"), TextInput: node("input"),
     Image: ({ source, accessibilityLabel, ...props }: any) => React.createElement("img", { ...props, src: source?.uri, alt: accessibilityLabel }),
     ActivityIndicator: ({ accessibilityLabel }: any) => React.createElement("span", { "aria-label": accessibilityLabel }),
@@ -91,6 +92,16 @@ function setup(options: { faces?: boolean; orientation?: { portrait: number; lan
 }
 
 describe("Director chat", () => {
+  it("keeps chat history content from growing a spacer below the last message", async () => {
+    setup();
+    await renderScreen();
+    const history = host.querySelector('[aria-label="Director chat history"]');
+    expect(history).toBeTruthy();
+    expect(history?.getAttribute("data-content-container-class-name")).toContain("pb-4");
+    expect(history?.getAttribute("data-content-container-class-name")).not.toContain("py-6");
+    expect(history?.getAttribute("data-content-container-style")).toBe(JSON.stringify({ flexGrow: 1, justifyContent: "flex-end" }));
+  });
+
   it("resumes a proposal-backed people step on the same unanswered person and shows the tag return", async () => {
     setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
     const personFlow = (personId: string, name: string | null, confirmed: boolean) => ({ personId, name, role: name ? "child" : null, confirmed, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
