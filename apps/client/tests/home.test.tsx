@@ -2,9 +2,9 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ films: [] as any[], pickerFiles: null as File[] | null, listFilms: vi.fn(), uploadMedia: vi.fn(), setPendingMedia: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any, flow: { repository: "api" as const, projectId: "" } }));
+const state = vi.hoisted(() => ({ films: [] as any[], pickerFiles: null as File[] | null, listFilms: vi.fn(), deleteProject: vi.fn(), uploadMedia: vi.fn(), setPendingMedia: vi.fn(), push: vi.fn(), focusEffect: null as null | (() => void | (() => void)), repository: {} as any, flow: { repository: "api" as const, projectId: "" } }));
 vi.mock("@/lib/startDemoTrip", () => ({ startDemoTrip: vi.fn(async () => {}) }));
-vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms }), uploadMedia: state.uploadMedia, setPendingMedia: state.setPendingMedia }));
+vi.mock("@mosae/core", async (load) => ({ ...(await load<typeof import("@mosae/core")>()), getStoryRepository: () => ({ listFilms: state.listFilms, deleteProject: state.deleteProject }), uploadMedia: state.uploadMedia, setPendingMedia: state.setPendingMedia }));
 vi.mock("@/components/MediaPicker", async () => {
   const ReactModule = await import("react");
   return { MediaPicker: ReactModule.forwardRef(({ onFiles }: { onFiles: (files: File[]) => void }, ref) => {
@@ -36,6 +36,7 @@ beforeEach(() => {
   state.pickerFiles = null;
   state.focusEffect = null;
   state.listFilms.mockImplementation(async () => state.films);
+  state.deleteProject.mockResolvedValue(undefined);
   state.uploadMedia.mockImplementation(async (_files: File[], options: any) => {
     options.onProjectReady?.("uploaded-project");
     options.onPreparationProgress?.({ totalFiles: 1, preparedFiles: 0 });
@@ -44,7 +45,7 @@ beforeEach(() => {
     options.onProgress?.({ totalFiles: 1, finishedFiles: 0, failedFiles: 0, bytesSent: 0, totalBytes: 5 });
     return { projectId: "uploaded-project", finished: 1, failed: 0, assetIds: ["asset-1"] };
   });
-  state.repository = { listFilms: state.listFilms };
+  state.repository = { listFilms: state.listFilms, deleteProject: state.deleteProject };
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
@@ -101,7 +102,7 @@ describe("Home", () => {
     expect(createButtons[0]?.className).toContain("rounded-md");
     expect(createButtons[0]?.parentElement?.className).toContain("bottom-0");
     expect(host.querySelector('[data-testid="home-mosaic"]')).toBeNull();
-    await act(async () => (host.querySelector('[data-film-grid="true"] button') as HTMLButtonElement).click());
+    await act(async () => (host.querySelector('[data-film-grid="true"] [aria-label="Film 0, Jun 2026, Ready to watch"]') as HTMLButtonElement).click());
     expect(state.push).toHaveBeenCalledWith("/save-film?repository=api&projectId=p0&filmId=g0");
   });
 
@@ -142,6 +143,41 @@ describe("Home", () => {
     expect(state.push).toHaveBeenLastCalledWith("/editor?repository=api&projectId=render-project&planId=render-plan&generationId=render-gen");
     await act(async () => card("In progress").click());
     expect(state.push).toHaveBeenLastCalledWith("/director?repository=api&projectId=active-project");
+  });
+
+  it("opens the per-film delete confirmation and removes the film after success", async () => {
+    state.films = [{ projectId: "p1", filmId: "g1", title: "Trip", month: "Jun 2026", status: "saved" }];
+    let resolveDelete!: () => void;
+    state.deleteProject.mockImplementation(() => new Promise<void>((resolve) => { resolveDelete = resolve; }));
+    await render();
+    const clickLabel = async (label: string) => {
+      const button = host.querySelector(`[aria-label="${label}"]`) as HTMLButtonElement;
+      expect(button).toBeTruthy(); await act(async () => button.click());
+    };
+    await clickLabel("More options for Trip");
+    await clickLabel("Delete film");
+    expect(host.textContent).toContain("This removes the film and its uploaded photos and videos. This can't be undone.");
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Delete")!.click());
+    expect(state.deleteProject).toHaveBeenCalledWith("p1");
+    expect(host.textContent).toContain("No films yet");
+    expect(host.textContent).toContain("0 films");
+    await act(async () => resolveDelete());
+  });
+
+  it("supports selecting multiple films and restores them with an error on failure", async () => {
+    state.films = ["p1", "p2"].map((projectId) => ({ projectId, filmId: null, title: `Film ${projectId}`, month: "Jun 2026", status: "in-progress" }));
+    state.deleteProject.mockRejectedValue(new Error("offline"));
+    await render();
+    await act(async () => (host.querySelector('[aria-label="Select films"]') as HTMLButtonElement).click());
+    await act(async () => (host.querySelector('[aria-label="Select Film p1"]') as HTMLButtonElement).click());
+    await act(async () => (host.querySelector('[aria-label="Select Film p2"]') as HTMLButtonElement).click());
+    expect(host.textContent).toContain("Delete (2)");
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Delete (2)")!.click());
+    expect(host.textContent).toContain("removes 2 films and their uploaded photos and videos");
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Delete")!.click());
+    expect(state.deleteProject).toHaveBeenCalledTimes(2);
+    expect(host.textContent).toContain("Could not delete the selected film(s). Please try again.");
+    expect(host.textContent).toContain("2 films");
   });
 
 });

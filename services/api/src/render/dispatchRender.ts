@@ -126,6 +126,8 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
   return async (task) => {
     if (task.revision !== undefined) return renderEditRevision(config, { ...task, revision: task.revision }, post);
     const project = db.collection("projects").doc(task.projectId);
+    const projectSnap = await project.get();
+    if (!projectSnap.exists || projectSnap.get("deleting") === true) return "skipped";
     const genRef = project.collection("generations").doc(task.generationId);
     const genSnap = await genRef.get();
     if (!genSnap.exists) return "skipped";
@@ -135,7 +137,6 @@ export function createRender(config: RenderConfig): (task: RenderTask) => Promis
     // attempt; a redelivery must not render over it.
     if (generation.status !== "rendering") return "skipped";
 
-    const projectSnap = await project.get();
     const userId = (projectSnap.get("userId") as string | undefined) ?? "";
     const identity = { userId, projectId: task.projectId, generationId: task.generationId };
 
@@ -262,7 +263,7 @@ async function renderEditRevision(
   const [generationSnap, projectSnap, revisionSnap] = await Promise.all([
     generationRef.get(), project.get(), revisionRef.get(),
   ]);
-  if (!generationSnap.exists || !projectSnap.exists || !revisionSnap.exists || revisionSnap.get("status") !== "rendering") return "skipped";
+  if (!generationSnap.exists || !projectSnap.exists || projectSnap.get("deleting") === true || !revisionSnap.exists || revisionSnap.get("status") !== "rendering") return "skipped";
 
   const settle = async (status: "ready" | "failed", fields: Record<string, unknown>): Promise<RenderTaskResult> => {
     await db.runTransaction(async (tx) => {

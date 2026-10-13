@@ -9,9 +9,13 @@ type FilmCardProps = {
   chapters?: number;
   badge?: string;
   onPress?: () => void;
+  onMenu?: () => void;
+  selected?: boolean;
+  selectionMode?: boolean;
+  onSelect?: () => void;
 };
 
-export function FilmCard({ title, meta, status, duration, posterSource, chapters = 0, badge, onPress }: FilmCardProps) {
+export function FilmCard({ title, meta, status, duration, posterSource, chapters = 0, badge, onPress, onMenu, selected = false, selectionMode = false, onSelect }: FilmCardProps) {
   const content = <>
     <View className="relative aspect-video w-full overflow-hidden rounded-md bg-surface-sunken">
       {posterSource ? <Image source={posterSource} accessibilityLabel={`${title} poster`} resizeMode="cover" className="absolute inset-0 h-full w-full" /> : null}
@@ -29,5 +33,8 @@ export function FilmCard({ title, meta, status, duration, posterSource, chapters
     </View>
   </>;
   const className = "min-h-11 w-full max-w-[300px] overflow-hidden rounded-md border border-line bg-surface-raised";
-  return onPress ? <Pressable accessibilityRole="button" accessibilityLabel={`${title}, ${meta}, ${status}`} role="button" onPress={onPress} className={className}>{content}</Pressable> : <View className={className}>{content}</View>;
+  return <View className="relative">
+    {selectionMode ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected }} accessibilityLabel={`${selected ? "Deselect" : "Select"} ${title}`} aria-label={`${selected ? "Deselect" : "Select"} ${title}`} role="checkbox" aria-checked={selected} onPress={onSelect} className="absolute left-2 top-2 z-10 size-9 items-center justify-center rounded-pill bg-surface-raised"><Text className="text-heading text-ink">{selected ? "✓" : "○"}</Text></Pressable> : onMenu ? <Pressable accessibilityRole="button" accessibilityLabel={`More options for ${title}`} aria-label={`More options for ${title}`} role="button" onPress={onMenu} className="absolute right-2 top-2 z-10 size-9 items-center justify-center rounded-pill bg-surface-raised"><Text className="text-heading text-ink">⋯</Text></Pressable> : null}
+    {onPress ? <Pressable accessibilityRole="button" accessibilityLabel={`${title}, ${meta}, ${status}`} aria-label={`${title}, ${meta}, ${status}`} role="button" onPress={selectionMode ? onSelect : onPress} className={className}>{content}</Pressable> : <View className={className}>{content}</View>}
+  </View>;
 }

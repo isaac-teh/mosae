@@ -67,6 +67,15 @@ function dependencies(overrides: Partial<ApiStoryRepositoryDeps> = {}): ApiStory
 }
 
 describe("createApiStoryRepository", () => {
+  it("deletes a project through its authenticated API route", async () => {
+    const request = vi.fn().mockResolvedValue({});
+    await createApiStoryRepository({}, dependencies({ request })).deleteProject("project/encoded");
+    expect(request).toHaveBeenCalledWith("DELETE", "/api/projects/project%2Fencoded");
+  });
+  it("treats a missing project during resume as a 404 for the screen router", async () => {
+    const deps = dependencies({ listenDocument: vi.fn(async () => null) });
+    await expect(createApiStoryRepository({ projectId: "gone" }, deps).getProjectResume("gone")).rejects.toMatchObject({ status: 404, code: "not_found" });
+  });
   it("reads revisioned flow and posts idempotent actions", async () => {
     const request = vi.fn().mockResolvedValueOnce({ flow: { revision: 4 } }).mockResolvedValueOnce({ flow: { revision: 5 } });
     const repository = createApiStoryRepository({ projectId: "project-1" }, dependencies({ request }));

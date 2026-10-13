@@ -87,6 +87,7 @@ export function projectsRouter(deps: {
   sleep?: (ms: number) => Promise<void>;
   embedQuery?: (text: string) => Promise<number[]>;
   demoBucket?: DemoBucket;
+  storageBucket?: { deleteFiles(options: { prefix: string }): Promise<unknown> };
 }): Router {
   const { db } = deps;
   const now = deps.now ?? Date.now;
@@ -161,6 +162,38 @@ export function projectsRouter(deps: {
       res.status(201).json({ project });
     } catch (error) {
       handleError(res, error);
+    }
+  });
+
+  router.delete("/:projectId", async (req, res) => {
+    const projectRef = db.collection("projects").doc(req.params.projectId);
+    try {
+      const snapshot = await projectRef.get();
+      // Deletion is idempotent; a missing project is already in the desired state.
+      if (!snapshot.exists) { res.status(204).end(); return; }
+      const project = snapshot.data()!;
+      const userId: string = res.locals.userId;
+      if (project.userId !== userId) { res.status(404).json({ error: "not_found" }); return; }
+
+      // Persist the tombstone before touching external storage so any worker
+      // that checks the project can stop before publishing further outputs.
+      const stillOwned = await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(projectRef);
+        if (!current.exists) return true;
+        if (current.get("userId") !== userId) return false;
+        transaction.set(projectRef, { deleting: true, deletingAt: now() }, { merge: true });
+        return true;
+      });
+      if (!stillOwned) { res.status(404).json({ error: "not_found" }); return; }
+      const bucket = deps.storageBucket ?? getStorage(getAdminApp()).bucket(process.env.FIREBASE_STORAGE_BUCKET ?? "demo-mosae.appspot.com");
+      for (const root of ["uploads", "proxies", "renders"]) {
+        await bucket.deleteFiles({ prefix: `${root}/${userId}/${req.params.projectId}/` });
+      }
+      await db.recursiveDelete(projectRef);
+      res.status(204).end();
+    } catch (error) {
+      console.error("delete project failed", req.params.projectId, error);
+      res.status(500).json({ error: "internal" });
     }
   });
 

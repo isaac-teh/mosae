@@ -16,6 +16,11 @@ export default function Home() {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [preparationProgress, setPreparationProgress] = useState<UploadPreparationProgress | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [menuProjectId, setMenuProjectId] = useState<string | null>(null);
+  const [confirmProjectIds, setConfirmProjectIds] = useState<string[] | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const router = useRouter();
   const story = useStoryFlow();
   const { repository } = story;
@@ -28,6 +33,22 @@ export default function Home() {
   }, [repository]));
 
   function createFilm() { pickerRef.current?.open(); }
+  async function deleteConfirmed() {
+    if (!confirmProjectIds) return;
+    const ids = [...new Set(confirmProjectIds)];
+    const before = films ?? [];
+    setFilms(before.filter((film) => !ids.includes(film.projectId)));
+    setConfirmProjectIds(null); setMenuProjectId(null); setDeleteError(null);
+    const results = await Promise.allSettled(ids.map((id) => repository.deleteProject(id)));
+    const failedIds = ids.filter((_id, index) => results[index]?.status === "rejected");
+    setFilms(before.filter((film) => !ids.includes(film.projectId) || failedIds.includes(film.projectId)));
+    setSelectedProjectIds((selected) => selected.filter((id) => !ids.includes(id) || failedIds.includes(id)));
+    if (failedIds.length > 0) {
+      setDeleteError("Could not delete the selected film(s). Please try again.");
+    } else if (selectedProjectIds.every((id) => ids.includes(id))) {
+      setSelectionMode(false);
+    }
+  }
   async function tryDemo() {
     if (demoBusy) return;
     setDemoBusy(true); setDemoError(null);
@@ -191,13 +212,18 @@ export default function Home() {
           <View className="mt-8">
             <View className="mb-4 flex-row items-center justify-between">
               <Text role="heading" aria-level={1} className="font-title text-title text-ink">Your films</Text>
-              <Text className="font-sans text-caption text-ink-muted">{films.length} films</Text>
+              <View className="flex-row items-center gap-3">
+                {selectionMode && selectedProjectIds.length > 0 ? <Pressable role="button" accessibilityRole="button" onPress={() => setConfirmProjectIds(selectedProjectIds)} className="min-h-11 justify-center"><Text className="font-sans-medium text-label text-critical">Delete ({selectedProjectIds.length})</Text></Pressable> : null}
+                <Pressable role="button" accessibilityRole="button" accessibilityLabel={selectionMode ? "Cancel selection" : "Select films"} aria-label={selectionMode ? "Cancel selection" : "Select films"} onPress={() => { setSelectionMode(!selectionMode); setSelectedProjectIds([]); }} className="min-h-11 justify-center"><Text className="font-sans-medium text-label text-action">{selectionMode ? "Cancel" : "Select"}</Text></Pressable>
+                <Text className="font-sans text-caption text-ink-muted">{films.length} films</Text>
+              </View>
             </View>
             <View data-film-grid="true" className="flex-row flex-wrap justify-between gap-y-3">
               {films.map((film) => <View key={film.projectId + "/" + (film.filmId ?? film.planId ?? "project")} className="w-[48%]">
-                <FilmCard title={film.title} meta={film.month} status={statusLabel(film.status)} duration={film.duration} posterSource={film.posterUrl ? { uri: film.posterUrl } : undefined} badge={film.demo ? "Demo" : film.justSaved ? "Just saved" : undefined} onPress={() => openFilm(film)} />
+                <FilmCard title={film.title} meta={film.month} status={statusLabel(film.status)} duration={film.duration} posterSource={film.posterUrl ? { uri: film.posterUrl } : undefined} badge={film.demo ? "Demo" : film.justSaved ? "Just saved" : undefined} selectionMode={selectionMode} selected={selectedProjectIds.includes(film.projectId)} onSelect={() => setSelectedProjectIds((ids) => ids.includes(film.projectId) ? ids.filter((id) => id !== film.projectId) : [...ids, film.projectId])} onMenu={() => setMenuProjectId(film.projectId)} onPress={() => openFilm(film)} />
               </View>)}
             </View>
+            {deleteError ? <Text accessibilityRole="alert" role="alert" className="mt-3 font-sans text-caption text-critical">{deleteError}</Text> : null}
           </View>
         ) : (
           <>
@@ -214,7 +240,7 @@ export default function Home() {
               {demoError ? <Text className="font-sans text-caption text-critical">{demoError}</Text> : null}
             </View>
             <View className="mt-[60px] border-t border-line pt-5">
-              <Text role="heading" aria-level={2} className="mb-3 font-title text-heading text-ink">Your films</Text>
+              <View className="mb-3 flex-row items-center justify-between"><Text role="heading" aria-level={2} className="font-title text-heading text-ink">Your films</Text><Text className="font-sans text-caption text-ink-muted">0 films</Text></View>
               {films === null ? <View accessibilityRole="progressbar" aria-label="Loading your films" className="flex-row flex-wrap justify-between gap-y-3">
                 {[0, 1].map((item) => <View key={item} className="w-[48%] animate-pulse">
                   <View className="aspect-video rounded-md bg-surface-sunken" />
@@ -235,6 +261,8 @@ export default function Home() {
         )}
       </ScrollView>
       {hasFilms ? <View className="absolute inset-x-0 bottom-0 z-20 border-t border-line bg-surface px-6 pb-8 pt-4"><Button label="＋  Create a new film" onPress={createFilm} /><Pressable role="button" disabled={demoBusy} onPress={() => void tryDemo()} className="min-h-11 items-center justify-center"><Text className="font-sans-medium text-label text-action">{demoBusy ? "Preparing demo trip…" : "Try with a demo trip"}</Text></Pressable></View> : null}
+      {menuProjectId ? <View className="absolute inset-0 z-30 items-center justify-center bg-scrim/40 px-8"><View className="w-full max-w-sm rounded-md bg-surface-raised p-5"><Text className="font-title text-heading text-ink">Film options</Text><Pressable role="button" accessibilityRole="button" accessibilityLabel="Delete film" aria-label="Delete film" onPress={() => { setConfirmProjectIds([menuProjectId]); setMenuProjectId(null); }} className="mt-4 min-h-11 justify-center"><Text className="font-sans-medium text-label text-critical">Delete film</Text></Pressable><Pressable role="button" accessibilityRole="button" onPress={() => setMenuProjectId(null)} className="min-h-11 justify-center"><Text className="font-sans-medium text-label text-ink-muted">Cancel</Text></Pressable></View></View> : null}
+      {confirmProjectIds ? <View accessibilityRole="alert" aria-modal={true} className="absolute inset-0 z-40 items-center justify-center bg-scrim/50 px-8"><View className="w-full max-w-sm rounded-md bg-surface-raised p-5"><Text role="heading" className="font-title text-heading text-ink">Delete {confirmProjectIds.length > 1 ? `${confirmProjectIds.length} films` : "this film"}?</Text><Text className="mt-3 font-sans text-body text-ink-muted">{confirmProjectIds.length > 1 ? `This removes ${confirmProjectIds.length} films and their uploaded photos and videos. This can't be undone.` : "This removes the film and its uploaded photos and videos. This can't be undone."}</Text><View className="mt-5 flex-row justify-end gap-3"><Pressable role="button" accessibilityRole="button" onPress={() => setConfirmProjectIds(null)} className="min-h-11 justify-center px-3"><Text className="font-sans-medium text-label text-ink-muted">Cancel</Text></Pressable><Pressable role="button" accessibilityRole="button" onPress={() => void deleteConfirmed()} className="min-h-11 justify-center rounded-md bg-critical px-4"><Text className="font-sans-medium text-label text-on-screen">Delete</Text></Pressable></View></View></View> : null}
     </View>
   );
 }

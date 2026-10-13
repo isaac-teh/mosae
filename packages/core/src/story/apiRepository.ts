@@ -27,7 +27,7 @@ export type ApiStoryRepositoryDeps = {
   listenUntil(path: string, accept: (value: unknown) => boolean): Promise<unknown>;
   listenCollection(path: string): Promise<unknown[]>;
   getThumbnailUrl(projectId: string, assetId: string): Promise<string>;
-  request(method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown): Promise<unknown>;
+  request(method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", path: string, body?: unknown): Promise<unknown>;
 };
 
 export type ApiStoryRepositoryOptions = { projectId?: string };
@@ -385,9 +385,10 @@ export function createApiStoryRepository(
         return Number(projectB.createdAt ?? 0) - Number(projectA.createdAt ?? 0);
       });
     },
+    deleteProject: async (id) => { await deps.request("DELETE", `/api/projects/${encodeURIComponent(id)}`); },
     getProjectResume: async (id): Promise<ProjectResumeState> => {
       const projectValue = await deps.listenDocument(`projects/${id}`);
-      if (!projectValue) return { proposalId: null, storyText: null, generationId: null, generationStatus: null };
+      if (!projectValue) throw new ApiError(404, "not_found");
       const project = record(projectValue, "project");
       const savedId = typeof project.savedGenerationId === "string" ? project.savedGenerationId : "";
       const candidates = [...new Set([

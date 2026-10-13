@@ -169,7 +169,7 @@ app.use(express.json({ limit: "2mb" }));
 app.use(
   "/api/projects",
   projectsRouter({
-    db: adminDb, settle, embedQuery, demoBucket: getStorage(getAdminApp()).bucket(config.storageBucket),
+    db: adminDb, settle, embedQuery, demoBucket: getStorage(getAdminApp()).bucket(config.storageBucket), storageBucket: getStorage(getAdminApp()).bucket(config.storageBucket),
     notifyUploaded: async ({ userId, projectId, sessionId, assetId, generation }) => {
       const objectName = buildOriginalPath({ userId, projectId, sessionId, assetId });
       const [metadata] = await getStorage(getAdminApp()).bucket(config.storageBucket).file(objectName).getMetadata();

@@ -55,6 +55,8 @@ const assetRef = (db: Firestore, projectId: string, assetId: string) =>
   db.collection("projects").doc(projectId).collection("assets").doc(assetId);
 
 export async function loadAsset(db: Firestore, projectId: string, assetId: string): Promise<Asset | null> {
+  const project = await db.collection("projects").doc(projectId).get();
+  if (!project.exists || project.get("deleting") === true) return null;
   const snap = await assetRef(db, projectId, assetId).get();
   return snap.exists ? (snap.data() as Asset) : null;
 }
@@ -73,8 +75,8 @@ export async function commitIngested(db: Firestore, commit: IngestCommit, enqueu
   const taskRef = db.collection("projects").doc(commit.projectId).collection("taskOutbox").doc(task.id);
 
   return db.runTransaction(async (tx) => {
-    const [snap, taskSnap] = await Promise.all([tx.get(ref), tx.get(taskRef)]);
-    if (!snap.exists) return "skipped";
+    const [projectSnap, snap, taskSnap] = await Promise.all([tx.get(db.collection("projects").doc(commit.projectId)), tx.get(ref), tx.get(taskRef)]);
+    if (!projectSnap.exists || projectSnap.get("deleting") === true || !snap.exists) return "skipped";
     const asset = snap.data() as Asset;
     if (asset.generation !== commit.generation || !canTransition(asset.status, "ingested")) return "skipped";
 
@@ -101,8 +103,8 @@ export async function commitFailed(
 ): Promise<"failed" | "skipped"> {
   const ref = assetRef(db, input.projectId, input.assetId);
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists) return "skipped";
+    const [projectSnap, snap] = await Promise.all([tx.get(db.collection("projects").doc(input.projectId)), tx.get(ref)]);
+    if (!projectSnap.exists || projectSnap.get("deleting") === true || !snap.exists) return "skipped";
     const asset = snap.data() as Asset;
     if (asset.generation !== input.generation || asset.status !== "uploaded") return "skipped";
     tx.update(ref, { status: "failed", failureReason: input.reason, updatedAt: input.now });
