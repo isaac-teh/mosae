@@ -328,11 +328,11 @@ describe("Director chat", () => {
   let recoveryProjectSequence = 0;
   const useFreshRecoveryProject = () => { mocks.projectId = `recovery-project-${++recoveryProjectSequence}`; };
 
-  it.each([[false, "16:9"], [true, "9:16"]] as const)("uses the Landscape suggestion until the user explicitly chooses portrait (%s)", async (choosePortrait, expectedAspect) => {
+  it.each([[false, "16:9"], [true, "9:16"]] as const)("uses the Landscape photo majority until the user explicitly chooses portrait (%s)", async (choosePortrait, expectedAspect) => {
     setup({ readyPlan: true, orientation: { portrait: 1, landscape: 7, square: 0, suggested: "16:9" }, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
     await renderScreen(); await waitFor(() => expect(hasText("Looks good")).toBe(true)); await click("Looks good");
-    await waitFor(() => expect(host.querySelector('button[aria-label="Yes, landscape"]')?.getAttribute("aria-pressed")).toBe("true"));
-    if (choosePortrait) await click("Portrait instead");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Landscape"]')?.getAttribute("aria-pressed")).toBe("true"));
+    if (choosePortrait) await click("Portrait");
     await click("Sounds good");
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ aspect: expectedAspect })));
   });
@@ -1067,12 +1067,15 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Sounds good"]')).toBeTruthy();
     expect(hasText("Length")).toBe(false);
     expect(host.querySelector('button[aria-label="4 min"]')).toBeNull();
+    expect(hasText("Motion")).toBe(false);
+    expect(host.querySelector('button[aria-label="Sounds good"]')?.className).toContain("bg-transparent");
+    expect(host.querySelector('button[aria-label="Sounds good"]')?.className).toContain("border-line-strong");
+    expect(host.querySelector('button[aria-label="Sounds good"]')?.parentElement?.className).toContain("self-start");
     await click("Lively");
     await click("The moments");
     await click("Lots");
-    await click("Playful");
     await click("Sounds good");
-    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ cadenceId: "playful", durationId: "2m", focus: "family", soundtrackId: "lyria-reflective", collageAmount: "lots", motionFeel: "playful" })));
+    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ cadenceId: "playful", durationId: "2m", focus: "family", soundtrackId: "lyria-reflective", collageAmount: "lots", motionFeel: "calm" })));
   });
 
   it("restores selected direction controls after generation creation fails and resubmits them", async () => {
@@ -1083,7 +1086,6 @@ describe("Director chat", () => {
     await click("Lively");
     await click("The moments");
     await click("Lots");
-    await click("Playful");
     mocks.repo.directFilm.mockRejectedValueOnce(new Error("503"));
     await click("Sounds good");
     await waitFor(() => expect(hasText("I couldn't do that. Try again?")).toBe(true));
@@ -1095,7 +1097,7 @@ describe("Director chat", () => {
     await waitFor(() => expect(host.querySelector('[data-testid="film-player"]')).toBeTruthy());
     expect(mocks.repo.directFilm).toHaveBeenCalledTimes(2);
     expect(mocks.repo.directFilm.mock.calls[1]).toEqual(mocks.repo.directFilm.mock.calls[0]);
-    expect(mocks.repo.directFilm.mock.calls[1][1]).toMatchObject({ cadenceId: "playful", focus: "family", collageAmount: "lots", motionFeel: "playful" });
+    expect(mocks.repo.directFilm.mock.calls[1][1]).toMatchObject({ cadenceId: "playful", focus: "family", collageAmount: "lots", motionFeel: "calm" });
   });
 
   it("removes all user-facing duration choices while the server budget still directs", async () => {

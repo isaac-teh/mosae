@@ -429,7 +429,16 @@ export function deriveChat(input: ChatInput): ChatState {
     // Keep the single missed-people question before the names and photo-selection
     // turns in the reconstructed transcript, then place the final summary after them.
     addMissedPeople(true, false);
-    const named = mainPeople(input.people ?? [], input.summary?.photos ?? 0).filter((person) => !person.skipped && person.name).map((person) => ({ personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri, sampleFace: person.sampleFaces?.[0] }));
+    const announced = mainPeople(input.people ?? [], input.summary?.photos ?? 0).filter((person) => !person.personId.startsWith("p-missed-") && !person.skipped && person.name);
+    const peopleById = new Map(announced.map((person) => [person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri, sampleFace: person.sampleFaces?.[0] }]));
+    const taggedMissed = (input.people ?? []).filter((person) => person.personId.startsWith("p-missed-") && !person.skipped && person.name && person.momentCount > 0);
+    for (const person of taggedMissed) {
+      if (!peopleById.has(person.personId)) peopleById.set(person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri, sampleFace: person.sampleFaces?.[0] });
+    }
+    for (const person of missedPeople) {
+      if (!person.skipped && person.momentCount > 0 && !peopleById.has(person.personId)) peopleById.set(person.personId, { personId: person.personId, name: summaryPersonLabel(person.name), momentCount: person.momentCount, sampleUri: undefined, sampleFace: undefined });
+    }
+    const named = [...peopleById.values()];
     const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     if (named.length === 1) add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged ${named[0]!.name} in your moments.` });
     else add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged all ${words[named.length] ?? named.length} in your moments.` });
