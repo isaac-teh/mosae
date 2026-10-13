@@ -44,6 +44,10 @@ describe("owned edit context", () => {
     expect(context.people.find(person => person.personId === "two")?.focused).toBe(true);
     expect(context.candidates.map(candidate => candidate.shotId)).toEqual(["video"]);
   });
+  it("marks every selected person focused for a multi-person direction", async () => {
+    const context = await loadEditContext(fixture({ "projects/p/generations/g": { proposalId: "proposal", settings: { focus: "one,two" } } }), "owner", "p", "g", { kind: "film" });
+    expect(context.people.filter(person => person.focused).map(person => person.personId)).toEqual(["one", "two"]);
+  });
   it("checks ownership before catalog reads", async () => {
     await expect(loadEditContext(fixture(), "stranger", "p", "g", { kind: "film" })).rejects.toThrow("not_found");
   });

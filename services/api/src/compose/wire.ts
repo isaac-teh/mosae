@@ -234,10 +234,11 @@ export function createCompose(config: ComposeConfig): (task: ComposeTask) => Pro
     const selectedFocus = settings.settings.focus;
     const castSnap = await project.collection("cast").doc("current").get();
     const stored = castSnap.exists ? castSnap.data() as Cast : null;
-    if (selectedFocus !== undefined && selectedFocus !== "family" && (!stored?.confirmed || !stored.people.some(person => person.personId === selectedFocus && !person.excluded))) {
+    const selectedFocusIds = selectedFocus === undefined || selectedFocus === "family" ? [] : [...new Set(selectedFocus.split(",").filter(Boolean))];
+    if (selectedFocusIds.length > 0 && (!stored?.confirmed || selectedFocusIds.some(id => !stored.people.some(person => person.personId === id && !person.excluded)))) {
       return fail(["Selected focus is no longer in the confirmed cast."]);
     }
-    const generationFocus = selectedFocus === undefined ? undefined : selectedFocus === "family" ? [] : [selectedFocus];
+    const generationFocus = selectedFocus === undefined ? undefined : selectedFocus === "family" ? [] : selectedFocusIds;
     if (generationFocus !== undefined) proposal.proposal.constraints.focusCharacterIds = generationFocus;
     const catalog = await loadComposeCatalog(db, task.projectId, proposal.proposal);
 

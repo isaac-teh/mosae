@@ -58,4 +58,34 @@ describe("interpret", () => {
     expect(searchShots).toHaveBeenCalledWith("snow monkeys");
     expect(result.change).toEqual({ kind: "moments", mustIncludeShotIds: ["s1", "s2"] });
   });
+  it("interprets a missed-name list and asks for names when a plural relation is vague", async () => {
+    const missed = await interpret(request("people", "Grandpa and Grandma"), {
+      generate: generate({ change: { kind: "person", intent: "missed", names: ["Grandpa", "Grandma"], needsClarification: false } }), searchShots: vi.fn(),
+    });
+    expect(missed.change).toMatchObject({ intent: "missed", names: ["Grandpa", "Grandma"] });
+    const clarify = await interpret(request("people", "my two cousins"), {
+      generate: generate({ change: { kind: "person", intent: "missed", names: [], needsClarification: true, clarifyingQuestion: "What are their names?" } }), searchShots: vi.fn(),
+    });
+    expect(clarify.change).toMatchObject({ needsClarification: true, clarifyingQuestion: "What are their names?" });
+  });
+  it("extracts a name or a normalized family role and classifies change requests", async () => {
+    const single = await interpret(request("people", "Mia"), { generate: generate({ change: { kind: "person", intent: "assign", names: ["Mia"], name: "Mia", role: "other", needsClarification: false } }), searchShots: vi.fn() });
+    expect(single.change).toMatchObject({ intent: "assign", name: "Mia", names: ["Mia"], needsClarification: false });
+    const role = await interpret(request("people", "My daughter"), { generate: generate({ change: { kind: "person", intent: "assign", names: ["Daughter"], name: "Daughter", role: "child", needsClarification: false } }), searchShots: vi.fn() });
+    expect(role.change).toMatchObject({ name: "Daughter", role: "child" });
+    const change = await interpret({ ...request("people", "Wife is wrong"), context: { peopleStage: "summary" } }, { generate: generate({ change: { kind: "person", intent: "change", names: ["Wife"], name: "Wife", role: "other", needsClarification: false } }), searchShots: vi.fn() });
+    expect(change.change).toMatchObject({ intent: "change", names: ["Wife"] });
+  });
+  it("fast-paths exact Proceed and everyone confirmations without Gemini", async () => {
+    const gen = vi.fn();
+    const proceed = await interpret({ ...request("people", "Proceed"), context: { peopleStage: "tagged" } }, { generate: gen, searchShots: vi.fn() });
+    expect(proceed.change).toMatchObject({ intent: "proceed" });
+    expect(gen).not.toHaveBeenCalled();
+    const everyone = await interpret(request("people", "That's everyone"), { generate: gen, searchShots: vi.fn() });
+    expect(everyone.change).toMatchObject({ intent: "confirm" });
+    expect(gen).not.toHaveBeenCalled();
+    const summary = await interpret({ ...request("people", "Looks right"), context: { peopleStage: "summary" } }, { generate: gen, searchShots: vi.fn() });
+    expect(summary.change).toMatchObject({ intent: "confirm" });
+    expect(gen).not.toHaveBeenCalled();
+  });
 });

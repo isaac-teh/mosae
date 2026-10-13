@@ -152,6 +152,17 @@ describe("generation focus", () => {
     await expect(compose({ projectId: "project1", generationId: "generation1" })).resolves.toBe("composed");
     expect(runCompose).toHaveBeenCalledWith(expect.objectContaining({ cast: expect.objectContaining({ focus: expected, summary: expect.stringContaining(`focus: ${expectedSummary};`) }), proposal: expect.objectContaining({ constraints: expect.objectContaining({ focusCharacterIds: expected }) }) }), expect.anything());
   });
+
+  it("passes multiple selected people through composition focus", async () => {
+    vi.mocked(runCompose).mockClear();
+    vi.mocked(runCompose).mockResolvedValue({ ok: true, timeline: {} as never, droppedPicks: [], reasons: [] } as never);
+    const compose = createCompose({ db: composeFirestore(proposal(), "person-1,child"), generateStructured: async () => ({}) as never });
+    await expect(compose({ projectId: "project1", generationId: "generation1" })).resolves.toBe("composed");
+    expect(runCompose).toHaveBeenCalledWith(expect.objectContaining({
+      cast: expect.objectContaining({ focus: ["person-1", "child"] }),
+      proposal: expect.objectContaining({ constraints: expect.objectContaining({ focusCharacterIds: ["person-1", "child"] }) }),
+    }), expect.anything());
+  });
 });
 
 it("passes the adaptive short target from stored settings to compose", async () => {

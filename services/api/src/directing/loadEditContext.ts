@@ -44,7 +44,7 @@ export async function loadEditContext(db: Firestore, userId: string, projectId: 
   const cast = castSnap.data() as Cast | undefined;
   const confirmed = cast?.confirmed ? cast.people.filter(person => !person.excluded) : [];
   const focus = generation.get("settings")?.focus;
-  const focusIds: string[] = typeof focus === "string" ? focus === "family" ? [] : [focus] : (proposal?.constraints?.focusCharacterIds ?? cast?.focus ?? []);
+  const focusIds: string[] = typeof focus === "string" ? focus === "family" ? [] : focus.split(",").filter(Boolean) : (proposal?.constraints?.focusCharacterIds ?? cast?.focus ?? []);
   const people = confirmed.map(person => ({ personId: person.personId, name: person.name?.trim() || null, role: person.role ?? "other", focused: focusIds.includes(person.personId) }));
   const personIds = new Set(people.map(person => person.personId));
   const assetIds = [...new Set(shots.docs.map(shot => shot.get("assetId")).filter((id): id is string => typeof id === "string" && !id.includes("/")))];

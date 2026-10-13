@@ -11,6 +11,7 @@ const personDefaults = (personId: string, value: Record<string, unknown> = {}) =
   skipped: value.skipped === true || value.excluded === true,
   manualShotAdds: Array.isArray(value.manualShots) ? value.manualShots.filter((x): x is string => typeof x === "string") : [],
   manualShotRemoves: Array.isArray(value.removedShots) ? value.removedShots.filter((x): x is string => typeof x === "string") : [],
+  ...(Array.isArray(value.samplePhotoUris) ? { samplePhotoUris: value.samplePhotoUris.filter((x): x is string => typeof x === "string").slice(0, 4) } : {}),
   faceIds: Array.isArray(value.faceIds) ? value.faceIds.filter((x): x is string => typeof x === "string") : [],
   mergedInto: typeof value.mergedInto === "string" ? value.mergedInto : null,
 });
@@ -80,6 +81,10 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
     (action.included ? removes : adds).delete(action.shotId);
     return { ...flow, people: [...flow.people.filter((person) => person.personId !== action.personId), { ...prior, manualShotAdds: [...adds], manualShotRemoves: [...removes] }] };
   }
+  if (action.type === "sample-photos") {
+    const prior = flow.people.find((person) => person.personId === action.personId) ?? personDefaults(action.personId);
+    return { ...flow, people: [...flow.people.filter((person) => person.personId !== action.personId), { ...prior, samplePhotoUris: action.uris.slice(0, 4) }] };
+  }
   if (action.type === "move-photo") {
     if (action.personId !== null && !flow.people.some((person) => person.personId === action.personId)) throw new FlowStoreError("invalid_action");
     return { ...flow, people: flow.people.map((person) => ({ ...person, faceIds: action.personId === person.personId
@@ -93,6 +98,8 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
     return { ...flow, people: flow.people.map((person) => person.personId === action.personId ? { ...person, mergedInto: action.targetPersonId, skipped: true } : person) };
   }
   if (action.type === "people-summary-confirmed") return { ...flow, peopleSummaryConfirmed: action.confirmed };
+  if (action.type === "people-progress") return { ...flow, peopleProgress: { completedPersonIds: [...new Set(action.completedPersonIds)] } };
+  if (action.type === "missed-people-confirmed") return { ...flow, missedPeopleConfirmed: action.confirmed };
   if (action.type === "missed-people") return { ...flow, missedPeople: action.people };
   return flow;
 }
