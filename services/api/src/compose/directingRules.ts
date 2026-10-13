@@ -1,3 +1,4 @@
+import { finalMusicFadeOutSec } from "@mosae/contracts";
 import type { CadenceId } from "@mosae/contracts";
 import { styleRecipeForCadence } from "./styleRecipe.js";
 
@@ -95,6 +96,4 @@ export function deterministicPlacement(clipCount: number, collageCount: number, 
   return options.length ? options[(value >>> 0) % options.length]! : [];
 }
 
-export function fadeOutSec(filmSec: number): number {
-  return Math.max(0, Math.min(1, filmSec));
-}
+export const fadeOutSec = finalMusicFadeOutSec;

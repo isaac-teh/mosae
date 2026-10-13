@@ -2,7 +2,7 @@ import { z } from "zod";
 import { COLLAGE_LAYOUTS, CollageSpecSchema } from "./collage.js";
 import { ALLOWED_COMBOS } from "./collageCombos.js";
 import { safeParseTimeline, type AudioClip, type Caption, type CollageClip, type Timeline, type VideoClip } from "./timeline.js";
-import { refitSoundtrackToDuration } from "./soundtrack.js";
+import { finalMusicFadeOutSec, refitSoundtrackToDuration } from "./soundtrack.js";
 
 const clipId = z.string().min(1);
 const shotId = z.string().min(1);
@@ -97,7 +97,7 @@ function buildTimeline(firstCut: Timeline, work: WorkClip[], soundtrackId?: stri
     }
     const refit = track.source.kind === "soundtrack" && track.role === "music"
       ? soundtrackId !== undefined
-        ? { ...track, startSec: 0, gainDb: musicGains.get(track.id) ?? track.gainDb, source: { ...track.source, soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, fadeOutSec: Math.min(track.fadeOutSec, durationSec) }
+        ? { ...track, startSec: 0, gainDb: musicGains.get(track.id) ?? track.gainDb, source: { ...track.source, soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, fadeOutSec: finalMusicFadeOutSec(durationSec) }
         : { ...track, gainDb: musicGains.get(track.id) ?? track.gainDb }
       : track;
     const available = durationSec - refit.startSec;
@@ -108,7 +108,7 @@ function buildTimeline(firstCut: Timeline, work: WorkClip[], soundtrackId?: stri
     return [{ ...refit, source: { ...refit.source, sourceOutSec: refit.source.sourceInSec + fittedLength } }];
   });
   if (soundtrackId && !audioClips.some((track) => track.source.kind === "soundtrack")) {
-    audioClips.push({ id: "editor-soundtrack", source: { kind: "soundtrack", soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, role: "music", startSec: 0, gainDb: musicGains.get("editor-soundtrack") ?? -18, fadeInSec: 0.5, fadeOutSec: Math.min(0.5, durationSec) });
+    audioClips.push({ id: "editor-soundtrack", source: { kind: "soundtrack", soundtrackId, sourceInSec: 0, sourceOutSec: durationSec }, role: "music", startSec: 0, gainDb: musicGains.get("editor-soundtrack") ?? -18, fadeInSec: 0.5, fadeOutSec: finalMusicFadeOutSec(durationSec) });
   }
   work.forEach((item, index) => item.audio.forEach(({ clip, offset }) => {
     if (clip.source.kind !== "asset") return;

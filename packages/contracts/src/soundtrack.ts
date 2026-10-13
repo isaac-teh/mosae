@@ -3,6 +3,11 @@ import type { AudioClip, Timeline } from "./timeline.js";
 type SoundtrackClip = Omit<AudioClip, "source"> & { source: { kind: "soundtrack"; soundtrackId: string; sourceInSec: number; sourceOutSec: number } };
 const isSoundtrackClip = (clip: AudioClip): clip is SoundtrackClip => clip.role === "music" && clip.source.kind === "soundtrack";
 
+/** Final music fade: up to three seconds, limited to a quarter of the film. */
+export function finalMusicFadeOutSec(filmSec: number): number {
+  return Math.max(0, Math.min(3, filmSec * 0.25));
+}
+
 /** Refit soundtrack source windows and fades after the picture duration changes. */
 export function refitSoundtrackToDuration(
   timeline: Timeline,
@@ -31,7 +36,7 @@ export function refitSoundtrackToDuration(
     const availableToExtend = Math.max(0, targetSourceOut - last.source.sourceOutSec);
     let fittedSegments = segments.map((segment) => ({ ...segment }));
     if (availableToExtend > 0 && last.startSec + (last.source.sourceOutSec - last.source.sourceInSec) < timeline.durationSec) {
-      const extended = { ...last, source: { ...last.source, sourceOutSec: targetSourceOut }, fadeOutSec: Math.min(1, timeline.durationSec * 0.05) };
+      const extended = { ...last, source: { ...last.source, sourceOutSec: targetSourceOut }, fadeOutSec: finalMusicFadeOutSec(timeline.durationSec) };
       fittedSegments = [...segments.slice(0, -1), extended];
       if (last.startSec + (targetSourceOut - last.source.sourceInSec) >= timeline.durationSec) {
         clips.push(...fittedSegments);
@@ -41,7 +46,7 @@ export function refitSoundtrackToDuration(
     const existingEnd = Math.max(...fittedSegments.map((segment) => segment.startSec + segment.source.sourceOutSec - segment.source.sourceInSec));
     const fittedToFilm = fittedSegments.map((segment) => {
       const available = Math.max(0, Math.min(timeline.durationSec, segment.startSec + segment.source.sourceOutSec - segment.source.sourceInSec) - segment.startSec);
-      return { ...segment, source: { ...segment.source, sourceOutSec: segment.source.sourceInSec + Math.min(segment.source.sourceOutSec - segment.source.sourceInSec, available) }, fadeOutSec: segment === last ? Math.min(1, timeline.durationSec * 0.05) : segment.fadeOutSec };
+      return { ...segment, source: { ...segment.source, sourceOutSec: segment.source.sourceInSec + Math.min(segment.source.sourceOutSec - segment.source.sourceInSec, available) }, fadeOutSec: segment.id === last.id ? finalMusicFadeOutSec(timeline.durationSec) : segment.fadeOutSec };
     }).filter((segment) => segment.source.sourceOutSec > segment.source.sourceInSec);
     clips.push(...fittedToFilm);
     if (existingEnd >= timeline.durationSec - 1e-6) continue;
@@ -58,7 +63,7 @@ export function refitSoundtrackToDuration(
       const fade = Math.min(0.5, length / 2);
       const previousIndex = clips.findIndex((clip) => clip.id === previousId);
       if (previousIndex >= 0) clips[previousIndex] = { ...clips[previousIndex]!, fadeOutSec: fade };
-      const next: AudioClip = { ...last, id: `${last.id}-loop-${suffix++}`, startSec: nextStart, source: { ...last.source, sourceInSec: 0, sourceOutSec: length }, fadeInSec: fade, fadeOutSec: Math.min(1, timeline.durationSec * 0.05) };
+      const next: AudioClip = { ...last, id: `${last.id}-loop-${suffix++}`, startSec: nextStart, source: { ...last.source, sourceInSec: 0, sourceOutSec: length }, fadeInSec: fade, fadeOutSec: finalMusicFadeOutSec(timeline.durationSec) };
       clips.push(next);
       previousId = next.id;
       const previousCoveredEnd = coveredEnd;
