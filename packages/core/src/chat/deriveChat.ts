@@ -104,6 +104,8 @@ export function canConfirmStory(input: ChatInput): boolean {
 
 export function deriveChat(input: ChatInput): ChatState {
   if (input.flow?.story.answer && !input.intent) input = { ...input, intent: { text: input.flow.story.answer }, storySummary: input.flow.story.storySummary ?? undefined, mentionedPeople: input.flow.story.mentionedPeople };
+  if (input.proceededPersonIds === undefined && input.flow?.peopleProgress) input = { ...input, proceededPersonIds: input.flow.peopleProgress.completedPersonIds };
+  if (input.missedPeopleConfirmed === undefined && input.flow?.missedPeopleConfirmed !== undefined) input = { ...input, missedPeopleConfirmed: input.flow.missedPeopleConfirmed };
   const items: ChatItem[] = [];
   let step: ChatState["step"] = "occasion";
   let confirmed: ChatState["confirmed"] = 0;
@@ -222,30 +224,37 @@ export function deriveChat(input: ChatInput): ChatState {
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const introCount = peopleIntroCount(people, mergeEvents);
     const countLabel = countWords[introCount] ?? String(introCount);
-    add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments. Who is this?` });
+    add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments.` });
     const answered = (person: (typeof people)[number]) => person.skipped || Boolean(person.name);
     const firstUnanswered = people.findIndex((person) => !answered(person));
-    const unanswered = (input.mergeEvents ?? []).some((event) => !event.response) ? null : firstUnanswered >= 0 ? people[firstUnanswered] : null;
+    const pendingProceedIndex = input.proceededPersonIds === undefined ? -1 : people.findIndex((person) => !person.skipped && Boolean(person.name) && !input.proceededPersonIds!.includes(person.personId));
+    const awaitingProceed = pendingProceedIndex >= 0 ? people[pendingProceedIndex] : null;
+    const unanswered = (input.mergeEvents ?? []).some((event) => !event.response) ? null : awaitingProceed ? null : firstUnanswered >= 0 ? people[firstUnanswered] : null;
     const orderedHistory = [
       ...people.map((person, index) => ({ kind: "person" as const, person, index, momentCount: person.momentCount })),
       ...mergeEvents.filter(({ personId }) => !people.some((person) => person.personId === personId)).map((event) => ({ kind: "merge" as const, event, momentCount: event.momentCount })),
     ].sort((a, b) => b.momentCount - a.momentCount);
     for (const entry of orderedHistory) {
       if (entry.kind === "person") {
-        if (firstUnanswered >= 0 && entry.index >= firstUnanswered) continue;
+        if (pendingProceedIndex >= 0 ? entry.index > pendingProceedIndex : firstUnanswered >= 0 && entry.index >= firstUnanswered) continue;
         const { person } = entry;
-        add({ kind: "mosae", id: `person-question-${person.personId}`, text: `Who's this? They're in ${person.momentCount} of your moments.`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri), faceSamples: (person.sampleFaces ?? []).slice(0, 4) });
+        add({ kind: "mosae", id: `person-question-${person.personId}`, text: "Who is this?", photos: (person.sampleFaces ?? []).slice(0, 1).map((face) => face.uri), faceSamples: (person.sampleFaces ?? []).slice(0, 1) });
         add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
         for (const event of mergeEvents.filter(({ personId }) => personId === person.personId)) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       } else {
         const { event } = entry;
-        add({ kind: "mosae", id: `person-question-${event.personId}`, text: `Who's this? They're in ${event.momentCount} of your moments.`, photos: (event.questionFaces ?? event.sampleFaces).slice(0, 2) });
+        add({ kind: "mosae", id: `person-question-${event.personId}`, text: "Who is this?", photos: (event.questionFaces ?? event.sampleFaces).slice(0, 1) });
         add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
         if (!event.automatic) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       }
     }
     if (input.pendingResponse === "person") {
       add({ kind: "typing", id: "person-save-wait", text: "Saving your answer" });
+    }
+    if (awaitingProceed) {
+      const name = summaryPersonLabel(awaitingProceed.name!);
+      const pronoun = /^(?:daughter|wife|mum|mom|mother|sister|grandma|grandmother)$/i.test(name) ? "her" : /^(?:son|husband|dad|father|brother|grandpa|grandfather)$/i.test(name) ? "him" : "them";
+      add({ kind: "person-tagged", id: `person-tagged-${awaitingProceed.personId}`, personId: awaitingProceed.personId, name, pronoun, momentCount: awaitingProceed.momentCount, ...(awaitingProceed.sampleFaces?.[0] ? { sampleFace: awaitingProceed.sampleFaces[0] } : {}) });
     }
     if (unanswered) {
       const mention = people[0]?.personId === unanswered.personId ? mentionedPerson(input.intent.text, people, input.mentionedPeople) : null;
@@ -256,25 +265,29 @@ export function deriveChat(input: ChatInput): ChatState {
           add({ kind: "mosae", id: `tagged-person-${unanswered.personId}`, text: "Got it — these are the photos of this person.", photos: input.taggedPerson.photos });
         }
         const declinedIdenticalMerge = (input.mergeEvents ?? []).some((event) => event.personId === unanswered.personId && event.response === "No, another person" && event.answer.trim().replace(/^my\s+/i, "").toLocaleLowerCase() === event.targetName.trim().replace(/^my\s+/i, "").toLocaleLowerCase());
-        add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: unanswered.sampleFaces ?? [], days: unanswered.days, questionText: declinedIdenticalMerge ? "What should I call this one?" : `Who's this? They're in ${unanswered.momentCount} of your moments.` });
+        add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 1), days: unanswered.days, questionText: declinedIdenticalMerge ? "What should I call this one?" : "Who is this?" });
       }
     } else {
       placeholder = "Type a name";
       const hasMissedPeople = (input.missedPeople ?? []).length > 0;
-      if (input.interpTurns?.length) add({ kind: "anyone-else", id: "anyone-else", text: "Did I miss anyone? Type the names of who were missed in the box below." });
+      // This is the one actionable missed-people prompt. The transcript is
+      // reconstructed on every render, so never add a second copy alongside
+      // clarification turns.
+      if (!(input.mergeEvents ?? []).some((event) => !event.response)) {
+        add({ kind: "anyone-else", id: "anyone-else", canConfirm: true, text: "Did I miss anyone? Enter the names of who were missed in the box below." });
+      }
       if (hasMissedPeople) input.interpTurns?.forEach((turn, index) => {
         add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
         if (turn.reply) add({ kind: "mosae", id: `missed-clarification-reply-${index + 1}`, text: turn.reply });
       });
-      for (const person of (input.missedPeople ?? []).filter((person) => person.momentCount === 0 && person.personId !== input.missedPersonTagging?.personId && !people.some((known) => known.personId === person.personId))) {
+      for (const person of (input.missedPeople ?? []).filter((person) => !people.some((known) => known.personId === person.personId))) {
         add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
-        add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name });
+        add({ kind: "mosae", id: `missed-select-${person.personId}`, text: `Help me select photos of ${person.name}.` });
+        add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name, momentCount: person.momentCount, photos: person.sampleUris?.slice(0, 4) ?? (person.sampleUri ? [person.sampleUri] : []) });
       }
-      if (input.missedPersonTagging) {
+      if (input.missedPersonTagging && !(input.missedPeople ?? []).some(({ personId }) => personId === input.missedPersonTagging!.personId)) {
         add({ kind: "mosae", id: `missed-select-${input.missedPersonTagging.personId}`, text: `Help me select 1 photo of ${input.missedPersonTagging.name}.` });
-        add({ kind: "missed-person", id: `missed-tag-${input.missedPersonTagging.personId}`, ...input.missedPersonTagging });
-      } else if (!(input.mergeEvents ?? []).some((event) => !event.response)) {
-        add({ kind: "anyone-else", id: hasMissedPeople && input.interpTurns?.length ? "anyone-else-next" : "anyone-else", text: (input.missedPeople ?? []).length ? "Did I miss anyone else? Type the names of who were missed in the box below." : "Did I miss anyone? Type the names of who were missed in the box below." });
+        add({ kind: "missed-person", id: `missed-tag-${input.missedPersonTagging.personId}`, ...input.missedPersonTagging, momentCount: 0, photos: [] });
       }
       if (!hasMissedPeople) input.interpTurns?.forEach((turn, index) => {
         add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
@@ -284,7 +297,12 @@ export function deriveChat(input: ChatInput): ChatState {
     return { items, step, confirmed, placeholder };
   }
 
-  const showPeopleSummary = input.peopleConfirmed && input.peopleSummaryConfirmed === false;
+  const missedPeople = input.missedPeople ?? [];
+  const taggedPersonIds = new Set((input.people ?? []).filter((person) => person.momentCount > 0).map((person) => person.personId));
+  const hasUntaggedMissedPeople = missedPeople.some((person) => person.momentCount === 0 && !taggedPersonIds.has(person.personId));
+  const collectingMissedPeople = input.peopleConfirmed && input.missedPeopleConfirmed === false && missedPeople.length === 0;
+  const taggingMissedPeople = input.peopleConfirmed && missedPeople.length > 0 && hasUntaggedMissedPeople;
+  const showPeopleSummary = input.peopleConfirmed && input.peopleSummaryConfirmed !== true && !hasUntaggedMissedPeople && (input.missedPeopleConfirmed === true || missedPeople.length > 0 || input.missedPeopleConfirmed === undefined && input.peopleSummaryConfirmed === false);
   const mergeEvents = input.mergeEvents ?? [];
   if (showPeopleSummary) {
     step = "people";
@@ -292,34 +310,30 @@ export function deriveChat(input: ChatInput): ChatState {
     const introCount = peopleIntroCount(people, mergeEvents);
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const countLabel = countWords[introCount] ?? String(introCount);
-    add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments. Who is this?` });
+    add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments.` });
   }
   if (input.peopleConfirmed && input.peopleSummaryConfirmed === true) {
     const historyPeople = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const count = peopleIntroCount(historyPeople, mergeEvents);
     const label = countWords[count] ?? String(count);
-    add({ kind: "mosae", id: "people-intro", text: `${count === 1 ? "One person appears" : `${label[0]!.toLocaleUpperCase()}${label.slice(1)} people appear`} often in your moments. Who is this?` });
+    add({ kind: "mosae", id: "people-intro", text: `${count === 1 ? "One person appears" : `${label[0]!.toLocaleUpperCase()}${label.slice(1)} people appear`} often in your moments.` });
   }
-  const addMissedPeople = () => {
-    const knownPersonIds = new Set((input.people ?? []).map(({ personId }) => personId));
-    const hasMissedPeople = (input.missedPeople ?? []).length > 0;
-    if (!hasMissedPeople || input.interpTurns?.length) add({ kind: "anyone-else", id: "anyone-else", text: "Did I miss anyone? Type the names of who were missed in the box below." });
+  const addMissedPeople = (showPrompt: boolean, canConfirm = showPrompt) => {
+    if (showPrompt) add({ kind: "anyone-else", id: "anyone-else", canConfirm, text: "Did I miss anyone? Enter the names of who were missed in the box below." });
     input.interpTurns?.forEach((turn, index) => {
       add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
       if (turn.reply) add({ kind: "mosae", id: `missed-clarification-reply-${index + 1}`, text: turn.reply });
     });
     for (const person of input.missedPeople ?? []) {
-      if (knownPersonIds.has(person.personId)) continue;
       add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
-      if (person.momentCount === 0 && person.personId !== input.missedPersonTagging?.personId) add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name });
+      add({ kind: "mosae", id: `missed-select-${person.personId}`, text: `Help me select photos of ${person.name}.` });
+      add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name, momentCount: person.momentCount, photos: person.sampleUris?.slice(0, 4) ?? (person.sampleUri ? [person.sampleUri] : []) });
     }
-    if (input.missedPersonTagging) {
+    if (input.missedPersonTagging && !(input.missedPeople ?? []).some(({ personId }) => personId === input.missedPersonTagging!.personId)) {
       add({ kind: "mosae", id: `missed-select-${input.missedPersonTagging.personId}`, text: `Help me select 1 photo of ${input.missedPersonTagging.name}.` });
-      add({ kind: "missed-person", id: `missed-tag-${input.missedPersonTagging.personId}`, ...input.missedPersonTagging });
+      add({ kind: "missed-person", id: `missed-tag-${input.missedPersonTagging.personId}`, ...input.missedPersonTagging, momentCount: 0, photos: [] });
     }
-    const hasUntaggedMissedPerson = (input.missedPeople ?? []).some(({ personId, momentCount }) => momentCount === 0 && !knownPersonIds.has(personId));
-    if (hasMissedPeople && !hasUntaggedMissedPerson && !input.missedPersonTagging) add({ kind: "anyone-else", id: input.interpTurns?.length ? "anyone-else-next" : "anyone-else", text: "Did I miss anyone else? Type the names of who were missed in the box below." });
   };
   const people = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
   const orderedHistory = [
@@ -329,29 +343,40 @@ export function deriveChat(input: ChatInput): ChatState {
   for (const entry of orderedHistory) {
     if (entry.kind === "merge") {
       const { event } = entry;
-      add({ kind: "mosae", id: `person-question-${event.personId}`, text: `Who's this? They're in ${event.momentCount} of your moments.`, photos: (event.questionFaces ?? event.sampleFaces).slice(0, 2) });
+      add({ kind: "mosae", id: `person-question-${event.personId}`, text: "Who is this?", photos: (event.questionFaces ?? event.sampleFaces).slice(0, 1) });
       add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
       if (!event.automatic) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       continue;
     }
     const { person } = entry;
     if (person.skipped || person.name) {
-      add({ kind: "mosae", id: `person-question-${person.personId}`, text: `Who's this? They're in ${person.momentCount} of your moments.`, photos: (person.sampleFaces ?? []).slice(0, 4).map((face) => face.uri), faceSamples: (person.sampleFaces ?? []).slice(0, 4) });
+      add({ kind: "mosae", id: `person-question-${person.personId}`, text: "Who is this?", photos: (person.sampleFaces ?? []).slice(0, 1).map((face) => face.uri), faceSamples: (person.sampleFaces ?? []).slice(0, 1) });
       add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
       if (showPeopleSummary && input.taggedPerson?.personId === person.personId) add({ kind: "mosae", id: `tagged-person-${person.personId}`, text: "Got it — these are the photos of this person.", photos: input.taggedPerson.photos });
       for (const event of input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? []) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
     }
   }
+  if (collectingMissedPeople) {
+    step = "people";
+    addMissedPeople(true);
+    return { items, step, confirmed, placeholder };
+  }
+  if (taggingMissedPeople) {
+    step = "people";
+    addMissedPeople(true, false);
+    return { items, step, confirmed, placeholder };
+  }
   if (showPeopleSummary) {
+    // Keep the single missed-people question before the names and photo-selection
+    // turns in the reconstructed transcript, then place the final summary after them.
+    addMissedPeople(true, false);
     const named = mainPeople(input.people ?? [], input.summary?.photos ?? 0).filter((person) => !person.skipped && person.name).map((person) => ({ personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri, sampleFace: person.sampleFaces?.[0] }));
     const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     if (named.length === 1) add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged ${named[0]!.name} in your moments.` });
     else add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged all ${words[named.length] ?? named.length} in your moments.` });
     add({ kind: "people-summary", id: "people-summary", people: named });
-    addMissedPeople();
     return { items, step, confirmed, placeholder };
   }
-  if (input.peopleConfirmed && input.peopleSummaryConfirmed === true) addMissedPeople();
   confirmed = 2;
 
   if (!input.plan || !input.summary.ready.plan) {

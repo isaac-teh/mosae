@@ -13,4 +13,8 @@ describe("flow action application", () => {
     expect(applyFlowAction(flow, { type: "people-summary-confirmed", confirmed: true })).toEqual({ ...flow, peopleSummaryConfirmed: true });
     expect(applyFlowAction(flow, { type: "people-summary-confirmed", confirmed: false })).toEqual(flow);
   });
+  it("persists proceeded identities and preserves old flows without progress state", () => {
+    const old: DirectorFlow = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [] };
+    expect(applyFlowAction(old, { type: "people-progress", completedPersonIds: ["p1"] })).toEqual({ ...old, peopleProgress: { completedPersonIds: ["p1"] } });
+  });
 });

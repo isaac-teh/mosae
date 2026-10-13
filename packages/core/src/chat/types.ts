@@ -36,10 +36,12 @@ export type ChatInput = {
   storySummary?: string;
   people: { personId: string; name: string | null; role: string | null; ageBand?: PersonAgeBand; skipped: boolean; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;
   peopleConfirmed: boolean;
-  missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string }[];
+  missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleUris?: string[] }[];
   missedPersonTagging?: { personId: string; name: string } | null;
   taggedPerson?: { personId: string; name: string; photos: string[] };
   peopleSummaryConfirmed?: boolean;
+  missedPeopleConfirmed?: boolean;
+  proceededPersonIds?: string[];
   dismissedPersonSuggestionIds?: string[];
   plan: StoryPlan | null;
   planFailed?: boolean;
@@ -63,9 +65,10 @@ export type ChatItem =
   | { kind: "preparing-videos"; id: string; text: string; progress: number }
   | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; questionText?: string }
   | { kind: "person-confirm"; id: string; personId: string; label: string; text: string; momentCount: number; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[] }
+  | { kind: "person-tagged"; id: string; personId: string; name: string; pronoun: "her" | "him" | "them"; momentCount: number; sampleFace?: { shotId: string; uri: string; bbox: [number, number, number, number] } }
   | { kind: "merge-followup"; id: string; text: string; answer: string; photos: string[]; faceSamples?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; response?: "Yes, same person" | "No, another person" }
-  | { kind: "anyone-else"; id: string; text?: string }
-  | { kind: "missed-person"; id: string; personId: string; name: string }
+  | { kind: "anyone-else"; id: string; text?: string; canConfirm?: boolean }
+  | { kind: "missed-person"; id: string; personId: string; name: string; momentCount: number; photos: string[] }
   | { kind: "people-summary"; id: string; people: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleFace?: { shotId: string; uri: string; bbox: [number, number, number, number] } }[] }
   | { kind: "set-aside"; id: string; blurry: number; duplicates: number; blurryPhotos: { shotId: string; uri: string }[]; blurryMore: number; duplicatePhotos: { shotId: string; uri: string }[]; duplicateMore: number }
   | { kind: "moments"; id: string; suggestedShotIds: string[] }

@@ -11,7 +11,7 @@ export async function getProjectMoments(projectId: string): Promise<ProjectMomen
   return body.moments as ProjectMoment[];
 }
 
-export async function savePersonMoments(projectId: string, personId: string, name: string | null, addShots: string[], removeShots: string[]): Promise<void> {
+export async function savePersonMoments(projectId: string, personId: string, name: string | null, addShots: string[], removeShots: string[], sampleUris: string[] = []): Promise<void> {
   const cast = await getCast(projectId);
   const current = cast ?? { people: [], core: [], focus: [], source: "none" as const };
   const existing = current.people.find((person) => person.personId === personId);
@@ -22,5 +22,6 @@ export async function savePersonMoments(projectId: string, personId: string, nam
     mutateProjectFlow(projectId, { type: "person", personId, name: name ?? existing?.name ?? null, role: existing?.role ?? "other", confirmed: Boolean(name ?? existing?.name), skipped: false }),
     ...addShots.map((shotId) => mutateProjectFlow(projectId, { type: "manual-shot", personId, shotId, included: true })),
     ...removeShots.map((shotId) => mutateProjectFlow(projectId, { type: "manual-shot", personId, shotId, included: false })),
+    ...(sampleUris.length ? [mutateProjectFlow(projectId, { type: "sample-photos", personId, uris: sampleUris.slice(0, 4) })] : []),
   ]);
 }
