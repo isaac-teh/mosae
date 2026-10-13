@@ -164,6 +164,24 @@ describe("Home", () => {
     await act(async () => resolveDelete());
   });
 
+  it("restores a film card and shows an error when its optimistic delete fails", async () => {
+    state.films = [{ projectId: "p1", filmId: "g1", title: "Trip", month: "Jun 2026", status: "saved" }];
+    state.deleteProject.mockRejectedValue(new Error("offline"));
+    await render();
+    const clickLabel = async (label: string) => {
+      const button = host.querySelector(`[aria-label="${label}"]`) as HTMLButtonElement;
+      expect(button).toBeTruthy(); await act(async () => button.click());
+    };
+    expect(host.textContent).toContain("Trip");
+    await clickLabel("More options for Trip");
+    await clickLabel("Delete film");
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Delete")!.click());
+    expect(state.deleteProject).toHaveBeenCalledWith("p1");
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("Could not delete the selected film(s). Please try again.");
+    expect(host.textContent).toContain("Trip");
+    expect(host.querySelector('[data-film-grid="true"]')).toBeTruthy();
+  });
+
   it("supports selecting multiple films and restores them with an error on failure", async () => {
     state.films = ["p1", "p2"].map((projectId) => ({ projectId, filmId: null, title: `Film ${projectId}`, month: "Jun 2026", status: "in-progress" }));
     state.deleteProject.mockRejectedValue(new Error("offline"));
