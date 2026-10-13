@@ -124,10 +124,11 @@ describe("Director chat", () => {
     await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
     expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Change Mia"]')).toBeTruthy();
+    mocks.push.mockClear();
     await click("Change Mia");
-    await waitFor(() => expect(host.querySelector('button[aria-label="My daughter"]')).toBeTruthy());
-    await click("My daughter");
-    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    expect(mocks.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: "/tag-moments", params: expect.objectContaining({ projectId: "project-1", repository: "api", personId: "person-1", name: "Mia" }) }));
+    expect(host.querySelector('button[aria-label="My daughter"]')).toBeNull();
+    expect(mocks.repo.mutateFlow.mock.calls.some(([, , action]: [string, string, any]) => action.type === "batch" && action.actions.some((change: any) => change.type === "person" && change.personId === "person-1" && change.name === null))).toBe(false);
     await click("That's everyone");
     await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), { type: "people-summary-confirmed", confirmed: true }));
     await act(async () => root.unmount());
