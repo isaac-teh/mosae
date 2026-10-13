@@ -89,6 +89,26 @@ describe("deriveChat state table", () => {
     ], plan: null });
     expect(missed.items.filter((item): item is Extract<ChatItem, { kind: "you" }> => item.kind === "you" && (item.id === "missed-answer" || item.id.startsWith("missed-name-"))).map((item) => item.text)).toEqual(["Grandpa and Grandma"]);
   });
+  it("keeps the missed names message in order and summarizes after all missed people are tagged", () => {
+    const people = [
+      { personId: "p1", name: "Daughter", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
+      { personId: "p-missed-grandpa", name: "Grandpa", role: "other", skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
+      { personId: "p-missed-grandma", name: "Grandma", role: "other", skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
+    ];
+    const state = deriveChat({ ...base(), people, proceededPersonIds: ["p1"], peopleConfirmed: true, peopleSummaryConfirmed: false,
+      missedPeopleConfirmed: false, missedAnswer: "Grandpa and Grandma", missedPeople: [
+        { personId: "p-missed-grandpa", name: "Grandpa", momentCount: 2 },
+        { personId: "p-missed-grandma", name: "Grandma", momentCount: 2 },
+      ], plan: null });
+    const ids = state.items.map(({ id }) => id);
+    expect(state.items.filter((item) => item.kind === "you" && item.text === "Grandpa and Grandma")).toHaveLength(1);
+    expect(ids.indexOf("anyone-else")).toBeLessThan(ids.indexOf("missed-answer"));
+    expect(ids.indexOf("missed-answer")).toBeLessThan(ids.indexOf("missed-select-p-missed-grandpa"));
+    expect(ids.indexOf("missed-person-p-missed-grandma")).toBeLessThan(ids.indexOf("people-summary-message"));
+    expect(state.items.find((item) => item.id === "anyone-else")).toMatchObject({ kind: "anyone-else", canConfirm: false });
+    expect(state.items.find((item) => item.id === "people-summary-message")).toMatchObject({ text: "Thanks. I've tagged all three in your moments." });
+    expect(state.items.find((item) => item.id === "people-summary")?.kind).toBe("people-summary");
+  });
   it("renders person clarification turns once after the question they answer", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null,
       interpTurns: [{ personId: "p1", question: "My daughter", reply: "What is your daughter's name?" }] });

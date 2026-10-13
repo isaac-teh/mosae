@@ -247,7 +247,8 @@ export function deriveChat(input: ChatInput): ChatState {
 
   const facesReady = facesComplete;
   const completedPersonIds = input.proceededPersonIds ?? input.flow?.peopleProgress?.completedPersonIds;
-  const allNamedPeopleProceeded = completedPersonIds === undefined || announcedPeople(input.people ?? [], input.summary?.photos ?? 0).every((person) => person.skipped || !person.name || completedPersonIds.includes(person.personId));
+  const missedPersonIds = new Set((input.missedPeople ?? []).map(({ personId }) => personId));
+  const allNamedPeopleProceeded = completedPersonIds === undefined || announcedPeople(input.people ?? [], input.summary?.photos ?? 0).filter((person) => !missedPersonIds.has(person.personId)).every((person) => person.skipped || !person.name || completedPersonIds.includes(person.personId));
   const peopleResolved = input.peopleConfirmed && allNamedPeopleProceeded || (facesReady && input.people?.length === 0);
   if (!peopleResolved) {
     step = "people";
@@ -316,8 +317,9 @@ export function deriveChat(input: ChatInput): ChatState {
       // reconstructed on every render, so never add a second copy alongside
       // clarification turns.
       if (!unanswered && !awaitingProceed && !(input.mergeEvents ?? []).some((event) => !event.response)) {
-        add({ kind: "anyone-else", id: "anyone-else", canConfirm: true, text: "Did I miss anyone? Enter the names of who were missed in the box below." });
+        add({ kind: "anyone-else", id: "anyone-else", canConfirm: !hasMissedPeople, text: "Did I miss anyone? Enter the names of who were missed in the box below." });
       }
+      if (input.missedAnswer) add({ kind: "you", id: "missed-answer", text: input.missedAnswer });
       if (hasMissedPeople) input.interpTurns?.filter((turn) => !turn.personId && (turn.stage === "missed" || !turn.stage)).forEach((turn, index) => {
         add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
         if (turn.reply) add({ kind: "mosae", id: `missed-clarification-reply-${index + 1}`, text: turn.reply });

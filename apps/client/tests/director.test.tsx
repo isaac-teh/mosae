@@ -172,6 +172,36 @@ describe("Director chat", () => {
     expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(2);
   });
 
+  it("keeps missed names in transcript order and shows the summary after both galleries", async () => {
+    setup({ readyPlan: true }); await renderScreen(); await click("A trip");
+    await answerPerson("My daughter");
+    await answerPerson("My son");
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    await typeAndSend("Grandpa and Grandma");
+    await waitFor(() => expect(hasText("Help me select photos of Grandpa.")).toBe(true));
+    expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeNull();
+    const transcript = [...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent);
+    let selectButtons = [...host.querySelectorAll('button[aria-label="Tap to select"]')];
+    expect(selectButtons).toHaveLength(2);
+    await act(async () => selectButtons[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const grandpaId = mocks.push.mock.calls.at(-1)?.[0]?.params?.personId as string;
+    selectButtons = [...host.querySelectorAll('button[aria-label="Tap to select"]')];
+    await act(async () => selectButtons[1]!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const grandmaId = mocks.push.mock.calls.at(-1)?.[0]?.params?.personId as string;
+    expect(grandpaId).toBeTruthy(); expect(grandmaId).toBeTruthy(); expect(grandpaId).not.toBe(grandmaId);
+    expect(transcript.filter((text) => text === "Grandpa and Grandma")).toHaveLength(1);
+    expect(transcript.indexOf("Grandpa and Grandma")).toBeGreaterThan(transcript.indexOf("My son"));
+    expect(host.textContent!.indexOf("Grandpa and Grandma")).toBeLessThan(host.textContent!.indexOf("Help me select photos of Grandpa."));
+    mocks.params = { completedPersonId: grandpaId, completedPersonName: "Grandpa", completedMomentCount: "2", completedIsMissed: "true", completedSampleUri: "grandpa.jpg" };
+    await renderScreen();
+    await waitFor(() => expect(hasText("Help me select photos of Grandma.")).toBe(true));
+    mocks.params = { completedPersonId: grandmaId, completedPersonName: "Grandma", completedMomentCount: "3", completedIsMissed: "true", completedSampleUri: "grandma.jpg" };
+    await renderScreen();
+    await waitFor(() => expect(hasText("Thanks. I've tagged all four in your moments.")).toBe(true));
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy();
+    expect([...host.querySelectorAll('[data-from="you"]')].filter((item) => item.textContent === "Grandpa and Grandma")).toHaveLength(1);
+  });
+
   it("shows the people summary after the one-time missed-people prompt and continues to direction", async () => {
     setup({ readyPlan: true }); await renderScreen(); await click("A trip");
     await answerPerson("My daughter");
