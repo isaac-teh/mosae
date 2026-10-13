@@ -5,13 +5,18 @@ import { mainPeople } from "./personChips.js";
 const DEFAULT_PLACEHOLDER = "Tell me anything about the story";
 
 function personAnswer(person: NonNullable<ChatInput["people"]>[number]): string {
-  if (person.skipped) return "Skip";
-  return person.name ?? "";
+  return person.answerText ?? (person.skipped ? "Skip" : person.name ?? "");
 }
 
 function summaryPersonLabel(name: string): string {
   const role = /^My\s+(son|daughter|wife|husband|mum|mom|mother|dad|father|partner)$/i.exec(name.trim())?.[1];
   return role ? `${role[0]!.toLocaleUpperCase()}${role.slice(1).toLocaleLowerCase()}` : name;
+}
+
+function taggedPersonItem(person: NonNullable<ChatInput["people"]>[number], canProceed = true): Extract<ChatItem, { kind: "person-tagged" }> {
+  const name = summaryPersonLabel(person.name!);
+  const pronoun = /^(?:daughter|wife|mum|mom|mother|sister|grandma|grandmother)$/i.test(name) ? "her" : /^(?:son|husband|dad|father|brother|grandpa|grandfather)$/i.test(name) ? "him" : "them";
+  return { kind: "person-tagged", id: `person-tagged-${person.personId}`, personId: person.personId, name, pronoun, momentCount: person.momentCount, canProceed, ...(person.sampleFaces?.[0] ? { sampleFace: person.sampleFaces[0] } : {}) };
 }
 
 function peopleIntroCount(people: { personId: string }[], mergeEvents: NonNullable<ChatInput["mergeEvents"]>): number {
@@ -252,6 +257,7 @@ export function deriveChat(input: ChatInput): ChatState {
           if (turn.reply) add({ kind: "mosae", id: `person-turn-reply-${person.personId}-${index + 1}`, text: turn.reply });
         });
         else add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+        if (person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
         for (const event of mergeEvents.filter(({ personId }) => personId === person.personId)) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       } else {
         const { event } = entry;
@@ -264,9 +270,7 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "typing", id: "person-save-wait", text: "Saving your answer" });
     }
     if (awaitingProceed) {
-      const name = summaryPersonLabel(awaitingProceed.name!);
-      const pronoun = /^(?:daughter|wife|mum|mom|mother|sister|grandma|grandmother)$/i.test(name) ? "her" : /^(?:son|husband|dad|father|brother|grandpa|grandfather)$/i.test(name) ? "him" : "them";
-      add({ kind: "person-tagged", id: `person-tagged-${awaitingProceed.personId}`, personId: awaitingProceed.personId, name, pronoun, momentCount: awaitingProceed.momentCount, ...(awaitingProceed.sampleFaces?.[0] ? { sampleFace: awaitingProceed.sampleFaces[0] } : {}) });
+      add(taggedPersonItem(awaitingProceed));
     }
     if (unanswered) {
       const mention = people[0]?.personId === unanswered.personId ? mentionedPerson(input.intent.text, people, input.mentionedPeople) : null;
@@ -285,7 +289,7 @@ export function deriveChat(input: ChatInput): ChatState {
       // This is the one actionable missed-people prompt. The transcript is
       // reconstructed on every render, so never add a second copy alongside
       // clarification turns.
-      if (!(input.mergeEvents ?? []).some((event) => !event.response)) {
+      if (!unanswered && !awaitingProceed && !(input.mergeEvents ?? []).some((event) => !event.response)) {
         add({ kind: "anyone-else", id: "anyone-else", canConfirm: true, text: "Did I miss anyone? Enter the names of who were missed in the box below." });
       }
       if (hasMissedPeople) input.interpTurns?.filter((turn) => !turn.personId && (turn.stage === "missed" || !turn.stage)).forEach((turn, index) => {
@@ -293,7 +297,7 @@ export function deriveChat(input: ChatInput): ChatState {
         if (turn.reply) add({ kind: "mosae", id: `missed-clarification-reply-${index + 1}`, text: turn.reply });
       });
       for (const person of (input.missedPeople ?? []).filter((person) => !people.some((known) => known.personId === person.personId))) {
-        add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
+        if (!input.missedAnswer) add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
         add({ kind: "mosae", id: `missed-select-${person.personId}`, text: `Help me select photos of ${person.name}.` });
         add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name, momentCount: person.momentCount, photos: person.sampleUris?.slice(0, 4) ?? (person.sampleUri ? [person.sampleUri] : []) });
       }
@@ -337,8 +341,9 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
       if (turn.reply) add({ kind: "mosae", id: `missed-clarification-reply-${index + 1}`, text: turn.reply });
     });
+    if (input.missedAnswer) add({ kind: "you", id: "missed-answer", text: input.missedAnswer });
     for (const person of input.missedPeople ?? []) {
-      add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
+      if (!input.missedAnswer) add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
       add({ kind: "mosae", id: `missed-select-${person.personId}`, text: `Help me select photos of ${person.name}.` });
       add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name, momentCount: person.momentCount, photos: person.sampleUris?.slice(0, 4) ?? (person.sampleUri ? [person.sampleUri] : []) });
     }
@@ -348,6 +353,12 @@ export function deriveChat(input: ChatInput): ChatState {
     }
   };
   const people = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
+  if ((collectingMissedPeople || taggingMissedPeople) && !showPeopleSummary) {
+    const introCount = peopleIntroCount(people, mergeEvents);
+    const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    const countLabel = countWords[introCount] ?? String(introCount);
+    add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments.` });
+  }
   const orderedHistory = [
     ...people.map((person) => ({ kind: "person" as const, person, momentCount: person.momentCount })),
     ...mergeEvents.filter(({ personId }) => !people.some((person) => person.personId === personId)).map((event) => ({ kind: "merge" as const, event, momentCount: event.momentCount })),
@@ -363,7 +374,13 @@ export function deriveChat(input: ChatInput): ChatState {
     const { person } = entry;
     if (person.skipped || person.name) {
       add({ kind: "mosae", id: `person-question-${person.personId}`, text: "Who is this?", photos: (person.sampleFaces ?? []).slice(0, 1).map((face) => face.uri), faceSamples: (person.sampleFaces ?? []).slice(0, 1) });
-      add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+      const personTurns = (input.interpTurns ?? []).filter((turn) => turn.personId === person.personId);
+      personTurns.forEach((turn, index) => {
+        add({ kind: "you", id: `person-turn-${person.personId}-${index + 1}`, text: turn.question });
+        if (turn.reply) add({ kind: "mosae", id: `person-turn-reply-${person.personId}-${index + 1}`, text: turn.reply });
+      });
+      if (!personTurns.some((turn) => turn.question === person.answerText)) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+      if (!showPeopleSummary && input.peopleSummaryConfirmed !== true && !person.skipped && person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
       if (showPeopleSummary && input.taggedPerson?.personId === person.personId) add({ kind: "mosae", id: `tagged-person-${person.personId}`, text: "Got it — these are the photos of this person.", photos: input.taggedPerson.photos });
       for (const event of input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? []) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
     }

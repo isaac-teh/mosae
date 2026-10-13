@@ -9,6 +9,7 @@ const personDefaults = (personId: string, value: Record<string, unknown> = {}) =
   role: typeof value.role === "string" ? value.role : null,
   confirmed: value.confirmed === true,
   skipped: value.skipped === true || value.excluded === true,
+  ...(typeof value.answerText === "string" ? { answerText: value.answerText } : {}),
   manualShotAdds: Array.isArray(value.manualShots) ? value.manualShots.filter((x): x is string => typeof x === "string") : [],
   manualShotRemoves: Array.isArray(value.removedShots) ? value.removedShots.filter((x): x is string => typeof x === "string") : [],
   ...(Array.isArray(value.samplePhotoUris) ? { samplePhotoUris: value.samplePhotoUris.filter((x): x is string => typeof x === "string").slice(0, 4) } : {}),
@@ -71,7 +72,7 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
   if (action.type === "story-answer") return { ...flow, story: { answer: action.answer, storySummary: action.storySummary ?? flow.story.storySummary, mentionedPeople: action.mentionedPeople ?? flow.story.mentionedPeople } };
   if (action.type === "person") {
     const prior = flow.people.find((person) => person.personId === action.personId) ?? personDefaults(action.personId);
-    const next = { ...prior, ...(action.name !== undefined ? { name: action.name } : {}), ...(action.role !== undefined ? { role: action.role } : {}), ...(action.confirmed !== undefined ? { confirmed: action.confirmed } : {}), ...(action.skipped !== undefined ? { skipped: action.skipped } : {}) };
+    const next = { ...prior, ...(action.name !== undefined ? { name: action.name } : {}), ...(action.role !== undefined ? { role: action.role } : {}), ...(action.answerText !== undefined ? { answerText: action.answerText } : {}), ...(action.confirmed !== undefined ? { confirmed: action.confirmed } : {}), ...(action.skipped !== undefined ? { skipped: action.skipped } : {}) };
     return { ...flow, people: [...flow.people.filter((person) => person.personId !== action.personId), next] };
   }
   if (action.type === "manual-shot") {
@@ -100,7 +101,7 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
   if (action.type === "people-summary-confirmed") return { ...flow, peopleSummaryConfirmed: action.confirmed };
   if (action.type === "people-progress") return { ...flow, peopleProgress: { completedPersonIds: [...new Set(action.completedPersonIds)] } };
   if (action.type === "missed-people-confirmed") return { ...flow, missedPeopleConfirmed: action.confirmed };
-  if (action.type === "missed-people") return { ...flow, missedPeople: action.people };
+  if (action.type === "missed-people") return { ...flow, missedPeople: action.people, ...(action.answer !== undefined ? { missedAnswer: action.answer } : {}) };
   return flow;
 }
 

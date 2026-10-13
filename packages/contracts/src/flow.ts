@@ -6,6 +6,7 @@ export const FlowPersonSchema = z.strictObject({
   role: z.string().nullable(),
   confirmed: z.boolean(),
   skipped: z.boolean(),
+  answerText: z.string().optional(),
   manualShotAdds: z.array(z.string()),
   manualShotRemoves: z.array(z.string()),
   samplePhotoUris: z.array(z.string()).optional(),
@@ -17,6 +18,7 @@ export const DirectorFlowSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
   story: z.object({ answer: z.string().nullable(), storySummary: z.string().nullable(), mentionedPeople: z.array(z.string()) }),
   people: z.array(FlowPersonSchema),
+  missedAnswer: z.string().optional(),
   peopleSummaryConfirmed: z.boolean().optional(),
   peopleProgress: z.object({ completedPersonIds: z.array(z.string().min(1)) }).optional(),
   missedPeopleConfirmed: z.boolean().optional(),
@@ -25,7 +27,7 @@ export const DirectorFlowSchema = z.strictObject({
 
 const AtomicFlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("story-answer"), answer: z.string().min(1).max(2000), storySummary: z.string().nullable().optional(), mentionedPeople: z.array(z.string()).optional() }),
-  z.object({ type: z.literal("person"), personId: z.string().min(1), name: z.string().nullable().optional(), role: z.string().nullable().optional(), confirmed: z.boolean().optional(), skipped: z.boolean().optional() }),
+  z.object({ type: z.literal("person"), personId: z.string().min(1), name: z.string().nullable().optional(), role: z.string().nullable().optional(), answerText: z.string().optional(), confirmed: z.boolean().optional(), skipped: z.boolean().optional() }),
   z.object({ type: z.literal("manual-shot"), personId: z.string().min(1), shotId: z.string().min(1), included: z.boolean() }),
   z.object({ type: z.literal("sample-photos"), personId: z.string().min(1), uris: z.array(z.string()).max(4) }),
   z.object({ type: z.literal("move-photo"), faceId: z.string().min(1), personId: z.string().nullable() }),
@@ -33,7 +35,7 @@ const AtomicFlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("people-summary-confirmed"), confirmed: z.boolean() }),
   z.object({ type: z.literal("people-progress"), completedPersonIds: z.array(z.string().min(1)).max(100) }),
   z.object({ type: z.literal("missed-people-confirmed"), confirmed: z.boolean() }),
-  z.object({ type: z.literal("missed-people"), people: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional() })).max(100) }),
+  z.object({ type: z.literal("missed-people"), people: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional() })).max(100), answer: z.string().optional() }),
   z.object({ type: z.literal("undo") }),
 ]);
 

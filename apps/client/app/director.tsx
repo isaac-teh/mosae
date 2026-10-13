@@ -378,7 +378,7 @@ export default function DirectorScreen() {
             {item.sampleFace ? <FacePreviewStrip samples={[item.sampleFace]} limit={1} size={48} rounded /> : <View className="size-12 rounded-full bg-surface-sunken" />}
             <View className="flex-1"><Text className="font-sans-semibold text-label text-ink">{item.name}</Text><Text className="font-sans text-caption text-ink-muted">Tagged in {item.momentCount} {item.momentCount === 1 ? "moment" : "moments"}</Text></View><Text className="text-heading text-ink-muted">›</Text>
           </Pressable>
-          <Button label="Proceed" variant="secondary" disabled={saving} onPress={() => scrollAfterAction(() => actions.proceedPerson(item.personId))} />
+          {item.canProceed !== false && <View className="self-start"><Button label="Proceed" variant="secondary" disabled={saving} onPress={() => scrollAfterAction(() => actions.proceedPerson(item.personId))} /></View>}
         </View>;
         if (item.kind === "person-confirm") return <View key={item.id} className="gap-3">
           <ChatMessage from="mosae" text={item.text} /><FacePreviewStrip samples={item.sampleFaces} limit={2} />

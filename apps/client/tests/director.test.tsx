@@ -114,14 +114,20 @@ describe("Director chat", () => {
     for (const label of ["Me", "My partner", "Friend", "Type a name", "Skip", "Not the same person? Tag it"]) expect(host.querySelector(`button[aria-label="${label}"]`)).toBeNull();
     await typeAndSend("My daughter");
     await waitFor(() => expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy());
+    expect(host.querySelector('button[aria-label="Did I miss anyone?"]')).toBeNull();
+    expect([...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent)).toContain("My daughter");
+    expect([...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent)).not.toContain("Daughter");
     expect(hasText("Thanks. I've tagged her in 212 moments.")).toBe(true);
     expect(hasText("Tagged in 212 moments")).toBe(true);
     expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Proceed"]')?.className).toContain("border-line-strong");
     expect(host.querySelector('button[aria-label="Proceed"]')?.className).toContain("bg-transparent");
+    expect(host.querySelector('button[aria-label="Proceed"]')?.parentElement?.className).toContain("self-start");
     await click("Proceed");
     await waitFor(() => expect(host.querySelector('[data-person-question="person-2"]')).toBeTruthy());
     expect(host.querySelector('button[aria-label="Proceed"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="Review Daughter"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Did I miss anyone?"]')).toBeNull();
   });
 
   it("interprets multiple missed names and creates a photo picker card for each", async () => {
@@ -132,6 +138,9 @@ describe("Director chat", () => {
     await typeAndSend("Grandpa and Grandma");
     await waitFor(() => expect(hasText("Help me select photos of Grandpa.")).toBe(true));
     expect(hasText("Help me select photos of Grandma.")).toBe(true);
+    expect([...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent)).toContain("Grandpa and Grandma");
+    expect([...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent)).not.toContain("Grandpa");
+    expect([...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent)).not.toContain("Grandma");
     expect(mocks.repo.interpret).toHaveBeenCalledWith("project-1", expect.objectContaining({ context: expect.objectContaining({ peopleStage: "missed" }) }));
     expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(2);
   });

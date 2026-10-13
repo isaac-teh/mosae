@@ -33,8 +33,9 @@ export type ChatInput = {
   summary: ProjectSummary | null;
   intent: { text: string } | null;
   mentionedPeople?: string[];
+  missedAnswer?: string;
   storySummary?: string;
-  people: { personId: string; name: string | null; role: string | null; ageBand?: PersonAgeBand; skipped: boolean; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;
+  people: { personId: string; name: string | null; role: string | null; answerText?: string; ageBand?: PersonAgeBand; skipped: boolean; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;
   peopleConfirmed: boolean;
   missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleUris?: string[] }[];
   missedPersonTagging?: { personId: string; name: string } | null;
@@ -65,7 +66,7 @@ export type ChatItem =
   | { kind: "preparing-videos"; id: string; text: string; progress: number }
   | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; questionText?: string; turns?: { question: string; reply?: string }[] }
   | { kind: "person-confirm"; id: string; personId: string; label: string; text: string; momentCount: number; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[] }
-  | { kind: "person-tagged"; id: string; personId: string; name: string; pronoun: "her" | "him" | "them"; momentCount: number; sampleFace?: { shotId: string; uri: string; bbox: [number, number, number, number] } }
+  | { kind: "person-tagged"; id: string; personId: string; name: string; pronoun: "her" | "him" | "them"; momentCount: number; canProceed?: boolean; sampleFace?: { shotId: string; uri: string; bbox: [number, number, number, number] } }
   | { kind: "merge-followup"; id: string; text: string; answer: string; photos: string[]; faceSamples?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; response?: "Yes, same person" | "No, another person" }
   | { kind: "anyone-else"; id: string; text?: string; canConfirm?: boolean }
   | { kind: "missed-person"; id: string; personId: string; name: string; momentCount: number; photos: string[] }
