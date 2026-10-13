@@ -729,11 +729,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         actions.discardInterpret();
       }
       const activePerson = state.items.find((item) => item.kind === "person");
-      if (activePerson?.kind === "person") {
-        const relation = /^(my\s+(?:son|daughter|wife|husband|mum|mom|mother|dad|father|partner)|me|friend|family)$/i.test(answer);
-        const chipAnswer = relation ? answer.replace(/^my\s+/i, "My ").replace(/^me$/i, "Me").replace(/^friend$/i, "Friend").replace(/^family$/i, "Family") : "Type a name";
-        return actions.setPerson(activePerson.personId, chipAnswer, relation ? undefined : answer);
-      }
+      if (activePerson?.kind === "person" && /^(?:skip|i don't know|i’m not sure|i'm not sure)$/i.test(answer)) return actions.setPerson(activePerson.personId, "Skip");
       const summaryVisible = state.items.some((item) => item.kind === "people-summary");
       const anyoneElseVisible = state.items.some((item) => item.kind === "anyone-else");
       const missedTaggingVisible = state.items.some((item) => item.kind === "missed-person") || Boolean(input.missedPersonTagging);
@@ -811,7 +807,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const interpretedPeople = result.change.kind === "occasion" && Array.isArray(result.change.mentionedPeople)
           ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
         const storySummary = result.change.kind === "occasion" && typeof result.change.storyText === "string" ? result.change.storyText : undefined;
-        if (result.change.kind === "person") setPendingInterpret({ reply: result.reply, text, change: result.change });
+        if (result.change.kind === "person") {
+          const person = activePerson?.kind === "person" ? activePerson : null;
+          if (person) return actions.setPerson(person.personId, String(result.change.role), String(result.change.name));
+          setPendingInterpret({ reply: result.reply, text, change: result.change });
+        }
         else if (result.change.kind === "occasion") setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
       } catch (cause) { setError(reportFailure(cause)); }
       finally { interpretInFlight.current = false; }

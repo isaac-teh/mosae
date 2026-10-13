@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AccessibilityInfo, ActivityIndicator, Animated, Image, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { AccessibilityInfo, ActivityIndicator, Animated, Image, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Asset } from "expo-asset";
 import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatProposal, ChatSetAsideCard, ChatShaping, ChatTyping } from "@/components/chat";
@@ -14,7 +14,7 @@ import { demoImage } from "@/lib/demoAssets";
 import { PendingPreviewUrls } from "@/lib/pendingPreviewUrls";
 import { StableUriImage } from "@/components/StableUriImage";
 import type { Timeline } from "@mosae/contracts";
-import { createUploadRecoveryOwner, directionFocus, contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, getUploadRecoveryOwner, personAnswerChips, subscribeUploadProgress, retryPendingMedia, hasPendingMediaRetry, setPendingMedia, setPendingMediaRetry, setUploadFailure, setUploadProgress, setUploadRecoveryOwner, uploadMedia, runUploadRecovery, type UploadRecoveryEntry } from "@mosae/core";
+import { createUploadRecoveryOwner, directionFocus, contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, getUploadRecoveryOwner, subscribeUploadProgress, retryPendingMedia, hasPendingMediaRetry, setPendingMedia, setPendingMediaRetry, setUploadFailure, setUploadProgress, setUploadRecoveryOwner, uploadMedia, runUploadRecovery, type UploadRecoveryEntry } from "@mosae/core";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
 import { consumeTaggedPersonResult } from "@/lib/taggedPersonResult";
 
@@ -86,8 +86,6 @@ export default function DirectorScreen() {
   const story = useStoryFlow();
   const router = useRouter();
   const mediaPicker = useRef<MediaPickerHandle>(null);
-  const [name, setName] = useState("");
-  const [namingPerson, setNamingPerson] = useState<string | null>(null);
   const [filmTimeline, setFilmTimeline] = useState<{ filmId: string; timeline: Timeline; sources: Record<string, string> } | null>(null);
   const [filmPlayerFailed, setFilmPlayerFailed] = useState(false);
   const [filmPreviewPlaying, setFilmPreviewPlaying] = useState(false);
@@ -371,8 +369,7 @@ export default function DirectorScreen() {
         </View>;
         if (item.kind === "occasion-question") return pendingInterpret ? null : <View key={item.id} className="gap-2"><ChatMessage from="mosae" text={item.uploadComplete ? "Tell me a little about them. Is it a trip, a birthday celebration, or something else?" : "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?"} /><View className="flex-row flex-wrap gap-2"><Pressable role="button" aria-label="A trip" onPress={() => scrollAfterAction(() => actions.answerOccasion("A trip", projectSummary?.country ? `${projectSummary.country} trip` : "Our trip"))} className="active:scale-[0.97] active:bg-surface-sunken rounded-pill border border-line-strong px-4 py-2" style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })}><Text className="font-sans text-caption text-ink">A trip</Text></Pressable><Pressable role="button" aria-label="A birthday celebration" onPress={() => scrollAfterAction(() => actions.answerOccasion("A birthday celebration", "Birthday celebration"))} className="active:scale-[0.97] active:bg-surface-sunken rounded-pill border border-line-strong px-4 py-2" style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })}><Text className="font-sans text-caption text-ink">A birthday celebration</Text></Pressable></View><Text className="font-sans text-caption text-ink-muted">Something else? Type it in the box below.</Text></View>;
         if (item.kind === "person") return <View key={item.id} className="gap-3">
-          <ChatPersonQuestion momentCount={item.momentCount} samples={item.sampleFaces} days={item.days} question={item.questionText} chips={personAnswerChips(item.ageBand, people.filter((person) => person.personId !== item.personId).map((person) => person.name ?? ""))} onPick={(role) => scrollAfterAction(() => actions.setPerson(item.personId, role))} onTypeName={() => scrollAfterAction(() => setNamingPerson(item.personId))} onSkip={() => scrollAfterAction(() => actions.setPerson(item.personId, "Skip"))} onTagIt={() => scrollAfterAction(() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: item.personId, name: "", faceUri: item.sampleFaces[0]?.uri, source: "identity" } } as any))} />
-          {namingPerson === item.personId && <View className="flex-row gap-2"><TextInput accessibilityLabel="Person name" placeholder="What's their name?" value={name} onChangeText={setName} className="min-h-11 flex-1 rounded-md border border-line-strong px-3 font-sans text-ink" /><Pressable role="button" onPress={() => scrollAfterAction(() => { const answerName = name.trim(); setName(""); setNamingPerson(null); return answerName ? actions.setPerson(item.personId, "Type a name", answerName) : undefined; })} style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })} className="active:scale-[0.97] active:bg-surface-sunken min-h-11 justify-center px-3"><Text className="font-sans-semibold text-action">Save name</Text></Pressable></View>}
+          <ChatPersonQuestion samples={item.sampleFaces} question="Who is this?" />
         </View>;
         if (item.kind === "person-confirm") return <View key={item.id} className="gap-3">
           <ChatMessage from="mosae" text={item.text} /><FacePreviewStrip samples={item.sampleFaces} limit={2} />
@@ -394,9 +391,9 @@ export default function DirectorScreen() {
               {person.sampleFace ? <FacePreviewStrip samples={[person.sampleFace]} limit={1} size={48} rounded /> : person.sampleUri ? <StableUriImage uri={person.sampleUri} accessibilityLabel={`${person.name} face`} className="size-12 rounded-full" /> : <View className="size-12 rounded-full bg-surface-sunken" />}
               <View className="flex-1"><Text className="font-sans-semibold text-label text-ink">{person.name}</Text><Text className="font-sans text-caption text-ink-muted">Tagged in {person.momentCount} {person.momentCount === 1 ? "moment" : "moments"}</Text></View><Text className="text-heading text-ink-muted">›</Text>
             </Pressable>
-            <Pressable role="button" accessibilityLabel={`Change ${person.name}`} onPress={() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: person.personId, name: person.name } } as any)} className="min-h-11 justify-center px-2"><Text className="font-sans-semibold text-caption text-action">Change</Text></Pressable>
           </View>)}</View>
           <Text className="font-sans text-caption text-ink-muted">Tap a person to check their moments.</Text>
+          <Button label="Looks right" disabled={saving} onPress={() => scrollAfterAction(actions.confirmPeopleSummary)} />
         </View>;
         return null;
       })}
