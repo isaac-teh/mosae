@@ -249,6 +249,24 @@ describe("film editor", () => {
     expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "move", clipId: "a", toIndex: 2 }]);
   });
 
+  it("commits the reorder from the drop coordinate when pointer-up has no final move", async () => {
+    await render(<EditorScreen />);
+    const pointer = (type: string, clientX: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.defineProperty(event, "clientX", { value: clientX });
+      Object.defineProperty(event, "clientY", { value: 20 });
+      Object.defineProperty(event, "pointerId", { value: 1 });
+      return event;
+    };
+    const start = host.querySelector('[aria-label="Select clip a"]')!;
+    await act(async () => start.dispatchEvent(pointer("pointerdown", 250)));
+    await advance(300);
+    await act(async () => start.dispatchEvent(pointer("pointerup", 515)));
+    expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((node) => node.getAttribute("aria-label"))).toEqual(["Select clip b", "Select clip c", "Select clip a"]);
+    await advance(1500);
+    expect(boundary.repository.saveEdits).toHaveBeenCalledWith("p1", "g1", 1, [{ op: "move", clipId: "a", toIndex: 2 }]);
+  });
+
   it("renders 18px undo and redo arrows in fixed disabled header columns", async () => {
     await render(<EditorScreen />);
     for (const label of ["Undo", "Redo"]) {

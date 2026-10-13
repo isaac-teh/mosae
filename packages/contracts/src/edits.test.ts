@@ -434,6 +434,32 @@ describe("applyEdits", () => {
     if (result.ok) expect(result.timeline.durationSec).toBe(10);
   });
 
+  it.each([
+    ["shorter", 5, 7, 9],
+    ["longer", 3, 7, 11],
+  ] as const)("ripples clips contiguously and refits music after a %s trim", (_label, inSec, outSec, durationSec) => {
+    const withSourceBounds = parseTimeline({ ...firstCut, videoClips: firstCut.videoClips.map((clip) => "id" in clip && clip.id === "v1"
+      ? { ...clip, source: { ...clip.source, sourceDurationSec: 10 } }
+      : clip) });
+    const result = applyEdits(withSourceBounds, [{ op: "trim", clipId: "v1", inSec, outSec }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.timeline.durationSec).toBe(durationSec);
+    expect(result.timeline.videoClips.map((clip) => clip.startSec)).toEqual([0, 2, 2 + outSec - inSec, 4 + outSec - inSec]);
+    expect(result.timeline.videoClips.slice(1).every((clip, index) =>
+      Math.abs(clip.startSec - (result.timeline.videoClips[index]!.startSec + result.timeline.videoClips[index]!.durationSec)) < 1e-6,
+    )).toBe(true);
+    expect(result.timeline.audioClips.find((clip) => clip.role === "music")?.source).toMatchObject({ sourceOutSec: durationSec });
+  });
+
+  it("reorders clips with contiguous starts", () => {
+    const moved = apply([{ op: "move", clipId: "c1", toIndex: 1 }]).timeline;
+    expect(moved.videoClips.map((clip) => "kind" in clip ? clip.clipId : clip.id)).toEqual(["p1", "c1", "v1", "p2"]);
+    expect(moved.videoClips.slice(1).every((clip, index) =>
+      Math.abs(clip.startSec - (moved.videoClips[index]!.startSec + moved.videoClips[index]!.durationSec)) < 1e-6,
+    )).toBe(true);
+  });
+
   it("allows video trims to expand to the source duration metadata", () => {
     const source = parseTimeline({ ...firstCut, videoClips: firstCut.videoClips.map((clip) => "id" in clip && clip.id === "v1" ? { ...clip, source: { ...clip.source, sourceDurationSec: 12 } } : clip) });
     const result = applyEdits(source, [{ op: "trim", clipId: "v1", inSec: 0, outSec: 10 }]);
