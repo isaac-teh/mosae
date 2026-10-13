@@ -322,15 +322,79 @@ describe("editor tool operations", () => {
   });
 
   it("centres a tapped clip start under the playhead after its seek request", async () => {
+    const frames: Array<(time: number) => void> = [];
+    const originalRaf = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => { frames.push(callback); return frames.length; }) as typeof requestAnimationFrame;
     mockScrollTo.mockClear();
-    function Harness() {
-      const [playhead, setPlayhead] = React.useState(0);
-      const [selected, setSelected] = React.useState<string | null>(null);
-      return <TimelineStrip timeline={timeline} sources={{}} selectedClipId={selected} playheadSec={playhead} onSelect={(id, startSec) => { setSelected(id); setPlayhead(startSec); }} onScrub={setPlayhead} />;
-    }
-    await render(<Harness />);
-    await click("Select clip b");
-    expect(mockScrollTo).toHaveBeenLastCalledWith({ x: 120, animated: false });
+    try {
+      function Harness() {
+        const [playhead, setPlayhead] = React.useState(0);
+        const [selected, setSelected] = React.useState<string | null>(null);
+        return <TimelineStrip timeline={timeline} sources={{}} selectedClipId={selected} playheadSec={playhead} onSelect={(id, startSec) => { setSelected(id); setPlayhead(startSec); }} onScrub={setPlayhead} />;
+      }
+      await render(<Harness />);
+      await click("Select clip b");
+      await act(async () => frames.shift()?.(performance.now() + 300));
+      expect(mockScrollTo).toHaveBeenLastCalledWith({ x: 120, animated: false });
+    } finally { globalThis.requestAnimationFrame = originalRaf; }
+  });
+
+  it("animates clip selection and cancels an in-flight slide when another clip is tapped", async () => {
+    const frames: Array<{ id: number; callback: (time: number) => void }> = [];
+    const originalRaf = globalThis.requestAnimationFrame;
+    const originalCancel = globalThis.cancelAnimationFrame;
+    let frameId = 0;
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => { const id = ++frameId; frames.push({ id, callback }); return id; }) as typeof requestAnimationFrame;
+    globalThis.cancelAnimationFrame = ((id: number) => { const index = frames.findIndex((frame) => frame.id === id); if (index >= 0) frames.splice(index, 1); }) as typeof cancelAnimationFrame;
+    try {
+      function Harness() {
+        const [playhead, setPlayhead] = React.useState(0);
+        const [selected, setSelected] = React.useState<string | null>(null);
+        return <TimelineStrip timeline={timeline} sources={{}} selectedClipId={selected} playheadSec={playhead} onSelect={(id, seconds) => { setSelected(id); setPlayhead(seconds); }} onScrub={setPlayhead} />;
+      }
+      mockScrollTo.mockClear();
+      await render(<Harness />);
+      await click("Select clip c");
+      expect(host.querySelector('[aria-label="Select clip c"]')?.getAttribute("aria-pressed")).toBe("true");
+      expect(frames.length).toBeGreaterThan(0);
+      await act(async () => frames.shift()?.callback(performance.now() + 100));
+      await click("Select clip a");
+      await act(async () => frames.pop()?.callback(performance.now() + 300));
+      expect(mockScrollTo.mock.calls.length).toBeGreaterThan(1);
+      expect(mockScrollTo.mock.calls[0][0].x).toBeGreaterThan(0);
+      expect(mockScrollTo.mock.calls[0][0].x).toBeLessThan(240);
+      expect(mockScrollTo.mock.calls.at(-1)?.[0].x).toBeCloseTo(118.667, 2);
+    } finally { globalThis.requestAnimationFrame = originalRaf; globalThis.cancelAnimationFrame = originalCancel; }
+  });
+
+  it("jumps immediately when reduced motion is preferred", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = (() => ({ matches: true, media: "(prefers-reduced-motion: reduce)", onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia;
+    try {
+      function Harness() {
+        const [playhead, setPlayhead] = React.useState(0);
+        const [selected, setSelected] = React.useState<string | null>(null);
+        return <TimelineStrip timeline={timeline} sources={{}} selectedClipId={selected} playheadSec={playhead} onSelect={(id, seconds) => { setSelected(id); setPlayhead(seconds); }} onScrub={setPlayhead} />;
+      }
+      mockScrollTo.mockClear();
+      await render(<Harness />);
+      await click("Select clip c");
+      expect(mockScrollTo).toHaveBeenLastCalledWith({ x: 240, animated: false });
+      expect(mockScrollTo).toHaveBeenCalledTimes(1);
+    } finally { window.matchMedia = originalMatchMedia; }
+  });
+
+  it("does not animate a clip tap while playback is active", async () => {
+    const frames: FrameRequestCallback[] = [];
+    const originalRaf = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => { frames.push(callback); return frames.length; }) as typeof requestAnimationFrame;
+    try {
+      mockScrollTo.mockClear();
+      await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} isPlaying onSelect={() => {}} onScrub={() => {}} />);
+      await click("Select clip c");
+      expect(frames).toHaveLength(0);
+      expect(mockScrollTo).toHaveBeenCalledOnce();
+    } finally { globalThis.requestAnimationFrame = originalRaf; }
   });
 
   it("uses the tapped clip's explicit startSec when selecting it", async () => {
