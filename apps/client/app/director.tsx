@@ -345,7 +345,7 @@ export default function DirectorScreen() {
         if (item.kind === "direction" && error === "I couldn't put your film together this time.") return null;
         if (item.kind === "direction") {
           const { options: focusOptions } = directionFocus(people, item.focus, true);
-          return <View key={item.id} className="gap-4"><ChatDirectionCard aspect={item.aspect} orientation={item.orientation} pace={item.pace as "gentle" | "lively"} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={(change) => scrollAfterAction(() => actions.setDirection(change))} /><Button label="Sounds good" disabled={saving || !directionOptions} onPress={() => scrollAfterAction(actions.shapeIt)} /></View>;
+          return <View key={item.id} className="gap-4"><ChatDirectionCard aspect={item.aspect} orientation={item.orientation} pace={item.pace as "gentle" | "lively"} focus={item.focus} collageAmount={directionSelection.collageAmount} motionFeel={directionSelection.motionFeel} focusOptions={focusOptions} onChange={(change) => scrollAfterAction(() => actions.setDirection(change))} /><View className="self-start"><Button variant="secondary" label="Sounds good" disabled={saving || !directionOptions} onPress={() => scrollAfterAction(actions.shapeIt)} /></View></View>;
         }
         if (item.kind === "film") return <View key={item.id} className="gap-4">
           <Text accessibilityRole="header" className="font-title text-heading text-positive">Film ready</Text>
