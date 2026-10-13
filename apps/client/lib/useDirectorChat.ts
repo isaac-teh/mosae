@@ -205,12 +205,15 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const stored = acceptedFlow.people.find((entry) => entry.personId === person.personId);
         return { ...person, momentCount: stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0, ...(stored?.samplePhotoUris ? { sampleUris: stored.samplePhotoUris } : {}) };
       });
-      const nextMissedPerson = missedPeople?.find((person) => person.momentCount === 0);
+      const nextMissedPerson = missedPeople?.find((person) => !person.skipped && person.momentCount === 0);
+      const historyTurns = acceptedFlow.missedClarifications?.map((turn) => ({ ...turn, stage: "missed" as const })) ?? current.interpTurns?.filter((turn) => turn.stage === "missed") ?? [];
       return { ...current, flow: acceptedFlow, missedPeople, missedPersonTagging: current.missedPersonTagging ?? (nextMissedPerson ? { personId: nextMissedPerson.personId, name: nextMissedPerson.name, momentCount: 0 } : undefined),
       intent: current.intent ?? (acceptedFlow.story.answer ? { text: acceptedFlow.story.answer } : null),
       ...(acceptedFlow.story.storySummary ? { storySummary: acceptedFlow.story.storySummary } : {}),
       ...(acceptedFlow.story.mentionedPeople.length ? { mentionedPeople: acceptedFlow.story.mentionedPeople } : {}),
       missedAnswer: current.missedAnswer ?? acceptedFlow.missedAnswer,
+      missedReply: current.missedReply ?? acceptedFlow.missedReply,
+      interpTurns: [...(current.interpTurns ?? []).filter((turn) => turn.stage !== "missed"), ...historyTurns],
       people: current.people?.map((person) => { const stored = acceptedFlow.people.find((entry) => entry.personId === person.personId); return stored ? { ...person, name: person.name ?? stored.name, role: person.role ?? stored.role, answerText: person.answerText ?? stored.answerText, skipped: person.skipped || stored.skipped } : person; }) ?? current.people };
     });
     if (activeFilmId.current) pollFilmRef.current(activeFilmId.current);
@@ -520,15 +523,25 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
     async addMissedPeople(names: string[], answerText?: string) {
-      const existing = input.missedPeople ?? [];
-      const known = new Set([...existing.map(({ name }) => name.toLocaleLowerCase()), ...(input.people ?? []).map(({ name }) => name?.toLocaleLowerCase()).filter((name): name is string => Boolean(name))]);
-      const added = names.map((name) => name.trim()).filter((name) => name && !known.has(name.toLocaleLowerCase())).map((name, index) => ({ personId: `p-missed-${Date.now()}-${index}`, name, momentCount: 0 }));
+      const existing: NonNullable<ChatInput["missedPeople"]> = input.missedPeople ?? [];
+      const normalize = (name: string) => name.trim().replace(/^my\s+/i, "").toLocaleLowerCase();
+      const known = new Map([...existing.map(({ name }) => [normalize(name), name] as const), ...(input.people ?? []).flatMap(({ name }) => name ? [[normalize(name), name] as const] : [])]);
+      const duplicates: string[] = [];
+      const added = names.map((name) => name.trim()).filter((name) => {
+        if (!name) return false;
+        const key = normalize(name);
+        if (known.has(key)) { const displayName = known.get(key)!; if (!duplicates.some((prior) => normalize(prior) === key)) duplicates.push(displayName.replace(/^my\s+/i, "")); return false; }
+        known.set(key, name);
+        return true;
+      }).map((name, index) => ({ personId: `p-missed-${Date.now()}-${index}`, name, momentCount: 0 }));
       const all = [...existing, ...added];
+      const missedReply = duplicates.length ? `${duplicates.join(" and ")} ${duplicates.length === 1 ? "is" : "are"} already tagged.` : undefined;
+      const allAlreadyTagged = added.length === 0 && duplicates.length > 0;
       await commitFlowAction({ type: "batch", actions: [
-        { type: "missed-people", people: all.map(({ personId, name }) => ({ personId, name })), ...(answerText ? { answer: answerText } : {}) },
-        { type: "missed-people-confirmed", confirmed: false },
+        { type: "missed-people", people: all.map((person) => ({ personId: person.personId, name: person.name, ...((person as { skipped?: boolean }).skipped ? { skipped: true } : {}) })), ...(answerText ? { answer: answerText } : {}), reply: missedReply ?? null },
+        { type: "missed-people-confirmed", confirmed: allAlreadyTagged },
       ] });
-      setInput((current) => ({ ...current, missedPeople: all, ...(answerText ? { missedAnswer: answerText } : {}), peopleConfirmed: true, missedPeopleConfirmed: false, peopleSummaryConfirmed: false }));
+      setInput((current) => ({ ...current, missedPeople: all, ...(answerText ? { missedAnswer: answerText } : {}), missedReply, missedPersonTagging: null, peopleConfirmed: true, missedPeopleConfirmed: allAlreadyTagged, peopleSummaryConfirmed: false }));
     },
     async confirmMissedPeople() {
       await commitFlowAction({ type: "missed-people-confirmed", confirmed: true });
@@ -602,9 +615,15 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const sampleFaces = sampleUri ? [{ shotId: "manual-sample", uri: sampleUri, bbox: [0, 0, 1, 1] as [number, number, number, number] }] : undefined;
         const updatedPeople = people.some((person) => person.personId === personId) ? people.map((person) => person.personId === personId ? { ...person, momentCount, ...(sampleFaces ? { sampleFaces } : {}) } : person) : [...people, { personId, name, role: "other", skipped: false, momentCount, sampleShotIds: [], days: [], ...(sampleFaces ? { sampleFaces } : {}) }];
         const missedPeople = (current.missedPeople ?? []).map((person) => person.personId === personId ? { ...person, momentCount, ...(sampleUris?.length ? { sampleUris: sampleUris.slice(0, 4) } : sampleUri ? { sampleUri } : {}) } : person);
-        const next = missedPeople.find((person) => person.momentCount === 0 && person.personId !== personId);
+        const next = missedPeople.find((person) => !person.skipped && person.momentCount === 0 && person.personId !== personId);
         return { ...current, people: updatedPeople, missedPeople, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null };
       });
+    },
+    async skipMissedPerson(personId: string) {
+      const missedPeople = (input.missedPeople ?? []).map((person) => person.personId === personId ? { ...person, skipped: true } : person);
+      await commitFlowAction({ type: "missed-people", people: missedPeople.map(({ personId: id, name, skipped }) => ({ personId: id, name, ...(skipped ? { skipped: true } : {}) })), ...(input.missedAnswer ? { answer: input.missedAnswer } : {}), ...(input.missedReply ? { reply: input.missedReply } : {}) });
+      const next = missedPeople.find((person) => !person.skipped && person.momentCount === 0);
+      setInput((current) => ({ ...current, missedPeople, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null }));
     },
     updatePersonTagCount(personId: string, momentCount: number, sampleUri?: string, name?: string | null) {
       personTagCounts.current.set(personId, momentCount);
@@ -823,7 +842,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (result.change.kind === "person") {
           const change = result.change as { intent?: string; name?: string; role?: string; names?: string[]; needsClarification?: boolean; clarifyingQuestion?: string };
           if (change.needsClarification) {
-            setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { ...(activePerson?.kind === "person" ? { personId: activePerson.personId } : {}), ...(peopleStage === "missed" ? { stage: "missed" as const } : {}), question: text, reply: change.clarifyingQuestion ?? "Could you tell me their names?" }] }));
+            const reply = change.clarifyingQuestion ?? "Could you tell me their names?";
+            if (peopleStage === "missed") await commitFlowAction({ type: "missed-clarification-turn", question: text.trim(), reply });
+            setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { ...(activePerson?.kind === "person" ? { personId: activePerson.personId } : {}), ...(peopleStage === "missed" ? { stage: "missed" as const } : {}), question: text.trim(), reply }] }));
             return;
           }
           if (change.intent === "proceed") {

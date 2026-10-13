@@ -130,6 +130,33 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Did I miss anyone?"]')).toBeNull();
   });
 
+  it("shows the same tagged confirmation for the fourth and last announced person", async () => {
+    const four = Array.from({ length: 4 }, (_, index) => ({ ...people[0]!, personId: `person-${index + 1}`, name: null, role: null, momentCount: 40 - index, sampleFaces: [] }));
+    setup({ people: four }); await renderScreen(); await click("A trip");
+    for (let index = 0; index < four.length; index++) {
+      await typeAndSend(`Alpha ${index + 1}`);
+      await waitFor(() => expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy());
+      expect(host.textContent).toContain("Thanks. I've tagged them in");
+      expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy();
+      if (index < four.length - 1) {
+        await click("Proceed");
+        await waitFor(() => expect(host.querySelector(`[data-person-question="person-${index + 2}"]`)).toBeTruthy());
+      }
+    }
+    expect(hasText("Thanks. I've tagged them in 37 moments.")).toBe(true);
+    expect(host.querySelector('button[aria-label="Did I miss anyone?"]')).toBeNull();
+  });
+
+  it("reports an already tagged missed name without opening another photo picker", async () => {
+    setup(); await renderScreen(); await click("A trip");
+    await answerPerson("Grandpa"); await answerPerson("My daughter");
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    await typeAndSend("grandpa");
+    await waitFor(() => expect(hasText("Grandpa is already tagged.")).toBe(true));
+    expect(host.querySelector('button[aria-label="Tap to select"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy();
+  });
+
   it("interprets multiple missed names and creates a photo picker card for each", async () => {
     setup({ readyPlan: true }); await renderScreen(); await click("A trip");
     await answerPerson("My daughter");
@@ -203,6 +230,7 @@ describe("Director chat", () => {
     await renderScreen();
     await waitFor(() => expect(hasText("Who is this?")).toBe(true));
     expect(hasText("Thanks. I've tagged all")).toBe(false);
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Proceed"]')).toBeNull();
   });
 
@@ -228,7 +256,7 @@ describe("Director chat", () => {
     await renderScreen();
     await waitFor(() => expect(mocks.repo.getPlan).toHaveBeenCalledWith("proposal-1"));
     expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
-    expect(hasText("Thanks. I've tagged all")).toBe(false);
+    expect(hasText("Thanks. I've tagged all")).toBe(true);
     expect(host.querySelector('[aria-label="Filtered photos"]')).toBeTruthy();
   });
 
@@ -239,7 +267,7 @@ describe("Director chat", () => {
     await renderScreen();
     await waitFor(() => expect(hasText("Film ready")).toBe(true));
     expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
-    expect(hasText("Thanks. I've tagged all")).toBe(false);
+    expect(hasText("Thanks. I've tagged all")).toBe(true);
   });
   it("defaults to the suggested soundtrack but keeps an existing explicit pick", () => {
     const options = [{ id: "first", name: "First", description: "" }, { id: "suggested", name: "Suggested", description: "", suggested: true }];

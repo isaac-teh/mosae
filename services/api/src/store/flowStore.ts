@@ -101,7 +101,11 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
   if (action.type === "people-summary-confirmed") return { ...flow, peopleSummaryConfirmed: action.confirmed };
   if (action.type === "people-progress") return { ...flow, peopleProgress: { completedPersonIds: [...new Set(action.completedPersonIds)] } };
   if (action.type === "missed-people-confirmed") return { ...flow, missedPeopleConfirmed: action.confirmed };
-  if (action.type === "missed-people") return { ...flow, missedPeople: action.people, ...(action.answer !== undefined ? { missedAnswer: action.answer } : {}) };
+  if (action.type === "missed-people") {
+    const { missedReply: _priorReply, ...withoutPriorReply } = flow;
+    return { ...withoutPriorReply, missedPeople: action.people, ...(action.answer !== undefined ? { missedAnswer: action.answer } : {}), ...(action.reply ? { missedReply: action.reply } : {}) };
+  }
+  if (action.type === "missed-clarification-turn") return { ...flow, missedClarifications: [...(flow.missedClarifications ?? []), { question: action.question, reply: action.reply }] };
   return flow;
 }
 

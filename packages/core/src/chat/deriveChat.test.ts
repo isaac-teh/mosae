@@ -235,14 +235,56 @@ describe("deriveChat state table", () => {
     expect(afterTagging.items.find((item) => item.id === "anyone-else")).toMatchObject({ canConfirm: false });
     expect(afterTagging.items.some((item) => item.id === "anyone-else-next")).toBe(false);
   });
-  it("goes straight to the summary after a missed person is tagged, including stale refreshed counts", () => {
+  it("waits for the missed-person picker state before showing the summary", () => {
     const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false,
       people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }, { personId: "missed-1", name: "Grandma", role: "other", skipped: false, momentCount: 1, sampleShotIds: [], days: [] }],
       missedPeople: [{ personId: "missed-1", name: "Grandma", momentCount: 0 }], plan: null });
     expect(state.items.find((item) => item.id === "anyone-else")).toMatchObject({ text: "Did I miss anyone? Enter the names of who were missed in the box below." });
     expect(state.items.some((item) => item.id === "missed-name-missed-1")).toBe(true);
     expect(state.items.filter((item) => item.kind === "anyone-else")).toHaveLength(1);
-    expect(state.items.findIndex((item) => item.id === "missed-select-missed-1")).toBeLessThan(state.items.findIndex((item) => item.id === "people-summary"));
+    expect(state.items.find((item) => item.id === "missed-person-missed-1")).toMatchObject({ momentCount: 0, photos: [] });
+    expect(state.items.some((item) => item.id === "people-summary")).toBe(false);
+    const selected = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false,
+      people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }, { personId: "missed-1", name: "Grandma", role: "other", skipped: false, momentCount: 1, sampleShotIds: [], days: [] }],
+      missedPeople: [{ personId: "missed-1", name: "Grandma", momentCount: 1 }], plan: null });
+    expect(selected.items.findIndex((item) => item.id === "missed-select-missed-1")).toBeLessThan(selected.items.findIndex((item) => item.id === "people-summary"));
+  });
+  it("keeps the full people conversation ordered and unique through the direction step", () => {
+    const state = deriveChat({ ...base(), peopleConfirmed: true,
+      people: [
+        { personId: "p1", name: "Daughter", role: "child", answerText: "My daughter", skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
+        { personId: "p2", name: "Grandpa", role: "other", answerText: "Grandpa", skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
+        { personId: "p-missed-grandma", name: "Grandma", role: "other", skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
+      ],
+      flow: { revision: 4, story: { answer: "Our Japan trip", storySummary: "Japan trip", mentionedPeople: [] }, people: [
+        { personId: "p-missed-grandma", name: "Grandma", role: "other", confirmed: true, skipped: false, manualShotAdds: ["shot-1", "shot-2"], manualShotRemoves: [], samplePhotoUris: ["grandma.jpg"], faceIds: [], mergedInto: null },
+      ], peopleProgress: { completedPersonIds: ["p1", "p2"] }, missedPeopleConfirmed: false, peopleSummaryConfirmed: true,
+      missedAnswer: "Grandma", missedReply: "Grandpa is already tagged.", missedClarifications: [{ question: "my two cousins", reply: "What are their names?" }],
+      missedPeople: [{ personId: "p-missed-grandma", name: "Grandma", samplePhotoUris: ["grandma.jpg"] }] },
+      plan: { ...plan, ready: true } as any,
+      direction: { confirmed: false, pace: "gentle", lengthSec: 90, focus: "family" },
+    });
+    const ids = state.items.map(({ id }) => id);
+    expect(ids).toContain("person-tagged-p1");
+    expect(ids).toContain("person-tagged-p2");
+    expect(ids).toContain("people-summary-message");
+    expect(ids).toContain("people-summary");
+    expect(ids).toContain("missed-select-p-missed-grandma");
+    expect(ids.indexOf("people-intro")).toBeLessThan(ids.indexOf("person-question-p1"));
+    expect(ids.indexOf("person-question-p1")).toBeLessThan(ids.indexOf("person-tagged-p1"));
+    expect(ids.indexOf("person-tagged-p2")).toBeLessThan(ids.indexOf("anyone-else"));
+    expect(ids.indexOf("anyone-else")).toBeLessThan(ids.indexOf("missed-clarification-question-1"));
+    expect(ids.indexOf("missed-clarification-reply-1")).toBeLessThan(ids.indexOf("missed-select-p-missed-grandma"));
+    expect(ids.indexOf("missed-person-p-missed-grandma")).toBeLessThan(ids.indexOf("people-summary-message"));
+    expect(ids.indexOf("people-summary-message")).toBeLessThan(ids.indexOf("people-summary"));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+  it("allows the summary when every missed person was explicitly skipped", () => {
+    const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false, missedPeopleConfirmed: false,
+      people: [{ personId: "p1", name: "Daughter", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }],
+      missedPeople: [{ personId: "p-missed-uncle", name: "Uncle", momentCount: 0, skipped: true }], plan: null });
+    expect(state.items.find((item) => item.id === "people-summary")).toBeTruthy();
+    expect(state.items.find((item) => item.id === "missed-person-p-missed-uncle")).toMatchObject({ skipped: true });
   });
   it("keeps answered mid-flow exchanges before later people and film-option prompts", () => {
     const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: true, interpTurns: [{ question: "There is one more", reply: "I didn't catch that." }], direction: { confirmed: false, pace: "gentle", lengthSec: 90, focus: "family" } });
@@ -506,7 +548,7 @@ describe("deriveChat state table", () => {
     expect(options.items.some((item) => item.kind === "direction")).toBe(true);
     const preview = deriveChat({ ...base(), people: named, peopleConfirmed: true, peopleSummaryConfirmed: true, momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 90, focus: "family" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } });
     expect(preview.items.some((item) => item.kind === "film")).toBe(true);
-    expect(preview.items.some((item) => item.id === "people-summary")).toBe(false);
+    expect(preview.items.some((item) => item.id === "people-summary")).toBe(true);
   });
 
   it("uses a warm question when the story answer does not mention a person", () => {
