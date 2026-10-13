@@ -45,6 +45,47 @@ describe("deriveChat state table", () => {
       else expect(active.items.some((item) => item.kind === "anyone-else")).toBe(true);
     }
   });
+  it("asks three recurring unnamed people in sequence and delays missed people until all three proceeds", () => {
+    const people = ["p1", "p2", "p3"].map((personId, index) => ({ personId, name: null, role: null, skipped: false, momentCount: 8 - index, sampleShotIds: [], days: [] }));
+    const clusters = [...people, { personId: "rare", name: null, role: null, skipped: false, momentCount: 0, sampleShotIds: [], days: [] }, { personId: "background", name: null, role: null, skipped: false, backgroundOnly: true, momentCount: 4, sampleShotIds: [], days: [] }];
+    const transcript = (state: ChatState) => state.items.filter((item) => item.id === "people-intro" || /^(?:person-question-|person-answer-|person-tagged-|anyone-else$)/.test(item.id) || item.kind === "person").map(({ id }) => id);
+    let state = deriveChat({ ...base(), people: clusters, peopleConfirmed: false, plan: null, proceededPersonIds: [] });
+    expect(state.items.filter((item) => item.kind === "person").map((item) => item.personId)).toEqual(["p1"]);
+    expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Three people appear often in your moments." });
+    expect(state.items.some((item) => item.kind === "anyone-else")).toBe(false);
+    expect(transcript(state)).toEqual(["people-intro", "person-p1"]);
+
+    const labels = ["My daughter", "My son", "Grandpa"];
+    for (let index = 0; index < people.length; index++) {
+      const currentId = `p${index + 1}`;
+      const answered = clusters.map((person, personIndex) => personIndex <= index ? { ...person, name: labels[personIndex] } : person);
+      state = deriveChat({ ...base(), people: answered, peopleConfirmed: false, plan: null, proceededPersonIds: people.slice(0, index).map(({ personId }) => personId) });
+      expect(state.items.filter((item) => item.kind === "person-tagged").at(-1)?.personId).toBe(currentId);
+      expect(state.items.find((item) => item.kind === "anyone-else")).toBeUndefined();
+      expect(transcript(state)).toEqual([
+        "people-intro",
+        ...people.slice(0, index + 1).flatMap(({ personId }) => [`person-question-${personId}`, `person-answer-${personId}`, `person-tagged-${personId}`]),
+      ]);
+      const afterProceed = deriveChat({ ...base(), people: answered, peopleConfirmed: index === people.length - 1, missedPeopleConfirmed: false, peopleSummaryConfirmed: false, plan: null, proceededPersonIds: people.slice(0, index + 1).map(({ personId }) => personId) });
+      if (index < people.length - 1) {
+        expect(afterProceed.items.find((item) => item.kind === "person")?.personId).toBe(`p${index + 2}`);
+        expect(afterProceed.items.some((item) => item.kind === "anyone-else")).toBe(false);
+        expect(transcript(afterProceed)).toEqual(["people-intro", ...people.slice(0, index + 1).flatMap(({ personId }) => [`person-question-${personId}`, `person-answer-${personId}`, `person-tagged-${personId}`]), `person-p${index + 2}`]);
+      } else {
+        expect(afterProceed.items.filter((item) => item.kind === "anyone-else")).toHaveLength(1);
+        expect(transcript(afterProceed)).toEqual(["people-intro", ...people.flatMap(({ personId }) => [`person-question-${personId}`, `person-answer-${personId}`, `person-tagged-${personId}`]), "anyone-else"]);
+      }
+    }
+  });
+  it("keeps typed person and missed-people text verbatim in user bubbles", () => {
+    const people = [{ personId: "p1", name: "Daughter", role: "child", skipped: false, answerText: "My daughter", momentCount: 3, sampleShotIds: [], days: [] }];
+    const identified = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null, proceededPersonIds: ["p1"] });
+    expect(identified.items.find((item): item is Extract<ChatItem, { kind: "you" }> => item.kind === "you" && item.id === "person-answer-p1")?.text).toBe("My daughter");
+    const missed = deriveChat({ ...base(), people, peopleConfirmed: true, peopleSummaryConfirmed: false, missedPeopleConfirmed: false, missedAnswer: "Grandpa and Grandma", missedPeople: [
+      { personId: "grandpa", name: "Grandpa", momentCount: 0 }, { personId: "grandma", name: "Grandma", momentCount: 0 },
+    ], plan: null });
+    expect(missed.items.filter((item): item is Extract<ChatItem, { kind: "you" }> => item.kind === "you" && (item.id === "missed-answer" || item.id.startsWith("missed-name-"))).map((item) => item.text)).toEqual(["Grandpa and Grandma"]);
+  });
   it("renders person clarification turns once after the question they answer", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null,
       interpTurns: [{ personId: "p1", question: "My daughter", reply: "What is your daughter's name?" }] });
