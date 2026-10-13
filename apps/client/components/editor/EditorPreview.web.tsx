@@ -102,6 +102,17 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
   }, [seekRequest, timeline.durationSec, timeline.fps]);
 
   useEffect(() => {
+    const lastFrame = Math.max(0, Math.ceil(timeline.durationSec * timeline.fps) - 1);
+    const lastSecond = lastFrame / timeline.fps;
+    if (currentTimeRef.current <= lastSecond) return;
+    currentTimeRef.current = lastSecond;
+    hasUserPositioned.current = true;
+    setCurrentTime(lastSecond);
+    player.current?.seekTo(lastFrame);
+    onTimeChange?.(lastSecond);
+  }, [timeline.durationSec, timeline.fps, onTimeChange]);
+
+  useEffect(() => {
     if (pauseRequest > 0) player.current?.pause();
   }, [pauseRequest]);
 

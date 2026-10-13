@@ -386,7 +386,11 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
     pendingSlotPress.current = null;
     const active = activeSlotReorder.current;
     if (active) {
-      if (commit && active.toIndex !== active.fromIndex) onReorder(active.clipId, active.toIndex);
+      // Pointer-up is the authoritative drop location. Touch and captured-pointer
+      // sequences can end at a new coordinate without a final pointer-move.
+      const dropX = event.clientX ?? event.nativeEvent?.clientX ?? event.nativeEvent?.pageX;
+      const toIndex = commit && typeof dropX === "number" ? targetIndexAt(dropX) : active.toIndex;
+      if (commit && toIndex !== active.fromIndex) onReorder(active.clipId, toIndex);
       suppressNextPress.current = true;
       setTimeout(() => { suppressNextPress.current = false; }, 0);
       activeSlotReorder.current = null;
@@ -394,7 +398,7 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
       stopEdgeScroll();
       event.currentTarget?.releasePointerCapture?.(active.pointerId);
     }
-  }, [onReorder, stopEdgeScroll]);
+  }, [onReorder, stopEdgeScroll, targetIndexAt]);
   useEffect(() => () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
     if (edgeScrollTimer.current) clearInterval(edgeScrollTimer.current);
