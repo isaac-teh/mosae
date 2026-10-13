@@ -179,6 +179,9 @@ describe("Director chat", () => {
     await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
     await click("That's everyone");
     await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
+    expect(host.querySelector('button[aria-label="Looks right"]')?.className).toContain("border-line-strong");
+    expect(host.querySelector('button[aria-label="Looks right"]')?.className).toContain("bg-transparent");
+    expect(host.querySelector('button[aria-label="Looks right"]')?.parentElement?.className).toContain("self-start");
     expect(hasText("Thanks. I've tagged all two in your moments.")).toBe(true);
     expect(host.querySelector('button[aria-label="Change Daughter"]')).toBeNull();
     await click("Looks right");
