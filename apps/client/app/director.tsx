@@ -402,7 +402,7 @@ export default function DirectorScreen() {
             </Pressable>
           </View>)}</View>
           <Text className="font-sans text-caption text-ink-muted">Tap a person to check their moments.</Text>
-          {item.canConfirm !== false && <Button label="Looks right" disabled={saving} onPress={() => scrollAfterAction(actions.confirmPeopleSummary)} />}
+          {item.canConfirm !== false && <View className="self-start"><Button label="Looks right" variant="secondary" disabled={saving} onPress={() => scrollAfterAction(actions.confirmPeopleSummary)} /></View>}
         </View>;
         return null;
       })}

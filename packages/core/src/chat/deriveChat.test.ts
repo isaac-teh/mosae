@@ -53,15 +53,17 @@ describe("deriveChat state table", () => {
     expect(state.items.filter((item) => item.kind === "person").map((item) => item.personId)).toEqual(["p1"]);
     expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Three people appear often in your moments." });
     expect(state.items.some((item) => item.kind === "anyone-else")).toBe(false);
+    expect(state.items.some((item) => item.kind === "people-summary" || item.id === "people-summary-message")).toBe(false);
     expect(transcript(state)).toEqual(["people-intro", "person-p1"]);
 
     const labels = ["My daughter", "My son", "Grandpa"];
     for (let index = 0; index < people.length; index++) {
       const currentId = `p${index + 1}`;
       const answered = clusters.map((person, personIndex) => personIndex <= index ? { ...person, name: labels[personIndex] } : person);
-      state = deriveChat({ ...base(), people: answered, peopleConfirmed: false, plan: null, proceededPersonIds: people.slice(0, index).map(({ personId }) => personId) });
+      state = deriveChat({ ...base(), people: answered, peopleConfirmed: index === people.length - 1, plan: null, proceededPersonIds: people.slice(0, index).map(({ personId }) => personId) });
       expect(state.items.filter((item) => item.kind === "person-tagged").at(-1)?.personId).toBe(currentId);
       expect(state.items.find((item) => item.kind === "anyone-else")).toBeUndefined();
+      expect(state.items.some((item) => item.kind === "people-summary" || item.id === "people-summary-message")).toBe(false);
       expect(transcript(state)).toEqual([
         "people-intro",
         ...people.slice(0, index + 1).flatMap(({ personId }) => [`person-question-${personId}`, `person-answer-${personId}`, `person-tagged-${personId}`]),
@@ -72,7 +74,8 @@ describe("deriveChat state table", () => {
         expect(afterProceed.items.some((item) => item.kind === "anyone-else")).toBe(false);
         expect(transcript(afterProceed)).toEqual(["people-intro", ...people.slice(0, index + 1).flatMap(({ personId }) => [`person-question-${personId}`, `person-answer-${personId}`, `person-tagged-${personId}`]), `person-p${index + 2}`]);
       } else {
-        expect(afterProceed.items.filter((item) => item.kind === "anyone-else")).toHaveLength(1);
+        expect(afterProceed.items.filter((item) => item.kind === "anyone-else")).toEqual([expect.objectContaining({ id: "anyone-else", canConfirm: true })]);
+        expect(afterProceed.items.some((item) => item.kind === "people-summary" || item.id === "people-summary-message")).toBe(false);
         expect(transcript(afterProceed)).toEqual(["people-intro", ...people.flatMap(({ personId }) => [`person-question-${personId}`, `person-answer-${personId}`, `person-tagged-${personId}`]), "anyone-else"]);
       }
     }

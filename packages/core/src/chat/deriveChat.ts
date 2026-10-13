@@ -246,7 +246,9 @@ export function deriveChat(input: ChatInput): ChatState {
   confirmed = 1;
 
   const facesReady = facesComplete;
-  const peopleResolved = input.peopleConfirmed || (facesReady && input.people?.length === 0);
+  const completedPersonIds = input.proceededPersonIds ?? input.flow?.peopleProgress?.completedPersonIds;
+  const allNamedPeopleProceeded = completedPersonIds === undefined || announcedPeople(input.people ?? [], input.summary?.photos ?? 0).every((person) => person.skipped || !person.name || completedPersonIds.includes(person.personId));
+  const peopleResolved = input.peopleConfirmed && allNamedPeopleProceeded || (facesReady && input.people?.length === 0);
   if (!peopleResolved) {
     step = "people";
     if (!facesReady || input.people === null) {
