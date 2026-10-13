@@ -35,4 +35,17 @@ describe("flow action application", () => {
     expect(skipped.missedPeople?.[0]?.skipped).toBe(true);
     expect(skipped.missedReply).toBeUndefined();
   });
+  it("persists missed-person gallery tags and completion in flow state", () => {
+    const flow: DirectorFlow = { revision: 0, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: [], missedPeople: [
+      { personId: "g1", name: "Grandpa" }, { personId: "g2", name: "Grandma" },
+    ], missedPeopleConfirmed: false };
+    const completed = applyFlowAction(flow, { type: "batch", actions: [
+      { type: "manual-shot", personId: "g1", shotId: "shot-1", included: true },
+      { type: "manual-shot", personId: "g2", shotId: "shot-2", included: true },
+      { type: "missed-people-confirmed", confirmed: true },
+    ] });
+    expect(completed.missedPeopleConfirmed).toBe(true);
+    expect(completed.missedPeople).toEqual(flow.missedPeople);
+    expect(completed.people.map(({ personId, manualShotAdds }) => [personId, manualShotAdds])).toEqual([["g1", ["shot-1"]], ["g2", ["shot-2"]]]);
+  });
 });

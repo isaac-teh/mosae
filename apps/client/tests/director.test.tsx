@@ -25,8 +25,8 @@ vi.mock("react-native", () => {
   };
 });
 
-const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, confirmCast: vi.fn(), push: vi.fn(), setParams: vi.fn(), params: {} as Record<string, string | undefined>, openPicker: vi.fn(), selectFiles: ((_: File[]) => {}) as (files: File[]) => void, uploadMedia: vi.fn(), projectId: "project-1" }));
-vi.mock("expo-router", () => ({ useFocusEffect: (callback: () => void) => React.useEffect(callback, [callback]), useLocalSearchParams: () => ({ projectId: mocks.projectId, ...mocks.params }), useRouter: () => ({ back: vi.fn(), push: mocks.push, setParams: mocks.setParams }) }));
+const mocks = vi.hoisted(() => ({ repo: null as any, flowRepo: null as any, confirmCast: vi.fn(), push: vi.fn(), setParams: vi.fn(), params: {} as Record<string, string | undefined>, focusCallback: null as (() => void) | null, openPicker: vi.fn(), selectFiles: ((_: File[]) => {}) as (files: File[]) => void, uploadMedia: vi.fn(), projectId: "project-1" }));
+vi.mock("expo-router", () => ({ useFocusEffect: (callback: () => void) => { mocks.focusCallback = callback; React.useEffect(callback, [callback]); }, useLocalSearchParams: () => ({ projectId: mocks.projectId, ...mocks.params }), useRouter: () => ({ back: vi.fn(), push: mocks.push, setParams: mocks.setParams }) }));
 vi.mock("@mosae/core", async (importOriginal) => ({ ...(await importOriginal<typeof import("@mosae/core")>()), getStoryRepository: () => mocks.repo, uploadMedia: (...args: any[]) => mocks.uploadMedia(...args) }));
 vi.mock("@/lib/characters", () => ({ confirmCast: (...args: any[]) => mocks.confirmCast(...args) }));
 vi.mock("@/lib/storyFlow", () => ({ useStoryFlow: () => ({ repository: mocks.flowRepo, flow: { repository: "api", projectId: "project-1" } }) }));
@@ -39,6 +39,7 @@ vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ onPlayin
 import DirectorScreen from "../app/director";
 import { defaultSoundtrackId, useDirectorChat } from "../lib/useDirectorChat";
 import { getUploadProgress, setPendingMedia, setUploadFailure, setUploadPreparationProgress, setUploadProgress } from "@mosae/core";
+import { setTaggedPersonResult } from "../lib/taggedPersonResult";
 
 let root: Root;
 let host: HTMLDivElement;
@@ -173,7 +174,14 @@ describe("Director chat", () => {
   });
 
   it("keeps missed names in transcript order and shows the summary after both galleries", async () => {
-    setup({ readyPlan: true }); await renderScreen(); await click("A trip");
+    setup({ readyPlan: true });
+    let flow: any = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [], missedPeople: [], peopleSummaryConfirmed: false };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => {
+      flow = { ...flow, revision: flow.revision + 1, ...(action.type === "missed-people-confirmed" ? { missedPeopleConfirmed: action.confirmed } : {}) };
+      return flow;
+    });
+    await renderScreen(); await click("A trip");
     await answerPerson("My daughter");
     await answerPerson("My son");
     await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
@@ -192,13 +200,20 @@ describe("Director chat", () => {
     expect(transcript.filter((text) => text === "Grandpa and Grandma")).toHaveLength(1);
     expect(transcript.indexOf("Grandpa and Grandma")).toBeGreaterThan(transcript.indexOf("My son"));
     expect(host.textContent!.indexOf("Grandpa and Grandma")).toBeLessThan(host.textContent!.indexOf("Help me select photos of Grandpa."));
-    mocks.params = { completedPersonId: grandpaId, completedPersonName: "Grandpa", completedMomentCount: "2", completedIsMissed: "true", completedSampleUri: "grandpa.jpg" };
-    await renderScreen();
+    setTaggedPersonResult({ personId: grandpaId, name: "Grandpa", momentCount: 2, isMissed: true, sampleUri: "grandpa.jpg", sampleUris: ["grandpa.jpg"] });
+    await act(async () => mocks.focusCallback?.());
     await waitFor(() => expect(hasText("Help me select photos of Grandma.")).toBe(true));
-    mocks.params = { completedPersonId: grandmaId, completedPersonName: "Grandma", completedMomentCount: "3", completedIsMissed: "true", completedSampleUri: "grandma.jpg" };
-    await renderScreen();
+    setTaggedPersonResult({ personId: grandmaId, name: "Grandma", momentCount: 3, isMissed: true, sampleUri: "grandma.jpg", sampleUris: ["grandma.jpg"] });
+    await act(async () => mocks.focusCallback?.());
     await waitFor(() => expect(hasText("Thanks. I've tagged all four in your moments.")).toBe(true));
     expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy();
+    expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), expect.objectContaining({
+      type: "batch",
+      actions: expect.arrayContaining([
+        expect.objectContaining({ type: "missed-people", people: expect.arrayContaining([expect.objectContaining({ name: "Grandpa" }), expect.objectContaining({ name: "Grandma" })]) }),
+        { type: "missed-people-confirmed", confirmed: true },
+      ]),
+    }));
     expect([...host.querySelectorAll('[data-from="you"]')].filter((item) => item.textContent === "Grandpa and Grandma")).toHaveLength(1);
   });
 
