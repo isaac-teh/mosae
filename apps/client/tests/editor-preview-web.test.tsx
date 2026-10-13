@@ -74,6 +74,20 @@ describe("web editor preview seeks", () => {
     expect(host.querySelector(".mosae-editor-preview [role=button]")?.getAttribute("data-current-time")).toBe("4");
   });
 
+  it("seeks back inside a shortened timeline when the prior playhead is beyond its new end", async () => {
+    const collage = (durationSec: number) => ({ kind: "collage" as const, clipId: "collage-1", startSec: 0, durationSec, transitionIn: { kind: "cut" as const, durationSec: 0 }, spec: { layoutId: "photo-table", motionId: "stack-deal", effectId: null, seed: "test", durationSec, slots: [{ slotId: "s1", shotId: "photo", kind: "photo" }] } });
+    const longer: Timeline = { ...timeline, durationSec: 9, videoClips: [collage(9)] as any };
+    const shorter: Timeline = { ...longer, durationSec: 6, videoClips: [collage(6)] as any };
+    await act(async () => root.render(<EditorPreview timeline={longer} sources={{ photo: "photo.jpg" }} onTimeChange={() => {}} />));
+    await act(async () => playerMock.listeners.get("play")?.({ detail: { frame: 0 } }));
+    await act(async () => playerMock.listeners.get("frameupdate")?.({ detail: { frame: 255 } }));
+    playerMock.seekTo.mockClear();
+    await act(async () => root.render(<EditorPreview timeline={shorter} sources={{ photo: "photo.jpg" }} onTimeChange={() => {}} />));
+    expect(playerMock.seekTo).toHaveBeenLastCalledWith(179);
+    expect(host.querySelector('[data-current-time]')?.getAttribute("data-current-time")).toBe("5.966666666666667");
+    expect(playerMock.inputProps.at(-1)).toMatchObject({ timeline: { videoClips: [{ durationSec: 6, spec: { durationSec: 6 } }] } });
+  });
+
   it("passes a landscape timeline through to the shared Remotion composition", async () => {
     await act(async () => root.render(<EditorPreview timeline={{ ...timeline, aspect: "16:9" }} sources={{}} />));
     expect(playerMock.inputProps[0]).toMatchObject({ timeline: { aspect: "16:9" } });
