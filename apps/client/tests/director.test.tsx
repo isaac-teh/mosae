@@ -117,8 +117,10 @@ describe("Director chat", () => {
     expect(hasText("Thanks. I've tagged her in 212 moments.")).toBe(true);
     expect(hasText("Tagged in 212 moments")).toBe(true);
     expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Proceed"]')?.className).toContain("border-line-strong");
+    expect(host.querySelector('button[aria-label="Proceed"]')?.className).toContain("bg-transparent");
     await click("Proceed");
-    await waitFor(() => expect(hasText("Who is this?")).toBe(true));
+    await waitFor(() => expect(host.querySelector('[data-person-question="person-2"]')).toBeTruthy());
     expect(host.querySelector('button[aria-label="Proceed"]')).toBeNull();
   });
 

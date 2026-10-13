@@ -44,9 +44,11 @@ const responseSchema = {
     change: { ...baseResponseSchema.properties.change, required: ["kind", "intent", "names", "needsClarification", "role", "name"], properties: {
       ...baseResponseSchema.properties.change.properties,
       intent: { type: "STRING", enum: ["assign", "skip", "proceed", "missed", "confirm", "change", "unclear"] },
-      names: { type: "ARRAY", items: { type: "STRING" } },
-      needsClarification: { type: "BOOLEAN" },
-      clarifyingQuestion: { type: "STRING" },
+      names: { type: "ARRAY", description: "For a clear single role answer, include its display label (for example Daughter, Wife, Me, or Grandpa).", items: { type: "STRING" } },
+      name: { type: "STRING", description: "A relationship or role alone is a valid display name; do not request a first name for it." },
+      role: { type: "STRING", enum: ["parent", "child", "other"], description: "Normalize family relationship labels into parent, child, or other." },
+      needsClarification: { type: "BOOLEAN", description: "True only when the identity or number of people is genuinely ambiguous; clear roles are complete answers." },
+      clarifyingQuestion: { type: "STRING", description: "A short question only when needsClarification is true." },
     } },
   },
 };
@@ -75,6 +77,20 @@ export async function interpret(req: InterpretRequest, deps: {
     const exact = req.text.trim().replace(/[.!?]+$/, "").toLocaleLowerCase();
     const stage = req.context.peopleStage ?? "identify";
     const fast = (intent: PeopleIntent): InterpretResult => ({ reply: "", change: { kind: "person", personId: null, name: "", role: "other", intent, names: [], needsClarification: false } });
+    if (stage === "identify") {
+      const rolePatterns: [RegExp, string, "parent" | "child" | "other"][] = [
+        [/^(?:that's me|that’s me|it's me|it’s me|i'm me|me|myself|i am me)$/, "Me", "other"],
+        [/^my\s+(daughter|son|child|children)$/, "child", "child"],
+        [/^my\s+(wife|husband|partner|mum|mom|mother|dad|father)$/, "parent", "parent"],
+        [/^(grandma|grandmother|grandpa|grandfather|granny|grandad)$/, "other", "other"],
+      ];
+      for (const [pattern, label, role] of rolePatterns) {
+        const match = pattern.exec(exact);
+        if (!match) continue;
+        const name = label === "child" || label === "parent" ? `${match[1]![0]!.toLocaleUpperCase()}${match[1]!.slice(1)}` : label === "Me" ? "Me" : `${match[1]![0]!.toLocaleUpperCase()}${match[1]!.slice(1)}`;
+        return { reply: "", change: { kind: "person", personId: null, name, role, intent: "assign", names: [name], needsClarification: false } };
+      }
+    }
     if (/^(proceed|next|continue|looks good|ok|okay)$/.test(exact) && stage === "tagged") return fast("proceed");
     if (/^(that's everyone|that’s everyone|that's all|that’s all)$/.test(exact) || stage === "missed" && /^(no|no one else|nobody else|none)$/.test(exact)) return fast("confirm");
     if (/^(ok|okay|good|yes|yeah|yep|looks right|continue)$/.test(exact) && stage === "summary") return fast("confirm");
@@ -84,7 +100,7 @@ export async function interpret(req: InterpretRequest, deps: {
     const modelResult = validate(await deps.generate({
       model: MODELS.analyze, stage: "chat.interpret", thinking: "MINIMAL",
       contents: [{ text: req.step === "people"
-        ? `Interpret the user's typed message only for the current director chat step. Nothing has been applied yet. For people, return a typed intent of assign, skip, proceed, missed, confirm, change or unclear; names as a list, role, needsClarification and a short clarifyingQuestion when needed. Identify one person from relationship words and normalize role as parent, child or other; vague plurals such as "my two cousins" must ask for names. Return multiple missed names separately. Detect correction/addition requests as change and confirmations as confirm. If unrelated to this step, return kind note.\nStep: ${req.step}\nContext: ${JSON.stringify(req.context)}\nText: ${req.text}`
+        ? `Interpret the user's typed message only for the current director chat step. Nothing has been applied yet. For people, return a typed intent of assign, skip, proceed, missed, confirm, change or unclear; names as a list, role, needsClarification and a short clarifyingQuestion when needed. A clear relationship or role by itself is a complete answer: "my daughter" means name Daughter and role child; "my wife" means Wife and role parent; "that's me" or "it's me" means Me; "Grandpa" means Grandpa. Assign these immediately and set needsClarification false. Ask for clarification only when the answer is genuinely ambiguous (for example "them", "two kids", or "not sure who"). Never ask for a first name just because a relationship or role was given. Identify one person from relationship words and normalize role as parent, child or other; vague plurals such as "my two cousins" must ask for names. Return multiple missed names separately. Detect correction/addition requests as change and confirmations as confirm. If unrelated to this step, return kind note.\nStep: ${req.step}\nContext: ${JSON.stringify(req.context)}\nText: ${req.text}`
         : `Interpret the user's typed message only for the current director chat step. Nothing has been applied yet. Restate the proposed change as a concise confirmation question for the user, such as "Make it lively and about a minute?" For occasion, return normalized storyText and mentionedPeople containing only people explicitly named by the user (relationships such as their son or a person's name); omit it when none are mentioned. If unrelated to this step, return kind note. If unsure, return unclear. For moments, return a concise semantic search query.\nStep: ${req.step}\nContext: ${JSON.stringify(req.context)}\nText: ${req.text}` }],
       responseSchema: req.step === "people" ? responseSchema : baseResponseSchema, validate,
     }));

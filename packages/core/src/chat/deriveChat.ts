@@ -21,6 +21,13 @@ function peopleIntroCount(people: { personId: string }[], mergeEvents: NonNullab
 
 function storyAcknowledgement(text: string, storySummary?: string, mentionedPeople?: string[]): string {
   let cleaned = (storySummary?.trim() || text.trim()).replace(/\s+/g, " ").replace(/children\s+day/gi, "Children's Day");
+  const tripToPlace = /^a\s+trip\s+to\s+(.+)$/i.exec(cleaned);
+  const tripWithDetail = /^a\s+trip[.!?]?\s+(.+)$/i.exec(cleaned);
+  if (tripToPlace) cleaned = `A ${tripToPlace[1]!.replace(/[.!?]+$/, "").trim()} trip`;
+  else if (tripWithDetail) {
+    const detail = tripWithDetail[1]!.replace(/\s+in\s+(?=(?:January|February|March|April|May|June|July|August|September|October|November|December)\b).*$/i, "").replace(/[.!?]+$/, "").trim();
+    cleaned = `A ${detail} trip`;
+  }
   const relation = mentionedPerson(text, [], mentionedPeople);
   if (relation && storySummary && !cleaned.toLocaleLowerCase().includes(relation.phrase.replace(/^your\s+/, ""))) {
     cleaned = `A ${cleaned[0]!.toLocaleLowerCase()}${cleaned.slice(1)} for ${relation.phrase}`;
@@ -159,7 +166,7 @@ export function deriveChat(input: ChatInput): ChatState {
   // inline (their question, then a "Thinking" bubble or the model's reply) without changing step.
   // Rendered in both !input.intent branches so questions answer during faces/confirm too.
   const addInterp = () => {
-    input.interpTurns?.forEach((turn, i) => {
+    input.interpTurns?.filter((turn) => !turn.personId && !turn.stage).forEach((turn, i) => {
       add({ kind: "you", id: `interp-question-${i + 1}`, text: turn.question });
       if (turn.reply) add({ kind: "mosae", id: `interp-reply-${i + 1}`, text: turn.reply });
       else if (input.interpReplying && i === input.interpTurns!.length - 1) {
@@ -239,7 +246,12 @@ export function deriveChat(input: ChatInput): ChatState {
         if (pendingProceedIndex >= 0 ? entry.index > pendingProceedIndex : firstUnanswered >= 0 && entry.index >= firstUnanswered) continue;
         const { person } = entry;
         add({ kind: "mosae", id: `person-question-${person.personId}`, text: "Who is this?", photos: (person.sampleFaces ?? []).slice(0, 1).map((face) => face.uri), faceSamples: (person.sampleFaces ?? []).slice(0, 1) });
-        add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+        const personTurns = (input.interpTurns ?? []).filter((turn) => turn.personId === person.personId);
+        if (personTurns.length) personTurns.forEach((turn, index) => {
+          add({ kind: "you", id: `person-turn-${person.personId}-${index + 1}`, text: turn.question });
+          if (turn.reply) add({ kind: "mosae", id: `person-turn-reply-${person.personId}-${index + 1}`, text: turn.reply });
+        });
+        else add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
         for (const event of mergeEvents.filter(({ personId }) => personId === person.personId)) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       } else {
         const { event } = entry;
@@ -265,7 +277,7 @@ export function deriveChat(input: ChatInput): ChatState {
           add({ kind: "mosae", id: `tagged-person-${unanswered.personId}`, text: "Got it — these are the photos of this person.", photos: input.taggedPerson.photos });
         }
         const declinedIdenticalMerge = (input.mergeEvents ?? []).some((event) => event.personId === unanswered.personId && event.response === "No, another person" && event.answer.trim().replace(/^my\s+/i, "").toLocaleLowerCase() === event.targetName.trim().replace(/^my\s+/i, "").toLocaleLowerCase());
-        add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 1), days: unanswered.days, questionText: declinedIdenticalMerge ? "What should I call this one?" : "Who is this?" });
+        add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 1), days: unanswered.days, questionText: declinedIdenticalMerge ? "What should I call this one?" : "Who is this?", turns: (input.interpTurns ?? []).filter((turn) => turn.personId === unanswered.personId).map(({ question, reply }) => ({ question, ...(reply ? { reply } : {}) })) });
       }
     } else {
       placeholder = "Type a name";
@@ -276,7 +288,7 @@ export function deriveChat(input: ChatInput): ChatState {
       if (!(input.mergeEvents ?? []).some((event) => !event.response)) {
         add({ kind: "anyone-else", id: "anyone-else", canConfirm: true, text: "Did I miss anyone? Enter the names of who were missed in the box below." });
       }
-      if (hasMissedPeople) input.interpTurns?.forEach((turn, index) => {
+      if (hasMissedPeople) input.interpTurns?.filter((turn) => !turn.personId && (turn.stage === "missed" || !turn.stage)).forEach((turn, index) => {
         add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
         if (turn.reply) add({ kind: "mosae", id: `missed-clarification-reply-${index + 1}`, text: turn.reply });
       });
@@ -289,7 +301,7 @@ export function deriveChat(input: ChatInput): ChatState {
         add({ kind: "mosae", id: `missed-select-${input.missedPersonTagging.personId}`, text: `Help me select 1 photo of ${input.missedPersonTagging.name}.` });
         add({ kind: "missed-person", id: `missed-tag-${input.missedPersonTagging.personId}`, ...input.missedPersonTagging, momentCount: 0, photos: [] });
       }
-      if (!hasMissedPeople) input.interpTurns?.forEach((turn, index) => {
+      if (!hasMissedPeople) input.interpTurns?.filter((turn) => !turn.personId && (turn.stage === "missed" || !turn.stage)).forEach((turn, index) => {
         add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
         if (turn.reply) add({ kind: "mosae", id: `missed-clarification-reply-${index + 1}`, text: turn.reply });
       });

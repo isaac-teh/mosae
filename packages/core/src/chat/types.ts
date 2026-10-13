@@ -26,7 +26,7 @@ export type ChatInput = {
   localUpload?: { total: number; settled: number; failed: number; photos: number; clips: number };
   earlyOccasionAnswer?: string;
   earlyOccasionStoryText?: string;
-  interpTurns?: { question: string; reply?: string }[];
+  interpTurns?: { question: string; reply?: string; personId?: string; stage?: "missed" }[];
   interpReplying?: boolean;
   pendingResponse?: "occasion" | "person";
   uploadFailuresAcknowledged?: boolean;
@@ -63,7 +63,7 @@ export type ChatItem =
   | { kind: "you"; id: string; text: string }
   | { kind: "typing"; id: string; text: string }
   | { kind: "preparing-videos"; id: string; text: string; progress: number }
-  | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; questionText?: string }
+  | { kind: "person"; id: string; personId: string; ageBand?: PersonAgeBand; momentCount: number; sampleShotIds: string[]; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; questionText?: string; turns?: { question: string; reply?: string }[] }
   | { kind: "person-confirm"; id: string; personId: string; label: string; text: string; momentCount: number; sampleFaces: { shotId: string; uri: string; bbox: [number, number, number, number] }[] }
   | { kind: "person-tagged"; id: string; personId: string; name: string; pronoun: "her" | "him" | "them"; momentCount: number; sampleFace?: { shotId: string; uri: string; bbox: [number, number, number, number] } }
   | { kind: "merge-followup"; id: string; text: string; answer: string; photos: string[]; faceSamples?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; response?: "Yes, same person" | "No, another person" }

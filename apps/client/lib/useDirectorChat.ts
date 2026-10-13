@@ -813,7 +813,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const peopleStage = activePerson?.kind === "person" ? "identify" : state.items.some((item) => item.kind === "person-tagged") ? "tagged" : summaryVisible ? "summary" : missedFlowActive ? "missed" : undefined;
         const result = await repository.interpret(projectId, { step, text, context: { summary, people: (input.people ?? []).map(({ personId, name, role }) => ({ personId, name, role })), ...(peopleStage ? { peopleStage } : {}) } });
         if (result.change.kind === "unclear") {
-          setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { question: text.trim(), reply: result.reply || UNCLEAR }] }));
+          setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { ...(activePerson?.kind === "person" ? { personId: activePerson.personId } : {}), ...(step === "people" && peopleStage === "missed" ? { stage: "missed" as const } : {}), question: text.trim(), reply: result.reply || UNCLEAR }] }));
           return;
         }
         const interpretedPeople = result.change.kind === "occasion" && Array.isArray(result.change.mentionedPeople)
@@ -822,7 +822,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (result.change.kind === "person") {
           const change = result.change as { intent?: string; name?: string; role?: string; names?: string[]; needsClarification?: boolean; clarifyingQuestion?: string };
           if (change.needsClarification) {
-            setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { question: text, reply: change.clarifyingQuestion ?? "Could you tell me their names?" }] }));
+            setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { ...(activePerson?.kind === "person" ? { personId: activePerson.personId } : {}), ...(peopleStage === "missed" ? { stage: "missed" as const } : {}), question: text, reply: change.clarifyingQuestion ?? "Could you tell me their names?" }] }));
             return;
           }
           if (change.intent === "proceed") {
@@ -834,7 +834,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
             return /^(?:that's everyone|that’s everyone|no|no one else|nobody else|that's all|that’s all|none)$/.test(normalized) ? actions.confirmMissedPeople() : actions.confirmPeopleSummary();
           }
           if (change.intent === "skip" && activePerson?.kind === "person") return actions.setPerson(activePerson.personId, "Skip");
-          if (change.intent === "assign" && activePerson?.kind === "person") return actions.setPerson(activePerson.personId, String(change.role ?? "other"), String(change.name ?? text));
+          if (change.intent === "assign" && activePerson?.kind === "person") {
+            if ((input.interpTurns ?? []).some((turn) => turn.personId === activePerson.personId)) {
+              setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { personId: activePerson.personId, question: text }] }));
+            }
+            return actions.setPerson(activePerson.personId, String(change.role ?? "other"), String(change.name ?? text));
+          }
           if (change.intent === "missed" || change.intent === "assign") {
             const names = change.names?.length ? change.names : change.name ? [change.name] : [];
             if (names.length) return actions.addMissedPeople(names);
