@@ -46,9 +46,10 @@ describe("deterministic directing rules", () => {
     for (const n of [3, 6, 10]) expect(n * photoHoldRange(1, "playful").base).toBeLessThan(20);
     expect(10 * DIRECTING_RULES.singlePhotoMaxSec).toBeGreaterThanOrEqual(20);
   });
-  it("fades out over exactly the final second or the full sub-second film", () => {
-    expect(fadeOutSec(60)).toBe(1);
-    expect(fadeOutSec(0.5)).toBe(0.5);
+  it("uses the shared final music fade rule", () => {
+    expect(fadeOutSec(30)).toBe(3);
+    expect(fadeOutSec(8)).toBe(2);
+    expect(fadeOutSec(0.5)).toBe(0.125);
   });
   it.each([["tender", 4, 6], ["reflective", 4, 6], ["playful", 2, 3], ["energetic", 2, 3], ["celebratory", 3, 4]] as const)("uses the full %s video cadence range", (cadence, min, max) => {
     expect(videoTargetLength(cadence, 10, 0)).toBe(min);

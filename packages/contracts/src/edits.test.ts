@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyEdits, mergeOps, type EditOp } from "./edits.js";
 import { parseTimeline, type Timeline } from "./timeline.js";
-import { refitSoundtrackToDuration } from "./soundtrack.js";
+import { finalMusicFadeOutSec, refitSoundtrackToDuration } from "./soundtrack.js";
 
 const cut = { kind: "cut" as const, durationSec: 0 };
 const firstCut: Timeline = parseTimeline({
@@ -27,6 +27,20 @@ const firstCut: Timeline = parseTimeline({
   ],
   audioClips: [{ id: "music", source: { kind: "soundtrack", soundtrackId: "soft-piano", sourceInSec: 0, sourceOutSec: 10 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0.5, fadeOutSec: 0.5 }],
   captions: [{ text: "At the station", startSec: 2.5, endSec: 3.5 }],
+});
+
+describe("final music fade", () => {
+  it("uses three seconds capped at a quarter of the film", () => {
+    expect(finalMusicFadeOutSec(30)).toBe(3);
+    expect(finalMusicFadeOutSec(8)).toBe(2);
+    expect(finalMusicFadeOutSec(-1)).toBe(0);
+  });
+
+  it("applies the shared fade to a soundtrack selected in editor edits", () => {
+    const result = applyEdits(firstCut, [{ op: "setSoundtrack", soundtrackId: "new-theme" }]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.timeline.audioClips[0]?.fadeOutSec).toBe(2.5);
+  });
 });
 
 const geometry = (timeline: Timeline) => timeline.videoClips.map((clip) => ["kind" in clip ? clip.clipId : clip.id, clip.startSec, clip.durationSec]);
@@ -85,7 +99,7 @@ describe("applyEdits", () => {
       expect(result.timeline.durationSec).toBe(12);
       const music = result.timeline.audioClips.find((clip) => clip.role === "music")!;
       expect(music.source).toMatchObject({ kind: "soundtrack", sourceOutSec: 12 });
-      expect(music.fadeOutSec).toBeCloseTo(0.6);
+      expect(music.fadeOutSec).toBe(3);
     }
   });
 
@@ -95,7 +109,12 @@ describe("applyEdits", () => {
     const music = refitted.audioClips.filter((clip) => clip.role === "music");
     expect(Math.max(...music.map((clip) => clip.startSec + clip.source.sourceOutSec - clip.source.sourceInSec))).toBe(12);
     expect(music.some((clip) => clip.source.kind === "soundtrack" && clip.source.sourceInSec === 0 && clip.source.sourceOutSec > 0)).toBe(true);
-    expect(music.at(-1)?.fadeOutSec).toBeCloseTo(0.6);
+    expect(music.at(-1)?.fadeOutSec).toBe(3);
+  });
+
+  it("sets the final fade when refitting a soundtrack that already reaches the film end", () => {
+    const refitted = refitSoundtrackToDuration(firstCut);
+    expect(refitted.audioClips[0]?.fadeOutSec).toBe(2.5);
   });
 
   it("refits soundtrack and overlapping audio clips when a duration edit shortens the film", () => {
@@ -110,7 +129,7 @@ describe("applyEdits", () => {
     if (result.ok) {
       expect(result.timeline.durationSec).toBe(8.5);
       expect(result.timeline.audioClips).toEqual([
-        expect.objectContaining({ id: "music", source: expect.objectContaining({ sourceOutSec: 8.5 }), gainDb: -12, fadeInSec: 0.5, fadeOutSec: 0.5 }),
+        expect.objectContaining({ id: "music", source: expect.objectContaining({ sourceOutSec: 8.5 }), gainDb: -12, fadeInSec: 0.5, fadeOutSec: 2.125 }),
         expect.objectContaining({ id: "speech", source: expect.objectContaining({ sourceInSec: 3, sourceOutSec: 8 }), startSec: 3, gainDb: -4, fadeOutSec: 0.3 }),
         expect.objectContaining({ id: "ambient", source: expect.objectContaining({ sourceInSec: 1, sourceOutSec: 2.5 }), startSec: 7, gainDb: -9, fadeInSec: 0.4, fadeOutSec: 0.6 }),
       ]);
@@ -178,7 +197,7 @@ describe("applyEdits", () => {
     expect(removed.timeline.captions).toEqual([]);
     expect(removed.leftOutShotIds).toEqual(["shot-v1"]);
     expect(removed.timeline.audioClips[0].source.sourceOutSec).toBe(7);
-    expect(removed.timeline.audioClips[0].fadeOutSec).toBe(0.5);
+    expect(removed.timeline.audioClips[0].fadeOutSec).toBe(1.75);
   });
 
   it("duplicates a selected clip immediately after it with a fresh id", () => {

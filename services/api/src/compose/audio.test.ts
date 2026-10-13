@@ -98,7 +98,7 @@ describe("buildAudioClips — music track", () => {
       expect(result.length).toBeGreaterThan(1);
       expect(Math.max(...result.map((clip) => clip.endSec))).toBe(12);
       expect(result.every((clip) => clip.sourceOutSec! - clip.sourceInSec! <= 5)).toBe(true);
-      expect(result.at(-1)?.fadeOutSec).toBe(1);
+      expect(result.at(-1)?.fadeOutSec).toBe(3);
     } finally {
       librarySpy.mockRestore();
     }
@@ -146,7 +146,7 @@ describe("buildAudioClips — music track", () => {
     const trackDuration = loadLibrary().find((track) => track.id === "lyria-tender")!.analysis!.durationSec;
     expect(result[1]!.sourceOutSec).toBe(trackDuration);
     expect(result[1]!.endSec - result[1]!.startSec).toBe(result[1]!.sourceOutSec! - result[1]!.sourceInSec!);
-    expect(result[1]!.fadeOutSec).toBe(1);
+    expect(result[1]!.fadeOutSec).toBe(3);
   });
 
   it("ambient clips are offset correctly alongside music", () => {
