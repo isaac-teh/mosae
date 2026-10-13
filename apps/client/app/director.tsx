@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AccessibilityInfo, ActivityIndicator, Animated, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { AccessibilityInfo, ActivityIndicator, Animated, Image, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Asset } from "expo-asset";
 import { ChatComposer, ChatDirectionCard, ChatHeader, ChatMessage, ChatProposal, ChatSetAsideCard, ChatShaping, ChatTyping } from "@/components/chat";
@@ -66,6 +66,20 @@ function titleFromSummary(summary: { country: string | null; season: string | nu
 }
 
 export default function DirectorScreen() {
+  const [visibleViewport, setVisibleViewport] = useState<{ height: number; top: number; keyboardOpen: boolean } | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => setVisibleViewport({ height: viewport.height, top: viewport.offsetTop, keyboardOpen: window.innerHeight - viewport.height > 100 });
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+    };
+  }, []);
   const reducedMotion = useReducedMotion();
   const params = useLocalSearchParams<{ projectId?: string; completedPersonId?: string; completedPersonName?: string; completedMomentCount?: string; completedIsMissed?: string; completedSampleUri?: string }>();
   const projectId = params.projectId ?? "";
@@ -279,10 +293,10 @@ export default function DirectorScreen() {
     <Button label={canRetryLocal ? "Retry uploads" : "Pick the missing files again"} variant="secondary" disabled={uploadBusy} onPress={() => { if (canRetryLocal) { setUploadFailuresAcknowledged(false); void retryPendingMedia(projectId); } else mediaPicker.current?.open(); }} />
     {Boolean(uploadProgress ? uploadProgress.finishedFiles : projectSummary && projectSummary.total > 0 && projectSummary.processed.understood > 0) && !uploadFailuresAcknowledged && <Button label="Continue with uploaded files" onPress={() => setUploadFailuresAcknowledged(true)} />}
   </View> : null;
-  return <View className="flex-1 bg-surface">
+  return <View className="flex-1 bg-surface" style={Platform.OS === "web" && visibleViewport ? { position: "fixed", top: visibleViewport.top, left: 0, right: 0, height: visibleViewport.height, maxHeight: visibleViewport.height, overflow: "hidden" } as never : undefined}>
     <MediaPicker ref={mediaPicker} onFiles={(files) => { void replaceMissingMedia(files); }} />
     <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} />
-    <ScrollView ref={chatScroll} accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 py-6" contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { userDragging.current = true; }} onScroll={(event: any) => {
+    <ScrollView ref={chatScroll} accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 pt-6 pb-4" contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { userDragging.current = true; }} onScroll={(event: any) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       if (userDragging.current && contentOffset && contentSize && layoutMeasurement) userScrolledUp.current = contentOffset.y + layoutMeasurement.height < contentSize.height - 32;
     }} onScrollEndDrag={() => { userDragging.current = false; }} onMomentumScrollEnd={() => { userDragging.current = false; }} onContentSizeChange={() => { if (!userScrolledUp.current) requestAnimationFrame(() => chatScroll.current?.scrollToEnd({ animated: false })); }} scrollEventThrottle={16} style={{ flex: 1, minHeight: 0 }}>
@@ -391,6 +405,6 @@ export default function DirectorScreen() {
       {pendingInterpret && !localMediaPending && <View className="gap-3"><ChatMessage from="you" text={pendingInterpret.text} /><ChatMessage from="mosae" text={pendingInterpret.reply} />{(pendingInterpret.change?.kind === "person" || pendingInterpret.mentionedPeople || pendingInterpret.storySummary) && <ChatProposal replies={[{ id: "confirm", label: "Yes, that's right" }, { id: "discard", label: "Not quite" }]} onReply={(choice) => scrollAfterAction(() => choice === "confirm" ? actions.confirmInterpret() : actions.discardInterpret())} />}</View>}
       {error && <View className="gap-2"><ChatMessage from="mosae" text={error} /><Pressable role="button" onPress={() => scrollAfterAction(() => { retry(); if (state.step === "occasion") return actions.confirmOccasion(); })} style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })} className="active:scale-[0.97] active:bg-surface-sunken min-h-11 self-start justify-center"><Text className="font-sans-semibold text-action">Try again</Text></Pressable></View>}
     </ScrollView>
-    {<ChatComposer placeholder={state.placeholder} disabled={saving} onSend={(text) => scrollAfterAction(() => state.step === "ready" ? actions.askForChange(text) : actions.send(text))} />}
+    {<ChatComposer placeholder={state.placeholder} disabled={saving} keyboardOpen={visibleViewport?.keyboardOpen ?? false} onSend={(text) => scrollAfterAction(() => state.step === "ready" ? actions.askForChange(text) : actions.send(text))} />}
   </View>;
 }
