@@ -340,7 +340,7 @@ export default function EditorScreen() {
             <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="h-[40px] w-[40px] items-center justify-start"><View className="h-5 w-5 items-center justify-center"><RedoIcon size={18} disabled={!editor.canRedo} /></View><Text className={`mt-0.5 font-sans text-[9px] leading-[11px] text-on-screen-muted ${editor.canRedo ? "" : "opacity-50"}`}>Redo</Text></Pressable>
           </View>
         </View>
-        <TimelineStrip timeline={editor.timeline} sources={editor.sources} thumbnails={editor.thumbnails} selectedClipId={editor.selectedClipId} selectedAudioClipId={selectedAudioClipId} playheadSec={playhead} soundtrackName={soundtrackName ? `${soundtrackName} · paced to the film` : null}
+        <TimelineStrip timeline={editor.timeline} sources={editor.sources} thumbnails={editor.thumbnails} selectedClipId={editor.selectedClipId} selectedAudioClipId={selectedAudioClipId} playheadSec={playhead} isPlaying={playing} soundtrackName={soundtrackName ? `${soundtrackName} · paced to the film` : null}
           onSelect={onTimelineSelect} onScrub={seekTo} onScrubStart={() => setPauseRequest((request) => request + 1)}
           onSelectAudio={onSelectAudio} onAddClip={onAddTimelineClip}
           onTrim={(id, edge, delta) => {

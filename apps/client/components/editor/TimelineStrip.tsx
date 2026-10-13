@@ -110,12 +110,12 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
 
 type TouchPoint = { pageX?: number; clientX?: number; locationX?: number };
 type PinchState = { distance: number; scale: number; timeAtCenter: number; centerX: number } | null;
-type TouchDragState = { lastX: number } | null;
+type TouchDragState = { lastX: number; active: boolean } | null;
 type TrimDragState = { clipId: string; edge: "start" | "end"; startX: number; edgeTime: number; pixelsPerSecond: number; target: HTMLElement; button: HTMLElement | null; startLeft: number; startWidth: number; pendingDelta: number; raf: number | null; lastPreviewAt: number } | null;
 type PendingSlotPress = { clipId: string; fromIndex: number; startX: number; startY: number; pointerId: number; target: any } | null;
 type ActiveSlotReorder = { clipId: string; fromIndex: number; toIndex: number; pointerId: number } | null;
 
-export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, selectedAudioClipId = null, playheadSec, soundtrackName = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {}, onSelectAudio = () => {}, onAddClip = () => {} }: {
+export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, selectedAudioClipId = null, playheadSec, soundtrackName = null, isPlaying = false, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {}, onSelectAudio = () => {}, onAddClip = () => {} }: {
   timeline: Timeline;
   sources: Record<string, string>;
   thumbnails?: Record<string, string>;
@@ -123,6 +123,7 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
   selectedAudioClipId?: string | null;
   playheadSec: number;
   soundtrackName?: string | null;
+  isPlaying?: boolean;
   onSelect: (clipId: string, startSec: number) => void;
   onScrub: (seconds: number) => void;
   onScrubStart?: () => void;
@@ -140,8 +141,10 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
   const scrollLeft = useRef(0);
   const isUserScrolling = useRef(false);
   const programmaticOffset = useRef<number | null>(null);
+  const slideFrame = useRef<number | null>(null);
+  const slideToken = useRef(0);
   const interactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mouseDrag = useRef<{ x: number; scrollLeft: number } | null>(null);
+  const mouseDrag = useRef<{ x: number; active: boolean } | null>(null);
   const touchDrag = useRef<TouchDragState>(null);
   const trimDrag = useRef<TrimDragState>(null);
   const pendingSlotPress = useRef<PendingSlotPress>(null);
@@ -156,6 +159,12 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
   const leadingPadding = viewportWidth / 2;
   const contentWidth = timelineContentWidth(timeline.durationSec, viewportWidth, pixelsPerSecond);
 
+  const cancelSlide = useCallback(() => {
+    slideToken.current += 1;
+    if (slideFrame.current !== null) cancelAnimationFrame(slideFrame.current);
+    slideFrame.current = null;
+  }, []);
+
   const updateViewport = useCallback((event: LayoutChangeEvent) => setViewportWidth(event.nativeEvent.layout.width), []);
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (activeSlotReorder.current) { scrollLeft.current = event.nativeEvent.contentOffset.x; return; }
@@ -169,12 +178,13 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
     if (isUserScrolling.current) onScrub(Math.max(0, Math.min(timeline.durationSec, xToTime(offset + viewportWidth / 2, pixelsPerSecond, leadingPadding))));
   }, [leadingPadding, onScrub, pixelsPerSecond, timeline.durationSec, viewportWidth]);
   const beginInteraction = useCallback(() => {
+    cancelSlide();
     if (interactionTimer.current) clearTimeout(interactionTimer.current);
     interactionTimer.current = null;
     if (!isUserScrolling.current) onScrubStart();
     isUserScrolling.current = true;
     programmaticOffset.current = null;
-  }, [onScrubStart]);
+  }, [cancelSlide, onScrubStart]);
   const endInteractionSoon = useCallback(() => {
     if (interactionTimer.current) clearTimeout(interactionTimer.current);
     interactionTimer.current = setTimeout(() => {
@@ -197,16 +207,50 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
     scrollView.current?.scrollTo({ x, animated });
   }, [contentWidth, leadingPadding, pixelsPerSecond, viewportWidth]);
 
+  const slideToTime = useCallback((seconds: number) => {
+    cancelSlide();
+    if (!viewportWidth) return;
+    const target = Math.max(0, Math.min(contentWidth - viewportWidth, timeToX(seconds, pixelsPerSecond, leadingPadding) - viewportWidth / 2));
+    const prefersReducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (isPlaying || isUserScrolling.current || prefersReducedMotion) {
+      scrollLeft.current = target;
+      programmaticOffset.current = target;
+      scrollView.current?.scrollTo({ x: target, animated: false });
+      return;
+    }
+    const from = scrollLeft.current;
+    if (Math.abs(target - from) < 0.5) return;
+    const token = slideToken.current;
+    const startedAt = performance.now();
+    const durationMs = 250;
+    const step = (now: number) => {
+      if (slideToken.current !== token) return;
+      const progress = Math.min(1, Math.max(0, (now - startedAt) / durationMs));
+      const eased = 1 - (1 - progress) ** 3;
+      const x = from + (target - from) * eased;
+      scrollLeft.current = x;
+      programmaticOffset.current = x;
+      scrollView.current?.scrollTo({ x, animated: false });
+      if (progress < 1) slideFrame.current = requestAnimationFrame(step);
+      else { scrollLeft.current = target; programmaticOffset.current = target; slideFrame.current = null; }
+    };
+    slideFrame.current = requestAnimationFrame(step);
+  }, [cancelSlide, contentWidth, isPlaying, leadingPadding, pixelsPerSecond, viewportWidth]);
+
+  useEffect(() => cancelSlide, [cancelSlide]);
+  useEffect(() => { if (isPlaying) cancelSlide(); }, [cancelSlide, isPlaying]);
+
   // Player frames move the content under the fixed playhead. This imperative sync never calls onScrub.
-  useEffect(() => { syncScrollToTime(playheadSec); }, [playheadSec, syncScrollToTime]);
+  useEffect(() => { if (slideFrame.current === null) syncScrollToTime(playheadSec); }, [playheadSec, syncScrollToTime]);
 
   const zoom = useCallback((delta: number) => {
+    cancelSlide();
     const nextScale = Math.max(MIN_PIXELS_PER_SECOND, Math.min(MAX_PIXELS_PER_SECOND, pixelsPerSecond + delta));
     if (nextScale === pixelsPerSecond) return;
     isUserScrolling.current = false;
     setPixelsPerSecond(nextScale);
     requestAnimationFrame(() => syncScrollToTime(playheadSec));
-  }, [pixelsPerSecond, playheadSec, syncScrollToTime]);
+  }, [cancelSlide, pixelsPerSecond, playheadSec, syncScrollToTime]);
 
   const beginTrim = useCallback((clip: Timeline["videoClips"][number], edge: "start" | "end", event: any) => {
     event.preventDefault?.();
@@ -363,11 +407,11 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
     if (isTrimHandle(event as any)) return;
     const touches = (event.nativeEvent ?? event).touches;
     if (touches?.length === 1) {
-      beginInteraction();
       const left = event.currentTarget?.getBoundingClientRect?.().left ?? 0;
-      touchDrag.current = { lastX: touchX(touches[0], left) };
+      touchDrag.current = { lastX: touchX(touches[0], left), active: false };
     }
     if (!touches || touches.length < 2 || !viewportWidth) return;
+    cancelSlide();
     touchDrag.current = null;
     const left = event.currentTarget?.getBoundingClientRect?.().left ?? 0;
     const first = touchX(touches[0], left);
@@ -382,6 +426,10 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
     const initial = pinch.current;
     const touches = (event.nativeEvent ?? event).touches;
     if (!initial && touches?.length === 1 && touchDrag.current) {
+      if (!touchDrag.current.active) {
+        touchDrag.current.active = true;
+        beginInteraction();
+      }
       const left = event.currentTarget?.getBoundingClientRect?.().left ?? 0;
       const currentX = touchX(touches[0], left);
       scrubBy(touchDrag.current.lastX - currentX);
@@ -403,17 +451,19 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
       if (event.button !== 0) return;
       if (isTrimHandle(event as any)) return;
       if (!((event as any).target?.closest?.('[data-timeline-slot="true"]'))) event.preventDefault();
-      beginInteraction();
-      mouseDrag.current = { x: event.clientX, scrollLeft: scrollLeft.current };
+      mouseDrag.current = { x: event.clientX, active: false };
     },
     onMouseMove: (event: { clientX: number }) => {
       if (activeSlotReorder.current) return;
       const drag = mouseDrag.current;
       if (!drag) return;
+      if (!drag.active && Math.abs(drag.x - event.clientX) > 2) { drag.active = true; beginInteraction(); }
+      if (!drag.active) return;
       scrubBy(drag.x - event.clientX);
+      drag.x = event.clientX;
     },
-    onMouseUp: () => { mouseDrag.current = null; endInteractionSoon(); },
-    onMouseLeave: () => { if (mouseDrag.current) { mouseDrag.current = null; endInteractionSoon(); } },
+    onMouseUp: () => { const wasDragging = mouseDrag.current?.active; mouseDrag.current = null; if (wasDragging) endInteractionSoon(); },
+    onMouseLeave: () => { if (mouseDrag.current) { const wasDragging = mouseDrag.current.active; mouseDrag.current = null; if (wasDragging) endInteractionSoon(); } },
     onWheel: (event: { deltaX: number; deltaY: number; shiftKey?: boolean; preventDefault: () => void }) => {
       const delta = event.deltaX || (event.shiftKey ? event.deltaY : 0);
       if (!delta) return;
@@ -445,6 +495,7 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
           ? Math.max(tapped.startSec, tapped.startSec + tapped.durationSec - 1 / timeline.fps)
           : start;
         onSelect(id, seekSec);
+        slideToTime(seekSec);
       }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} onSelectAudio={onSelectAudio} onAddClip={onAddClip} />
       </ScrollView>
 
