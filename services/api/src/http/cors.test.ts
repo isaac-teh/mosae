@@ -20,7 +20,7 @@ describe("apiCors", () => {
   it("answers allowed preflights", async () => {
     const res = await request(await listeningServer(app())).options("/api/ping").set("Origin", "https://web.example");
     expect(res.status).toBe(204);
-    expect(res.headers["access-control-allow-methods"]).toBe("GET, POST, PUT, PATCH, OPTIONS");
+    expect(res.headers["access-control-allow-methods"]).toBe("GET, POST, PUT, PATCH, DELETE, OPTIONS");
   });
   /**
    * Proposal constraints are revised with PATCH, by both the moment screens and
@@ -35,6 +35,11 @@ describe("apiCors", () => {
   it("permits the PUT used to confirm the cast", async () => {
     const res = await request(await listeningServer(app())).options("/api/ping").set("Origin", "https://web.example");
     expect(res.headers["access-control-allow-methods"]).toContain("PUT");
+  });
+  it("permits DELETE preflights used to remove a film", async () => {
+    const res = await request(await listeningServer(app())).options("/api/ping").set("Origin", "https://web.example").set("Access-Control-Request-Method", "DELETE");
+    expect(res.status).toBe(204);
+    expect(res.headers["access-control-allow-methods"]).toContain("DELETE");
   });
   it("allows localhost only outside production and never applies to events", async () => {
     expect((await request(await listeningServer(app())).get("/api/ping").set("Origin", "http://localhost:3100")).headers["access-control-allow-origin"]).toBe("http://localhost:3100");
