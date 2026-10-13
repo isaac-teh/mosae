@@ -527,7 +527,7 @@ describe("deriveChat state table", () => {
       direction: { confirmed: true, aspect: "16:9", pace: "lively", lengthSec: 30, focus: "family", collageAmount: "few", motionFeel: "calm" },
     });
     expect(state.items.filter((item) => item.kind === "you" && item.id === "direction-answer")).toEqual([
-      { kind: "you", id: "direction-answer", text: "Format: YouTube style\nPace: Lively\nLength: 30 sec\nFocus: Everyone\nCollages: A few\nMotion: Calm" },
+      { kind: "you", id: "direction-answer", text: "Format: Landscape\nPace: Lively\nLength: 30 sec\nFocus: Everyone\nCollages: A few\nMotion: Calm" },
     ]);
   });
 

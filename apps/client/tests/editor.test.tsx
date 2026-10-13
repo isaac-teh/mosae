@@ -133,7 +133,7 @@ describe("film editor", () => {
     expect(ratio.textContent).toContain("Ratio");
     expect(ratio.querySelector("svg")?.querySelectorAll("path")).toHaveLength(1);
     await click("Ratio");
-    expect(host.querySelector('[aria-label="9:16 TikTok / Reels"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="9:16 Portrait"]')).not.toBeNull();
   });
 
   it("puts playback beside the editor time and sends play toggles to the preview", async () => {

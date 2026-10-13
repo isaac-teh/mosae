@@ -63,7 +63,7 @@ function directionAnswer(input: ChatInput): string {
   const labels: Record<string, string> = { aspect: "Format", pace: "Pace", lengthSec: "Length", focus: "Focus", collageAmount: "Collages", motionFeel: "Motion" };
   const words = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (first) => first.toUpperCase());
   const displayValue = (key: string, value: unknown) => {
-    if (key === "aspect") return value === "16:9" ? "YouTube style" : "TikTok style";
+    if (key === "aspect") return value === "16:9" ? "Landscape" : "Portrait";
     if (key === "pace") return value === "lively" ? "Lively" : "Gentle";
     if (key === "lengthSec") return `${value} sec`;
     if (key === "focus") return focus;
