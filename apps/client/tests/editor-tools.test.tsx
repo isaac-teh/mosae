@@ -2,6 +2,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Timeline } from "@mosae/contracts";
+import { applyEdits } from "@mosae/contracts";
 import type { Moment, Soundtrack } from "@mosae/core";
 import type { StoryRepository } from "@mosae/core";
 
@@ -614,6 +615,35 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "simple-grid-2x2", motionId: "print-drop", slots: [...threeSlotCollage.spec.slots, { slotId: "empty:collage-1:4", kind: "photo", empty: true }] } });
     await click("Layout Travel story");
     expect(host.querySelector('[aria-label="Layout Travel story"]')?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("updates count, layout, slots, and filtered designs through the collage editor state", async () => {
+    let current = { ...collage };
+    const editorTimeline: Timeline = { schemaVersion: 2, projectId: "p1", mode: "memory", aspect: "9:16", fps: 30, durationSec: 8, chapters: [{ title: "Trip", startSec: 0 }], videoClips: [current], audioClips: [], captions: [] };
+    const extras: Moment[] = [
+      { ...moments[0]!, id: "near", title: "Near photo", shotId: "near-shot" },
+      { ...moments[0]!, id: "far", title: "Far photo", shotId: "far-shot" },
+    ];
+    const timelineWithPhotos: Timeline = { ...editorTimeline, videoClips: [current, { id: "near-clip", source: { kind: "photo", shotId: "near-shot" }, startSec: 4, durationSec: 2, transitionIn: { kind: "cut", durationSec: 0 } }, { id: "far-clip", source: { kind: "photo", shotId: "far-shot" }, startSec: 6, durationSec: 2, transitionIn: { kind: "cut", durationSec: 0 } }] };
+    const applyToEditor = (op: any) => {
+      const result = applyEdits(timelineWithPhotos, [op]);
+      expect(result.ok).toBe(true);
+      if (result.ok) current = result.timeline.videoClips[0] as typeof current;
+      return result.ok;
+    };
+    const renderPanel = () => render(<CollagePanel clip={current} section="Layout" timeline={timelineWithPhotos} moments={extras} onApply={applyToEditor} onClose={() => {}} />);
+    await renderPanel();
+    await click("Increase number of photos");
+    await renderPanel();
+    expect(host.querySelector('[aria-label="5 photos"]')?.textContent).toBe("5");
+    expect(current.spec.layoutId).toBe("simple-five-top");
+    expect(current.spec.slots.map((slot) => slot.shotId)).toContain("near-shot");
+    expect(host.querySelector('[aria-label="Layout Full-bleed"]')).toBeNull();
+    await click("Decrease number of photos");
+    await renderPanel();
+    expect(host.querySelector('[aria-label="4 photos"]')?.textContent).toBe("4");
+    expect(current.spec.layoutId).toBe("simple-grid-2x2");
+    expect(current.spec.slots).toHaveLength(4);
   });
 
   it("offers the exact simple option counts per number of photos and maps legacy layouts", () => {

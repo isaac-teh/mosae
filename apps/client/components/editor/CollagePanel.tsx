@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { reassignCollageSlots } from "@mosae/core";
+import { reassignCollageSlots, type Moment } from "@mosae/core";
 import { COLLAGE_GRID_VARIANTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, ALLOWED_COMBOS, collageGridRects, type CollageGridVariant, type EditOp, type Timeline } from "@mosae/contracts";
 
 const SIMPLE_LAYOUTS = COLLAGE_GRID_VARIANTS.filter(({ id }) => id.startsWith("simple-"));
@@ -92,10 +92,12 @@ function thumbnailTitleRect(layoutId: string, count: number): { x: number; y: nu
   return { x: col * (cellW + gap), y: row * (cellH + gap), w: cellW, h: cellH };
 }
 
-export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose }: {
+export function CollagePanel({ clip, section, aspect = "9:16", timeline, moments = [], onApply, onClose }: {
   clip: Collage;
   section: "Layout" | "Motion";
   aspect?: Timeline["aspect"];
+  timeline?: Timeline;
+  moments?: Moment[];
   onApply: (op: CollageOp) => void;
   onClose: () => void;
 }) {
@@ -134,11 +136,33 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
     const motionId = allowedMotions.includes(clip.spec.motionId) ? clip.spec.motionId : allowedMotions[0]!;
     const slots = clip.spec.slots.slice(0, nextCount);
     const usedIds = new Set(slots.map((slot) => slot.slotId));
+    const usedShots = new Set(clip.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []));
+    const chapterAt = (time: number) => timeline?.chapters.reduce((chapter, item, index) => item.startSec <= time ? index : chapter, 0) ?? 0;
+    const currentChapter = chapterAt(clip.startSec);
+    const candidateShots = new Set<string>();
+    const candidates = moments.filter((moment) => {
+      if (moment.kind !== "photo" || !moment.shotId || usedShots.has(moment.shotId) || candidateShots.has(moment.shotId)) return false;
+      candidateShots.add(moment.shotId);
+      return true;
+    }).map((moment) => {
+      const occurrences = timeline?.videoClips.flatMap((item) => {
+        const time = item.startSec + item.durationSec / 2;
+        const shotIds = "kind" in item ? item.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []) : [item.source.shotId];
+        return shotIds.includes(moment.shotId!) ? [{ sameChapter: chapterAt(time) === currentChapter, distance: Math.abs(time - clip.startSec) }] : [];
+      }) ?? [];
+      const nearest = occurrences.sort((a, b) => Number(b.sameChapter) - Number(a.sameChapter) || a.distance - b.distance)[0];
+      return { moment, sameChapter: nearest?.sameChapter ?? false, distance: nearest?.distance ?? Number.POSITIVE_INFINITY };
+    }).sort((a, b) => Number(b.sameChapter) - Number(a.sameChapter) || a.distance - b.distance);
     for (let index = slots.length; index < nextCount; index++) {
-      let id = `empty:${clip.clipId}:${index + 1}`;
+      let candidate = candidates.shift()?.moment;
+      while (candidate?.shotId && usedShots.has(candidate.shotId)) candidate = candidates.shift()?.moment;
+      let id = candidate ? `photo:${candidate.shotId}` : `empty:${clip.clipId}:${index + 1}`;
       while (usedIds.has(id)) id = `${id}-next`;
       usedIds.add(id);
-      slots.push({ slotId: id, kind: "photo", empty: true });
+      if (candidate?.shotId) {
+        usedShots.add(candidate.shotId);
+        slots.push({ slotId: id, shotId: candidate.shotId, kind: "photo", ...(candidate.width ? { width: candidate.width } : {}), ...(candidate.height ? { height: candidate.height } : {}) });
+      } else slots.push({ slotId: id, kind: "photo", empty: true });
     }
     onApply({ op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, layoutId: layout.id, motionId, slots: slotsForLayout(layout.id, slots) } });
   };
