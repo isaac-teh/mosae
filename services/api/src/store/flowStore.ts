@@ -103,7 +103,7 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
     ...(flow.peopleProgress?.askedPersonIds?.length ? { askedPersonIds: flow.peopleProgress.askedPersonIds } : action.askedPersonIds ? { askedPersonIds: [...new Set(action.askedPersonIds)] } : {}),
     completedPersonIds: [...new Set(action.completedPersonIds)],
   } };
-  if (action.type === "missed-people-confirmed") return { ...flow, missedPeopleConfirmed: action.confirmed };
+  if (action.type === "missed-people-confirmed") return { ...flow, missedPeopleConfirmed: action.confirmed, ...(action.confirmed ? { peopleSummaryFollowupActive: false } : {}) };
   if (action.type === "missed-person-added") {
     const missedPeople = flow.missedPeople ?? [];
     if (missedPeople.some((person) => person.personId === action.personId)) return flow;
@@ -114,7 +114,9 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
   }
   if (action.type === "missed-person-skipped") {
     const missedPeople = flow.missedPeople ?? [];
-    return { ...flow, missedPeople: missedPeople.map((person) => person.personId === action.personId ? { ...person, skipped: true } : person) };
+    const next = { ...flow, missedPeople: missedPeople.map((person) => person.personId === action.personId ? { ...person, skipped: true } : person) };
+    if (next.missedPeople.length && next.missedPeople.every((person) => person.skipped || flow.people.some((entry) => entry.personId === person.personId && entry.manualShotAdds.some((shotId) => !entry.manualShotRemoves.includes(shotId))))) next.peopleSummaryFollowupActive = false;
+    return next;
   }
   if (action.type === "missed-people") {
     const { missedReply: _priorReply, ...withoutPriorReply } = flow;
@@ -128,9 +130,11 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
       return Boolean(person && person.manualShotAdds.some((shotId) => !person.manualShotRemoves.includes(shotId)));
     };
     const allMissedPeopleResolved = missedPeople.length > 0 && missedPeople.every((person) => person.skipped || complete(person.personId));
-    return allMissedPeopleResolved ? { ...flow, missedPeopleConfirmed: true } : flow;
+    return allMissedPeopleResolved ? { ...flow, missedPeopleConfirmed: true, peopleSummaryFollowupActive: false } : flow;
   }
-  if (action.type === "missed-clarification-turn") return { ...flow, missedClarifications: [...(flow.missedClarifications ?? []), { question: action.question, reply: action.reply }] };
+  if (action.type === "missed-clarification-turn") return { ...flow, missedClarifications: [...(flow.missedClarifications ?? []), { question: action.question, reply: action.reply, ...(action.stage ? { stage: action.stage } : {}) }] };
+  if (action.type === "people-summary-snapshot") return { ...flow, peopleSummaryHistory: [...(flow.peopleSummaryHistory ?? []), action.people], peopleSummaryFollowupActive: true };
+  if (action.type === "people-summary-followup") return { ...flow, peopleSummaryFollowups: [...(flow.peopleSummaryFollowups ?? []), { question: action.question, ...(action.reply ? { reply: action.reply } : {}) }] };
   return flow;
 }
 

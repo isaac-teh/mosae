@@ -7,7 +7,7 @@ export type ChatStep = "occasion" | "people" | "moments" | "direction";
 export type InterpretRequest = {
   step: ChatStep;
   text: string;
-  context: { summary?: ProjectSummary; people?: { personId: string; name: string | null; role: string | null }[]; peopleStage?: "identify" | "tagged" | "missed" | "summary" };
+  context: { summary?: ProjectSummary; people?: { personId: string; name: string | null; role: string | null }[]; peopleStage?: "identify" | "tagged" | "missed" | "summary"; summaryFollowupAwaitingName?: boolean };
 };
 export type PeopleIntent = "assign" | "skip" | "proceed" | "missed" | "confirm" | "change" | "unclear";
 export type ChatChange =
@@ -44,7 +44,7 @@ function shortName(text: string): string | undefined {
   return normalizeName(cleaned);
 }
 function missedNameParts(text: string): { names?: string[]; needsClarification?: boolean } {
-  const cleaned = text.trim().replace(/[.!?]+$/, "").replace(/^(?:(?:i|we)\s+)?missed\s+/i, "").replace(/^also\s+/i, "");
+  const cleaned = text.trim().replace(/[.!?]+$/, "").replace(/^(?:(?:i|we)\s+)?missed\s+/i, "").replace(/^(?:please\s+)?(?:add|include)\s+/i, "").replace(/^also\s+/i, "");
   if (ambiguousPlural.test(cleaned)) return { needsClarification: true };
   const names = cleaned.split(/\s*(?:,|&|\band\b)\s*/i).map((part) => {
     const normalized = part.trim().replace(/^my\s+/i, "");
@@ -108,8 +108,18 @@ export async function interpret(req: InterpretRequest, deps: {
     const exact = req.text.trim().replace(/[.!?]+$/, "").toLocaleLowerCase();
     const stage = req.context.peopleStage ?? "identify";
     const fast = (intent: PeopleIntent): InterpretResult => ({ reply: "", change: { kind: "person", personId: null, name: "", role: "other", intent, names: [], needsClarification: false } });
+    if (stage === "summary" && /\b(?:add|include|missed|missing|left out|forgot)\b/i.test(req.text)) {
+      const parsed = missedNameParts(req.text);
+      if (parsed.needsClarification) return { reply: "Who did I miss? Type their name.", change: { kind: "person", personId: null, name: "", role: "other", intent: "missed", names: [], needsClarification: true, clarifyingQuestion: "Who did I miss? Type their name." } };
+      if (parsed.names?.length) return { reply: "", change: { kind: "person", personId: null, name: parsed.names[0]!, role: "other", intent: "missed", names: parsed.names, needsClarification: false } };
+    }
+    if (stage === "summary" && req.context.summaryFollowupAwaitingName) {
+      const parsed = missedNameParts(req.text);
+      if (parsed.needsClarification) return { reply: "Who did I miss? Type their name.", change: { kind: "person", personId: null, name: "", role: "other", intent: "missed", names: [], needsClarification: true, clarifyingQuestion: "Who did I miss? Type their name." } };
+      if (parsed.names?.length) return { reply: "", change: { kind: "person", personId: null, name: parsed.names[0]!, role: "other", intent: "missed", names: parsed.names, needsClarification: false } };
+    }
     if (stage === "missed") {
-      if (/^(?:no|none|no one(?: else)?|nobody(?: else)?|skip)$/i.test(exact)) return fast("confirm");
+      if (/^(?:no|none|no one(?: else)?|nobody(?: else)?|skip|that's everyone|that’s everyone|that's all|that’s all)$/i.test(exact)) return fast("confirm");
       const parsed = missedNameParts(req.text);
       if (parsed.needsClarification) return { reply: "Is that one person? What's their name?", change: { kind: "person", personId: null, name: "", role: "other", intent: "missed", names: [], needsClarification: true, clarifyingQuestion: "Is that one person? What's their name?" } };
       if (parsed.names?.length) return { reply: "", change: { kind: "person", personId: null, name: parsed.names[0]!, role: "other", intent: "missed", names: parsed.names, needsClarification: false } };

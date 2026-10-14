@@ -125,6 +125,37 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.id === "people-summary-message")).toMatchObject({ text: "Thanks. I've tagged all three in your moments." });
     expect(state.items.find((item) => item.id === "people-summary")?.kind).toBe("people-summary");
   });
+  it("names the person in a photo selection acknowledgement", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "Kara", role: "other", skipped: false, momentCount: 1, sampleShotIds: [], days: [] }], peopleConfirmed: true, peopleSummaryConfirmed: false, plan: null, taggedPerson: { personId: "p1", name: "Kara", photos: ["photo.jpg"] } });
+    expect(state.items.find((item) => item.id === "tagged-person-p1")).toMatchObject({ text: "Got it — these are the photos of Kara.", photos: ["photo.jpg"] });
+  });
+  it("appends a summary follow-up, selection, and refreshed summary after the inactive prior summary", () => {
+    const prior = [{ personId: "p1", name: "Zx", momentCount: 4 }, { personId: "p2", name: "Jamie", momentCount: 3 }, { personId: "p3", name: "Emily", momentCount: 2 }];
+    const followup = (complete: boolean) => deriveChat({ ...base(), people: [
+      { personId: "p1", name: "Zx", role: "other", skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
+      { personId: "p2", name: "Jamie", role: "other", skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
+      { personId: "p3", name: "Emily", role: "other", skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
+      ...(complete ? [{ personId: "p-missed-grandma", name: "Grandma", role: "other", skipped: false, momentCount: 1, sampleShotIds: [], days: [] }] : []),
+    ], peopleConfirmed: true, peopleSummaryConfirmed: false, missedPeopleConfirmed: false, missedPeople: [{ personId: "p-missed-grandma", name: "Grandma", momentCount: complete ? 1 : 0, ...(complete ? { sampleUri: "grandma.jpg" } : {}) }],
+      flow: { revision: 4, story: { answer: "trip", storySummary: null, mentionedPeople: [] }, people: [], peopleProgress: { askedPersonIds: ["p1", "p2", "p3"], completedPersonIds: ["p1", "p2", "p3"] }, peopleSummaryConfirmed: false,
+        peopleSummaryHistory: [prior], peopleSummaryFollowupActive: !complete,
+        peopleSummaryFollowups: [{ question: "One more person missing", reply: "Who did I miss? Type their name." }, { question: "Grandma" }],
+      }, plan: null });
+    const tagging = followup(false);
+    const ids = tagging.items.map((item) => item.id);
+    expect(ids.indexOf("people-summary-history-1")).toBeLessThan(ids.indexOf("summary-followup-1"));
+    expect(ids.indexOf("summary-followup-1")).toBeLessThan(ids.indexOf("summary-followup-reply-1"));
+    expect(ids.indexOf("summary-followup-reply-1")).toBeLessThan(ids.indexOf("summary-followup-2"));
+    expect(ids.indexOf("summary-followup-2")).toBeLessThan(ids.indexOf("missed-select-p-missed-grandma"));
+    expect(tagging.items.find((item) => item.id === "people-summary-history-1" )).toMatchObject({ kind: "people-summary", canConfirm: false });
+    expect(tagging.items.some((item) => item.id === "people-summary")).toBe(false);
+
+    const done = followup(true);
+    const doneIds = done.items.map((item) => item.id);
+    expect(doneIds.indexOf("missed-person-p-missed-grandma")).toBeLessThan(doneIds.indexOf("people-summary-message"));
+    expect(done.items.find((item) => item.id === "people-summary-message")).toMatchObject({ text: "Thanks. I've tagged all four in your moments." });
+    expect(done.items.filter((item) => item.kind === "people-summary").at(-1)).toMatchObject({ people: [{ personId: "p1" }, { personId: "p2" }, { personId: "p3" }, { personId: "p-missed-grandma" }] });
+  });
   it("renders person clarification turns once after the question they answer", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null,
       interpTurns: [{ personId: "p1", question: "My daughter", reply: "What is your daughter's name?" }] });

@@ -20,7 +20,10 @@ export const DirectorFlowSchema = z.strictObject({
   people: z.array(FlowPersonSchema),
   missedAnswer: z.string().optional(),
   missedReply: z.string().optional(),
-  missedClarifications: z.array(z.object({ question: z.string(), reply: z.string() })).optional(),
+  missedClarifications: z.array(z.object({ question: z.string(), reply: z.string(), stage: z.enum(["missed", "summary"]).optional() })).optional(),
+  peopleSummaryHistory: z.array(z.array(z.object({ personId: z.string(), name: z.string(), momentCount: z.number().nonnegative(), sampleUri: z.string().optional() }))).optional(),
+  peopleSummaryFollowups: z.array(z.object({ question: z.string(), reply: z.string().optional() })).optional(),
+  peopleSummaryFollowupActive: z.boolean().optional(),
   peopleSummaryConfirmed: z.boolean().optional(),
   peopleProgress: z.object({ askedPersonIds: z.array(z.string().min(1)).max(100).optional(), completedPersonIds: z.array(z.string().min(1)) }).optional(),
   missedPeopleConfirmed: z.boolean().optional(),
@@ -41,7 +44,9 @@ const AtomicFlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("missed-person-skipped"), personId: z.string().min(1) }),
   z.object({ type: z.literal("missed-people"), people: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional(), skipped: z.boolean().optional() })).max(100), answer: z.string().optional(), reply: z.string().nullable().optional() }),
   z.object({ type: z.literal("missed-person-completed"), personId: z.string().min(1) }),
-  z.object({ type: z.literal("missed-clarification-turn"), question: z.string(), reply: z.string() }),
+  z.object({ type: z.literal("missed-clarification-turn"), question: z.string(), reply: z.string(), stage: z.enum(["missed", "summary"]).optional() }),
+  z.object({ type: z.literal("people-summary-snapshot"), people: z.array(z.object({ personId: z.string(), name: z.string(), momentCount: z.number().nonnegative(), sampleUri: z.string().optional() })) }),
+  z.object({ type: z.literal("people-summary-followup"), question: z.string(), reply: z.string().optional() }),
   z.object({ type: z.literal("undo") }),
 ]);
 

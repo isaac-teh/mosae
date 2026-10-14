@@ -241,6 +241,46 @@ describe("Director chat", () => {
     expect([...host.querySelectorAll('[data-from="you"]')].filter((item) => item.textContent === "Grandpa and Grandma")).toHaveLength(1);
   });
 
+  it("appends a summary name response after the historical summary and clarification", async () => {
+    setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    let flow: any = {
+      revision: 4,
+      story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] },
+      people: ["person-1", "person-2"].map((personId, index) => ({ personId, name: index ? "Jamie" : "Zx", role: "other", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })),
+      peopleProgress: { askedPersonIds: ["person-1", "person-2"], completedPersonIds: ["person-1", "person-2"] },
+      peopleSummaryHistory: [[{ personId: "person-1", name: "Zx", momentCount: 4 }, { personId: "person-2", name: "Jamie", momentCount: 3 }]],
+      peopleSummaryFollowups: [{ question: "One more person missing", reply: "Who did I miss? Type their name." }],
+      peopleSummaryFollowupActive: true,
+      missedClarifications: [{ question: "One more person missing", reply: "Who did I miss? Type their name.", stage: "summary" }],
+      missedPeople: [], missedPeopleConfirmed: false, peopleSummaryConfirmed: false,
+    };
+    mocks.repo.interpret = vi.fn(async (_projectId: string, request: any) => ({ reply: "", change: { kind: "person", intent: "missed", names: [String(request.text).trim()], name: String(request.text).trim(), role: "other", needsClarification: false } }));
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => {
+      const changes = action.type === "batch" ? action.actions : [action];
+      for (const change of changes) {
+        if (change.type === "people-summary-snapshot") { flow.peopleSummaryHistory = [...(flow.peopleSummaryHistory ?? []), change.people]; flow.peopleSummaryFollowupActive = true; }
+        if (change.type === "people-summary-followup") flow.peopleSummaryFollowups = [...(flow.peopleSummaryFollowups ?? []), { question: change.question, ...(change.reply ? { reply: change.reply } : {}) }];
+        if (change.type === "missed-person-added") flow.missedPeople = [...(flow.missedPeople ?? []), { personId: change.personId, name: change.name }];
+        if (change.type === "missed-people-confirmed") flow.missedPeopleConfirmed = change.confirmed;
+      }
+      flow = { ...flow, revision: flow.revision + 1 };
+      return flow;
+    });
+    await renderScreen();
+    await waitFor(() => expect(hasText("Who did I miss? Type their name.")).toBe(true));
+    await typeAndSend("Grandma");
+    await waitFor(() => expect(hasText("Help me select photos of Grandma.")).toBe(true));
+    const you = [...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent ?? "");
+    expect(you.slice(-2)).toEqual(["One more person missing", "Grandma"]);
+    const transcript = host.textContent ?? "";
+    expect(transcript.indexOf("Thanks. I've tagged all two in your moments.")).toBeLessThan(transcript.indexOf("One more person missing"));
+    expect(transcript.indexOf("Who did I miss? Type their name.")).toBeLessThan(transcript.indexOf("Grandma"));
+    expect(transcript.indexOf("Grandma")).toBeLessThan(transcript.indexOf("Help me select photos of Grandma."));
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull();
+    expect(mocks.repo.interpret).toHaveBeenCalledWith("project-1", expect.objectContaining({ context: expect.objectContaining({ peopleStage: "summary" }) }));
+  });
+
   it("shows the people summary after the one-time missed-people prompt and continues to direction", async () => {
     setup({ readyPlan: true }); await renderScreen(); await click("A trip");
     await answerPerson("My daughter");
