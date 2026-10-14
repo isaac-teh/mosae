@@ -28,7 +28,7 @@ import { SwapSheet } from "../components/editor/SwapSheet";
 import { TrimControl } from "../components/editor/TrimControl";
 import { MoveMode } from "../components/editor/MoveMode";
 import { AddSheet } from "../components/editor/AddSheet";
-import { CollagePanel, transitionCollageSheet } from "../components/editor/CollagePanel";
+import { CollagePanel, collageOptionsForPhotoCount, nearestCollageOption, transitionCollageSheet } from "../components/editor/CollagePanel";
 import { CollageCellSheet } from "../components/editor/CollageCellSheet";
 import { SoundtrackSheet } from "../components/editor/SoundtrackSheet";
 import { AudioVolumeSheet } from "../components/editor/AudioVolumeSheet";
@@ -567,43 +567,32 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Timeline zoom 120 pixels per second"]')).not.toBeNull();
   });
 
-  it("shows selected collage chips, only layouts that fit the slots, and motions allowed by the selected layout", async () => {
+  it("shows the selected design and only the new layout options for the current photo count", async () => {
     const threeSlotCollage = { ...collage, spec: { ...collage.spec, layoutId: "postcard-stack" as const, slots: collage.spec.slots.slice(0, 3) } };
     await render(<CollagePanel clip={threeSlotCollage} section="Layout" onApply={apply} onClose={() => {}} />);
-    await click("Collage Styles");
-    expect(host.querySelector('[aria-label="Layout Postcard stack"]')?.className).toContain("border-white");
-    expect(host.querySelector('[aria-label="Motion Stack deal"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Effect Vignette"]')).toBeNull();
-    for (const label of ["Botanical scrapbook", "Nine-photo grid", "Travel mosaic", "Travel story", "Torn paper mosaic", "Polaroid garland", "Postcard stack", "Route map"]) {
-      expect(host.querySelector(`[aria-label="Layout ${label}"]`)).not.toBeNull();
-    }
-    expect((host.querySelector('[aria-label="Layout Photo table"]') as HTMLButtonElement).disabled).toBe(true);
-    await click("Layout Torn paper mosaic");
-    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "torn-paper", motionId: "print-drop" } });
-    expect(host.querySelector('[aria-label="Layout Torn paper mosaic"]')?.className).toContain("border-white");
+    expect(host.querySelector('[aria-label="Layout Polaroid"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Layout Magazine"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Layout Film strip"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Layout Three stacked rows"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Layout Full-bleed"]')).toBeNull();
+    await click("Layout Magazine");
+    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "design-magazine", motionId: "print-drop" } });
+    expect(host.querySelector('[aria-label="Layout Magazine"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("keeps portrait-only styles out of landscape films and preserves slots when choosing Torn paper", async () => {
     await render(<CollagePanel clip={collage} aspect="16:9" section="Layout" onApply={apply} onClose={() => {}} />);
-    await click("Collage Styles");
-    expect(host.querySelector('[aria-label="Layout Polaroid garland"]')).toBeNull();
-    expect(host.querySelector('[aria-label="Layout Postcard stack"]')).toBeNull();
-    expect(host.querySelector('[aria-label="Layout Torn paper mosaic"]')).not.toBeNull();
-    await click("Layout Torn paper mosaic");
-    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: collage.clipId, spec: { ...collage.spec, layoutId: "torn-paper", motionId: "print-drop" } });
+    expect(host.querySelector('[aria-label="Layout Polaroid"]')).not.toBeNull();
+    await click("Layout Polaroid");
+    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: collage.clipId, spec: { ...collage.spec, layoutId: "design-polaroid", motionId: "page-turn" } });
   });
 
-  it("shows the library for two photos and explains the required slot counts", async () => {
+  it("shows the three design options for two photos", async () => {
     const two = { ...collage, spec: { ...collage.spec, layoutId: "two-photo-diptych" as const, motionId: "print-drop" as const, slots: collage.spec.slots.slice(0, 2) } };
     await render(<CollagePanel clip={two} section="Layout" onApply={apply} onClose={() => {}} />);
-    await click("Collage Styles");
-    expect(host.querySelectorAll('[aria-label^="Layout "]')).toHaveLength(9);
-    expect((host.querySelector('[aria-label="Layout Torn paper mosaic"]') as HTMLButtonElement).disabled).toBe(true);
-    expect(host.textContent).toContain("Tap + above");
-    await click("Increase number of photos");
-    const op = apply.mock.lastCall![0];
-    await render(<CollagePanel clip={{ ...two, spec: op.spec }} section="Layout" onApply={apply} onClose={() => {}} />);
-    expect((host.querySelector('[aria-label="Layout Torn paper mosaic"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(host.querySelectorAll('[aria-label^="Layout "]')).toHaveLength(5);
+    expect(host.querySelector('[aria-label="Layout Two stacked"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Layout Film strip"]')).not.toBeNull();
   });
 
   it("shows only motion choices in the collage motion sheet", async () => {
@@ -621,10 +610,20 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Toggle layout drawer"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="3 photos"]')?.textContent).toBe("3");
     await click("Increase number of photos");
-    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, slots: [...threeSlotCollage.spec.slots, { slotId: "empty:collage-1:4", kind: "photo", empty: true }] } });
-    await click("Collage Styles");
-    await click("Layout Postcard stack");
-    expect(host.querySelector('[aria-label="Layout Postcard stack"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "simple-grid-2x2", motionId: "print-drop", slots: [...threeSlotCollage.spec.slots, { slotId: "empty:collage-1:4", kind: "photo", empty: true }] } });
+    await click("Layout Polaroid");
+    expect(host.querySelector('[aria-label="Layout Polaroid"]')?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("offers the exact simple option counts per number of photos and maps legacy layouts", () => {
+    expect([1, 2, 3, 4, 5, 6].map((count) => collageOptionsForPhotoCount(count).simple.map(({ id }) => id))).toEqual([
+      ["simple-full", "simple-centered"], ["simple-stacked", "simple-offset"], ["simple-three-stacked", "simple-three-top", "simple-three-bottom"],
+      ["simple-grid-2x2"], ["simple-five-top", "simple-five-middle", "simple-five-bottom"], ["simple-grid-2x3"],
+    ]);
+    expect([1, 2, 3, 4, 5, 6].map((count) => collageOptionsForPhotoCount(count).designs.map(({ id }) => id))).toEqual(Array(6).fill(["design-polaroid", "design-magazine", "design-film-strip"]));
+    expect(nearestCollageOption("polaroid-garland", 4)).toBe("design-polaroid");
+    expect(nearestCollageOption("travel-story", 5)).toBe("design-magazine");
+    expect(nearestCollageOption("nine-photo-grid", 6)).toBe("simple-grid-2x3");
   });
 
   it("applies an Ask edit as one atomic timeline change and keeps Undo available", async () => {

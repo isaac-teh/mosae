@@ -4,7 +4,7 @@ export type CollageGridVariant = typeof COLLAGE_GRID_VARIANTS[number]["id"];
 export type CollageGridRect = { x: number; y: number; w: number; h: number };
 const r = (x: number, y: number, w: number, h: number): CollageGridRect => ({ x, y, w, h });
 
-const threePhoto: Record<CollageGridVariant, CollageGridRect[]> = {
+const threePhoto: Partial<Record<CollageGridVariant, CollageGridRect[]>> = {
   "grid-wide-top": [r(0, 0, 100, 49), r(0, 51, 49, 49), r(51, 51, 49, 49)],
   "grid-wide-bottom": [r(0, 0, 49, 49), r(51, 0, 49, 49), r(0, 51, 100, 49)],
   "grid-stacked-rows": [r(0, 0, 100, 32), r(0, 34, 100, 32), r(0, 68, 100, 32)],
@@ -13,7 +13,7 @@ const threePhoto: Record<CollageGridVariant, CollageGridRect[]> = {
   "grid-three-columns": [r(0, 0, 32, 100), r(34, 0, 32, 100), r(68, 0, 32, 100)],
 };
 
-const twoPhoto: Record<CollageGridVariant, CollageGridRect[]> = {
+const twoPhoto: Partial<Record<CollageGridVariant, CollageGridRect[]>> = {
   "grid-wide-top": [r(0, 0, 100, 60), r(0, 62, 100, 38)],
   "grid-wide-bottom": [r(0, 0, 100, 38), r(0, 40, 100, 60)],
   "grid-stacked-rows": [r(0, 0, 100, 49), r(0, 51, 100, 49)],
@@ -22,7 +22,7 @@ const twoPhoto: Record<CollageGridVariant, CollageGridRect[]> = {
   "grid-three-columns": [r(0, 0, 49, 100), r(51, 0, 49, 100)],
 };
 
-const fourPhoto: Record<CollageGridVariant, CollageGridRect[]> = {
+const fourPhoto: Partial<Record<CollageGridVariant, CollageGridRect[]>> = {
   "grid-wide-top": [r(0, 0, 100, 49), r(0, 51, 32, 49), r(34, 51, 32, 49), r(68, 51, 32, 49)],
   "grid-wide-bottom": [r(0, 0, 32, 49), r(34, 0, 32, 49), r(68, 0, 32, 49), r(0, 51, 100, 49)],
   "grid-stacked-rows": [r(0, 0, 100, 23.5), r(0, 25.5, 100, 23.5), r(0, 51, 100, 23.5), r(0, 76.5, 100, 23.5)],
@@ -55,12 +55,41 @@ function splitLargest(rects: CollageGridRect[], variant: CollageGridVariant): Co
 /** Normalized, non-overlapping photo rectangles shared by the drawer and renderer. */
 export function collageGridRects(variant: CollageGridVariant, count: number): CollageGridRect[] {
   if (!Number.isInteger(count) || count < 1 || count > 9) throw new RangeError("grid photo count must be 1–9");
+  const simple: Record<string, CollageGridRect[]> = {
+    "simple-full": [r(0, 0, 100, 100)], "simple-centered": [r(12, 24, 76, 52)],
+    "simple-stacked": [r(0, 0, 100, 49), r(0, 51, 100, 49)],
+    "simple-offset": [r(0, 0, 48, 48), r(52, 52, 48, 48)],
+    "simple-three-stacked": [r(0, 0, 100, 32), r(0, 34, 100, 32), r(0, 68, 100, 32)],
+    "simple-three-top": [r(0, 0, 100, 56), r(0, 58, 49, 42), r(51, 58, 49, 42)],
+    "simple-three-bottom": [r(0, 0, 49, 42), r(51, 0, 49, 42), r(0, 44, 100, 56)],
+    "simple-grid-2x2": [r(0, 0, 49, 49), r(51, 0, 49, 49), r(0, 51, 49, 49), r(51, 51, 49, 49)],
+    "simple-five-top": [r(0, 0, 100, 44), r(0, 46, 49, 26), r(51, 46, 49, 26), r(0, 74, 49, 26), r(51, 74, 49, 26)],
+    "simple-five-middle": [r(0, 0, 49, 25), r(51, 0, 49, 25), r(0, 27, 100, 46), r(0, 75, 49, 25), r(51, 75, 49, 25)],
+    "simple-five-bottom": [r(0, 0, 49, 25), r(51, 0, 49, 25), r(0, 27, 49, 25), r(51, 27, 49, 25), r(0, 54, 100, 46)],
+    "simple-grid-2x3": [r(0, 0, 49, 32), r(51, 0, 49, 32), r(0, 34, 49, 32), r(51, 34, 49, 32), r(0, 68, 49, 32), r(51, 68, 49, 32)],
+  };
+  if (simple[variant]) return simple[variant]!.slice(0, count).map((item) => ({ ...item }));
   if (count === 1) return [r(0, 0, 100, 100)];
-  if (count === 2) return twoPhoto[variant].map((item) => ({ ...item }));
-  if (count === 3) return threePhoto[variant].map((item) => ({ ...item }));
-  const rects = fourPhoto[variant].map((item) => ({ ...item }));
+  if (count === 2) return twoPhoto[variant]!.map((item) => ({ ...item }));
+  if (count === 3) return threePhoto[variant]!.map((item) => ({ ...item }));
+  const rects = fourPhoto[variant]!.map((item) => ({ ...item }));
   while (rects.length < count) splitLargest(rects, variant).forEach((item, i) => { rects[i] = item; });
   return rects;
+}
+
+/** Shared styled-template photo geometry used by the picker and final renderer. */
+export function collageDesignRects(layoutId: string, count: number): CollageGridRect[] {
+  if (!Number.isInteger(count) || count < 1 || count > 6) throw new RangeError("design photo count must be 1–6");
+  if (layoutId === "design-film-strip") return Array.from({ length: count }, (_, i) => r(13, 4 + i * (92 / count), 74, 92 / count - 2));
+  if (layoutId === "design-magazine") {
+    const gap = 4, top = 22, rows = Math.ceil(count / 2), h = (76 - gap * (rows - 1)) / rows;
+    return Array.from({ length: count }, (_, i) => { const col = i % 2, row = Math.floor(i / 2); return r(6 + col * 47, top + row * (h + gap), 41, h); });
+  }
+  if (layoutId === "design-polaroid") return Array.from({ length: count }, (_, i) => {
+    const cols = count <= 2 ? count : 2, rows = Math.ceil(count / cols), cellW = 86 / cols, cellH = 86 / rows;
+    return r(7 + (i % cols) * cellW + cellW * .08, 7 + Math.floor(i / cols) * cellH + cellH * .08, cellW * .78, cellH * .72);
+  });
+  throw new RangeError(`unknown collage design: ${layoutId}`);
 }
 
 /** Slot aspect ratios in rendered pixels (width / height), including the film frame shape. */

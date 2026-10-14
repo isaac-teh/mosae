@@ -6,6 +6,21 @@ export function isApprovedCollageCombination(layoutId: string, motionId: string)
 }
 
 export const COLLAGE_LAYOUTS = [
+  { id: "simple-full", label: "Full-bleed", minSlots: 1, maxSlots: 1, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 1 },
+  { id: "simple-centered", label: "Centered photo", minSlots: 1, maxSlots: 1, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 1 },
+  { id: "simple-stacked", label: "Two stacked", minSlots: 2, maxSlots: 2, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 2 },
+  { id: "simple-offset", label: "Two offset", minSlots: 2, maxSlots: 2, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 2 },
+  { id: "simple-three-stacked", label: "Three stacked rows", minSlots: 3, maxSlots: 3, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
+  { id: "simple-three-top", label: "One big top + two", minSlots: 3, maxSlots: 3, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
+  { id: "simple-three-bottom", label: "Two top + one big bottom", minSlots: 3, maxSlots: 3, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
+  { id: "simple-grid-2x2", label: "2 × 2 grid", minSlots: 4, maxSlots: 4, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 4 },
+  { id: "simple-five-top", label: "Big top + four", minSlots: 5, maxSlots: 5, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 5 },
+  { id: "simple-five-middle", label: "Big middle", minSlots: 5, maxSlots: 5, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 5 },
+  { id: "simple-five-bottom", label: "Big bottom + four", minSlots: 5, maxSlots: 5, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 5 },
+  { id: "simple-grid-2x3", label: "2 × 3 grid", minSlots: 6, maxSlots: 6, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 6 },
+  { id: "design-polaroid", label: "Polaroid", minSlots: 1, maxSlots: 6, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
+  { id: "design-magazine", label: "Magazine", minSlots: 1, maxSlots: 6, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
+  { id: "design-film-strip", label: "Film strip", minSlots: 1, maxSlots: 6, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
   { id: "single-photo", label: "Single photo", minSlots: 1, maxSlots: 1, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 1 },
   { id: "two-photo-diptych", label: "Two-photo diptych", minSlots: 2, maxSlots: 2, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 2 },
   { id: "grid-wide-top", label: "Wide top + two bottom", minSlots: 1, maxSlots: 9, aspect: ["9:16", "16:9"], maxVideoCells: 1, preferredSlots: 3 },
@@ -26,6 +41,18 @@ export const COLLAGE_LAYOUTS = [
 ] as const;
 
 export const COLLAGE_GRID_VARIANTS = [
+  { id: "simple-full", label: "Full-bleed" },
+  { id: "simple-centered", label: "Centered photo" },
+  { id: "simple-stacked", label: "Two stacked" },
+  { id: "simple-offset", label: "Two offset" },
+  { id: "simple-three-stacked", label: "Three stacked rows" },
+  { id: "simple-three-top", label: "One big top + two" },
+  { id: "simple-three-bottom", label: "Two top + one big bottom" },
+  { id: "simple-grid-2x2", label: "2 × 2 grid" },
+  { id: "simple-five-top", label: "Big top + four" },
+  { id: "simple-five-middle", label: "Big middle" },
+  { id: "simple-five-bottom", label: "Big bottom + four" },
+  { id: "simple-grid-2x3", label: "2 × 3 grid" },
   { id: "grid-wide-top", label: "Wide top + two bottom" },
   { id: "grid-wide-bottom", label: "Two top + wide bottom" },
   { id: "grid-stacked-rows", label: "Three stacked rows" },
