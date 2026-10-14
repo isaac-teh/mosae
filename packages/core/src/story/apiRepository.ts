@@ -426,11 +426,9 @@ export function createApiStoryRepository(
     },
     interpret: async (id, req) => await deps.request("POST", `/api/projects/${encodeURIComponent(id)}/chat/interpret`, req) as { reply: string; change: { kind: string; [key: string]: unknown } },
     getPeople: async (id): Promise<DirectorPerson[] | null> => {
-      const root = `projects/${id}`;
-      const [charactersValue, castValue, shotsValue, assetsValue, eventsValue, momentsValue] = await Promise.all([
+      const [charactersValue, castValue, momentsValue] = await Promise.all([
         deps.request("GET", `/api/projects/${encodeURIComponent(id)}/characters`),
         deps.request("GET", `/api/projects/${encodeURIComponent(id)}/cast`).catch(() => null),
-        deps.listenCollection(`${root}/shots`), deps.listenCollection(`${root}/assets`), deps.listenCollection(`${root}/events`),
         deps.request("GET", `/api/projects/${encodeURIComponent(id)}/moments`).catch(() => null),
       ]);
       const characters = record(charactersValue, "characters response");
@@ -441,11 +439,23 @@ export function createApiStoryRepository(
       if (!cast || !Array.isArray(cast.people)) return null;
       const castPeople = cast && Array.isArray(cast.people) ? cast.people as RecordData[] : [];
       const names = new Map(castPeople.map((person) => [String(person.personId), person]));
-      const assets = new Map(assetsValue.map((value) => { const asset = record(value, "asset"); return [String(asset.id), asset] as const; }));
-      const events = new Map(eventsValue.map((value) => { const event = record(value, "event"); return [String(event.id), event] as const; }));
       const momentsRecord = momentsValue ? record(momentsValue, "moments response") : {};
+      if (!Array.isArray(momentsRecord.moments)) return null;
       const momentById = new Map((Array.isArray(momentsRecord.moments) ? momentsRecord.moments : []).map((value) => { const moment = record(value, "moment"); return [String(moment.shotId), moment] as const; }));
       const groups = new Map<string, { shots: Set<string>; samples: Map<string, { shotId: string; assetId: string; bbox: [number, number, number, number] }>; days: Set<number> }>();
+      // The tag-moments gallery is the source of truth: its moment list is
+      // already filtered to visible moments and includes manual tag edits.
+      for (const [shotId, moment] of momentById) {
+        if (!Array.isArray(moment.personIds)) continue;
+        for (const personIdValue of moment.personIds) {
+          if (typeof personIdValue !== "string" || !personIdValue) continue;
+          const group = groups.get(personIdValue) ?? { shots: new Set<string>(), samples: new Map(), days: new Set<number>() };
+          group.shots.add(shotId);
+          if (typeof moment.assetId === "string") group.samples.set(shotId, { shotId, assetId: moment.assetId, bbox: [0, 0, 1, 1] });
+          if (typeof moment.dayIndex === "number") group.days.add(moment.dayIndex);
+          groups.set(personIdValue, group);
+        }
+      }
       const shots = Array.isArray(characters.shots) ? characters.shots as RecordData[] : [];
       for (const shotValue of shots) {
         const shot = record(shotValue, "character shot");
@@ -454,28 +464,16 @@ export function createApiStoryRepository(
           const face = record(faceValue, "face");
           if (face.prominence === "background") continue;
           if (typeof face.characterId !== "string" || !face.characterId) continue;
-          const group = groups.get(face.characterId) ?? { shots: new Set<string>(), samples: new Map(), days: new Set<number>() };
+          const galleryMoment = momentById.get(shotId);
+          if (!galleryMoment || !Array.isArray(galleryMoment.personIds) || !galleryMoment.personIds.includes(face.characterId)) continue;
+          const group = groups.get(face.characterId);
+          if (!group) continue;
           group.shots.add(shotId);
           const bbox = face.bbox;
-          if (typeof shot.assetId === "string" && Array.isArray(bbox) && bbox.length === 4 && bbox.every((value) => typeof value === "number") && !group.samples.has(shotId)) {
+          const sample = group.samples.get(shotId);
+          if (typeof shot.assetId === "string" && Array.isArray(bbox) && bbox.length === 4 && bbox.every((value) => typeof value === "number") && (!sample || sample.bbox.join(",") === "0,0,1,1")) {
             group.samples.set(shotId, { shotId, assetId: shot.assetId, bbox: bbox as [number, number, number, number] });
           }
-          const asset = assets.get(String(shot.assetId));
-          const event = asset && events.get(String(asset.eventId));
-          const day = /day\s+(\d+)/i.exec(String(event?.label ?? ""));
-          if (day) group.days.add(Number(day[1]));
-          groups.set(face.characterId, group);
-        }
-      }
-      for (const person of castPeople) {
-        const manualShots = Array.isArray(person.manualShots) ? person.manualShots.filter((shotId): shotId is string => typeof shotId === "string") : [];
-        for (const shotId of manualShots) {
-          const group = groups.get(String(person.personId)) ?? { shots: new Set<string>(), samples: new Map(), days: new Set<number>() };
-          group.shots.add(shotId);
-          const moment = momentById.get(shotId);
-          if (moment && typeof moment.assetId === "string" && !group.samples.has(shotId)) group.samples.set(shotId, { shotId, assetId: moment.assetId, bbox: [0, 0, 1, 1] });
-          if (typeof moment?.dayIndex === "number") group.days.add(moment.dayIndex);
-          groups.set(String(person.personId), group);
         }
       }
       const thumbnailUrls = new Map<string, Promise<string>>();

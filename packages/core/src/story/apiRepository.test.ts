@@ -261,7 +261,10 @@ describe("createApiStoryRepository", () => {
     vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
       { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "face-1", characterId: "char-1", bbox: [0.1, 0.2, 0.4, 0.5] }, { faceId: "face-2", characterId: "char-1", bbox: [0.2, 0.3, 0.5, 0.6] }, { faceId: "bg-1", characterId: "background-only", prominence: "background", bbox: [0.2, 0.3, 0.5, 0.6] }] },
       { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "face-3", characterId: "char-1", bbox: [0.3, 0.4, 0.7, 0.8] }, { faceId: "bg-2", characterId: "background-only", prominence: "background", bbox: [0.2, 0.3, 0.5, 0.6] }] },
-    ] } : { cast: { people: [{ personId: "char-1", name: "Mia", role: "child", ageBand: "teen" }, { personId: "background-only", name: "Photobomber", role: "other" }] } });
+    ] } : path.endsWith("/cast") ? { cast: { people: [{ personId: "char-1", name: "Mia", role: "child", ageBand: "teen" }, { personId: "background-only", name: "Photobomber", role: "other" }] } } : { moments: [
+      { shotId: "shot-1", assetId: "asset-1", dayIndex: 1, personIds: ["char-1"] },
+      { shotId: "shot-2", assetId: "asset-2", dayIndex: 1, personIds: ["char-1"] },
+    ] });
     const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
     await expect(repository.getPeople("project-1")).resolves.toEqual([{ personId: "char-1", name: "Mia", role: "child", ageBand: "teen", momentCount: 2, sampleShotIds: ["shot-1", "shot-2"], sampleFaces: [
       { shotId: "shot-1", uri: "https://storage.test/project-1/asset-1?signed=true", bbox: [0.1, 0.2, 0.4, 0.5] },
@@ -271,13 +274,36 @@ describe("createApiStoryRepository", () => {
     expect(deps.getThumbnailUrl).toHaveBeenCalledWith("project-1", "asset-2");
   });
 
+  it("counts only selected gallery moments across repeated video frames and excludes culled shots", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
+      { shotId: "video-shot", assetId: "video-asset", faces: Array.from({ length: 48 }, (_, index) => ({ faceId: `video-frame-${index}`, characterId: "person-1", bbox: [0.1, 0.2, 0.4, 0.5] })) },
+      { shotId: "photo-shot", assetId: "photo-asset", faces: Array.from({ length: 3 }, (_, index) => ({ faceId: `photo-face-${index}`, characterId: "person-1", bbox: [0.2, 0.2, 0.6, 0.6] })) },
+      { shotId: "blurred-shot", assetId: "blurred-asset", faces: [{ faceId: "blurred-face", characterId: "person-1" }] },
+      { shotId: "duplicate-shot", assetId: "duplicate-asset", faces: [{ faceId: "duplicate-face", characterId: "person-1" }] },
+    ] } : path.endsWith("/cast") ? { cast: { people: [{ personId: "person-1", name: "Mia", role: "child" }] } } : { moments: [
+      { shotId: "video-shot", assetId: "video-asset", dayIndex: 1, personIds: ["person-1"] },
+      { shotId: "photo-shot", assetId: "photo-asset", dayIndex: 2, personIds: ["person-1"] },
+      { shotId: "manual-tag", assetId: "manual-asset", dayIndex: 2, personIds: ["person-1"] },
+    ] });
+
+    const [person] = await createApiStoryRepository({ projectId: "project-1" }, deps).getPeople("project-1") ?? [];
+
+    expect(person).toMatchObject({ momentCount: 3, shotIds: ["video-shot", "photo-shot", "manual-tag"], days: [1, 2] });
+    expect(person?.sampleFaces?.map(({ shotId }) => shotId)).toEqual(["video-shot", "photo-shot", "manual-tag"]);
+  });
+
   it("does not ask the user about a person who appears in only one photo", async () => {
     const deps = dependencies();
     vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
       { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "repeat-1", characterId: "repeat", bbox: [0.1, 0.2, 0.4, 0.5] }] },
       { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "repeat-2", characterId: "repeat", bbox: [0.1, 0.2, 0.4, 0.5] }] },
       { shotId: "shot-3", assetId: "asset-1", faces: [{ faceId: "single-1", characterId: "single", bbox: [0.2, 0.3, 0.5, 0.6] }] },
-    ] } : { cast: { people: [{ personId: "repeat", role: "parent" }, { personId: "single", role: "other" }] } });
+    ] } : path.endsWith("/cast") ? { cast: { people: [{ personId: "repeat", role: "parent" }, { personId: "single", role: "other" }] } } : { moments: [
+      { shotId: "shot-1", assetId: "asset-1", dayIndex: 1, personIds: ["repeat"] },
+      { shotId: "shot-2", assetId: "asset-2", dayIndex: 1, personIds: ["repeat"] },
+      { shotId: "shot-3", assetId: "asset-1", dayIndex: 1, personIds: ["single"] },
+    ] });
 
     const people = await createApiStoryRepository({ projectId: "project-1" }, deps).getPeople("project-1");
 
@@ -290,7 +316,11 @@ describe("createApiStoryRepository", () => {
       { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "only-face", characterId: "child", bbox: [0.1, 0.2, 0.4, 0.5] }] },
       { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "only-face-2", characterId: "child", bbox: [0.1, 0.2, 0.4, 0.5] }] },
       { shotId: "shot-3", assetId: "asset-3", faces: [{ faceId: "only-face-3", characterId: "child", bbox: [0.1, 0.2, 0.4, 0.5] }] },
-    ] } : { cast: { people: [{ personId: "child", role: "child", ageBand: "child" }] } });
+    ] } : path.endsWith("/cast") ? { cast: { people: [{ personId: "child", role: "child", ageBand: "child" }] } } : { moments: [
+      { shotId: "shot-1", assetId: "asset-1", dayIndex: 1, personIds: ["child"] },
+      { shotId: "shot-2", assetId: "asset-2", dayIndex: 1, personIds: ["child"] },
+      { shotId: "shot-3", assetId: "asset-3", dayIndex: 1, personIds: ["child"] },
+    ] });
 
     await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getPeople("project-1")).resolves.toEqual([
       expect.objectContaining({ personId: "child", momentCount: 3, ageBand: "child" }),
@@ -301,7 +331,7 @@ describe("createApiStoryRepository", () => {
     const deps = dependencies({
       request: vi.fn(async (_method, path) => path.endsWith("/characters")
         ? { shots: [{ shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "face-1", characterId: null, bbox: [0.1, 0.2, 0.4, 0.5] }] }] }
-        : { cast: null }),
+        : path.endsWith("/cast") ? { cast: null } : { moments: [] }),
     });
 
     await expect(createApiStoryRepository({ projectId: "project-1" }, deps).getPeople("project-1")).resolves.toBeNull();
