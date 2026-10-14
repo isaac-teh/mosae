@@ -1024,6 +1024,8 @@ describe("Director chat", () => {
       reconcilePersonId: "kara",
       reconcilePendingPersonIds: [],
     }));
+    expect(mocks.repo.getPeople).toHaveBeenLastCalledWith("project-1", []);
+    expect(mocks.repo.getPeople).toHaveBeenCalledWith("project-1", ["split-kara"]);
     expect(chat.people?.map((person) => person.personId)).toEqual(["kara"]);
     expect(chat.state.items.some((item) => item.kind === "merge-followup")).toBe(false);
   });
