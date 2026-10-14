@@ -1252,16 +1252,21 @@ describe("Director chat", () => {
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledTimes(2));
   });
 
-  it("shows the completed film with three direction notes and opens the editor", async () => {
+  it("shows only the film actions on the completed film card and opens the editor", async () => {
     planFixture.chapters = Array.from({ length: 5 }, (_, index) => ({ id: `chapter-${index}`, title: `Chapter ${index + 1}`, momentIds: [] }));
     await openMoments();
     await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
     await click("Sounds good");
-    await waitFor(() => expect(hasText("Japan, autumn")).toBe(true));
-    expect(hasText("5 chapters")).toBe(true);
-    expect(hasText("How I directed it")).toBe(true);
-    expect(hasText("Both moments you kept are in.")).toBe(true);
+    await waitFor(() => expect(host.querySelector('button[aria-label="Open in editor"]')).toBeTruthy());
+    expect(hasText("Japan, autumn")).toBe(false);
+    expect(hasText("Play Date Adventures")).toBe(false);
+    expect(hasText("1 chapters")).toBe(false);
+    expect(hasText("5 chapters")).toBe(false);
+    expect(hasText("How I directed it")).toBe(false);
+    expect(host.querySelector('button[aria-label="Open in editor"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Save film"]')).toBeTruthy();
+    expect(hasText("Both moments you kept are in.")).toBe(false);
     expect(hasText("I left out repeated scenery shots.")).toBe(false);
     await click("Open in editor");
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", planId: "proposal-1", generationId: "film-1", request: "", repository: "api" } });
