@@ -203,9 +203,14 @@ describe("Director chat", () => {
     setTaggedPersonResult({ personId: grandpaId, name: "Grandpa", momentCount: 2, isMissed: true, sampleUri: "grandpa.jpg", sampleUris: ["grandpa.jpg"] });
     await act(async () => mocks.focusCallback?.());
     await waitFor(() => expect(hasText("Help me select photos of Grandma.")).toBe(true));
+    expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(1);
+    expect(host.querySelector('button[aria-label="Change selected photos for Grandpa"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Tap to select"]')?.parentElement?.textContent).toContain("Grandma");
     setTaggedPersonResult({ personId: grandmaId, name: "Grandma", momentCount: 3, isMissed: true, sampleUri: "grandma.jpg", sampleUris: ["grandma.jpg"] });
     await act(async () => mocks.focusCallback?.());
     await waitFor(() => expect(hasText("Thanks. I've tagged all four in your moments.")).toBe(true));
+    expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(0);
+    expect(host.querySelector('button[aria-label="Change selected photos for Grandma"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy();
     expect(mocks.repo.mutateFlow.mock.calls.filter(([, , action]: [string, string, any]) => action.type === "missed-person-completed").map(([, , action]: [string, string, any]) => action.personId)).toEqual([grandpaId, grandmaId]);
     expect([...host.querySelectorAll('[data-from="you"]')].filter((item) => item.textContent === "Grandpa and Grandma")).toHaveLength(1);
