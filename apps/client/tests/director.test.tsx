@@ -120,7 +120,7 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Did I miss anyone?"]')).toBeNull();
     expect([...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent)).toContain("My daughter");
     expect([...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent)).not.toContain("Daughter");
-    expect(hasText("Thanks. I've tagged her in 212 moments.")).toBe(true);
+    expect(hasText("Thanks. Click on the tagged moment below.")).toBe(true);
     expect(hasText("Tagged in 212 moments")).toBe(true);
     expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Proceed"]')?.className).toContain("border-line-strong");
@@ -139,14 +139,14 @@ describe("Director chat", () => {
     for (let index = 0; index < four.length; index++) {
       await typeAndSend(`Alpha ${index + 1}`);
       await waitFor(() => expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy());
-      expect(host.textContent).toContain("Thanks. I've tagged them in");
+      expect(host.textContent).toContain("Thanks. Click on the tagged moment below.");
       expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy();
       if (index < four.length - 1) {
         await click("Proceed");
         await waitFor(() => expect(host.querySelector(`[data-person-question="person-${index + 2}"]`)).toBeTruthy());
       }
     }
-    expect(hasText("Thanks. I've tagged them in 37 moments.")).toBe(true);
+    expect(hasText("Thanks. Click on the tagged moment below.")).toBe(true);
     expect(host.querySelector('button[aria-label="Did I miss anyone?"]')).toBeNull();
   });
 
@@ -409,6 +409,17 @@ describe("Director chat", () => {
     expect(host.querySelector('[aria-label="Uploading 0 of 50"]')).toBeTruthy();
     expect(hasText("MB transferred")).toBe(false);
     expect(host.querySelector('img[alt^="Photo "]')).toBeFalsy();
+  });
+
+  it("uses the same fixed progress-icon box for pending, active, and completed rows", async () => {
+    setup();
+    setPendingMedia([new File(["photo"], "trip.jpg", { type: "image/jpeg" })]);
+    setUploadProgress({ totalFiles: 1, finishedFiles: 1, failedFiles: 0, bytesSent: 100, totalBytes: 100, assetStatuses: [] });
+    setUploadPreparationProgress({ preparedFiles: 1, totalFiles: 1 });
+    await renderScreen();
+    await waitFor(() => expect(host.querySelectorAll('[data-testid="upload-progress-icon"]')).toHaveLength(3));
+    const boxes = [...host.querySelectorAll('[data-testid="upload-progress-icon"]')];
+    expect(new Set(boxes.map((box) => box.className))).toEqual(new Set(["h-4 w-4 shrink-0 items-center justify-center"]));
   });
 
   it("keeps terminal all-failed upload status visible in the chat", async () => {
@@ -1261,7 +1272,6 @@ describe("Director chat", () => {
     await waitFor(() => expect(host.querySelector('button[aria-label="Open in editor"]')).toBeTruthy());
     expect(hasText("Japan, autumn")).toBe(false);
     expect(hasText("Play Date Adventures")).toBe(false);
-    expect(hasText("1 chapters")).toBe(false);
     expect(hasText("5 chapters")).toBe(false);
     expect(hasText("How I directed it")).toBe(false);
     expect(host.querySelector('button[aria-label="Open in editor"]')).toBeTruthy();

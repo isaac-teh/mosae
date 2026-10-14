@@ -36,11 +36,11 @@ export default function TagMomentsScreen() {
       const personName = source === "missed" ? displayName : name?.trim() || null;
       const selectedMoments = moments.filter((moment) => selected.has(moment.shotId));
       const sampleUris = selectedMoments.map((moment) => moment.thumbnailUrl).filter(Boolean).slice(0, 4);
-      if (story.flow.repository !== "fixture") await savePersonMoments(projectId, personId, personName, [...selected].filter((id) => !previous.has(id)), [...previous].filter((id) => !selected.has(id)), sampleUris);
+      const savedPersonId = story.flow.repository !== "fixture" ? await savePersonMoments(projectId, personId, personName, [...selected].filter((id) => !previous.has(id)), [...previous].filter((id) => !selected.has(id)), sampleUris) ?? personId : personId;
       const sampleUri = faceUri || sampleUris[0];
-      setTaggedPersonResult({ personId, name: personName ?? "", momentCount: selected.size, isMissed: source === "missed", ...(sampleUri ? { sampleUri } : {}), ...(sampleUris.length ? { sampleUris } : {}) });
+      setTaggedPersonResult({ personId: savedPersonId, name: personName ?? "", momentCount: selected.size, isMissed: source === "missed", ...(sampleUri ? { sampleUri } : {}), ...(sampleUris.length ? { sampleUris } : {}) });
       router.back();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save these tags"); }
+    } catch { setError("We couldn't save these tags. Please try again."); }
     finally { setSaving(false); }
   };
   return <View className="flex-1 bg-ink">

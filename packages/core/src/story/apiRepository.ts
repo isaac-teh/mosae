@@ -486,7 +486,8 @@ export function createApiStoryRepository(
       const visibleGroups = [...groups.entries()].filter(([personId, group]) => includeSinglePhotoIds.has(personId) || group.shots.size >= 2 || (names.get(personId)?.manualShots as unknown[] | undefined)?.length);
       return (await Promise.all(visibleGroups.map(async ([personId, group]) => {
         const person = names.get(personId);
-        const samples = await Promise.all([...group.samples.values()].slice(0, 4).map(async ({ shotId, assetId, bbox }) => {
+        const orderedSamples = [...group.samples.values()].sort((a, b) => Number(a.bbox.join(",") === "0,0,1,1") - Number(b.bbox.join(",") === "0,0,1,1"));
+        const samples = await Promise.all(orderedSamples.slice(0, 4).map(async ({ shotId, assetId, bbox }) => {
           try { return { shotId, uri: await thumbnail(assetId), bbox }; }
           catch { return null; }
         }));

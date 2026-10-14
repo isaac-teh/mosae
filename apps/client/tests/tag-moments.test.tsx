@@ -47,4 +47,17 @@ describe("Tag moments screen", () => {
     expect(consumeTaggedPersonResult()).toMatchObject({ personId: "p-missed-1", name: "Grandpa", momentCount: 2, isMissed: true, sampleUris: ["https://thumb/1", "https://thumb/2"] });
     expect(mocks.back).toHaveBeenCalledOnce();
   });
+
+  it("shows a friendly message when cast validation rejects a gallery save", async () => {
+    mocks.savePersonMoments.mockRejectedValueOnce(new Error("invalid_cast"));
+    await act(async () => root.render(<TagMomentsScreen />));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    const tag = host.querySelector('button[aria-label="Tag moment"]');
+    await act(async () => { tag!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    const done = [...host.querySelectorAll("button")].find((button) => button.textContent === "Done");
+    await act(async () => { done!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    expect(host.textContent).toContain("We couldn't save these tags. Please try again.");
+    expect(host.textContent).not.toContain("invalid_cast");
+    expect(mocks.back).not.toHaveBeenCalled();
+  });
 });

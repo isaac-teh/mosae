@@ -337,9 +337,10 @@ export default function DirectorScreen() {
           const segmentRow = <View className="flex-row gap-1">{Array.from({ length: 10 }, (_, index) => index === activeSegment
             ? <PulsingSegment key={index} reducedMotion={reducedMotion} />
             : <View key={index} testID="upload-progress-segment" className={`h-1.5 flex-1 rounded-pill ${index < filledSegments ? "bg-ink-muted" : "bg-line"}`} />)}</View>;
-          const progressIcon = (done: boolean, active: boolean) => done
-            ? <Text className="font-sans text-caption text-ink-muted">✓</Text>
-            : active ? <UploadSpinner reducedMotion={reducedMotion} /> : <Text className="font-sans text-caption text-ink-muted">○</Text>;
+          const progressIcon = (done: boolean, active: boolean) => <View testID="upload-progress-icon" className="h-4 w-4 shrink-0 items-center justify-center">
+            {done ? <Text className="font-sans text-caption text-ink-muted">✓</Text>
+              : active ? <UploadSpinner reducedMotion={reducedMotion} /> : <Text className="font-sans text-caption text-ink-muted">○</Text>}
+          </View>;
           const subject = item.photos && item.clips ? "photos and clips" : item.photos ? `photo${item.photos === 1 ? "" : "s"}` : `clip${item.clips === 1 ? "" : "s"}`;
           return <Fragment key={item.id}><View accessibilityRole="progressbar" aria-label={`Uploading ${item.uploadDone} of ${item.uploadTotal}`} className="gap-3 rounded-md bg-surface-sunken p-3">
             {segmentRow}
@@ -397,7 +398,7 @@ export default function DirectorScreen() {
           {item.turns?.map((turn, index) => <View key={`${item.personId}-turn-${index}`} className="gap-2"><ChatMessage from="you" text={turn.question} />{turn.reply ? <ChatMessage from="mosae" text={turn.reply} /> : null}</View>)}
         </View>;
         if (item.kind === "person-tagged") return <View key={item.id} className="gap-3">
-          <ChatMessage from="mosae" text={`Thanks. I've tagged ${item.pronoun} in ${item.momentCount} ${item.momentCount === 1 ? "moment" : "moments"}.`} />
+          <ChatMessage from="mosae" text="Thanks. Click on the tagged moment below." />
           <Pressable role="button" accessibilityLabel={`Review ${item.name}`} onPress={() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: item.personId, name: item.name } } as any)} className="flex-row items-center gap-3 rounded-md border border-line bg-surface-raised p-3">
             {item.sampleFace ? <FacePreviewStrip samples={[item.sampleFace]} limit={1} size={48} rounded /> : <View className="size-12 rounded-full bg-surface-sunken" />}
             <View className="flex-1"><Text className="font-sans-semibold text-label text-ink">{item.name}</Text><Text className="font-sans text-caption text-ink-muted">Tagged in {item.momentCount} {item.momentCount === 1 ? "moment" : "moments"}</Text></View><Text className="text-heading text-ink-muted">›</Text>

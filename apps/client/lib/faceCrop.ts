@@ -26,7 +26,7 @@ export function imageSizeFromLoadEvent(event: unknown): { width: number; height:
  * 30% padding on each side of the face box and is calculated in source pixels,
  * so portrait and landscape thumbnails keep their natural aspect ratio.
  */
-export function faceCropGeometry(bbox: FaceBbox, sourceWidth: number, sourceHeight: number, size: number): FaceCropGeometry {
+export function faceCropGeometry(bbox: FaceBbox, sourceWidth: number, sourceHeight: number, size: number, paddingScale = 1.6): FaceCropGeometry {
   const [ymin, xmin, ymax, xmax] = normalizeFaceBbox(bbox);
   const width = Math.max(1, sourceWidth);
   const height = Math.max(1, sourceHeight);
@@ -34,8 +34,7 @@ export function faceCropGeometry(bbox: FaceBbox, sourceWidth: number, sourceHeig
   const centerY = ((ymin + ymax) / 2) * height;
   const faceWidth = Math.max((xmax - xmin) * width, 1);
   const faceHeight = Math.max((ymax - ymin) * height, 1);
-  // 1.6 gives 30% of the face-box dimension on all four sides.
-  const cropSide = Math.min(Math.max(faceWidth, faceHeight) * 1.6, width, height);
+  const cropSide = Math.min(Math.max(faceWidth, faceHeight) * paddingScale, width, height);
   const half = cropSide / 2;
   const cx = width >= cropSide ? Math.max(half, Math.min(width - half, centerX)) : width / 2;
   const cy = height >= cropSide ? Math.max(half, Math.min(height - half, centerY)) : height / 2;

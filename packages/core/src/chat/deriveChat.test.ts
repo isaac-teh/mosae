@@ -731,6 +731,32 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.id === "people-summary-message")).toMatchObject({ text: "Thanks. I've tagged all three in your moments." });
   });
 
+  it("waits for the final tagged card Proceed and missed-people answer before summarizing", () => {
+    const people = [
+      { personId: "p1", name: "Kara", role: "child", skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
+      { personId: "p2", name: "Chloe", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
+    ];
+    const flow = {
+      revision: 23,
+      story: { answer: "Our trip", storySummary: "Trip", mentionedPeople: [] },
+      people: people.map((person) => ({ ...person, confirmed: true, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })),
+      peopleProgress: { completedPersonIds: ["p1"] },
+      missedPeopleConfirmed: false,
+    };
+    const beforeProceed = deriveChat({ ...base(), people, peopleConfirmed: false, proceededPersonIds: ["p1"], flow });
+    expect(beforeProceed.items.filter((item) => item.kind === "person-tagged").find((item) => item.kind === "person-tagged" && item.personId === "p2")).toMatchObject({ personId: "p2", name: "Chloe", canProceed: true });
+    expect(beforeProceed.items.some((item) => item.kind === "anyone-else" || item.kind === "people-summary")).toBe(false);
+
+    const afterProceed = deriveChat({ ...base(), people, peopleConfirmed: true, proceededPersonIds: ["p1", "p2"],
+      flow: { ...flow, peopleProgress: { completedPersonIds: ["p1", "p2"] } } });
+    expect(afterProceed.items.some((item) => item.kind === "anyone-else")).toBe(true);
+    expect(afterProceed.items.some((item) => item.kind === "people-summary")).toBe(false);
+
+    const afterAnswer = deriveChat({ ...base(), people, peopleConfirmed: true, proceededPersonIds: ["p1", "p2"],
+      flow: { ...flow, peopleProgress: { completedPersonIds: ["p1", "p2"] }, missedPeopleConfirmed: true } });
+    expect(afterAnswer.items.some((item) => item.kind === "people-summary")).toBe(true);
+  });
+
   it("does not count an automatically reconciled face cluster as another person", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "kara", name: "Kara", role: "parent", skipped: false, momentCount: 8, sampleShotIds: [], days: [] }], peopleConfirmed: true, peopleSummaryConfirmed: false,
       missedPeopleConfirmed: true, missedPeople: [], mergeEvents: [
