@@ -729,7 +729,14 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const focusLabel = focus.label;
         const direction: Direction & { focus: string } = { note: `${directionOptions?.note ?? ""}${directionOptions?.note ? "\n" : ""}Focus: ${focusLabel}.`, cadenceId: directionSelection.cadenceId, soundtrackId: directionSelection.soundtrackId, soundtrackExplicit: directionSelection.soundtrackExplicit, durationId: directionSelection.durationId, ...(directionSelection.durationId === "short" ? { durationSec: directionSelection.durationSec } : {}), focus: focus.selected, collageAmount: directionSelection.collageAmount, motionFeel: directionSelection.motionFeel, aspect: effectiveAspect };
         compositionStartedAt.current = Date.now();
-        setInput((current) => ({ ...current, direction: current.direction ? { ...current.direction, confirmed: true } : current.direction }));
+        setInput((current) => ({ ...current, direction: current.direction ? {
+          ...current.direction,
+          confirmed: true,
+          pace: /gentle|reflective/i.test(directionSelection.cadenceId) ? "gentle" : "lively",
+          focus: focus.selected,
+          collageAmount: directionSelection.collageAmount,
+          aspect: effectiveAspect,
+        } : current.direction }));
         let latestSummary = input.summary;
         const pendingVideos = () => latestSummary?.videoStatuses?.filter((video) => video.status === "processing") ?? [];
         const waitingVideoCount = pendingVideos().length;

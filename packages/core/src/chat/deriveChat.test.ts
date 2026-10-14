@@ -756,26 +756,37 @@ describe("deriveChat state table", () => {
       ...base(),
       people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }],
       momentsConfirmed: true,
-      direction: { confirmed: true, aspect: "16:9", pace: "lively", lengthSec: 30, focus: "family", collageAmount: "few", motionFeel: "calm" },
+      direction: { confirmed: true, aspect: "9:16", pace: "lively", lengthSec: 30, focus: "p1", collageAmount: "few", motionFeel: "calm" },
     });
     expect(state.items.filter((item) => item.kind === "you" && item.id === "direction-answer")).toEqual([
-      { kind: "you", id: "direction-answer", text: "Format: Landscape\nPace: Lively\nLength: 30 sec\nFocus: Everyone\nCollages: A few\nMotion: Calm" },
+      { kind: "you", id: "direction-answer", text: "Orientation: Portrait\nPace: Lively\nFocus: Mia\nCollage: A few" },
     ]);
   });
 
-  it("only shows settings rows present on the direction card", () => {
-    const state = deriveChat({ ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 60, focus: "family" } });
+  it("summarizes multiple selected focus people and ignores legacy length and motion", () => {
+    const state = deriveChat({
+      ...base(),
+      people: [
+        { personId: "p1", name: "Jamie", role: null, skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
+        { personId: "p2", name: "Zx", role: null, skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
+      ],
+      momentsConfirmed: true,
+      direction: { confirmed: true, aspect: "16:9", pace: "lively", lengthSec: 30, focus: "p1,p2", collageAmount: "lots", motionFeel: "playful" },
+    });
     expect(state.items.find((item) => item.kind === "you" && item.id === "direction-answer")).toMatchObject({
-      text: "Pace: Gentle\nLength: 60 sec\nFocus: The moments",
+      text: "Orientation: Landscape\nPace: Lively\nFocus: Jamie, Zx\nCollage: Lots",
     });
   });
 
-  it("includes newly added direction fields in the saved answer", () => {
-    const state = deriveChat({ ...base(), momentsConfirmed: true, direction: {
-      confirmed: true, pace: "gentle", lengthSec: 60, focus: "family", visualStyle: "film grain",
-    } as ChatInput["direction"] });
+  it("uses Everyone when focus is set to the whole cast", () => {
+    const state = deriveChat({
+      ...base(),
+      people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }],
+      momentsConfirmed: true,
+      direction: { confirmed: true, pace: "gentle", lengthSec: 60, focus: "family", collageAmount: "none" },
+    });
     expect(state.items.find((item) => item.kind === "you" && item.id === "direction-answer")).toMatchObject({
-      text: "Pace: Gentle\nLength: 60 sec\nFocus: The moments\nVisual Style: Film grain",
+      text: "Pace: Calm\nFocus: Everyone\nCollage: None",
     });
   });
 

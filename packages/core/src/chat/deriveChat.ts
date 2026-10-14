@@ -99,22 +99,14 @@ function mentionedPerson(text: string, people: NonNullable<ChatInput["people"]>,
 function directionAnswer(input: ChatInput): string {
   const direction = input.direction!;
   const focus = directionFocus(input.people, direction.focus, true).label;
-  const labels: Record<string, string> = { aspect: "Format", pace: "Pace", lengthSec: "Length", focus: "Focus", collageAmount: "Collages", motionFeel: "Motion" };
-  const words = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (first) => first.toUpperCase());
-  const displayValue = (key: string, value: unknown) => {
-    if (key === "aspect") return value === "16:9" ? "Landscape" : "Portrait";
-    if (key === "pace") return value === "lively" ? "Lively" : "Gentle";
-    if (key === "lengthSec") return `${value} sec`;
-    if (key === "focus") return focus;
-    if (key === "collageAmount") return value === "lots" ? "Lots" : value === "none" ? "None" : "A few";
-    if (key === "motionFeel") return value === "playful" ? "Playful" : "Calm";
-    if (typeof value === "string") return words(value);
-    return String(value);
-  };
-  return Object.entries(direction)
-    .filter(([key, value]) => key !== "confirmed" && value !== undefined && value !== null)
-    .map(([key, value]) => `${labels[key] ?? words(key)}: ${displayValue(key, value)}`)
-    .join("\n");
+  const orientation = direction.aspect ?? input.summary?.orientation?.suggested;
+  const rows = [
+    orientation ? `Orientation: ${orientation === "16:9" ? "Landscape" : "Portrait"}` : null,
+    direction.pace ? `Pace: ${direction.pace === "lively" ? "Lively" : "Calm"}` : null,
+    direction.focus ? `Focus: ${focus}` : null,
+    direction.collageAmount ? `Collage: ${direction.collageAmount === "lots" ? "Lots" : direction.collageAmount === "none" ? "None" : "A few"}` : null,
+  ];
+  return rows.filter((row): row is string => row !== null).join("\n");
 }
 
 export function getSetAsideSummary(plan: ChatInput["plan"]) {
