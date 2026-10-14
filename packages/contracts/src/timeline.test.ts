@@ -59,7 +59,7 @@ describe("TimelineSchema", () => {
       legacy("design-magazine", "print-drop", 1),
       legacy("design-film-strip", "print-drop", 2),
     ] });
-    expect(migrated.videoClips.map((clip) => clip.kind === "collage" ? [clip.spec.layoutId, clip.spec.motionId] : null)).toEqual([
+    expect(migrated.videoClips.map((clip) => "kind" in clip && clip.kind === "collage" ? [clip.spec.layoutId, clip.spec.motionId] : null)).toEqual([
       ["polaroid-garland", "page-turn"], ["travel-story", "focus-relay"], ["postcard-stack", "stack-deal"],
       ["botanical-scrapbook", "tape-slap"], ["simple-full", "print-drop"], ["simple-stacked", "print-drop"],
     ]);
