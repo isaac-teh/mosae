@@ -44,7 +44,7 @@ describe("Tag moments screen", () => {
     expect(done).toBeTruthy();
     await act(async () => { done!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     expect(mocks.savePersonMoments).toHaveBeenCalledWith("project-1", "p-missed-1", "Grandpa", ["shot-1", "shot-2"], [], ["https://thumb/1", "https://thumb/2"]);
-    expect(consumeTaggedPersonResult()).toMatchObject({ personId: "p-missed-1", name: "Grandpa", momentCount: 2, isMissed: true, sampleUris: ["https://thumb/1", "https://thumb/2"] });
+    expect(consumeTaggedPersonResult()).toMatchObject({ personId: "p-missed-1", name: "Grandpa", momentCount: 2, isMissed: true, shotIds: ["shot-1", "shot-2"], sampleUris: ["https://thumb/1", "https://thumb/2"] });
     expect(mocks.back).toHaveBeenCalledOnce();
   });
 

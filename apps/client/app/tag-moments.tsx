@@ -38,7 +38,7 @@ export default function TagMomentsScreen() {
       const sampleUris = selectedMoments.map((moment) => moment.thumbnailUrl).filter(Boolean).slice(0, 4);
       const savedPersonId = story.flow.repository !== "fixture" ? await savePersonMoments(projectId, personId, personName, [...selected].filter((id) => !previous.has(id)), [...previous].filter((id) => !selected.has(id)), sampleUris) ?? personId : personId;
       const sampleUri = faceUri || sampleUris[0];
-      setTaggedPersonResult({ personId: savedPersonId, name: personName ?? "", momentCount: selected.size, isMissed: source === "missed", ...(sampleUri ? { sampleUri } : {}), ...(sampleUris.length ? { sampleUris } : {}) });
+      setTaggedPersonResult({ personId: savedPersonId, name: personName ?? "", momentCount: selected.size, isMissed: source === "missed", shotIds: [...selected], ...(sampleUri ? { sampleUri } : {}), ...(sampleUris.length ? { sampleUris } : {}) });
       router.back();
     } catch { setError("We couldn't save these tags. Please try again."); }
     finally { setSaving(false); }

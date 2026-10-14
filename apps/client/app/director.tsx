@@ -138,7 +138,7 @@ export default function DirectorScreen() {
     const result = consumeTaggedPersonResult();
     if (!result) return;
     if (result.isMissed) void tagActions.current.completeMissedPerson(result.personId, result.name ?? "", result.momentCount, result.sampleUri, result.sampleUris);
-    else tagActions.current.updatePersonTagCount(result.personId, result.momentCount, result.sampleUri, result.name);
+    else tagActions.current.updatePersonTagCount(result.personId, result.momentCount, result.sampleUri, result.name, result.shotIds);
   }, []));
   useEffect(() => {
     if (!params.completedPersonId) return;

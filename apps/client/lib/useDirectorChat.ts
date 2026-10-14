@@ -675,12 +675,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const next = missedPeople.find((person) => !person.skipped && person.momentCount === 0);
       setInput((current) => ({ ...current, missedPeople, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null }));
     },
-    updatePersonTagCount(personId: string, momentCount: number, sampleUri?: string, name?: string | null) {
+    updatePersonTagCount(personId: string, momentCount: number, sampleUri?: string, name?: string | null, shotIds?: string[]) {
       const person = input.people?.find((entry) => entry.personId === personId);
       if (sampleUri) taggedPersonRef.current = { personId, name: person?.name ?? (name === "this person" ? "" : name ?? ""), photos: [sampleUri] };
       // The selected grid image is a scene thumbnail, so preserve the face
       // crops on the original person question in chat history.
-      setInput((current) => ({ ...current, ...(taggedPersonRef.current ? { taggedPerson: taggedPersonRef.current } : {}), people: (current.people ?? []).map((entry) => entry.personId === personId ? { ...entry, momentCount } : entry) }));
+      setInput((current) => ({ ...current, ...(taggedPersonRef.current ? { taggedPerson: taggedPersonRef.current } : {}), people: (current.people ?? []).map((entry) => entry.personId === personId ? { ...entry, momentCount, ...(shotIds ? { shotIds: [...shotIds], sampleShotIds: [...entry.sampleShotIds] } : {}) } : entry) }));
     },
     beginMissedPersonTagging(personId: string, name: string) { setInput((current) => ({ ...current, missedPersonTagging: { personId, name } })); },
     async confirmPeopleSummary() {

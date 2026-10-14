@@ -3,6 +3,7 @@ export type TaggedPersonResult = {
   name: string | null;
   momentCount: number;
   isMissed: boolean;
+  shotIds?: string[];
   sampleUri?: string;
   sampleUris?: string[];
 };
