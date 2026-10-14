@@ -24,8 +24,21 @@ function peopleIntroCount(people: { personId: string }[], mergeEvents: NonNullab
   return people.length + mergeEvents.filter(({ personId }) => !present.has(personId)).length;
 }
 
-function announcedPeople(people: NonNullable<ChatInput["people"]>, photos: number) {
-  return mainPeople(people.filter((person) => !person.personId.startsWith("p-missed-")), photos);
+function keptPeople(input: ChatInput) {
+  const culled = new Set((input.plan?.leftOut ?? []).filter(({ reason }) => /blur|soft focus|duplicat|similar|same burst/i.test(reason)).map(({ shotId }) => shotId));
+  return (input.people ?? []).filter((person) => !person.personId.startsWith("p-missed-")).map((person) => {
+    if (!person.shotIds) return person; // Old flows did not retain the per-shot cluster membership.
+    const shotIds = person.shotIds.filter((shotId) => !culled.has(shotId));
+    return { ...person, momentCount: shotIds.length, shotIds, sampleShotIds: person.sampleShotIds.filter((shotId) => !culled.has(shotId)), sampleFaces: person.sampleFaces?.filter((face) => !culled.has(face.shotId)) };
+  }).filter((person) => person.momentCount > 0);
+}
+
+function announcedPeople(input: ChatInput) {
+  const people = keptPeople(input);
+  const culled = new Set((input.plan?.leftOut ?? []).filter(({ reason }) => /blur|soft focus|duplicat|similar|same burst/i.test(reason)).map(({ shotId }) => shotId));
+  const culledPhotoCount = culled.size;
+  const keptPhotoCount = Math.max(0, (input.summary?.photos ?? 0) - culledPhotoCount);
+  return mainPeople(people, keptPhotoCount);
 }
 
 function orderByProgress<T extends { momentCount: number; personId: string }>(entries: T[], input: ChatInput): T[] {
@@ -259,7 +272,7 @@ export function deriveChat(input: ChatInput): ChatState {
   const facesReady = facesComplete;
   const completedPersonIds = input.proceededPersonIds ?? input.flow?.peopleProgress?.completedPersonIds;
   const missedPersonIds = new Set((input.missedPeople ?? []).map(({ personId }) => personId));
-  const allNamedPeopleProceeded = completedPersonIds === undefined || announcedPeople(input.people ?? [], input.summary?.photos ?? 0).filter((person) => !missedPersonIds.has(person.personId)).every((person) => person.skipped || !person.name || completedPersonIds.includes(person.personId));
+  const allNamedPeopleProceeded = completedPersonIds === undefined || announcedPeople(input).filter((person) => !missedPersonIds.has(person.personId)).every((person) => person.skipped || !person.name || completedPersonIds.includes(person.personId));
   const peopleResolved = input.peopleConfirmed && allNamedPeopleProceeded || (facesReady && input.people?.length === 0);
   if (!peopleResolved) {
     step = "people";
@@ -268,7 +281,7 @@ export function deriveChat(input: ChatInput): ChatState {
       return { items, step, confirmed, placeholder };
     }
 
-    const people = announcedPeople(input.people ?? [], input.summary?.photos ?? 0);
+    const people = announcedPeople(input);
     const mergeEvents = input.mergeEvents ?? [];
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const introCount = peopleIntroCount(people, mergeEvents);
@@ -361,14 +374,14 @@ export function deriveChat(input: ChatInput): ChatState {
   const mergeEvents = input.mergeEvents ?? [];
   if (showPeopleSummary) {
     step = "people";
-    const people = announcedPeople(input.people ?? [], input.summary?.photos ?? 0);
+    const people = announcedPeople(input);
     const introCount = peopleIntroCount(people, mergeEvents);
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const countLabel = countWords[introCount] ?? String(introCount);
     add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments.` });
   }
   if (input.peopleConfirmed && input.peopleSummaryConfirmed === true) {
-    const historyPeople = announcedPeople(input.people ?? [], input.summary?.photos ?? 0);
+    const historyPeople = announcedPeople(input);
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const count = peopleIntroCount(historyPeople, mergeEvents);
     const label = countWords[count] ?? String(count);
@@ -392,7 +405,7 @@ export function deriveChat(input: ChatInput): ChatState {
       add({ kind: "missed-person", id: `missed-tag-${input.missedPersonTagging.personId}`, ...input.missedPersonTagging, momentCount: 0, photos: [] });
     }
   };
-  const people = announcedPeople(input.people ?? [], input.summary?.photos ?? 0);
+  const people = announcedPeople(input);
   if ((collectingMissedPeople || taggingMissedPeople) && !showPeopleSummary) {
     const introCount = peopleIntroCount(people, mergeEvents);
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
@@ -440,7 +453,7 @@ export function deriveChat(input: ChatInput): ChatState {
     // Keep the single missed-people question before the names and photo-selection
     // turns in the reconstructed transcript, then place the final summary after them.
     addMissedPeople(true, false);
-    const announced = (input.people ?? []).filter((person) => !person.personId.startsWith("p-missed-") && !person.skipped && person.name)
+    const announced = keptPeople(input).filter((person) => !person.skipped && person.name)
       .sort((a, b) => b.momentCount - a.momentCount);
     const peopleById = new Map(announced.map((person) => [person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri, sampleFace: person.sampleFaces?.[0] }]));
     const taggedMissed = (input.people ?? []).filter((person) => person.personId.startsWith("p-missed-") && !person.skipped && person.name && person.momentCount > 0);
@@ -479,7 +492,7 @@ export function deriveChat(input: ChatInput): ChatState {
   }
 
   if (hasPhotosToReview) {
-    add({ kind: "mosae", id: "set-aside-message", text: `I've set aside ${setAside.blurry} blurry ${setAside.blurry === 1 ? "shot" : "shots"} and ${setAside.duplicates} near-duplicate${setAside.duplicates === 1 ? "" : "s"}, keeping the best of each burst. Your originals are untouched.` });
+    add({ kind: "mosae", id: "set-aside-message", text: `Got it. I've set aside ${setAside.blurry} blurry ${setAside.blurry === 1 ? "shot" : "shots"} and ${setAside.duplicates} near-duplicate${setAside.duplicates === 1 ? "" : "s"}, keeping the best of each burst. Your originals are untouched.` });
     add({ kind: "you", id: "moments-answer", text: "Looks good" });
   }
   confirmed = 3;

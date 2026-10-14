@@ -1001,7 +1001,7 @@ describe("Director chat", () => {
 
   it("shows filtered-photo counts and opens the existing full review list", async () => {
     await openMoments();
-    expect(hasText("I've set aside 1 blurry shot and 120 near-duplicates, keeping the best of each burst. Your originals are untouched.")).toBe(true);
+    expect(hasText("Got it. I've set aside 1 blurry shot and 120 near-duplicates, keeping the best of each burst. Your originals are untouched.")).toBe(true);
     expect(host.querySelector('[aria-label="Filtered photos"]')).not.toBeNull();
     expect(host.querySelector('img[alt="Blurry photo"]')).not.toBeNull();
     await click("+116");

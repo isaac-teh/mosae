@@ -266,7 +266,7 @@ describe("createApiStoryRepository", () => {
     await expect(repository.getPeople("project-1")).resolves.toEqual([{ personId: "char-1", name: "Mia", role: "child", ageBand: "teen", momentCount: 2, sampleShotIds: ["shot-1", "shot-2"], sampleFaces: [
       { shotId: "shot-1", uri: "https://storage.test/project-1/asset-1?signed=true", bbox: [0.1, 0.2, 0.4, 0.5] },
       { shotId: "shot-2", uri: "https://storage.test/project-1/asset-2?signed=true", bbox: [0.3, 0.4, 0.7, 0.8] },
-    ], days: [1] }]);
+    ], shotIds: ["shot-1", "shot-2"], days: [1] }]);
     expect(deps.getThumbnailUrl).toHaveBeenCalledWith("project-1", "asset-1");
     expect(deps.getThumbnailUrl).toHaveBeenCalledWith("project-1", "asset-2");
   });
