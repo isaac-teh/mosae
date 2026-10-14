@@ -2,11 +2,11 @@
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 assert_command gcloud
-if [[ "$ENV" != dev ]]; then echo 'The ArcFace service is enabled for dev only in this release.' >&2; exit 2; fi
+if [[ "$ENV" != dev ]]; then echo 'Skipping optional ArcFace service outside dev.'; exit 0; fi
 image="$(image_tag mosae-face)"
 run gcloud builds submit "$ROOT_DIR/services/face" --project "$PROJECT_ID" --tag "$image"
 run gcloud run deploy mosae-face --project "$PROJECT_ID" --region "$REGION" --image "$image" \
-  --service-account "$API_SA" --cpu 2 --memory 2Gi --concurrency 4 --max-instances 5 --timeout 300 \
+  --service-account "$FACE_SA" --cpu 2 --memory 2Gi --concurrency 4 --max-instances 5 --timeout 300 \
   --no-allow-unauthenticated --port 8080 --set-env-vars "MODEL_VERSION=arcface-buffalo_l-v1"
 run gcloud run services add-iam-policy-binding mosae-face --project "$PROJECT_ID" --region "$REGION" \
   --member "serviceAccount:$API_SA" --role roles/run.invoker --quiet

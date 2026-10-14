@@ -8,7 +8,7 @@ export type Config = {
   invokerEmails: string[];
   allowedOrigins: string[];
   geminiApiKey: string;
-  faceMatchThreshold: number;
+  faceMatchThresholds: Record<string, number>;
   /** Base URL of the `mosae-render` Cloud Run service. */
   renderServiceUrl: string;
   tasks: { project: string; location: string; queue: string; invokerServiceAccount: string } | null;
@@ -26,10 +26,11 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
 
 const TASK_KEYS = ["GCP_PROJECT_ID", "TASKS_LOCATION", "TASKS_QUEUE", "TASKS_INVOKER_SERVICE_ACCOUNT"] as const;
 
-export function faceMatchingThresholds(env: NodeJS.ProcessEnv = process.env): Pick<Config, "faceMatchThreshold"> {
-  return {
-    faceMatchThreshold: Number(env.FACE_MATCH_THRESHOLD ?? 0.35),
-  };
+export function faceMatchingThresholds(env: NodeJS.ProcessEnv = process.env): Pick<Config, "faceMatchThresholds"> {
+  return { faceMatchThresholds: {
+    "arcface-buffalo_l-v1": Number(env.ARCFACE_MATCH_THRESHOLD ?? 0.35),
+    "gemini-embedding-2": Number(env.GEMINI_FACE_MATCH_THRESHOLD ?? 0.85),
+  } };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {

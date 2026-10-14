@@ -27,6 +27,7 @@ fi
 API_SA="mosae-api-sa@$PROJECT_ID.iam.gserviceaccount.com"
 # shellcheck disable=SC2034
 RENDER_SA="mosae-render-sa@$PROJECT_ID.iam.gserviceaccount.com"
+FACE_SA="mosae-face-sa@$PROJECT_ID.iam.gserviceaccount.com"
 # shellcheck disable=SC2034
 INVOKER_SA="mosae-tasks-invoker@$PROJECT_ID.iam.gserviceaccount.com"
 IMAGE_BASE="$REGION-docker.pkg.dev/$PROJECT_ID/$ARTIFACT_REPO"

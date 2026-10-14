@@ -107,6 +107,26 @@ describe("understandAsset", () => {
     expect(deps.embedImageContent).not.toHaveBeenCalled();
   });
 
+  it("marks ArcFace failures pending without mixing in Gemini face vectors", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "understand-arcface-pending-"));
+    const jpeg = await sharp({ create: { width: 500, height: 300, channels: 3, background: "#68a5c2" } }).jpeg().toBuffer();
+    const analysisWithFaces = { ...photoAnalysis, faces: [{ faceId: "gemini-face", bbox: [0.1, 0.1, 0.5, 0.5] as [number, number, number, number], confidence: 0.99, prominence: "primary" as const }] };
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const deps = setup(photoAsset, {
+      makeWorkDir: vi.fn().mockResolvedValue(dir), removeWorkDir: vi.fn(async (workDir) => rm(workDir, { recursive: true, force: true })),
+      objects: { download: vi.fn(), upload: vi.fn(), downloadCurrent: vi.fn(async ({ destination }) => writeFile(destination, jpeg)) },
+      analyzePhoto: vi.fn().mockResolvedValue(analysisWithFaces), faceService: vi.fn().mockRejectedValue(new Error("face service failed: 503")),
+    });
+    try {
+      await expect(understandAsset(deps, task)).resolves.toBe("understood");
+      const shot = vi.mocked(deps.commitUnderstood).mock.calls[0]?.[0].shots[0]!;
+      expect(shot.faceEmbeddingModel).toBe("pending");
+      expect(shot.faceEmbeddings).toBeUndefined();
+      expect(deps.embedImageContent).not.toHaveBeenCalled();
+      expect(errorLog).toHaveBeenCalled();
+    } finally { errorLog.mockRestore(); }
+  });
+
   it("keeps the asset understood when one face embedding fails", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "understand-face-failure-"));
     const jpeg = await sharp({ create: { width: 500, height: 300, channels: 3, background: "#68a5c2" } }).jpeg().toBuffer();

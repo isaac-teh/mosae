@@ -41,20 +41,21 @@ async function understandOriginal(deps: UnderstandDeps, asset: Asset, shots: Sho
         const result = await timed(deps, timings, "faceEmbedMs", async () => deps.faceService!(await sharp(renderPath).jpeg({ quality: 92 }).toBuffer()));
         const original = analysis.faces ?? [];
         const assigned = new Set<number>();
-        const normalized = result.map((face, index) => {
+        const ordered = [...result].sort((a, b) => a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0]);
+        const normalized = ordered.map((face, index) => {
           const best = original.map((candidate, i) => ({ i, score: boxIou(face.bbox, candidate.bbox) })).filter(({ i }) => !assigned.has(i)).sort((a, b) => b.score - a.score)[0];
           const metadata = best && best.score >= 0.08 ? original[best.i] : undefined;
           if (metadata && best) assigned.add(best.i);
           const faceId = `${shots[0]!.id}-${index}`;
-          return { faceId, bbox: face.bbox, confidence: face.detScore, ...(metadata ? { ageBand: metadata.ageBand, appearance: metadata.appearance, prominence: metadata.prominence, expression: metadata.expression, lookingAtCamera: metadata.lookingAtCamera, faceVisible: metadata.faceVisible } : {}) };
+          return { faceId, bbox: face.bbox, confidence: face.detScore, ...(metadata ? { ageBand: metadata.ageBand, appearance: metadata.appearance, prominence: metadata.prominence, expression: metadata.expression, lookingAtCamera: metadata.lookingAtCamera, faceVisible: metadata.faceVisible } : { prominence: "background" as const }) };
         }).sort((a, b) => a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0]);
         // Stable IDs follow the sorted boxes; reorder vectors by those same sorted boxes.
-        const ordered = [...result].sort((a, b) => a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0]);
         analysis.faces = normalized;
         faceEmbeddings = Object.fromEntries(normalized.map((face, i) => [face.faceId, ordered[i]!.embedding]));
         faceEmbeddingModel = FACE_EMBEDDING_MODEL;
       } catch (error) {
-        console.warn("ArcFace extraction failed; retaining Gemini face metadata without identity vectors", error);
+        console.error("ArcFace extraction failed; marking face embeddings pending for reprocessing", { projectId: asset.projectId, assetId: asset.id, error });
+        faceEmbeddingModel = "pending";
       }
     }
     if (!faceEmbeddingModel && analysis.faces?.length) {
@@ -68,7 +69,7 @@ async function understandOriginal(deps: UnderstandDeps, asset: Asset, shots: Sho
       });
       if (faceEmbeddings) faceEmbeddingModel = "gemini-embedding-2";
     }
-    return commit(deps, asset, [{ shotId: shots[0].id, analysis, embedding: embedded[0]?.embedding ?? null, ...(faceEmbeddings ? { faceEmbeddings, faceEmbeddingModel } : {}) }], null, timings);
+    return commit(deps, asset, [{ shotId: shots[0].id, analysis, embedding: embedded[0]?.embedding ?? null, ...(faceEmbeddingModel ? { faceEmbeddingModel, ...(faceEmbeddings ? { faceEmbeddings } : {}) } : {}) }], null, timings);
   }
   if (!asset.derivatives?.proxyPath) throw new PermanentIngestError("missing_derivatives");
   const proxyPath = path.join(workDir, "proxy.mp4"); const file = await timed(deps, timings, "downloadMs", async () => { await deps.objects.downloadCurrent({ path: asset.derivatives!.proxyPath!, destination: proxyPath }); return deps.uploadVideoFile(proxyPath); });
