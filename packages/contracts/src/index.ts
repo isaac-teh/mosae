@@ -1,5 +1,6 @@
 export {
   TimelineSchema,
+  LEGACY_DESIGN_MAPPINGS,
   CollageClipSchema,
   collageShotIds,
   VideoClipSchema,
