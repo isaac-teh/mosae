@@ -134,8 +134,12 @@ export function deriveChat(input: ChatInput): ChatState {
   if (input.flow?.missedPeople?.length) input = { ...input,
     missedPeople: input.flow.missedPeople.map((person) => {
       const stored = input.flow!.people.find((entry) => entry.personId === person.personId);
-      return { personId: person.personId, name: person.name, momentCount: stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0,
-        ...(person.samplePhotoUris ? { sampleUris: person.samplePhotoUris } : {}), ...(person.skipped ? { skipped: true } : {}) };
+      const local = input.missedPeople?.find((entry) => entry.personId === person.personId);
+      const storedCount = stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0;
+      const momentCount = Math.max(storedCount, local?.momentCount ?? 0);
+      const sampleUris = person.samplePhotoUris?.length ? person.samplePhotoUris : local?.sampleUris;
+      return { personId: person.personId, name: person.name, momentCount,
+        ...(sampleUris?.length ? { sampleUris } : {}), ...(person.skipped || local?.skipped ? { skipped: true } : {}) };
     }),
   };
   if (input.flow?.missedPeopleConfirmed !== undefined) input = { ...input, missedPeopleConfirmed: input.flow.missedPeopleConfirmed };

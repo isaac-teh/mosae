@@ -203,7 +203,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     if (acceptedFlow) setInput((current) => {
       const missedPeople = acceptedFlow.missedPeople?.length ? acceptedFlow.missedPeople.map((person) => {
         const stored = acceptedFlow.people.find((entry) => entry.personId === person.personId);
-        return { ...person, momentCount: stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0, ...(stored?.samplePhotoUris ? { sampleUris: stored.samplePhotoUris } : {}) };
+        const local = current.missedPeople?.find((entry) => entry.personId === person.personId);
+        const storedCount = stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0;
+        const sampleUris = stored?.samplePhotoUris?.length ? stored.samplePhotoUris : local?.sampleUris;
+        return { ...person, momentCount: Math.max(storedCount, local?.momentCount ?? 0), ...(sampleUris?.length ? { sampleUris } : {}), ...(local?.skipped ? { skipped: true } : {}) };
       }) : current.missedPeople;
       const nextMissedPerson = missedPeople?.find((person) => !person.skipped && person.momentCount === 0);
       const historyTurns = acceptedFlow.missedClarifications?.map((turn) => ({ ...turn, stage: "missed" as const })) ?? current.interpTurns?.filter((turn) => turn.stage === "missed") ?? [];

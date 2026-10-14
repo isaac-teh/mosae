@@ -246,6 +246,23 @@ describe("deriveChat state table", () => {
       ...missed.map(({ personId, name }) => ({ personId, name, momentCount: 2 })),
     ] });
   });
+  it("keeps optimistic missed selections and thumbnails when the flow snapshot is stale", () => {
+    const flow = { revision: 8, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: [],
+      missedPeople: [{ personId: "g1", name: "Grandpa" }, { personId: "g2", name: "Grandma" }], missedPeopleConfirmed: false };
+    const state = deriveChat({ ...base(), peopleConfirmed: true, missedPeopleConfirmed: false, peopleSummaryConfirmed: false,
+      people: [{ personId: "g1", name: "Grandpa", role: "other", skipped: false, momentCount: 2, sampleShotIds: [], days: [], sampleFaces: [] },
+        { personId: "g2", name: "Grandma", role: "other", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }],
+      missedPeople: [{ personId: "g1", name: "Grandpa", momentCount: 2, sampleUris: ["g1-a.jpg", "g1-b.jpg"] },
+        { personId: "g2", name: "Grandma", momentCount: 3, sampleUris: ["g2-a.jpg"] }], flow });
+    expect(state.items.filter((item) => item.kind === "missed-person")).toMatchObject([
+      { personId: "g1", momentCount: 2, photos: ["g1-a.jpg", "g1-b.jpg"] },
+      { personId: "g2", momentCount: 3, photos: ["g2-a.jpg"] },
+    ]);
+    expect(state.items.find((item) => item.kind === "people-summary")).toMatchObject({ people: [
+      { personId: "g2", name: "Grandma", momentCount: 3 },
+      { personId: "g1", name: "Grandpa", momentCount: 2 },
+    ] });
+  });
   it("keeps the people intro and face crops in history after summary confirmation", () => {
     const state = deriveChat({ ...base(), intent: { text: "A trip" }, peopleConfirmed: true, peopleSummaryConfirmed: true, people: [
       { personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: ["scene"], sampleFaces: [{ shotId: "face", uri: "face-crop.jpg", bbox: [0, 0, 1, 1] }], days: [] },
