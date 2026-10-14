@@ -208,7 +208,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       }) : current.missedPeople;
       const nextMissedPerson = missedPeople?.find((person) => !person.skipped && person.momentCount === 0);
       const historyTurns = acceptedFlow.missedClarifications?.map((turn) => ({ ...turn, stage: "missed" as const })) ?? current.interpTurns?.filter((turn) => turn.stage === "missed") ?? [];
-      return { ...current, flow: acceptedFlow, missedPeople, missedPeopleConfirmed: acceptedFlow.missedPeopleConfirmed ?? current.missedPeopleConfirmed, missedPersonTagging: nextMissedPerson ? { personId: nextMissedPerson.personId, name: nextMissedPerson.name, momentCount: 0 } : null,
+      return { ...current, flow: acceptedFlow, missedPeople, missedPeopleConfirmed: acceptedFlow.missedPeopleConfirmed ?? current.missedPeopleConfirmed ?? (acceptedFlow.peopleProgress ? false : undefined), missedPersonTagging: nextMissedPerson ? { personId: nextMissedPerson.personId, name: nextMissedPerson.name, momentCount: 0 } : null,
       intent: current.intent ?? (acceptedFlow.story.answer ? { text: acceptedFlow.story.answer } : null),
       ...(acceptedFlow.story.storySummary ? { storySummary: acceptedFlow.story.storySummary } : {}),
       ...(acceptedFlow.story.mentionedPeople.length ? { mentionedPeople: acceptedFlow.story.mentionedPeople } : {}),
@@ -245,7 +245,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
           return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto) && (!requiresExplicitProceed || completedPeople.has(person.personId)));
         }));
-        const peopleSummaryConfirmed = acceptedFlow?.peopleSummaryConfirmed === true || (hasFlowRecord && acceptedFlow?.peopleSummaryConfirmed === undefined && (hasGeneration || allFlowPeopleAnswered));
+        const peopleSummaryConfirmed = acceptedFlow?.peopleSummaryConfirmed === true || (!requiresExplicitProceed && hasFlowRecord && acceptedFlow?.peopleSummaryConfirmed === undefined && (hasGeneration || allFlowPeopleAnswered));
         const setAside = getSetAsideSummary(plan);
         const needsFilteredPhotoReview = setAside.blurry + setAside.duplicates > 0;
         const isFilmReady = Boolean(film) && (resume.generationStatus === "playable" || resume.generationStatus === "rendering" || resume.generationStatus === "saved");
@@ -291,7 +291,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     setInput((current) => ({ ...current, ...(taggedPersonRef.current ? { taggedPerson: taggedPersonRef.current } : {}), summary: mergedSummary, people: mergedSummary.ready.faces ? mapped?.map((person) => {
       const local = current.people?.find((item) => item.personId === person.personId);
       return local?.name || local?.skipped || peopleEdits.current.has(person.personId) ? { ...person, ...local, momentCount: person.momentCount } : person;
-    }) ?? null : current.people, peopleConfirmed: typeof repository.getFlow !== "function" ? current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) : allFlowPeopleProceeded, peopleSummaryConfirmed: typeof repository.getFlow !== "function" ? current.peopleSummaryConfirmed : acceptedFlow?.peopleSummaryConfirmed === true || (acceptedFlow?.peopleSummaryConfirmed === undefined && (current.peopleSummaryConfirmed === true || Boolean(current.generation) || (nextSummary.ready.faces && mapped !== null && mapped.length > 0 && mapped.every((person) => {
+    }) ?? null : current.people, peopleConfirmed: typeof repository.getFlow !== "function" ? current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) : allFlowPeopleProceeded, peopleSummaryConfirmed: typeof repository.getFlow !== "function" ? current.peopleSummaryConfirmed : acceptedFlow?.peopleSummaryConfirmed === true || (!requiresExplicitProceed && acceptedFlow?.peopleSummaryConfirmed === undefined && (current.peopleSummaryConfirmed === true || Boolean(current.generation) || (nextSummary.ready.faces && mapped !== null && mapped.length > 0 && mapped.every((person) => {
       const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
       return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto));
     })))) }));

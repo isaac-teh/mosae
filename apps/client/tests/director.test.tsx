@@ -235,6 +235,30 @@ describe("Director chat", () => {
     expect(mocks.confirmCast).toHaveBeenCalledTimes(3);
   });
 
+  it("treats a missing API missed-people flag as waiting for That's everyone", async () => {
+    setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    const personFlow = (personId: string, name: string) => ({ personId, name, role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
+    let flow: any = {
+      revision: 4,
+      story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] },
+      people: people.map((person) => personFlow(person.personId, person.personId === "person-1" ? "Daughter" : "Son")),
+      peopleProgress: { completedPersonIds: people.map((person) => person.personId) },
+      peopleSummaryConfirmed: false,
+    };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => {
+      flow = { ...flow, revision: flow.revision + 1, ...(action.type === "missed-people-confirmed" ? { missedPeopleConfirmed: action.confirmed } : {}) };
+      return flow;
+    });
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull();
+    await click("That's everyone");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
+    expect(mocks.repo.mutateFlow.mock.calls.some(([, , action]: [string, string, any]) => action.type === "missed-people-confirmed" && action.confirmed === true)).toBe(true);
+    expect(hasText("Thanks. I've tagged all two in your moments.")).toBe(true);
+  });
+
   it("routes a summary correction for a tagged person straight to their gallery", async () => {
     setup({ interpret: async (_projectId, request) => request.context.peopleStage === "identify"
       ? ({ reply: "", change: { kind: "person", intent: "assign", names: [request.text === "My son" ? "Son" : "Daughter"], name: request.text === "My son" ? "Son" : "Daughter", role: "child", needsClarification: false } })
