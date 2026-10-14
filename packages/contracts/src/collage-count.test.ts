@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { applyEdits } from "./edits.js";
+import { applyEdits, mergeOps, type EditOp } from "./edits.js";
 import { parseTimeline } from "./timeline.js";
+import composedCollageFixture from "./fixtures/composed-collage-count.json" with { type: "json" };
+import { ALLOWED_COMBOS } from "./collageCombos.js";
 
 const timeline = parseTimeline({
   schemaVersion: 2, projectId: "collage-count", mode: "memory", aspect: "9:16", fps: 30,
@@ -15,6 +17,33 @@ const timeline = parseTimeline({
 });
 
 describe("atomic collage count edits", () => {
+  it("lets a composed collage recover from superseded legacy spec edits and change to any supported count", () => {
+    // Sanitized one-clip snapshot from a real composed first cut read from Firestore.
+    const composed = parseTimeline(composedCollageFixture);
+    const clip = composed.videoClips[0]!;
+    if (!("kind" in clip)) throw new Error("expected composed collage fixture");
+
+    // This is the stale design-magazine edit shape still present in older saved editor histories.
+    const staleLegacyEdit = {
+      op: "setCollageSpec",
+      clipId: clip.clipId,
+      spec: { ...clip.spec, layoutId: "design-magazine" },
+    } as unknown as EditOp;
+
+    for (let count = 1; count <= 6; count++) {
+      const layoutId = (["simple-full", "simple-stacked", "simple-three-stacked", "simple-grid-2x2", "simple-five-top", "simple-grid-2x3"] as const)[count - 1]!;
+      const motionId = ALLOWED_COMBOS.find((combo) => combo.layoutId === layoutId)!.motionId;
+      const slots = clip.spec.slots.slice(0, count);
+      for (let index = slots.length; index < count; index++) {
+        slots.push({ slotId: `empty:${clip.clipId}:${index + 1}`, kind: "photo", empty: true });
+      }
+      const edit = { op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, layoutId, motionId, slots } } as EditOp;
+      const result = applyEdits(composed, mergeOps([staleLegacyEdit, edit]));
+      expect(result.ok, `count ${count}${result.ok ? "" : `: ${result.error}`}`).toBe(true);
+      if (result.ok) expect((result.timeline.videoClips[0] as typeof clip).spec.slots).toHaveLength(count);
+    }
+  });
+
   it("changes 2→3→4 slots atomically while preserving duration and surviving slot IDs", () => {
     const collage = timeline.videoClips[0]!;
     if (!("kind" in collage)) throw new Error("expected collage fixture");

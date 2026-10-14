@@ -329,6 +329,18 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
 export function mergeOps(ops: EditOp[]): EditOp[] {
   const merged: EditOp[] = [];
   for (const op of ops) {
+    if (op.op === "setCollageSpec") {
+      // A full collage spec supersedes earlier edits to that collage. Dropping
+      // those snapshots also lets a current edit recover histories that contain
+      // layout IDs removed since they were saved.
+      for (let index = merged.length - 1; index >= 0; index--) {
+        const previous = merged[index]!;
+        if ("clipId" in previous && previous.clipId === op.clipId && [
+          "setCollageSpec", "setCollageLayout", "setCollageMotion", "setCollageEffect",
+          "replaceCollageSlot", "setCollageCrop", "addCollageSlot", "removeCollageSlot",
+        ].includes(previous.op)) merged.splice(index, 1);
+      }
+    }
     const previous = merged.at(-1);
     if (previous && ((op.op === "trim" || op.op === "setPhotoDuration" || op.op === "move") && previous.op === op.op && previous.clipId === op.clipId || op.op === "setMusicVolume" && previous.op === "setMusicVolume" && previous.audioClipId === op.audioClipId)) {
       merged[merged.length - 1] = op;

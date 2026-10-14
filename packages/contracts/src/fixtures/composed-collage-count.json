@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 2,
+  "projectId": "compose-fixture",
+  "mode": "memory",
+  "aspect": "9:16",
+  "fps": 30,
+  "durationSec": 2.267,
+  "chapters": [
+    {
+      "title": "Compose fixture",
+      "startSec": 0
+    }
+  ],
+  "videoClips": [
+    {
+      "clipId": "compose-collage-1",
+      "transitionIn": {
+        "kind": "crossfade",
+        "durationSec": 0.4
+      },
+      "spec": {
+        "seed": "compose-fixture",
+        "motionId": "focus-relay",
+        "layoutId": "travel-story",
+        "durationSec": 2.267,
+        "effectId": "warm-grade",
+        "slots": [
+          {
+            "shotId": "compose-photo-1",
+            "width": 1500,
+            "crop": {
+              "scale": 1,
+              "x": 0.3839999999999999,
+              "y": 0.5
+            },
+            "slotId": "compose-slot-1",
+            "height": 2000,
+            "kind": "photo"
+          },
+          {
+            "crop": {
+              "y": 0.5,
+              "scale": 1,
+              "x": 0.5
+            },
+            "slotId": "compose-slot-2",
+            "height": 2048,
+            "kind": "photo",
+            "width": 1152,
+            "shotId": "compose-photo-2"
+          },
+          {
+            "shotId": "compose-photo-3",
+            "width": 1536,
+            "crop": {
+              "scale": 1,
+              "y": 0.5,
+              "x": 0.5300000000000002
+            },
+            "slotId": "compose-slot-3",
+            "height": 2048,
+            "kind": "photo"
+          },
+          {
+            "shotId": "compose-photo-4",
+            "width": 1536,
+            "crop": {
+              "scale": 1,
+              "x": 0.41400000000000015,
+              "y": 0.5
+            },
+            "kind": "photo",
+            "height": 2048,
+            "slotId": "compose-slot-4"
+          }
+        ]
+      },
+      "durationSec": 2.267,
+      "kind": "collage",
+      "startSec": 0
+    }
+  ],
+  "audioClips": [],
+  "captions": []
+}
