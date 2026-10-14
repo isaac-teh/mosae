@@ -67,15 +67,39 @@ function titleFromSummary(summary: { country: string | null; season: string | nu
 
 export default function DirectorScreen() {
   const [visibleViewport, setVisibleViewport] = useState<{ height: number; top: number; keyboardOpen: boolean } | null>(null);
+  const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
+  const nearBottom = useRef(true);
+  const userScrolledUp = useRef(false);
+  const focusedNearBottom = useRef(false);
+  const restoreViewportAnchor = useRef(false);
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
     const viewport = window.visualViewport;
     if (!viewport) return;
-    const update = () => setVisibleViewport({ height: viewport.height, top: viewport.offsetTop, keyboardOpen: window.innerHeight - viewport.height > 100 });
+    let lastHeight = viewport.height;
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
+    const update = () => {
+      const resized = Math.abs(lastHeight - viewport.height) > 1;
+      lastHeight = viewport.height;
+      setVisibleViewport({ height: viewport.height, top: viewport.offsetTop, keyboardOpen: window.innerHeight - viewport.height > 100 });
+      if (!resized) return;
+      restoreViewportAnchor.current = focusedNearBottom.current || (nearBottom.current && !userScrolledUp.current);
+      focusedNearBottom.current = false;
+      if (!restoreViewportAnchor.current) return;
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (restoreViewportAnchor.current && !userScrolledUp.current) chatScroll.current?.scrollToEnd({ animated: false });
+          restoreViewportAnchor.current = false;
+          settleTimer = undefined;
+        }));
+      }, 120);
+    };
     update();
     viewport.addEventListener("resize", update);
     viewport.addEventListener("scroll", update);
     return () => {
+      if (settleTimer) clearTimeout(settleTimer);
       viewport.removeEventListener("resize", update);
       viewport.removeEventListener("scroll", update);
     };
@@ -89,9 +113,7 @@ export default function DirectorScreen() {
   const [filmTimeline, setFilmTimeline] = useState<{ filmId: string; timeline: Timeline; sources: Record<string, string> } | null>(null);
   const [filmPlayerFailed, setFilmPlayerFailed] = useState(false);
   const [filmPreviewPlaying, setFilmPreviewPlaying] = useState(false);
-  const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
   const actionPendingScroll = useRef(false);
-  const userScrolledUp = useRef(false);
   const userDragging = useRef(false);
   const previewUrls = useRef<PendingPreviewUrls | null>(null);
   if (!previewUrls.current) previewUrls.current = new PendingPreviewUrls();
@@ -296,7 +318,11 @@ export default function DirectorScreen() {
     <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} />
     <ScrollView ref={chatScroll} accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 pt-6 pb-4" contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { userDragging.current = true; }} onScroll={(event: any) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      if (userDragging.current && contentOffset && contentSize && layoutMeasurement) userScrolledUp.current = contentOffset.y + layoutMeasurement.height < contentSize.height - 32;
+      if (contentOffset && contentSize && layoutMeasurement) {
+        const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+        nearBottom.current = distanceFromBottom <= 80;
+        if (userDragging.current) userScrolledUp.current = distanceFromBottom > 32;
+      }
     }} onScrollEndDrag={() => { userDragging.current = false; }} onMomentumScrollEnd={() => { userDragging.current = false; }} onContentSizeChange={() => { if (!userScrolledUp.current) requestAnimationFrame(() => chatScroll.current?.scrollToEnd({ animated: false })); }} scrollEventThrottle={16} style={{ flex: 1, minHeight: 0 }}>
       {state.items.map((item) => {
         if (item.kind === "mosae" && item.id === "moments-conflict") return <ChatProposal key={item.id} question={item.text.endsWith("?") ? item.text : `${item.text} What would you like to do?`} replies={[{ id: "keep", label: "Keep it" }, { id: "leave", label: "Leave it out" }]} onReply={(choice) => scrollAfterAction(() => actions.resolveConflict(choice as "keep" | "leave"))} />;
@@ -369,7 +395,7 @@ export default function DirectorScreen() {
         </View>;
         if (item.kind === "occasion-question") return pendingInterpret ? null : <View key={item.id} className="gap-2"><ChatMessage from="mosae" text={item.uploadComplete ? "Tell me a little about them. Is it a trip, a birthday celebration, or something else?" : "While they come in, tell me a little about them. Is it a trip, a birthday celebration, or something else?"} /><View className="flex-row flex-wrap gap-2"><Pressable role="button" aria-label="A trip" onPress={() => scrollAfterAction(() => actions.answerOccasion("A trip", projectSummary?.country ? `${projectSummary.country} trip` : "Our trip"))} className="active:scale-[0.97] active:bg-surface-sunken rounded-pill border border-line-strong px-4 py-2" style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })}><Text className="font-sans text-caption text-ink">A trip</Text></Pressable><Pressable role="button" aria-label="A birthday celebration" onPress={() => scrollAfterAction(() => actions.answerOccasion("A birthday celebration", "Birthday celebration"))} className="active:scale-[0.97] active:bg-surface-sunken rounded-pill border border-line-strong px-4 py-2" style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })}><Text className="font-sans text-caption text-ink">A birthday celebration</Text></Pressable></View><Text className="font-sans text-caption text-ink-muted">Something else? Type it in the box below.</Text></View>;
         if (item.kind === "person") return <View key={item.id} data-person-question={item.personId} className="gap-3">
-          <ChatPersonQuestion samples={item.sampleFaces} question="Who is this?" />
+          <ChatPersonQuestion samples={item.sampleFaces} question="Who is this?" onSamplePress={(uri) => router.push({ pathname: "/photo-viewer", params: { uri } } as any)} />
           {item.turns?.map((turn, index) => <View key={`${item.personId}-turn-${index}`} className="gap-2"><ChatMessage from="you" text={turn.question} />{turn.reply ? <ChatMessage from="mosae" text={turn.reply} /> : null}</View>)}
         </View>;
         if (item.kind === "person-tagged") return <View key={item.id} className="gap-3">
@@ -411,6 +437,6 @@ export default function DirectorScreen() {
       {pendingInterpret && !localMediaPending && <View className="gap-3"><ChatMessage from="you" text={pendingInterpret.text} /><ChatMessage from="mosae" text={pendingInterpret.reply} />{(pendingInterpret.change?.kind === "person" || pendingInterpret.mentionedPeople || pendingInterpret.storySummary) && <ChatProposal replies={[{ id: "confirm", label: "Yes, that's right" }, { id: "discard", label: "Not quite" }]} onReply={(choice) => scrollAfterAction(() => choice === "confirm" ? actions.confirmInterpret() : actions.discardInterpret())} />}</View>}
       {error && <View className="gap-2"><ChatMessage from="mosae" text={error} /><Pressable role="button" onPress={() => scrollAfterAction(() => { retry(); if (state.step === "occasion") return actions.confirmOccasion(); })} style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })} className="active:scale-[0.97] active:bg-surface-sunken min-h-11 self-start justify-center"><Text className="font-sans-semibold text-action">Try again</Text></Pressable></View>}
     </ScrollView>
-    {<ChatComposer placeholder={state.placeholder} disabled={saving} keyboardOpen={visibleViewport?.keyboardOpen ?? false} onSend={(text) => scrollAfterAction(() => state.step === "ready" ? actions.askForChange(text) : actions.send(text))} />}
+    {<ChatComposer placeholder={state.placeholder} disabled={saving} keyboardOpen={visibleViewport?.keyboardOpen ?? false} onInputFocus={() => { focusedNearBottom.current = nearBottom.current && !userScrolledUp.current; }} onSend={(text) => scrollAfterAction(() => state.step === "ready" ? actions.askForChange(text) : actions.send(text))} />}
   </View>;
 }
