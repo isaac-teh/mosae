@@ -293,23 +293,28 @@ describe("createApiStoryRepository", () => {
     expect(person?.sampleFaces?.map(({ shotId }) => shotId)).toEqual(["video-shot", "photo-shot", "manual-tag"]);
   });
 
-  it("returns one-photo clusters so the chat can keep pending faces after reconciliation", async () => {
+  it("returns only requested one-photo clusters so unrelated singletons cannot reset chat confirmation", async () => {
     const deps = dependencies();
     vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
       { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "repeat-1", characterId: "repeat", bbox: [0.1, 0.2, 0.4, 0.5] }] },
       { shotId: "shot-2", assetId: "asset-2", faces: [{ faceId: "repeat-2", characterId: "repeat", bbox: [0.1, 0.2, 0.4, 0.5] }] },
       { shotId: "shot-3", assetId: "asset-1", faces: [{ faceId: "single-1", characterId: "single", bbox: [0.2, 0.3, 0.5, 0.6] }] },
-    ] } : path.endsWith("/cast") ? { cast: { people: [{ personId: "repeat", role: "parent" }, { personId: "single", role: "other" }] } } : { moments: [
+      { shotId: "shot-4", assetId: "asset-2", faces: [{ faceId: "unrelated-1", characterId: "unrelated", bbox: [0.3, 0.3, 0.6, 0.6] }] },
+    ] } : path.endsWith("/cast") ? { cast: { people: [{ personId: "repeat", role: "parent" }, { personId: "single", role: "other" }, { personId: "unrelated", role: "other" }] } } : { moments: [
       { shotId: "shot-1", assetId: "asset-1", dayIndex: 1, personIds: ["repeat"] },
       { shotId: "shot-2", assetId: "asset-2", dayIndex: 1, personIds: ["repeat"] },
       { shotId: "shot-3", assetId: "asset-1", dayIndex: 1, personIds: ["single"] },
+      { shotId: "shot-4", assetId: "asset-2", dayIndex: 1, personIds: ["unrelated"] },
     ] });
 
     const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
     expect((await repository.getPeople("project-1"))?.map((person) => person.personId)).toEqual(["repeat"]);
-    const people = await repository.getPeople("project-1", true);
+    const people = await repository.getPeople("project-1", ["single"]);
     expect(people?.map((person) => person.personId)).toEqual(["repeat", "single"]);
     expect(people?.find((person) => person.personId === "single")?.momentCount).toBe(1);
+    await expect(repository.getPeople("project-1", ["single", "unrelated"])).resolves.toMatchObject([
+      expect.objectContaining({ personId: "repeat" }), expect.objectContaining({ personId: "single" }), expect.objectContaining({ personId: "unrelated" }),
+    ]);
   });
 
   it("resolves one child across three photos after cast creation", async () => {

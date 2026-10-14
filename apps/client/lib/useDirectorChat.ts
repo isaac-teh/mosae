@@ -185,8 +185,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const requestId = ++refreshRequest.current;
     const stillValid = () => mounted.current && isCurrentProject() && refreshEpoch === uploadEpoch.current && requestId === refreshRequest.current;
     const startedWhilePending = previousLocalPending.current;
-    const includePendingSingles = Boolean(peopleRef.current?.some((person) => person.forceShow));
-    const result = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId, includePendingSingles), repository.getFlow?.(projectId) ?? Promise.resolve(null)]).catch(cause => {
+    const pendingSinglePersonIds = [...new Set(peopleRef.current?.filter((person) => person.forceShow).map((person) => person.personId) ?? [])];
+    const result = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId, pendingSinglePersonIds), repository.getFlow?.(projectId) ?? Promise.resolve(null)]).catch(cause => {
       if (stillValid()) throw cause;
       return null;
     });
@@ -508,7 +508,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}),
         });
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
-        const refreshedPeople = result ? await repository.getPeople(projectId, reconciliationPendingIds.length > 0) : null;
+        const refreshedPeople = result ? await repository.getPeople(projectId, reconciliationPendingIds) : null;
         const emptiedReconciledIds = result ? reconciliationPendingIds.filter((id) => { const reconciled = result.cast.people.find((entry) => entry.personId === id); return Boolean(reconciled && reconciled.faceIds.length === 0); }) : [];
         const completedAfterReconciliation = [...new Set([...completedPersonIds, ...emptiedReconciledIds])];
         if (emptiedReconciledIds.length) await commitFlowAction({ type: "people-progress", completedPersonIds: completedAfterReconciliation });
