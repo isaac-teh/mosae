@@ -278,3 +278,6 @@ Firestore and Storage store tests run inside the emulators with `npm run test:em
 ### Directing live-run record
 
 The Phase 3 manual `trip`-sample Gemini run was not made on 2026-09-23: `GEMINI_API_KEY` was unavailable in both the process environment and the repository-root `.env`. No API request, proposal, or charge was created. When a key is available, the production planner records estimated per-turn cost in the project's `geminiUsage` collection; the PoC writes equivalent call records to `poc/gemini/out/<set>/<model>/calls.jsonl`.
+# Face identity model license
+
+This hackathon project uses InsightFace `buffalo_l` (detection and recognition ONNX models) for face identity embeddings. The founder accepts the InsightFace model's non-commercial research license for this non-commercial hackathon use. Do not use or distribute the bundled weights for commercial purposes without obtaining the appropriate license from InsightFace.

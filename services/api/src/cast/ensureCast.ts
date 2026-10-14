@@ -45,7 +45,7 @@ export async function ensureCast(
   );
 
   const faces: FaceRef[] = [];
-  const vectorFaces: { faceId: string; shotId: string; vector: number[]; characterId?: string }[] = [];
+  const vectorFaces: { faceId: string; shotId: string; vector: number[]; modelVersion: string; characterId?: string }[] = [];
   const interactions: Interaction[] = [];
   const refs = new Map<string, { shotId: string; index: number }>();
   for (const doc of shotSnaps.docs) {
@@ -60,10 +60,10 @@ export async function ensureCast(
       faces.push({ faceId: face.faceId, shotId: doc.id, photoHash: hash, bbox: face.bbox, ageBand: face.ageBand, prominence: face.prominence });
       const storedVector = (data.faceEmbeddings as Record<string, { toArray?: () => number[] } | number[]> | undefined)?.[face.faceId];
       const vector = Array.isArray(storedVector) ? storedVector : storedVector?.toArray?.();
-      if (vector) vectorFaces.push({ faceId: face.faceId, shotId: doc.id, vector, ...(face.characterId ? { characterId: face.characterId } : {}) });
+      if (vector) vectorFaces.push({ faceId: face.faceId, shotId: doc.id, vector, modelVersion: (data.faceEmbeddingModel as string | undefined) ?? "gemini-embedding-2", ...(face.characterId ? { characterId: face.characterId } : {}) });
       refs.set(face.faceId, { shotId: doc.id, index });
     });
-    for (const interaction of analysis.interactions ?? []) interactions.push(interaction);
+    if (analysis.kind === "photo") for (const interaction of analysis.interactions ?? []) interactions.push(interaction);
   }
 
   const storedCast = storedCastSnap.data() as Cast | undefined;
@@ -93,7 +93,7 @@ export async function ensureCast(
   if (vectorFaces.length) {
     const similarityByPerson = closestPersonSimilarity(vectorFaces.flatMap((face) => {
       const personId = identities.get(face.faceId);
-      return personId ? [{ personId, vector: face.vector }] : [];
+      return personId ? [{ personId, vector: face.vector, modelVersion: face.modelVersion }] : [];
     }));
     for (const person of cast.people) {
       const best = similarityByPerson.get(person.personId);

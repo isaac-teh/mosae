@@ -88,6 +88,25 @@ describe("understandAsset", () => {
     expect(deps.objects.upload).not.toHaveBeenCalled();
   });
 
+  it("uses the ArcFace service boxes and vectors while retaining overlapping Gemini metadata", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "understand-arcface-"));
+    const jpeg = await sharp({ create: { width: 500, height: 300, channels: 3, background: "#68a5c2" } }).jpeg().toBuffer();
+    const analysisWithFaces = { ...photoAnalysis, faces: [{ faceId: "gemini-face", bbox: [0.1, 0.1, 0.5, 0.5] as [number, number, number, number], confidence: 0.99, prominence: "primary" as const, faceVisible: true }] };
+    const deps = setup(photoAsset, {
+      makeWorkDir: vi.fn().mockResolvedValue(dir),
+      removeWorkDir: vi.fn(async (workDir) => rm(workDir, { recursive: true, force: true })),
+      objects: { download: vi.fn(), upload: vi.fn(), downloadCurrent: vi.fn(async ({ destination }) => writeFile(destination, jpeg)) },
+      analyzePhoto: vi.fn().mockResolvedValue(analysisWithFaces),
+      faceService: vi.fn().mockResolvedValue([{ bbox: [0.11, 0.12, 0.51, 0.52], detScore: 0.97, embedding: Array(512).fill(1 / Math.sqrt(512)) }]),
+    });
+    await expect(understandAsset(deps, task)).resolves.toBe("understood");
+    const shot = vi.mocked(deps.commitUnderstood).mock.calls[0]?.[0].shots[0]!;
+    expect(shot.analysis).toMatchObject({ faces: [{ faceId: "a1_0000-0", bbox: [0.11, 0.12, 0.51, 0.52], prominence: "primary" }] });
+    expect(shot.faceEmbeddings?.["a1_0000-0"]).toHaveLength(512);
+    expect(shot.faceEmbeddingModel).toBe("arcface-buffalo_l-v1");
+    expect(deps.embedImageContent).not.toHaveBeenCalled();
+  });
+
   it("keeps the asset understood when one face embedding fails", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "understand-face-failure-"));
     const jpeg = await sharp({ create: { width: 500, height: 300, channels: 3, background: "#68a5c2" } }).jpeg().toBuffer();

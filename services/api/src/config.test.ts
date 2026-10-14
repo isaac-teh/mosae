@@ -11,7 +11,7 @@ describe("loadConfig", () => {
   });
 
   it("uses the configured face matching threshold with the spike default", () => {
-    expect(loadConfig(base)).toMatchObject({ faceMatchThreshold: 0.85 });
+    expect(loadConfig(base)).toMatchObject({ faceMatchThreshold: 0.35 });
     expect(loadConfig({ ...base, FACE_MATCH_THRESHOLD: "0.9" })).toMatchObject({ faceMatchThreshold: 0.9 });
   });
 
