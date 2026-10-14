@@ -27,7 +27,7 @@ export {
   CollageSpecSchema, slotCountForLayout,
 } from "./collage.js";
 export type { CollageSpec, CollageSlot } from "./collage.js";
-export { collageGridRects, collageSlotAspects, assignCollageSlots, type CollageGridRect, type CollageGridVariant } from "./collageGeometry.js";
+export { collageGridRects, collageDesignRects, collageSlotAspects, assignCollageSlots, type CollageGridRect, type CollageGridVariant } from "./collageGeometry.js";
 export { ALLOWED_COMBOS, ALLOWED_COMBO_KEYS } from "./collageCombos.js";
 
 export {

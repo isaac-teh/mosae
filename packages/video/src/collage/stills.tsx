@@ -10,7 +10,7 @@ const WIDTH = 720;
 const HEIGHT = 1280;
 const FPS = 30;
 const FRAMES = 150;
-const STILL_MOTION_BY_LAYOUT: Record<CollageSpec["layoutId"], CollageSpec["motionId"]> = {
+const STILL_MOTION_BY_LAYOUT: Partial<Record<CollageSpec["layoutId"], CollageSpec["motionId"]>> = {
   "single-photo": "print-drop",
   "grid-wide-top": "print-drop",
   "grid-wide-bottom": "print-drop",
@@ -28,6 +28,7 @@ const STILL_MOTION_BY_LAYOUT: Record<CollageSpec["layoutId"], CollageSpec["motio
   "polaroid-garland": "focus-relay",
   "postcard-stack": "stack-deal",
   "route-map": "stack-deal",
+  "design-polaroid": "page-turn",
 };
 const sampleSources = process.env.MOSAE_COLLAGE_STILL_PLACEHOLDERS === "1"
   ? PLACEHOLDER_PHOTOS.map((file) => staticFile(file.replace(/^\//, "")))
@@ -39,7 +40,7 @@ const mixedOrientationSpec = createCollageSpec("grid-wide-top", {
 
 export function specForLayout(
   layoutId: CollageSpec["layoutId"],
-  motionId: CollageSpec["motionId"] = STILL_MOTION_BY_LAYOUT[layoutId],
+  motionId: CollageSpec["motionId"] = STILL_MOTION_BY_LAYOUT[layoutId] ?? "print-drop",
   effectId: CollageSpec["effectId"] = null,
 ): CollageSpec {
   const base = createCollageSpec(layoutId);

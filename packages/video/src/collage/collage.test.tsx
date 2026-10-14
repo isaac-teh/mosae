@@ -30,7 +30,7 @@ import { createCollageSpec } from "./fixtures";
 describe("CollageSpec", () => {
   it("uses six distinct normalized non-overlapping grid geometries at 2, 3, and 4 photos", () => {
     for (const count of [2, 3, 4]) {
-      const signatures = COLLAGE_GRID_VARIANTS.map(({ id }) => {
+      const signatures = COLLAGE_GRID_VARIANTS.filter(({ id }) => !id.startsWith("simple-")).map(({ id }) => {
         const rects = collageGridRects(id, count);
         expect(rects).toHaveLength(count);
         for (const rect of rects) {
@@ -124,7 +124,7 @@ describe("CollageSpec", () => {
     };
     const reviewedKeeps = review.combos.filter((combo) => combo.verdict === "keep")
       .map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort();
-    expect(ALLOWED_COMBOS.filter(({ layoutId }) => !["single-photo", "two-photo-diptych", ...COLLAGE_GRID_VARIANTS.map(({ id }) => id)].includes(layoutId)).map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort()).toEqual(reviewedKeeps);
+    expect(ALLOWED_COMBOS.filter(({ layoutId }) => !["single-photo", "two-photo-diptych", ...COLLAGE_GRID_VARIANTS.map(({ id }) => id), "design-polaroid", "design-magazine", "design-film-strip"].includes(layoutId)).map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort()).toEqual(reviewedKeeps);
 
     for (const layout of COLLAGE_LAYOUTS) for (const motion of COLLAGE_MOTIONS) {
       const spec = createCollageSpec(layout.id, { motionId: motion.id });
@@ -141,6 +141,30 @@ describe("Collage", () => {
     for (const combo of ALLOWED_COMBOS) for (const effect of COLLAGE_EFFECTS) {
       const spec = { ...createCollageSpec(combo.layoutId), motionId: combo.motionId, effectId: effect.id };
       expect(() => renderToStaticMarkup(<Collage spec={spec} />), `${combo.layoutId}/${combo.motionId}/${effect.id}`).not.toThrow();
+    }
+  });
+
+  it("renders every picker layout with its declared photo count", () => {
+    const picker = COLLAGE_LAYOUTS.filter(({ id }) => id.startsWith("simple-") || id.startsWith("design-"));
+    for (const layout of picker) {
+      const spec = createCollageSpec(layout.id);
+      expect(spec.slots).toHaveLength(layout.preferredSlots);
+      const markup = renderToStaticMarkup(<Collage spec={spec} />);
+      expect((markup.match(/data-collage-media=/g) ?? [])).toHaveLength(layout.preferredSlots);
+      expect(CollageSpecSchema.safeParse(spec).success, layout.id).toBe(true);
+    }
+  });
+
+  it("renders every design template for each supported photo count", () => {
+    for (const layout of COLLAGE_LAYOUTS.filter(({ id }) => id.startsWith("design-"))) {
+      const motionId = ALLOWED_COMBOS.find(({ layoutId }) => layoutId === layout.id)!.motionId;
+      for (let count = layout.minSlots; count <= layout.maxSlots; count++) {
+        const base = createCollageSpec(layout.id, { motionId });
+        const slots = Array.from({ length: count }, (_, index) => base.slots[index] ?? { slotId: `${layout.id}-${index}`, src: "/photo.svg" });
+        const spec = { ...base, slots };
+        expect(CollageSpecSchema.safeParse(spec).success, `${layout.id}/${count}`).toBe(true);
+        expect((renderToStaticMarkup(<Collage spec={spec} />).match(/data-collage-media=/g) ?? [])).toHaveLength(count);
+      }
     }
   });
 
