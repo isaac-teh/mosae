@@ -231,6 +231,19 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.kind === "people-summary")?.people.map(({ name }) => name)).toEqual(["Kara", "Chloe"]);
   });
 
+  it("keeps asked history and accepted answers when gallery counts and current people order change", () => {
+    const flow = { revision: 1, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [
+      { personId: "kara", name: "Kara", role: "other", confirmed: true, skipped: false, answerText: "Kara", manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null },
+      { personId: "chloe", name: "Chloe", role: "other", confirmed: true, skipped: false, answerText: "Chloe", manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null },
+    ], peopleProgress: { askedPersonIds: ["kara", "chloe"], completedPersonIds: ["kara", "chloe"] }, peopleSummaryConfirmed: false } as any;
+    const state = deriveChat({ ...base(), flow, peopleConfirmed: true, peopleSummaryConfirmed: false, proceededPersonIds: ["kara", "chloe"], people: [
+      { personId: "chloe", name: "Changed Chloe", answerText: "Changed Chloe", role: "other", skipped: false, momentCount: 9, sampleShotIds: [], days: [] },
+      { personId: "kara", name: "Changed Kara", answerText: "Changed Kara", role: "other", skipped: false, momentCount: 1, sampleShotIds: [], days: [] },
+    ] });
+    expect(state.items.filter((item) => item.id === "person-answer-kara" || item.id === "person-answer-chloe").map((item) => (item as any).text)).toEqual(["Kara", "Chloe"]);
+    expect(state.items.find((item) => item.kind === "people-summary")?.people.map(({ name }) => name)).toEqual(["Kara", "Chloe"]);
+  });
+
   it("renders exactly one select action for the missed person currently being tagged", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "Emily", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, missedPeople: [{ personId: "missed-1", name: "Emily", momentCount: 0 }], missedPersonTagging: { personId: "missed-1", name: "Emily" } });
     expect(state.items.filter((item) => item.kind === "missed-person" && item.personId === "missed-1")).toHaveLength(1);

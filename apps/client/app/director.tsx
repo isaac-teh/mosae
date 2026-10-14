@@ -316,7 +316,7 @@ export default function DirectorScreen() {
   return <View className="flex-1 bg-surface" style={Platform.OS === "web" && visibleViewport ? { position: "fixed", top: visibleViewport.top, left: 0, right: 0, height: visibleViewport.height, maxHeight: visibleViewport.height, overflow: "hidden" } as never : undefined}>
     <MediaPicker ref={mediaPicker} onFiles={(files) => { void replaceMissingMedia(files); }} />
     <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} />
-    <ScrollView ref={chatScroll} accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 pt-6 pb-4" contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { userDragging.current = true; }} onScroll={(event: any) => {
+    <ScrollView ref={chatScroll} accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 pt-6 pb-4" contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { userDragging.current = true; }} onScroll={(event: any) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       if (contentOffset && contentSize && layoutMeasurement) {
         const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);

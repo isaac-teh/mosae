@@ -133,6 +133,29 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Did I miss anyone?"]')).toBeNull();
   });
 
+  it("persists the initial asking order with the first identity answer", async () => {
+    setup();
+    let flow: any = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [] };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => {
+      const actions = action.type === "batch" ? action.actions : [action];
+      for (const change of actions) {
+        if (change.type === "person") {
+          const prior = flow.people.find((person: any) => person.personId === change.personId) ?? { personId: change.personId, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null };
+          flow.people = [...flow.people.filter((person: any) => person.personId !== change.personId), { ...prior, ...change, role: change.role ?? null, name: change.name ?? null, confirmed: change.confirmed ?? false, skipped: change.skipped ?? false }];
+        }
+        if (change.type === "people-progress") flow.peopleProgress = { ...flow.peopleProgress, ...change };
+      }
+      flow = { ...flow, revision: flow.revision + 1 };
+      return flow;
+    });
+    await renderScreen(); await click("A trip"); await typeAndSend("My daughter");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy());
+    expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), expect.objectContaining({ type: "batch", actions: expect.arrayContaining([
+      expect.objectContaining({ type: "people-progress", askedPersonIds: ["person-1", "person-2"] }),
+    ]) }));
+  });
+
   it("shows the same tagged confirmation for the fourth and last announced person", async () => {
     const four = Array.from({ length: 4 }, (_, index) => ({ ...people[0]!, personId: `person-${index + 1}`, name: null, role: null, momentCount: 40 - index, sampleFaces: [] }));
     setup({ people: four }); await renderScreen(); await click("A trip");
@@ -230,9 +253,31 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Looks right"]')?.parentElement?.className).toContain("self-start");
     expect(hasText("Thanks. I've tagged all two in your moments.")).toBe(true);
     expect(host.querySelector('button[aria-label="Change Daughter"]')).toBeNull();
+    let resolveConfirm!: (value: any) => void;
+    mocks.repo.mutateFlow = vi.fn(() => new Promise((resolve) => { resolveConfirm = resolve; }));
     await click("Looks right");
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull();
+    await act(async () => resolveConfirm({ revision: 1, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [], peopleSummaryConfirmed: true }));
     await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull());
     expect(mocks.confirmCast).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries a rejected people-summary confirmation after advancing optimistically", async () => {
+    setup({ readyPlan: true }); await renderScreen(); await click("A trip");
+    await answerPerson("My daughter"); await answerPerson("My son");
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    await click("That's everyone");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
+    let attempts = 0;
+    mocks.repo.mutateFlow = vi.fn(async () => {
+      attempts++;
+      if (attempts === 1) throw new Error("stale flow write");
+      return { revision: 2, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [], peopleSummaryConfirmed: true };
+    });
+    await click("Looks right");
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull();
+    await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledTimes(2));
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull();
   });
 
   it("treats a missing API missed-people flag as waiting for That's everyone", async () => {
@@ -291,7 +336,7 @@ describe("Director chat", () => {
     expect(history).toBeTruthy();
     expect(history?.getAttribute("data-content-container-class-name")).toContain("pb-4");
     expect(history?.getAttribute("data-content-container-class-name")).not.toContain("py-6");
-    expect(history?.getAttribute("data-content-container-style")).toBe(JSON.stringify({ flexGrow: 1, justifyContent: "flex-end" }));
+    expect(history?.getAttribute("data-content-container-style")).toBe(JSON.stringify({ flexGrow: 1 }));
   });
 
 

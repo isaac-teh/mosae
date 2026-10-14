@@ -17,6 +17,11 @@ describe("flow action application", () => {
     const old: DirectorFlow = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [] };
     expect(applyFlowAction(old, { type: "people-progress", completedPersonIds: ["p1"] })).toEqual({ ...old, peopleProgress: { completedPersonIds: ["p1"] } });
   });
+  it("persists the first asking order across later progress updates", () => {
+    const old: DirectorFlow = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [] };
+    const ordered = applyFlowAction(old, { type: "people-progress", askedPersonIds: ["kara", "chloe"], completedPersonIds: [] });
+    expect(applyFlowAction(ordered, { type: "people-progress", completedPersonIds: ["kara"] }).peopleProgress).toEqual({ askedPersonIds: ["kara", "chloe"], completedPersonIds: ["kara"] });
+  });
   it("persists the typed transcript alongside normalized person and missed-person names", () => {
     const flow: DirectorFlow = { revision: 0, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: [] };
     const named = applyFlowAction(flow, { type: "person", personId: "p1", name: "Daughter", role: "child", answerText: "My daughter" });
