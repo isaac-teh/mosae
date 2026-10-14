@@ -26,7 +26,8 @@ export type ChatInput = {
   localUpload?: { total: number; settled: number; failed: number; photos: number; clips: number };
   earlyOccasionAnswer?: string;
   earlyOccasionStoryText?: string;
-  interpTurns?: { question: string; reply?: string; personId?: string; stage?: "missed" }[];
+  interpTurns?: { question: string; reply?: string; personId?: string; stage?: "missed" | "summary" }[];
+  summaryFollowups?: { question: string; reply?: string }[];
   interpReplying?: boolean;
   pendingResponse?: "occasion" | "person";
   uploadFailuresAcknowledged?: boolean;

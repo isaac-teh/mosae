@@ -68,6 +68,19 @@ describe("interpret", () => {
     });
     expect(clarify.change).toMatchObject({ needsClarification: true, clarifyingQuestion: "Is that one person? What's their name?" });
   });
+  it.each([["add Grandma", ["Grandma"]], ["one more person missing", []], ["you missed someone", []]])("routes summary additions into the missed-person flow: %s", async (text, names) => {
+    const gen = vi.fn();
+    const result = await interpret({ ...request("people", text), context: { peopleStage: "summary" } }, { generate: gen, searchShots: vi.fn() });
+    expect(result.change).toMatchObject(names.length ? { intent: "missed", names, needsClarification: false } : { intent: "missed", needsClarification: true, clarifyingQuestion: "Who did I miss? Type their name." });
+    expect(result.reply).toBe(names.length ? "" : "Who did I miss? Type their name.");
+    expect(gen).not.toHaveBeenCalled();
+  });
+  it("routes a bare name after a summary clarification without Gemini", async () => {
+    const gen = vi.fn();
+    const result = await interpret({ ...request("people", "Grandma"), context: { peopleStage: "summary", summaryFollowupAwaitingName: true } }, { generate: gen, searchShots: vi.fn() });
+    expect(result.change).toMatchObject({ intent: "missed", names: ["Grandma"], needsClarification: false });
+    expect(gen).not.toHaveBeenCalled();
+  });
   it.each([
     ["Grandpa and Grandma", ["Grandpa", "Grandma"]],
     ["Mum, Dad and Uncle", ["Mum", "Dad", "Uncle"]],
@@ -130,7 +143,7 @@ describe("interpret", () => {
     expect(summary.change).toMatchObject({ intent: "confirm" });
     expect(gen).not.toHaveBeenCalled();
   });
-  it.each(["no", "none", "no one else", "nobody else", "skip"])("confirms missed people for %s", async (text) => {
+  it.each(["no", "none", "no one else", "nobody else", "skip", "That's everyone", "That's all"])("confirms missed people for %s", async (text) => {
     const gen = vi.fn();
     const result = await interpret({ ...request("people", text), context: { peopleStage: "missed" } }, { generate: gen, searchShots: vi.fn() });
     expect(result.change).toMatchObject({ intent: "confirm", needsClarification: false });

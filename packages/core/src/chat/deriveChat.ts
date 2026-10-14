@@ -203,8 +203,12 @@ export function deriveChat(input: ChatInput): ChatState {
     const stored = input.flow!.people.find((entry) => entry.personId === person.personId);
     return { personId: person.personId, name: person.name, momentCount: stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0, ...(person.samplePhotoUris ? { sampleUris: person.samplePhotoUris } : {}), ...(person.skipped ? { skipped: true } : {}) };
   }) };
-  if (!input.interpTurns?.some((turn) => turn.stage === "missed") && input.flow?.missedClarifications?.length) input = { ...input, interpTurns: [...(input.interpTurns ?? []), ...input.flow.missedClarifications.map((turn) => ({ ...turn, stage: "missed" as const }))] };
+  if (input.flow?.missedClarifications?.length) input = { ...input, interpTurns: [...(input.interpTurns ?? []).filter((turn) => turn.stage !== "missed" && turn.stage !== "summary"), ...input.flow.missedClarifications.map((turn) => ({ ...turn, stage: turn.stage ?? "missed" as const }))] };
+  if (input.flow?.peopleSummaryFollowups?.length) input = { ...input, summaryFollowups: input.flow.peopleSummaryFollowups };
   const missedFlowHistory = input.missedPeopleConfirmed !== undefined || input.missedAnswer !== undefined || input.flow?.missedPeopleConfirmed !== undefined;
+  const hasSummaryHistory = Boolean(input.flow?.peopleSummaryHistory?.length);
+  const hasSummaryFollowup = Boolean(input.summaryFollowups?.length || input.interpTurns?.some((turn) => turn.stage === "summary"));
+  const postSummaryTurns = input.summaryFollowups ?? input.interpTurns?.filter((turn) => turn.stage === "summary") ?? [];
   const items: ChatItem[] = [];
   let step: ChatState["step"] = "occasion";
   let confirmed: ChatState["confirmed"] = 0;
@@ -376,7 +380,7 @@ export function deriveChat(input: ChatInput): ChatState {
         add({ kind: "person-confirm", id: `person-confirm-${unanswered.personId}`, personId: unanswered.personId, label: mention.label, text: `Is this ${mention.phrase}?`, momentCount: unanswered.momentCount, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 2) });
       } else {
         if (input.taggedPerson?.personId === unanswered.personId) {
-          add({ kind: "mosae", id: `tagged-person-${unanswered.personId}`, text: "Got it — these are the photos of this person.", photos: input.taggedPerson.photos });
+          add({ kind: "mosae", id: `tagged-person-${unanswered.personId}`, text: `Got it — these are the photos of ${input.taggedPerson.name || "this person"}.`, photos: input.taggedPerson.photos });
         }
         const declinedIdenticalMerge = (input.mergeEvents ?? []).some((event) => event.personId === unanswered.personId && event.response === "No, another person" && event.answer.trim().replace(/^my\s+/i, "").toLocaleLowerCase() === event.targetName.trim().replace(/^my\s+/i, "").toLocaleLowerCase());
         add({ kind: "person", id: `person-${unanswered.personId}`, personId: unanswered.personId, ageBand: unanswered.ageBand, momentCount: unanswered.momentCount, sampleShotIds: unanswered.sampleShotIds, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 1), days: unanswered.days, questionText: declinedIdenticalMerge ? "What should I call this one?" : "Who is this?", turns: (input.interpTurns ?? []).filter((turn) => turn.personId === unanswered.personId).map(({ question, reply }) => ({ question, ...(reply ? { reply } : {}) })) });
@@ -421,7 +425,7 @@ export function deriveChat(input: ChatInput): ChatState {
   // An explicit answer is required only while the missed-people list is empty.
   // Once names have been supplied, completing or skipping every photo card is
   // the confirmation to continue; waiting for another answer leaves chat stuck.
-  const showPeopleSummary = (input.peopleConfirmed || allNamedPeopleProceeded && missedSelectionsResolved) && input.peopleSummaryConfirmed !== true && !hasUntaggedMissedPeople && (input.missedPeopleConfirmed === true || missedPeople.length > 0 || input.missedPeopleConfirmed === undefined && input.peopleSummaryConfirmed === false);
+  const showPeopleSummary = (input.peopleConfirmed || allNamedPeopleProceeded && missedSelectionsResolved) && input.peopleSummaryConfirmed !== true && !hasUntaggedMissedPeople && (input.missedPeopleConfirmed === true || missedPeople.length > 0 || input.missedPeopleConfirmed === undefined && input.peopleSummaryConfirmed === false) && !(hasSummaryHistory && input.flow?.peopleSummaryFollowupActive);
   const keepPeopleSummary = showPeopleSummary || input.peopleConfirmed && input.peopleSummaryConfirmed === true;
   const mergeEvents = input.mergeEvents ?? [];
   if (showPeopleSummary) {
@@ -438,6 +442,8 @@ export function deriveChat(input: ChatInput): ChatState {
     for (const event of mergeEvents.filter((item) => item.automatic && !item.reconciled)) add({ kind: "mosae", id: `${event.id}-ack`, text: `Got it — I've added these to ${event.targetName.replace(/^my\s+/i, "")}'s moments.` });
   }
   const addMissedPeople = (showPrompt: boolean, canConfirm = showPrompt) => {
+    const postSummaryFlow = hasSummaryHistory || hasSummaryFollowup;
+    if (postSummaryFlow) return;
     if (showPrompt) add({ kind: "anyone-else", id: "anyone-else", canConfirm, text: "Did I miss anyone? Enter the names of who were missed in the box below." });
     input.interpTurns?.filter((turn) => !turn.personId && (turn.stage === "missed" || !turn.stage)).forEach((turn, index) => {
       add({ kind: "you", id: `missed-clarification-question-${index + 1}`, text: turn.question });
@@ -447,6 +453,32 @@ export function deriveChat(input: ChatInput): ChatState {
     if (input.missedReply) add({ kind: "mosae", id: "missed-reply", text: input.missedReply });
     for (const person of input.missedPeople ?? []) {
       if (!input.missedAnswer) add({ kind: "you", id: `missed-name-${person.personId}`, text: person.name });
+      add({ kind: "mosae", id: `missed-select-${person.personId}`, text: `Help me select photos of ${person.name}.` });
+      add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name, momentCount: person.momentCount, photos: person.sampleUris?.slice(0, 4) ?? (person.sampleUri ? [person.sampleUri] : []), ...(person.skipped ? { skipped: true } : {}) });
+    }
+    if (input.missedPersonTagging && !(input.missedPeople ?? []).some(({ personId }) => personId === input.missedPersonTagging!.personId)) {
+      add({ kind: "mosae", id: `missed-select-${input.missedPersonTagging.personId}`, text: `Help me select 1 photo of ${input.missedPersonTagging.name}.` });
+      add({ kind: "missed-person", id: `missed-tag-${input.missedPersonTagging.personId}`, ...input.missedPersonTagging, momentCount: 0, photos: [] });
+    }
+  };
+  const addSummaryHistory = () => {
+    const history = input.flow?.peopleSummaryHistory ?? [];
+    history.forEach((people, index) => {
+      const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+      const count = people.length;
+      const text = count === 1 ? `Thanks. I've tagged ${people[0]!.name} in your moments.` : `Thanks. I've tagged all ${words[count] ?? count} in your moments.`;
+      add({ kind: "mosae", id: `people-summary-history-message-${index + 1}`, text });
+      add({ kind: "people-summary", id: `people-summary-history-${index + 1}`, people, canConfirm: false });
+    });
+  };
+  const addPostSummaryTurns = () => {
+    postSummaryTurns.forEach((turn, index) => {
+      add({ kind: "you", id: `summary-followup-${index + 1}`, text: turn.question });
+      if (turn.reply) add({ kind: "mosae", id: `summary-followup-reply-${index + 1}`, text: turn.reply });
+    });
+  };
+  const addPostSummaryMissedPeople = () => {
+    for (const person of missedPeople) {
       add({ kind: "mosae", id: `missed-select-${person.personId}`, text: `Help me select photos of ${person.name}.` });
       add({ kind: "missed-person", id: `missed-person-${person.personId}`, personId: person.personId, name: person.name, momentCount: person.momentCount, photos: person.sampleUris?.slice(0, 4) ?? (person.sampleUri ? [person.sampleUri] : []), ...(person.skipped ? { skipped: true } : {}) });
     }
@@ -483,27 +515,42 @@ export function deriveChat(input: ChatInput): ChatState {
       });
       if (!personTurns.some((turn) => turn.question === person.answerText) && personAnswer(person).trim()) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
       if (!person.skipped && person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
-      if (showPeopleSummary && input.taggedPerson?.personId === person.personId) add({ kind: "mosae", id: `tagged-person-${person.personId}`, text: "Got it — these are the photos of this person.", photos: input.taggedPerson.photos });
+      if (showPeopleSummary && input.taggedPerson?.personId === person.personId) add({ kind: "mosae", id: `tagged-person-${person.personId}`, text: `Got it — these are the photos of ${input.taggedPerson.name || person.name || "this person"}.`, photos: input.taggedPerson.photos });
       const personMergeEvents = input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? [];
       const automaticAck = automaticMergeAcknowledgement(input, person.personId);
       if (automaticAck) add({ kind: "mosae", id: `merge-${person.personId}-ack`, text: automaticAck });
       else for (const event of personMergeEvents) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
     }
   }
+  if (hasSummaryHistory && input.flow?.peopleSummaryFollowupActive) {
+    step = "people";
+    add({ kind: "anyone-else", id: "anyone-else", canConfirm: false, text: "Did I miss anyone? Enter the names of who were missed in the box below." });
+    addSummaryHistory();
+    addPostSummaryTurns();
+    addPostSummaryMissedPeople();
+    return { items, step, confirmed, placeholder };
+  }
   if (collectingMissedPeople) {
     step = "people";
-    addMissedPeople(true);
+    if (hasSummaryHistory && hasSummaryFollowup) { addSummaryHistory(); addPostSummaryTurns(); }
+    else addMissedPeople(true);
     return { items, step, confirmed, placeholder };
   }
   if (taggingMissedPeople) {
     step = "people";
-    addMissedPeople(true, false);
+    if (hasSummaryHistory && hasSummaryFollowup) { addSummaryHistory(); addPostSummaryTurns(); addPostSummaryMissedPeople(); }
+    else addMissedPeople(true, false);
     return { items, step, confirmed, placeholder };
   }
   if (keepPeopleSummary) {
     // Keep the single missed-people question before the names and photo-selection
     // turns in the reconstructed transcript, then place the final summary after them.
-    addMissedPeople(true, false);
+    if (hasSummaryHistory && hasSummaryFollowup) {
+      add({ kind: "anyone-else", id: "anyone-else", canConfirm: false, text: "Did I miss anyone? Enter the names of who were missed in the box below." });
+      addSummaryHistory();
+      addPostSummaryTurns();
+      addPostSummaryMissedPeople();
+    } else addMissedPeople(true, false);
     const summarySource = input.flow?.peopleProgress?.askedPersonIds?.length ? announcedPeople(input) : keptPeople(input);
     const summaryPeople = summarySource.filter((person) => !person.skipped && person.name);
     const asked = announcedPeople(input).filter((person) => !person.skipped && person.name && !summaryPeople.some((known) => known.personId === person.personId));
@@ -518,6 +565,7 @@ export function deriveChat(input: ChatInput): ChatState {
       if (!person.skipped && momentCount > 0 && !peopleById.has(person.personId)) peopleById.set(person.personId, { personId: person.personId, name: summaryPersonLabel(person.name), momentCount, sampleUri: person.sampleUri, sampleFace: undefined });
     }
     const named = [...peopleById.values()];
+    if (hasSummaryHistory && hasSummaryFollowup && !missedSelectionsResolved) return { items, step: "people", confirmed, placeholder };
     const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     if (named.length === 1) add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged ${named[0]!.name} in your moments.` });
     else add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged all ${words[named.length] ?? named.length} in your moments.` });

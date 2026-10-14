@@ -47,6 +47,19 @@ describe("flow action application", () => {
     expect(skipped.missedPeople?.[0]?.skipped).toBe(true);
     expect(skipped.missedReply).toBeUndefined();
   });
+  it("persists summary snapshots and chronological follow-up turns", () => {
+    const flow: DirectorFlow = { revision: 0, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: [] };
+    const snapshot = [{ personId: "p1", name: "Kara", momentCount: 2 }];
+    const started = applyFlowAction(flow, { type: "people-summary-snapshot", people: snapshot });
+    const clarified = applyFlowAction(started, { type: "batch", actions: [
+      { type: "missed-clarification-turn", question: "One more person missing", reply: "Who did I miss? Type their name.", stage: "summary" },
+      { type: "people-summary-followup", question: "One more person missing", reply: "Who did I miss? Type their name." },
+    ] });
+    expect(clarified.peopleSummaryHistory).toEqual([snapshot]);
+    expect(clarified.peopleSummaryFollowupActive).toBe(true);
+    expect(clarified.missedClarifications?.[0]?.stage).toBe("summary");
+    expect(clarified.peopleSummaryFollowups?.[0]).toEqual({ question: "One more person missing", reply: "Who did I miss? Type their name." });
+  });
   it("persists missed-person gallery tags and completion in flow state", () => {
     const flow: DirectorFlow = { revision: 0, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: [], missedPeople: [
       { personId: "g1", name: "Grandpa" }, { personId: "g2", name: "Grandma" },
