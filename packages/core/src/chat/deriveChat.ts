@@ -24,6 +24,15 @@ function peopleIntroCount(people: { personId: string }[], mergeEvents: NonNullab
   return people.length + mergeEvents.filter(({ personId, reconciled }) => !reconciled && !present.has(personId)).length;
 }
 
+function automaticMergeAcknowledgement(input: ChatInput, personId: string): string | null {
+  const event = input.mergeEvents?.find((item) => item.personId === personId && item.automatic);
+  const stored = input.flow?.people.find((person) => person.personId === personId);
+  if (event) return `Got it — I've added these to ${event.targetName.replace(/^my\s+/i, "")}'s moments.`;
+  if (!stored?.mergedInto) return null;
+  const targetName = input.flow?.people.find((person) => person.personId === stored.mergedInto)?.name ?? stored.name ?? "this person";
+  return `Got it — I've added these to ${targetName.replace(/^my\s+/i, "")}'s moments.`;
+}
+
 function peopleIntroText(): string {
   // Reconciliation can remove a face group after the conversation starts, so
   // avoid announcing a provisional count that can exceed the people we ask about.
@@ -53,7 +62,7 @@ function announcedPeople(input: ChatInput) {
   for (const stored of input.flow?.people ?? []) {
     if (!pinnedIds.includes(stored.personId) || present.has(stored.personId) || !(stored.confirmed || stored.skipped || stored.mergedInto)) continue;
     const momentCount = Math.max(0, stored.manualShotAdds.filter((shotId) => !stored.manualShotRemoves.includes(shotId)).length);
-    people.push({ personId: stored.personId, name: stored.name, role: stored.role, answerText: stored.answerText, skipped: stored.skipped, forceShow: true, momentCount, sampleShotIds: [], shotIds: [], days: [] });
+    people.push({ personId: stored.personId, name: stored.name, role: stored.role, answerText: stored.answerText, skipped: stored.skipped || Boolean(stored.mergedInto), forceShow: true, momentCount, sampleShotIds: [], shotIds: [], days: [] });
   }
   const culled = new Set((input.plan?.leftOut ?? []).filter(({ reason }) => /blur|soft focus|duplicat|similar|same burst/i.test(reason)).map(({ shotId }) => shotId));
   const culledPhotoCount = culled.size;
@@ -341,7 +350,10 @@ export function deriveChat(input: ChatInput): ChatState {
         });
         else if (personAnswer(person).trim()) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
         if (person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
-        for (const event of mergeEvents.filter(({ personId }) => personId === person.personId)) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
+        const personMergeEvents = mergeEvents.filter(({ personId }) => personId === person.personId);
+        const automaticAck = automaticMergeAcknowledgement(input, person.personId);
+        if (automaticAck) add({ kind: "mosae", id: `merge-${person.personId}-ack`, text: automaticAck });
+        else for (const event of personMergeEvents) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       } else {
         const { event } = entry;
         if (event.reconciled) continue;
@@ -457,7 +469,8 @@ export function deriveChat(input: ChatInput): ChatState {
       const { event } = entry;
       add({ kind: "mosae", id: `person-question-${event.personId}`, text: "Who is this?", photos: (event.questionFaces ?? event.sampleFaces).slice(0, 1) });
       add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
-      if (!event.automatic) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
+      if (event.automatic) add({ kind: "mosae", id: `${event.id}-ack`, text: `Got it — I've added these to ${event.targetName.replace(/^my\s+/i, "")}'s moments.` });
+      else add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       continue;
     }
     const { person } = entry;
@@ -471,7 +484,10 @@ export function deriveChat(input: ChatInput): ChatState {
       if (!personTurns.some((turn) => turn.question === person.answerText) && personAnswer(person).trim()) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
       if (!person.skipped && person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
       if (showPeopleSummary && input.taggedPerson?.personId === person.personId) add({ kind: "mosae", id: `tagged-person-${person.personId}`, text: "Got it — these are the photos of this person.", photos: input.taggedPerson.photos });
-      for (const event of input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? []) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
+      const personMergeEvents = input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? [];
+      const automaticAck = automaticMergeAcknowledgement(input, person.personId);
+      if (automaticAck) add({ kind: "mosae", id: `merge-${person.personId}-ack`, text: automaticAck });
+      else for (const event of personMergeEvents) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
     }
   }
   if (collectingMissedPeople) {

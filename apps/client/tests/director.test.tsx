@@ -1083,6 +1083,13 @@ describe("Director chat", () => {
       { ...people[1]!, personId: "split-kara", name: null },
     ];
     setup({ people: initialPeople });
+    let flowSnapshot: any = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [] };
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => {
+      for (const change of action.type === "batch" ? action.actions : [action]) {
+        if (change.type === "people-progress") flowSnapshot.peopleProgress = change;
+      }
+      return flowSnapshot = { ...flowSnapshot, revision: flowSnapshot.revision + 1 };
+    });
     let repoPeople = initialPeople;
     mocks.repo.getPeople.mockImplementation(async () => repoPeople);
     mocks.confirmCast.mockImplementation(async (_projectId: string, body: any) => {
@@ -1096,7 +1103,7 @@ describe("Director chat", () => {
     await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
     await act(async () => chat.actions.setPerson("kara", "Type a name", "Kara"));
     await act(async () => chat.actions.proceedPerson("kara"));
-    await act(async () => chat.actions.setPerson("split-kara", "Type a name", "Kara"));
+    await act(async () => chat.actions.setPerson("split-kara", "Type a name", "Kara", "that's Kara again"));
 
     expect(mocks.confirmCast).toHaveBeenLastCalledWith("project-1", expect.objectContaining({
       people: [expect.objectContaining({ personId: "kara", name: "Kara" })],
@@ -1106,8 +1113,13 @@ describe("Director chat", () => {
     }));
     expect(mocks.repo.getPeople).toHaveBeenLastCalledWith("project-1", []);
     expect(mocks.repo.getPeople).toHaveBeenCalledWith("project-1", ["split-kara"]);
+    expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), expect.objectContaining({ type: "batch", actions: expect.arrayContaining([
+      expect.objectContaining({ type: "merge", personId: "split-kara", targetPersonId: "kara" }),
+    ]) }));
     expect(chat.people?.map((person) => person.personId)).toEqual(["kara"]);
     expect(chat.state.items.some((item) => item.kind === "merge-followup")).toBe(false);
+    expect(chat.state.items.some((item) => item.id === "person-answer-split-kara" && item.kind === "you" && item.text === "that's Kara again")).toBe(true);
+    expect(chat.state.items.some((item) => item.kind === "mosae" && item.text === "Got it — I've added these to Kara's moments.")).toBe(true);
   });
 
 

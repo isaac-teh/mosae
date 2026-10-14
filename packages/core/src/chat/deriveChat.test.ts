@@ -244,6 +244,21 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.kind === "people-summary")?.people.map(({ name }) => name)).toEqual(["Kara", "Chloe"]);
   });
 
+  it("shows the typed repeat answer and automatic merge acknowledgement without a merge prompt", () => {
+    const flow = { revision: 2, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: [
+      { personId: "kara", name: "Kara", role: "other", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null },
+      { personId: "split-kara", name: "Kara", role: "other", confirmed: true, skipped: true, answerText: "that's Kara again", manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: "kara" },
+      { personId: "chloe", name: null, role: null, confirmed: false, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null },
+    ], peopleProgress: { askedPersonIds: ["kara", "split-kara", "chloe"], completedPersonIds: ["kara", "split-kara"] } } as any;
+    const state = deriveChat({ ...base(), flow, proceededPersonIds: ["kara", "split-kara"], people: [
+      { personId: "kara", name: "Kara", answerText: "Kara", role: "other", skipped: false, momentCount: 8, sampleShotIds: [], days: [] },
+      { personId: "chloe", name: null, role: null, skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
+    ], mergeEvents: [{ id: "merge-split-kara", personId: "split-kara", targetPersonId: "kara", answer: "that's Kara again", targetName: "Kara", sampleFaces: [], questionFaces: [], faceSamples: [], momentCount: 2, automatic: true, response: "Yes, same person" }] as any });
+    expect(state.items.find((item) => item.id === "person-answer-split-kara")).toMatchObject({ kind: "you", text: "that's Kara again" });
+    expect(state.items.some((item) => item.kind === "mosae" && item.text === "Got it — I've added these to Kara's moments.")).toBe(true);
+    expect(state.items.some((item) => item.kind === "merge-followup")).toBe(false);
+  });
+
   it("renders exactly one select action for the missed person currently being tagged", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "Emily", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, missedPeople: [{ personId: "missed-1", name: "Emily", momentCount: 0 }], missedPersonTagging: { personId: "missed-1", name: "Emily" } });
     expect(state.items.filter((item) => item.kind === "missed-person" && item.personId === "missed-1")).toHaveLength(1);

@@ -480,7 +480,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const priorPerson = duplicate ? people.find((person) => person.personId === duplicate.personId) : undefined;
       const automaticDuplicate = duplicate?.mode === "automatic" && Boolean(priorPerson);
       const mergeEvent = duplicate && priorPerson ? {
-        id: `merge-${personId}`, personId, targetPersonId: priorPerson.personId, answer: duplicate.answer,
+        id: `merge-${personId}`, personId, targetPersonId: priorPerson.personId, answer: answerText ?? duplicate.answer,
         targetName: priorPerson.name ?? duplicate.answer,
         sampleFaces: (priorPerson.sampleFaces ?? []).slice(0, 2).map((face) => face.uri),
         questionFaces: (updated.find((person) => person.personId === personId)?.sampleFaces ?? []).slice(0, 2).map((face) => face.uri),
@@ -505,6 +505,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const allProceededNow = actionableCastPeople.every((person) => person.skipped || completedPersonIds.includes(person.personId));
         await commitFlowAction({ type: "batch", actions: [
           { type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, ...(answerText ? { answerText } : {}), confirmed: role !== "Skip", skipped: role === "Skip" },
+          ...(automaticDuplicate && duplicate ? [{ type: "merge" as const, personId, targetPersonId: duplicate.personId }] : []),
           { type: "people-progress", askedPersonIds, completedPersonIds },
           ...(role === "Skip" && allAnsweredNow && allProceededNow ? [{ type: "missed-people-confirmed" as const, confirmed: false }] : []),
           { type: "people-summary-confirmed", confirmed: false },

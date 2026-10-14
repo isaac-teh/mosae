@@ -22,6 +22,13 @@ describe("flow action application", () => {
     const ordered = applyFlowAction(old, { type: "people-progress", askedPersonIds: ["kara", "chloe"], completedPersonIds: [] });
     expect(applyFlowAction(ordered, { type: "people-progress", completedPersonIds: ["kara"] }).peopleProgress).toEqual({ askedPersonIds: ["kara", "chloe"], completedPersonIds: ["kara"] });
   });
+  it("persists automatic identity merges on the answered source person", () => {
+    const old: DirectorFlow = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [
+      { personId: "split", name: "Kara", role: "other", confirmed: true, skipped: false, answerText: "that's Kara again", manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null },
+      { personId: "kara", name: "Kara", role: "other", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null },
+    ] };
+    expect(applyFlowAction(old, { type: "merge", personId: "split", targetPersonId: "kara" }).people[0]).toMatchObject({ personId: "split", mergedInto: "kara", skipped: true, answerText: "that's Kara again" });
+  });
   it("persists the typed transcript alongside normalized person and missed-person names", () => {
     const flow: DirectorFlow = { revision: 0, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: [] };
     const named = applyFlowAction(flow, { type: "person", personId: "p1", name: "Daughter", role: "child", answerText: "My daughter" });
