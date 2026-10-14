@@ -349,7 +349,7 @@ export function deriveChat(input: ChatInput): ChatState {
           if (turn.reply) add({ kind: "mosae", id: `person-turn-reply-${person.personId}-${index + 1}`, text: turn.reply });
         });
         else if (personAnswer(person).trim()) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
-        if (person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
+        if (!person.skipped && person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
         const personMergeEvents = mergeEvents.filter(({ personId }) => personId === person.personId);
         const automaticAck = automaticMergeAcknowledgement(input, person.personId);
         if (automaticAck) add({ kind: "mosae", id: `merge-${person.personId}-ack`, text: automaticAck });

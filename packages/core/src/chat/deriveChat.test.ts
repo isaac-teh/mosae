@@ -257,6 +257,7 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.id === "person-answer-split-kara")).toMatchObject({ kind: "you", text: "that's Kara again" });
     expect(state.items.some((item) => item.kind === "mosae" && item.text === "Got it — I've added these to Kara's moments.")).toBe(true);
     expect(state.items.some((item) => item.kind === "merge-followup")).toBe(false);
+    expect(state.items.some((item) => item.kind === "person-tagged" && item.personId === "split-kara")).toBe(false);
   });
 
   it("renders exactly one select action for the missed person currently being tagged", () => {
