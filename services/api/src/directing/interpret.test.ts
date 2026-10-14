@@ -59,14 +59,14 @@ describe("interpret", () => {
     expect(result.change).toEqual({ kind: "moments", mustIncludeShotIds: ["s1", "s2"] });
   });
   it("interprets a missed-name list and asks for names when a plural relation is vague", async () => {
-    const missed = await interpret(request("people", "Grandpa and Grandma"), {
+    const missed = await interpret({ ...request("people", "Grandpa and Grandma"), context: { peopleStage: "missed" } }, {
       generate: generate({ change: { kind: "person", intent: "missed", names: ["Grandpa", "Grandma"], needsClarification: false } }), searchShots: vi.fn(),
     });
     expect(missed.change).toMatchObject({ intent: "missed", names: ["Grandpa", "Grandma"] });
-    const clarify = await interpret(request("people", "my two cousins"), {
+    const clarify = await interpret({ ...request("people", "my two cousins"), context: { peopleStage: "missed" } }, {
       generate: generate({ change: { kind: "person", intent: "missed", names: [], needsClarification: true, clarifyingQuestion: "What are their names?" } }), searchShots: vi.fn(),
     });
-    expect(clarify.change).toMatchObject({ needsClarification: true, clarifyingQuestion: "What are their names?" });
+    expect(clarify.change).toMatchObject({ needsClarification: true, clarifyingQuestion: "Is that one person? What's their name?" });
   });
   it.each([
     ["Grandpa and Grandma", ["Grandpa", "Grandma"]],
@@ -81,7 +81,7 @@ describe("interpret", () => {
   it.each(["my two cousins", "some friends", "three kids"])("clarifies counts without identities: %s", async (text) => {
     const gen = vi.fn();
     const result = await interpret({ ...request("people", text), context: { peopleStage: "missed" } }, { generate: gen, searchShots: vi.fn() });
-    expect(result.change).toMatchObject({ kind: "person", intent: "missed", needsClarification: true, clarifyingQuestion: "What are their names?" });
+    expect(result.change).toMatchObject({ kind: "person", intent: "missed", needsClarification: true, clarifyingQuestion: "Is that one person? What's their name?" });
     expect(gen).not.toHaveBeenCalled();
   });
   it("extracts a name or a normalized family role and classifies change requests", async () => {
@@ -104,6 +104,13 @@ describe("interpret", () => {
     expect(result.change).toMatchObject({ kind: "person", intent: "assign", name, names: [name], role, needsClarification: false });
     expect(gen).not.toHaveBeenCalled();
   });
+  it.each(["Zx", "JJ", "Ah Ma", "a", "Mei Ling", "bb"])("fast-paths short names verbatim: %s", async (text) => {
+    const gen = vi.fn();
+    const name = text === text.toLocaleLowerCase() ? `${text[0]!.toLocaleUpperCase()}${text.slice(1)}` : text;
+    const result = await interpret({ ...request("people", text), context: { peopleStage: "identify" } }, { generate: gen, searchShots: vi.fn() });
+    expect(result.change).toMatchObject({ kind: "person", intent: "assign", name, names: [name], needsClarification: false });
+    expect(gen).not.toHaveBeenCalled();
+  });
   it("keeps ambiguous person answers eligible for clarification and tells the model roles are complete answers", async () => {
     const gen = generate({ change: { kind: "person", intent: "unclear", names: [], name: "", role: "other", needsClarification: true, clarifyingQuestion: "Who do you mean?" } });
     await interpret({ ...request("people", "two kids"), context: { peopleStage: "identify" } }, { generate: gen, searchShots: vi.fn() });
@@ -121,6 +128,14 @@ describe("interpret", () => {
     expect(gen).not.toHaveBeenCalled();
     const summary = await interpret({ ...request("people", "Looks right"), context: { peopleStage: "summary" } }, { generate: gen, searchShots: vi.fn() });
     expect(summary.change).toMatchObject({ intent: "confirm" });
+    expect(gen).not.toHaveBeenCalled();
+  });
+  it("accepts short missed names while clarifying a vague plural", async () => {
+    const gen = vi.fn();
+    const names = await interpret({ ...request("people", "Zx and Bo"), context: { peopleStage: "missed" } }, { generate: gen, searchShots: vi.fn() });
+    expect(names.change).toMatchObject({ intent: "missed", names: ["Zx", "Bo"], needsClarification: false });
+    const vague = await interpret({ ...request("people", "my two kids"), context: { peopleStage: "missed" } }, { generate: gen, searchShots: vi.fn() });
+    expect(vague.change).toMatchObject({ needsClarification: true, clarifyingQuestion: "Is that one person? What's their name?" });
     expect(gen).not.toHaveBeenCalled();
   });
 });
