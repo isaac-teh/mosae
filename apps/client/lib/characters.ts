@@ -120,6 +120,9 @@ export type ConfirmCastInput = {
   focus: string[];
   moves?: { faceId: string; personId: string | null }[];
   merges?: { fromPersonId: string; toPersonId: string }[];
+  /** Reconcile only this user's newly confirmed identity against these still-pending face clusters. */
+  reconcilePersonId?: string;
+  reconcilePendingPersonIds?: string[];
   /** The plan on screen; the cast is applied to it and a revised version comes back. */
   proposalId?: string;
 };

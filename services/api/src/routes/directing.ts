@@ -23,6 +23,7 @@ import { photoRoles } from "../cast/prominence.js";
 import { chooseFocus } from "../cast/focus.js";
 import { leaveOutShots } from "../cast/leaveOut.js";
 import type { Cast, CastPerson } from "../cast/types.js";
+import { reconcileConfirmedFaces } from "../cast/reconcileConfirmedFaces.js";
 import { z } from "zod";
 import { FlowMutationRequestSchema } from "@mosae/contracts";
 import type { PhotoAnalysis } from "../domain/understanding.js";
@@ -519,6 +520,8 @@ export function directingRouter(deps: {
         people: z.array(personSchema), focus: z.array(z.string().min(1)),
         moves: z.array(z.strictObject({ faceId: z.string().min(1), personId: z.string().min(1).nullable() })).optional(),
         merges: z.array(z.strictObject({ fromPersonId: z.string().min(1), toPersonId: z.string().min(1) })).optional(),
+        reconcilePersonId: z.string().min(1).optional(),
+        reconcilePendingPersonIds: z.array(z.string().min(1)).optional(),
         /** The current plan: when given, the cast's leave-out and focus are applied to it straight away. */
         proposalId: z.string().min(1).optional(),
       });
@@ -528,11 +531,13 @@ export function directingRouter(deps: {
       const currentSnap = await currentRef.get();
       const current = (currentSnap.exists ? currentSnap.data() : { people: [], core: [], focus: [], source: "none" }) as Cast;
       const validId = (id: string) => current.people.some((person) => person.personId === id) || id.startsWith("p-");
-      const { people, moves = [], merges = [] } = parsed.data;
+      const { people, moves = [], merges = [], reconcilePersonId, reconcilePendingPersonIds = [] } = parsed.data;
       let { focus } = parsed.data;
       const mergeTargets = new Map(merges.map(({ fromPersonId, toPersonId }) => [fromPersonId, toPersonId]));
       if ([...people.map((person) => person.personId), ...focus, ...moves.flatMap((move) => move.personId ? [move.personId] : []), ...merges.flatMap((merge) => [merge.fromPersonId, merge.toPersonId])].some((id) => !validId(id)) ||
           merges.some(({ fromPersonId, toPersonId }) => fromPersonId === toPersonId || !current.people.some((person) => person.personId === fromPersonId) || !people.some((person) => person.personId === toPersonId) || people.some((person) => person.personId === fromPersonId)) ||
+          (reconcilePersonId !== undefined && !people.some((person) => person.personId === reconcilePersonId)) ||
+          reconcilePendingPersonIds.some((id) => !current.people.some((person) => person.personId === id) || id === reconcilePersonId) ||
           new Set(merges.map(({ fromPersonId }) => fromPersonId)).size !== merges.length ||
           focus.some((id) => people.some((person) => person.personId === id && person.excluded)) ||
           new Set(people.map((person) => person.personId)).size !== people.length || new Set(focus).size !== focus.length) {
@@ -550,6 +555,16 @@ export function directingRouter(deps: {
       if (moves.some((move) => !faceLookup.has(move.faceId))) { res.status(400).json({ error: "invalid_cast" }); return; }
       const moved = new Map(moves.map((move) => [move.faceId, move.personId]));
       const personInputs = new Map(people.map((person) => [person.personId, person]));
+      const reconciliation = reconcilePersonId ? reconcileConfirmedFaces(allShotDocs.docs.flatMap((doc) => {
+        const data = doc.data();
+        const analysis = data.analysis as PhotoAnalysis | undefined;
+        const storedVectors = data.faceEmbeddings as Record<string, { toArray?: () => number[] } | number[]> | undefined;
+        return (analysis?.faces ?? []).flatMap((face) => {
+          const value = storedVectors?.[face.faceId];
+          const vector = Array.isArray(value) ? value : value?.toArray?.();
+          return vector ? [{ faceId: face.faceId, shotId: doc.id, vector, characterId: moved.has(face.faceId) ? moved.get(face.faceId) ?? undefined : face.characterId }] : [];
+        });
+      }), reconcilePersonId, undefined, new Set(reconcilePendingPersonIds)) : new Map<string, string>();
       const removedShotOwners = new Map<string, Set<string>>();
       for (const person of people) for (const shotId of person.removeShots ?? []) {
         const owners = removedShotOwners.get(shotId) ?? new Set<string>();
@@ -559,7 +574,7 @@ export function directingRouter(deps: {
       const peopleById = new Map<string, CastPerson>();
       const subjectsByShot = shots.map((shot) => photoRoles((shot.analysis?.faces ?? []).map((face) => face.bbox)));
       const facesByShot: NonNullable<PhotoAnalysis["faces"]>[] = shots.map((shot, shotIndex) => (shot.analysis?.faces ?? []).map((face, faceIndex) => {
-        const originalId = moved.has(face.faceId) ? moved.get(face.faceId) ?? undefined : face.characterId;
+        const originalId = moved.has(face.faceId) ? moved.get(face.faceId) ?? undefined : reconciliation.get(face.faceId) ?? face.characterId;
         const mappedPersonId = originalId ? mergeTargets.get(originalId) ?? originalId : undefined;
         const personId = mappedPersonId && !removedShotOwners.get(shot.shotId)?.has(mappedPersonId) ? mappedPersonId : undefined;
         const { characterId: _characterId, name: _name, role: _role, ...faceFields } = face;

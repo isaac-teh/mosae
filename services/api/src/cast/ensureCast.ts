@@ -84,7 +84,7 @@ export async function ensureCast(
   const coveredLabels = labels && labelsCover(labels, [...photoHashes.values()]) ? labels : undefined;
   const thresholds = faceMatchingThresholds();
   const embeddingResolver = !coveredLabels && vectorFaces.length
-    ? embeddingIdentity({ threshold: thresholds.faceMatchThreshold, groupMergeThreshold: thresholds.faceGroupMergeThreshold })
+    ? embeddingIdentity({ threshold: thresholds.faceMatchThreshold })
     : null;
   const resolver = coveredLabels ? labelledIdentity(coveredLabels) : embeddingResolver;
   const identities = embeddingResolver ? embeddingResolver.resolveVectors(vectorFaces) : resolver?.resolve(faces) ?? new Map<string, string>();

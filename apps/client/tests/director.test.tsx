@@ -997,6 +997,37 @@ describe("Director chat", () => {
     expect(chat.state.items.some((item) => item.kind === "occasion-question")).toBe(false);
   });
 
+  it("merges a repeated name automatically and confirms its face cluster once", async () => {
+    const initialPeople = [
+      { ...people[0]!, personId: "kara", name: null },
+      { ...people[1]!, personId: "split-kara", name: null },
+    ];
+    setup({ people: initialPeople });
+    let repoPeople = initialPeople;
+    mocks.repo.getPeople.mockImplementation(async () => repoPeople);
+    mocks.confirmCast.mockImplementation(async (_projectId: string, body: any) => {
+      if (body.merges?.length) repoPeople = repoPeople.filter((person) => person.personId !== body.merges[0].fromPersonId);
+      return { cast: { people: body.people.map((person: any) => ({ ...person, faceIds: [person.personId] })) } };
+    });
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await waitFor(() => expect(chat.people).toHaveLength(2));
+    await act(async () => chat.actions.answerOccasion("A trip", "Japan trip"));
+    await act(async () => chat.actions.setPerson("kara", "Type a name", "Kara"));
+    await act(async () => chat.actions.proceedPerson("kara"));
+    await act(async () => chat.actions.setPerson("split-kara", "Type a name", "Kara"));
+
+    expect(mocks.confirmCast).toHaveBeenLastCalledWith("project-1", expect.objectContaining({
+      people: [expect.objectContaining({ personId: "kara", name: "Kara" })],
+      merges: [{ fromPersonId: "split-kara", toPersonId: "kara" }],
+      reconcilePersonId: "kara",
+      reconcilePendingPersonIds: [],
+    }));
+    expect(chat.people?.map((person) => person.personId)).toEqual(["kara"]);
+    expect(chat.state.items.some((item) => item.kind === "merge-followup")).toBe(false);
+  });
+
 
 
 

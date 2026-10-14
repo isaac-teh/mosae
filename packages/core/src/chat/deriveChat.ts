@@ -304,9 +304,11 @@ export function deriveChat(input: ChatInput): ChatState {
         for (const event of mergeEvents.filter(({ personId }) => personId === person.personId)) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       } else {
         const { event } = entry;
+        if (event.reconciled) continue;
         add({ kind: "mosae", id: `person-question-${event.personId}`, text: "Who is this?", photos: (event.questionFaces ?? event.sampleFaces).slice(0, 1) });
         add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
-        if (!event.automatic) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
+        if (event.automatic) add({ kind: "mosae", id: `${event.id}-ack`, text: `Got it — I've added these to ${event.targetName.replace(/^my\s+/i, "")}'s moments.` });
+        else add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       }
     }
     if (input.pendingResponse === "person") {
@@ -371,6 +373,7 @@ export function deriveChat(input: ChatInput): ChatState {
     const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const countLabel = countWords[introCount] ?? String(introCount);
     add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments.` });
+    for (const event of mergeEvents.filter((item) => item.automatic && !item.reconciled)) add({ kind: "mosae", id: `${event.id}-ack`, text: `Got it — I've added these to ${event.targetName.replace(/^my\s+/i, "")}'s moments.` });
   }
   if (input.peopleConfirmed && input.peopleSummaryConfirmed === true) {
     const historyPeople = announcedPeople(input);
@@ -378,6 +381,7 @@ export function deriveChat(input: ChatInput): ChatState {
     const count = peopleIntroCount(historyPeople, mergeEvents);
     const label = countWords[count] ?? String(count);
     add({ kind: "mosae", id: "people-intro", text: `${count === 1 ? "One person appears" : `${label[0]!.toLocaleUpperCase()}${label.slice(1)} people appear`} often in your moments.` });
+    for (const event of mergeEvents.filter((item) => item.automatic && !item.reconciled)) add({ kind: "mosae", id: `${event.id}-ack`, text: `Got it — I've added these to ${event.targetName.replace(/^my\s+/i, "")}'s moments.` });
   }
   const addMissedPeople = (showPrompt: boolean, canConfirm = showPrompt) => {
     if (showPrompt) add({ kind: "anyone-else", id: "anyone-else", canConfirm, text: "Did I miss anyone? Enter the names of who were missed in the box below." });

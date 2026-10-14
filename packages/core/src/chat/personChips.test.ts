@@ -13,6 +13,10 @@ describe("mainPeople", () => {
   it("includes clusters appearing in at least ten percent of shots", () => {
     expect(mainPeople([{ personId: "ten-percent", momentCount: 10 }, { personId: "below", momentCount: 1 }], 100).map(({ personId }) => personId)).toEqual(["ten-percent"]);
   });
+
+  it("retains a previously surfaced pending cluster when face reconciliation leaves one photo", () => {
+    expect(mainPeople([{ personId: "pending", momentCount: 1, forceShow: true }], 100).map(({ personId }) => personId)).toEqual(["pending"]);
+  });
 });
 
 describe("personAnswerChips", () => {
@@ -38,14 +42,25 @@ describe("personAnswerChips", () => {
     expect(personAnswerChips(undefined, ["Family"])).toContain("Family");
   });
 
-  it("requires confirmation for every repeated name, including Me and partner, and ignores Friend or Family", () => {
+  it("automatically merges repeated names and relationship labels, and ignores Friend or Family", () => {
     const people = [{ personId: "first", name: "My Daughter" }, { personId: "named", name: "Ava" }];
-    expect(matchExistingPersonAnswer("My daughter", people)).toEqual({ personId: "first", mode: "confirm", answer: "My daughter" });
-    expect(matchExistingPersonAnswer(" ava ", people)).toEqual({ personId: "named", mode: "confirm", answer: "ava" });
-    expect(matchExistingPersonAnswer("Me", [{ personId: "self", name: "Me" }])).toEqual({ personId: "self", mode: "confirm", answer: "Me" });
-    expect(matchExistingPersonAnswer("My partner", [{ personId: "partner", name: "My partner" }])).toEqual({ personId: "partner", mode: "confirm", answer: "My partner" });
+    expect(matchExistingPersonAnswer("My daughter", people)).toEqual({ personId: "first", mode: "automatic", answer: "Daughter" });
+    expect(matchExistingPersonAnswer(" ava ", people)).toEqual({ personId: "named", mode: "automatic", answer: "Ava" });
+    expect(matchExistingPersonAnswer("mE", [{ personId: "self", name: "Me" }])).toEqual({ personId: "self", mode: "automatic", answer: "Me" });
+    expect(matchExistingPersonAnswer("My partner", [{ personId: "partner", name: "My partner" }])).toEqual({ personId: "partner", mode: "automatic", answer: "partner" });
     expect(matchExistingPersonAnswer("Friend", [{ personId: "friend", name: "Friend" }])).toBeNull();
     expect(matchExistingPersonAnswer("Family", [{ personId: "family", name: "Family" }])).toBeNull();
+  });
+
+  it("recognizes a previously tagged person in a natural repeat answer", () => {
+    const people = [{ personId: "kara", name: "Kara" }];
+    expect(matchExistingPersonAnswer("that's Kara again", people)).toEqual({ personId: "kara", mode: "automatic", answer: "Kara" });
+    expect(matchExistingPersonAnswer("already tagged", people)).toEqual({ personId: "kara", mode: "automatic", answer: "Kara" });
+  });
+
+  it("leaves generic same-person answers for clarification when more than one target is possible", () => {
+    expect(matchExistingPersonAnswer("same person", [{ personId: "a", name: "Kara" }, { personId: "b", name: "Chloe" }]))
+      .toEqual({ personId: "a", mode: "confirm", answer: "Kara" });
   });
 
   it("keeps likely merge candidates together in the question order", () => {
