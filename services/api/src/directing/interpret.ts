@@ -113,6 +113,7 @@ export async function interpret(req: InterpretRequest, deps: {
       if (parsed.needsClarification) return { reply: "Is that one person? What's their name?", change: { kind: "person", personId: null, name: "", role: "other", intent: "missed", names: [], needsClarification: true, clarifyingQuestion: "Is that one person? What's their name?" } };
       if (parsed.names?.length) return { reply: "", change: { kind: "person", personId: null, name: parsed.names[0]!, role: "other", intent: "missed", names: parsed.names, needsClarification: false } };
     }
+    if (stage === "identify" && /(?:\bstranger\b|\brandom person\b|\bbackground(?: person| stranger)?\b|\bnot (?:someone|a person) i know\b|\bi don't know (?:them|this person|who this is)\b|\bnot in my photos?\b|\bdoesn't? exist in my photos?\b|\bdon't exist in my photos?\b)/i.test(exact.replace(/[’]/g, "'"))) return fast("skip");
     if (stage === "identify") {
       const rolePatterns: [RegExp, string, "parent" | "child" | "other"][] = [
         [/^(?:that's me|that’s me|it's me|it’s me|i'm me|me|myself|i am me)$/, "Me", "other"],

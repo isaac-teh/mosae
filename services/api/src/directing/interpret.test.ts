@@ -130,6 +130,14 @@ describe("interpret", () => {
     expect(summary.change).toMatchObject({ intent: "confirm" });
     expect(gen).not.toHaveBeenCalled();
   });
+  it("fast-paths background stranger answers to exclusion", async () => {
+    const gen = vi.fn();
+    for (const text of ["This person don't exist in my photo", "I don't know them", "random person", "background stranger"]) {
+      const result = await interpret({ ...request("people", text), context: { peopleStage: "identify" } }, { generate: gen, searchShots: vi.fn() });
+      expect(result.change).toMatchObject({ kind: "person", intent: "skip", needsClarification: false });
+    }
+    expect(gen).not.toHaveBeenCalled();
+  });
   it("accepts short missed names while clarifying a vague plural", async () => {
     const gen = vi.fn();
     const names = await interpret({ ...request("people", "Zx and Bo"), context: { peopleStage: "missed" } }, { generate: gen, searchShots: vi.fn() });
