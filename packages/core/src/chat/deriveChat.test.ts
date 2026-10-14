@@ -757,6 +757,37 @@ describe("deriveChat state table", () => {
     expect(afterAnswer.items.some((item) => item.kind === "people-summary")).toBe(true);
   });
 
+  it("waits at the missed-people prompt, then summarizes automatically after all missed photo cards resolve", () => {
+    const people = [
+      { personId: "p1", name: "Kara", role: "child", skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
+    ];
+    const flow = {
+      revision: 24,
+      story: { answer: "Our trip", storySummary: "Trip", mentionedPeople: [] },
+      people: people.map((person) => ({ ...person, confirmed: true, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })),
+      peopleProgress: { completedPersonIds: ["p1"] },
+      missedPeopleConfirmed: false,
+    };
+    const waiting = deriveChat({ ...base(), people, peopleConfirmed: true, proceededPersonIds: ["p1"], flow, missedPeopleConfirmed: false, plan: null });
+    expect(waiting.items.filter((item) => item.kind === "anyone-else")).toEqual([expect.objectContaining({ canConfirm: true })]);
+    expect(waiting.items.some((item) => item.kind === "people-summary")).toBe(false);
+
+    const tagging = deriveChat({ ...base(), people, peopleConfirmed: true, proceededPersonIds: ["p1"], flow,
+      missedPeopleConfirmed: false, missedPeople: [{ personId: "g1", name: "Grandpa", momentCount: 0 }, { personId: "g2", name: "Grandma", momentCount: 0 }], plan: null });
+    expect(tagging.items.some((item) => item.kind === "people-summary")).toBe(false);
+    expect(tagging.items.find((item) => item.id === "missed-select-g1")).toMatchObject({ text: "Help me select photos of Grandpa." });
+
+    const completed = deriveChat({ ...base(), peopleConfirmed: true, proceededPersonIds: ["p1"], flow,
+      missedPeopleConfirmed: false, missedPeople: [{ personId: "g1", name: "Grandpa", momentCount: 0, sampleUris: ["grandpa-1.jpg", "grandpa-2.jpg"] }, { personId: "g2", name: "Grandma", momentCount: 0, sampleUris: ["grandma-1.jpg", "grandma-2.jpg"] }], plan: null });
+    expect(completed.items.find((item) => item.id === "people-summary-message")).toMatchObject({ text: "Thanks. I've tagged all two in your moments." });
+    expect(completed.items.some((item) => item.kind === "people-summary")).toBe(true);
+
+    const staleFlowFlags = deriveChat({ ...base(), people, peopleConfirmed: false, proceededPersonIds: ["p1"], flow,
+      missedPeopleConfirmed: false,
+      missedPeople: [{ personId: "g1", name: "Grandpa", momentCount: 0, sampleUris: ["grandpa-1.jpg", "grandpa-2.jpg"] }, { personId: "g2", name: "Grandma", momentCount: 0, sampleUris: ["grandma-1.jpg", "grandma-2.jpg"] }], plan: null });
+    expect(staleFlowFlags.items.some((item) => item.kind === "people-summary")).toBe(true);
+  });
+
   it("does not count an automatically reconciled face cluster as another person", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "kara", name: "Kara", role: "parent", skipped: false, momentCount: 8, sampleShotIds: [], days: [] }], peopleConfirmed: true, peopleSummaryConfirmed: false,
       missedPeopleConfirmed: true, missedPeople: [], mergeEvents: [
