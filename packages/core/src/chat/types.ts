@@ -36,7 +36,7 @@ export type ChatInput = {
   missedAnswer?: string;
   missedReply?: string;
   storySummary?: string;
-  people: { personId: string; name: string | null; role: string | null; answerText?: string; ageBand?: PersonAgeBand; skipped: boolean; momentCount: number; sampleShotIds: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;
+  people: { personId: string; name: string | null; role: string | null; answerText?: string; ageBand?: PersonAgeBand; skipped: boolean; momentCount: number; sampleShotIds: string[]; shotIds?: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;
   peopleConfirmed: boolean;
   missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleUris?: string[]; skipped?: boolean }[];
   missedPersonTagging?: { personId: string; name: string } | null;

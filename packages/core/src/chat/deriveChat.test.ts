@@ -27,6 +27,22 @@ const base = (): ChatInput => ({
 const kinds = (items: ChatItem[]) => items.map((item) => item.kind);
 
 describe("deriveChat state table", () => {
+  it("counts only kept photos for recurring people and tagged cards, while preserving old flows", () => {
+    const filteredPlan = { ...plan, leftOut: ["blur-1", "dup-1"].map((shotId) => ({ shotId, thumbnailUrl: "", reason: shotId === "blur-1" ? "Blurry" : "Near-duplicate" })) };
+    const people = [
+      { personId: "culled", name: null, role: null, skipped: false, momentCount: 2, sampleShotIds: ["blur-1", "dup-1"], shotIds: ["blur-1", "dup-1"], sampleFaces: [{ shotId: "blur-1", uri: "culled.jpg", bbox: [0, 0, 1, 1] as [number, number, number, number] }], days: [] },
+      { personId: "kept", name: null, role: "child", skipped: false, momentCount: 3, sampleShotIds: ["keep-1", "keep-2", "blur-1"], shotIds: ["keep-1", "keep-2", "blur-1"], sampleFaces: [{ shotId: "keep-1", uri: "kept.jpg", bbox: [0, 0, 1, 1] as [number, number, number, number] }], days: [] },
+    ];
+    const state = deriveChat({ ...base(), plan: filteredPlan, momentsConfirmed: true, people, peopleConfirmed: false, proceededPersonIds: [] });
+    expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "One person appears often in your moments." });
+    expect(state.items.filter((item) => item.kind === "person").map((item) => item.personId)).toEqual(["kept"]);
+    const tagged = deriveChat({ ...base(), plan: filteredPlan, momentsConfirmed: true, people: people.map((person) => ({ ...person, name: person.personId === "kept" ? "Mia" : null })), peopleConfirmed: false, proceededPersonIds: ["kept"] });
+    expect(tagged.items.find((item) => item.kind === "person-tagged")).toMatchObject({ momentCount: 2 });
+    const summaryState = deriveChat({ ...base(), plan: filteredPlan, momentsConfirmed: true, people: people.map((person) => ({ ...person, name: person.personId === "kept" ? "Mia" : null })), peopleConfirmed: true, peopleSummaryConfirmed: false });
+    expect(summaryState.items.find((item) => item.kind === "people-summary")).toMatchObject({ people: [{ personId: "kept", momentCount: 2 }] });
+    const oldFlow = deriveChat({ ...base(), plan: null, people: [people[0]!], peopleConfirmed: false });
+    expect(oldFlow.items.find((item) => item.kind === "person")).toMatchObject({ personId: "culled", momentCount: 2 });
+  });
   it("holds the next recurring person until the tagged person is proceeded", () => {
     const people = ["p1", "p2"].map((personId) => ({ personId, name: personId === "p1" ? "Mia" : null, role: personId === "p1" ? "child" : null, skipped: false, momentCount: 4, sampleShotIds: [], sampleFaces: [], days: [] }));
     const state = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null, proceededPersonIds: [] });

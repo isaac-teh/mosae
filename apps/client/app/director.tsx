@@ -334,7 +334,7 @@ export default function DirectorScreen() {
         if (item.kind === "set-aside") {
           const blurryLabel = `${item.blurry} blurry ${item.blurry === 1 ? "shot" : "shots"}`;
           const duplicateLabel = `${item.duplicates} near-duplicate${item.duplicates === 1 ? "" : "s"}`;
-          const message = `I've set aside ${blurryLabel} and ${duplicateLabel}, keeping the best of each burst. Your originals are untouched.`;
+          const message = `Got it. I've set aside ${blurryLabel} and ${duplicateLabel}, keeping the best of each burst. Your originals are untouched.`;
           return <View key={item.id} className="gap-3">
             <ChatMessage from="mosae" text={message} />
             <Text className="font-sans text-caption text-ink-muted">Tap on the photos to view.</Text>
