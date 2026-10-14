@@ -53,4 +53,14 @@ describe("savePersonMoments", () => {
     expect(boundary.mutateProjectFlow).toHaveBeenCalledWith("project-1", expect.objectContaining({ type: "person", personId: "chloe-current" }));
     expect(boundary.mutateProjectFlow).toHaveBeenCalledWith("project-1", expect.objectContaining({ type: "manual-shot", personId: "chloe-current", shotId: "shot-5" }));
   });
+  it("preserves a missed person ID even when the cast contains a same-name person", async () => {
+    boundary.getCast.mockResolvedValue({ people: [
+      { personId: "existing", name: "Chloe", role: "child", faceIds: [], excluded: false },
+    ], focus: ["existing"], source: "embeddings" });
+    await expect(savePersonMoments("project-1", "p-missed-chloe", "Chloe", ["shot-6"], [], [], "missed")).resolves.toBe("p-missed-chloe");
+    expect(boundary.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      people: expect.arrayContaining([expect.objectContaining({ personId: "p-missed-chloe", addShots: ["shot-6"] })]),
+    }));
+    expect(boundary.mutateProjectFlow).toHaveBeenCalledWith("project-1", expect.objectContaining({ type: "person", personId: "p-missed-chloe" }));
+  });
 });

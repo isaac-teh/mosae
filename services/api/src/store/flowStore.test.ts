@@ -76,4 +76,10 @@ describe("flow action application", () => {
     expect(bothDone.missedPeopleConfirmed).toBe(true);
     expect(bothDone.missedPeople?.map(({ personId }) => personId)).toEqual(["g1", "g2"]);
   });
+  it("appends and skips missed people by ID without replacing concurrent entries", () => {
+    const flow: DirectorFlow = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [], missedPeople: [{ personId: "g1", name: "Grandpa" }] };
+    const added = applyFlowAction(flow, { type: "missed-person-added", personId: "g2", name: "Grandma" });
+    const skipped = applyFlowAction(added, { type: "missed-person-skipped", personId: "g1" });
+    expect(skipped.missedPeople).toEqual([{ personId: "g1", name: "Grandpa", skipped: true }, { personId: "g2", name: "Grandma" }]);
+  });
 });

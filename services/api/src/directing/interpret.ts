@@ -37,9 +37,9 @@ function normalizeName(text: string): string {
 function shortName(text: string): string | undefined {
   const cleaned = text.trim().replace(/[.!]+$/, "");
   const lower = cleaned.toLocaleLowerCase();
-  if (!cleaned || /[?¿]/u.test(cleaned) || nonNameReplies.has(lower) || ambiguousPlural.test(cleaned)) return;
+  if (!cleaned || !/\p{L}/u.test(cleaned) || /[?¿]/u.test(cleaned) || nonNameReplies.has(lower) || ambiguousPlural.test(cleaned)) return;
   if (!/^[\p{L}\p{M}\p{N}]+(?:[ '\u2019-][\p{L}\p{M}\p{N}]+){0,2}$/u.test(cleaned)) return;
-  if (/\b(?:am|are|is|was|were|be|been|being|do|does|did|have|has|had|can|could|would|should|will|might|maybe|not|know|think|guess|mean|means|look|looks|wrong|missed|add|remove|change|that's|that’s|it's|it’s|i'm|i’m)\b/i.test(cleaned)) return;
+  if (cleaned.includes(" ") && /\b(?:am|are|is|was|were|be|been|being|do|does|did|have|has|had|can|could|would|should|will|might|maybe|not|know|think|guess|mean|means|look|looks|wrong|missed|add|remove|change|that's|that’s|it's|it’s|i'm|i’m)\b/i.test(cleaned)) return;
   if (/^(?:my|some|two|three|four|five|many|both)\s+(?:kids?|children|people|friends?|cousins?|siblings?|relatives?)$/i.test(cleaned)) return;
   return normalizeName(cleaned);
 }
@@ -109,6 +109,7 @@ export async function interpret(req: InterpretRequest, deps: {
     const stage = req.context.peopleStage ?? "identify";
     const fast = (intent: PeopleIntent): InterpretResult => ({ reply: "", change: { kind: "person", personId: null, name: "", role: "other", intent, names: [], needsClarification: false } });
     if (stage === "missed") {
+      if (/^(?:no|none|no one(?: else)?|nobody(?: else)?|skip)$/i.test(exact)) return fast("confirm");
       const parsed = missedNameParts(req.text);
       if (parsed.needsClarification) return { reply: "Is that one person? What's their name?", change: { kind: "person", personId: null, name: "", role: "other", intent: "missed", names: [], needsClarification: true, clarifyingQuestion: "Is that one person? What's their name?" } };
       if (parsed.names?.length) return { reply: "", change: { kind: "person", personId: null, name: parsed.names[0]!, role: "other", intent: "missed", names: parsed.names, needsClarification: false } };

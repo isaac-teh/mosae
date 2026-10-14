@@ -37,6 +37,8 @@ const AtomicFlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("people-summary-confirmed"), confirmed: z.boolean() }),
   z.object({ type: z.literal("people-progress"), askedPersonIds: z.array(z.string().min(1)).max(100).optional(), completedPersonIds: z.array(z.string().min(1)).max(100) }),
   z.object({ type: z.literal("missed-people-confirmed"), confirmed: z.boolean() }),
+  z.object({ type: z.literal("missed-person-added"), personId: z.string().min(1), name: z.string().min(1), answer: z.string().optional(), reply: z.string().nullable().optional() }),
+  z.object({ type: z.literal("missed-person-skipped"), personId: z.string().min(1) }),
   z.object({ type: z.literal("missed-people"), people: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional(), skipped: z.boolean().optional() })).max(100), answer: z.string().optional(), reply: z.string().nullable().optional() }),
   z.object({ type: z.literal("missed-person-completed"), personId: z.string().min(1) }),
   z.object({ type: z.literal("missed-clarification-turn"), question: z.string(), reply: z.string() }),
