@@ -1,23 +1,31 @@
 import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { reassignCollageSlots } from "@mosae/core";
-import { COLLAGE_GRID_VARIANTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, ALLOWED_COMBOS, collageDesignRects, collageGridRects, type CollageGridVariant, type EditOp, type Timeline } from "@mosae/contracts";
+import { COLLAGE_GRID_VARIANTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, ALLOWED_COMBOS, collageGridRects, type CollageGridVariant, type EditOp, type Timeline } from "@mosae/contracts";
 
 const SIMPLE_LAYOUTS = COLLAGE_GRID_VARIANTS.filter(({ id }) => id.startsWith("simple-"));
-const DESIGN_LAYOUTS = COLLAGE_LAYOUTS.filter(({ id }) => id.startsWith("design-"));
-export function collageOptionsForPhotoCount(count: number) {
-  return { simple: SIMPLE_LAYOUTS.filter(({ id }) => COLLAGE_LAYOUTS.find((layout) => layout.id === id)?.preferredSlots === count), designs: DESIGN_LAYOUTS };
+const DESIGNED_LAYOUT_IDS = ["botanical-scrapbook", "nine-photo-grid", "travel-mosaic", "travel-story", "photo-table", "torn-paper", "polaroid-garland", "postcard-stack", "route-map"] as const;
+const DESIGN_LAYOUTS = COLLAGE_LAYOUTS.filter(({ id }) => DESIGNED_LAYOUT_IDS.includes(id as typeof DESIGNED_LAYOUT_IDS[number]) && ALLOWED_COMBOS.some((combo) => combo.layoutId === id));
+export function collageOptionsForPhotoCount(count: number, aspect?: Timeline["aspect"]) {
+  return {
+    simple: SIMPLE_LAYOUTS.filter(({ id }) => COLLAGE_LAYOUTS.find((layout) => layout.id === id)?.preferredSlots === count),
+    designs: DESIGN_LAYOUTS.filter(({ minSlots, maxSlots, aspect: supportedAspects }) => minSlots <= count && count <= maxSlots && (!aspect || (supportedAspects as readonly string[]).includes(aspect))),
+  };
 }
 export function nearestCollageOption(layoutId: string, count: number): string {
-  if (layoutId.startsWith("simple-") || layoutId.startsWith("design-")) return layoutId;
-  if (["polaroid-garland", "postcard-stack", "photo-table", "torn-paper", "route-map", "botanical-scrapbook"].includes(layoutId)) return "design-polaroid";
-  if (["travel-story", "travel-mosaic"].includes(layoutId)) return "design-magazine";
+  const legacyDesigns: Record<string, string> = { "design-polaroid": "polaroid-garland", "design-magazine": "travel-story", "design-film-strip": "postcard-stack" };
+  if (legacyDesigns[layoutId]) {
+    if (count < 3) return count === 1 ? "simple-full" : "simple-stacked";
+    if (count > 5 && layoutId !== "design-magazine") return "botanical-scrapbook";
+    return legacyDesigns[layoutId]!;
+  }
+  if (layoutId.startsWith("simple-")) return layoutId;
+  if (DESIGN_LAYOUTS.some(({ id }) => id === layoutId) && COLLAGE_LAYOUTS.some(({ id, minSlots, maxSlots }) => id === layoutId && minSlots <= count && count <= maxSlots)) return layoutId;
   if (["single-photo"].includes(layoutId) && count === 1) return "simple-full";
   if (layoutId === "two-photo-diptych" && count === 2) return "simple-stacked";
   if (layoutId === "grid-wide-top" && count === 3) return "simple-three-top";
   if (layoutId === "grid-wide-bottom" && count === 3) return "simple-three-bottom";
   if (layoutId === "grid-stacked-rows" && count === 3) return "simple-three-stacked";
-  if (layoutId === "nine-photo-grid") return count === 1 ? "simple-full" : count === 2 ? "simple-stacked" : count === 3 ? "simple-three-stacked" : count === 4 ? "simple-grid-2x2" : count === 5 ? "simple-five-top" : "simple-grid-2x3";
   return count === 1 ? "simple-full" : count === 2 ? "simple-stacked" : count === 3 ? "simple-three-stacked" : count === 4 ? "simple-grid-2x2" : count === 5 ? "simple-five-top" : "simple-grid-2x3";
 }
 
@@ -32,20 +40,39 @@ export function transitionCollageSheet(state: CollageSheetState, dragDeltaY?: nu
 }
 
 function thumbnailRects(layoutId: string, count: number): { x: number; y: number; w: number; h: number }[] {
-  if (layoutId.startsWith("design-")) return collageDesignRects(layoutId, count);
   const gridVariant = COLLAGE_GRID_VARIANTS.find((variant) => variant.id === layoutId)?.id;
   if (gridVariant) return collageGridRects(gridVariant, count);
-  const asymmetrical: Record<string, { x: number; y: number; w: number; h: number }[]> = {
-    "single-photo": [{ x: 0, y: 0, w: 100, h: 100 }],
-    "two-photo-diptych": [{ x: 0, y: 0, w: 49, h: 100 }, { x: 51, y: 0, w: 49, h: 100 }],
-    "travel-story": [{ x: 0, y: 0, w: 64, h: 48 }, { x: 66, y: 0, w: 34, h: 100 }, { x: 0, y: 51, w: 31, h: 49 }, { x: 33, y: 51, w: 31, h: 23 }, { x: 33, y: 77, w: 31, h: 23 }],
-    "travel-mosaic": [{ x: 0, y: 0, w: 32, h: 32 }, { x: 34, y: 0, w: 66, h: 32 }, { x: 0, y: 34, w: 49, h: 32 }, { x: 51, y: 34, w: 49, h: 32 }, { x: 0, y: 68, w: 32, h: 32 }, { x: 34, y: 68, w: 66, h: 32 }],
-    "botanical-scrapbook": [{ x: 0, y: 0, w: 62, h: 52 }, { x: 64, y: 0, w: 36, h: 32 }, { x: 64, y: 34, w: 36, h: 66 }, { x: 0, y: 54, w: 62, h: 46 }],
+  if (layoutId === "travel-story" && count === 5) return [{ x: 0, y: 0, w: 65, h: 32 }, { x: 67, y: 0, w: 33, h: 66 }, { x: 0, y: 34, w: 32, h: 66 }, { x: 34, y: 34, w: 32, h: 32 }, { x: 34, y: 68, w: 66, h: 32 }];
+  if (layoutId === "travel-mosaic" && count === 8) return [{ x: 0, y: 0, w: 24, h: 32 }, { x: 25.5, y: 0, w: 24, h: 32 }, { x: 51, y: 0, w: 49, h: 32 }, { x: 0, y: 33.5, w: 49.5, h: 32 }, { x: 82, y: 33.5, w: 18, h: 32 }, { x: 0, y: 67, w: 24, h: 33 }, { x: 25.5, y: 67, w: 24, h: 33 }, { x: 51, y: 67, w: 49, h: 33 }];
+  if (layoutId === "botanical-scrapbook" && count >= 3) return count <= 4
+    ? [{ x: 10, y: 10, w: 39, h: 43 }, { x: 47, y: 10, w: 41, h: 39 }, { x: 10, y: 55, w: 38.5, h: 34 }, { x: 50, y: 47.5, w: 38, h: 40 }].slice(0, count)
+    : Array.from({ length: count }, (_, index) => ({ x: 10 + index % 2 * 40, y: 9 + Math.floor(index / 2) * 25, w: 39, h: 25 }));
+  const designedPositions: Record<string, number[][]> = {
+    "photo-table": [[33,25,43],[67,25,42],[34,51,41],[68,51,40],[34,77,41],[68,77,40]],
+    "torn-paper": [[34,28,49],[69,43,48],[34,68,50],[68,79,44],[52,51,42]],
+    "polaroid-garland": [[32,28,52],[68,35,52],[32,64,53],[68,69,52],[50,51,51]],
+    "postcard-stack": [[48,20,68],[39,40,64],[62,51,62],[49,67,61],[50,57,58]],
+    "route-map": [[28,28,47],[72,43,47],[33,66,46],[72,78,42],[52,52,41]],
   };
-  if (layoutId === "travel-story" && count === 5) return asymmetrical[layoutId]!;
-  if (layoutId === "travel-mosaic" && count >= 3) return asymmetrical[layoutId]!.slice(0, count);
-  if (layoutId === "botanical-scrapbook" && count >= 3) return [...asymmetrical[layoutId]!.slice(0, Math.min(count, 4)), ...Array.from({ length: Math.max(0, count - 4) }, (_, i) => ({ x: 66, y: (i * 24) % 100, w: 34, h: 22 }))];
-  const columns = layoutId === "nine-photo-grid" ? 3 : Math.min(3, Math.ceil(Math.sqrt(count)));
+  if (designedPositions[layoutId]) return designedPositions[layoutId]!.slice(0, count).map(([cx, cy, width]) => ({ x: cx! - width! / 2, y: cy! - width! * .77 * .56 / 2, w: width!, h: width! * .77 * .56 }));
+  if (layoutId === "travel-mosaic" && count >= 3) {
+    const total = count + 1, columns = total === 9 ? 3 : Math.min(3, Math.ceil(Math.sqrt(total))), rows = Math.ceil(total / columns), gap = 2;
+    const titleOrder = Math.floor(total / 2), rowH = (100 - gap * (rows - 1)) / rows;
+    const rects: { x: number; y: number; w: number; h: number }[] = [];
+    for (let row = 0, next = 0; row < rows; row++) {
+      const rowCount = Math.min(columns, total - row * columns), cellW = (100 - gap * (rowCount - 1)) / rowCount;
+      for (let col = 0; col < rowCount; col++, next++) if (next !== titleOrder) rects.push({ x: col * (cellW + gap), y: row * (rowH + gap), w: cellW, h: rowH });
+    }
+    return rects;
+  }
+  if (layoutId === "nine-photo-grid") {
+    const columns = Math.ceil(Math.sqrt(count)), rows = Math.ceil(count / columns), margin = 5.1, gap = 2.3, cellH = (100 - margin * 2 - gap * (rows - 1)) / rows;
+    return Array.from({ length: count }, (_, index) => {
+      const row = Math.floor(index / columns), rowCount = Math.min(columns, count - row * columns), cellW = (100 - margin * 2 - gap * (rowCount - 1)) / rowCount;
+      return { x: margin + index % columns * (cellW + gap), y: margin + row * (cellH + gap), w: cellW, h: cellH };
+    });
+  }
+  const columns = Math.min(3, Math.ceil(Math.sqrt(count)));
   const rows = Math.ceil(count / columns);
   const gap = 3;
   return Array.from({ length: count }, (_, index) => {
@@ -54,6 +81,15 @@ function thumbnailRects(layoutId: string, count: number): { x: number; y: number
     const rowCount = Math.min(columns, count - row * columns);
     return { x: col * (100 + gap) / rowCount, y: row * (100 + gap) / rows, w: (100 - gap * (rowCount - 1)) / rowCount, h: (100 - gap * (rows - 1)) / rows };
   });
+}
+
+function thumbnailTitleRect(layoutId: string, count: number): { x: number; y: number; w: number; h: number } | null {
+  if (layoutId === "travel-mosaic" && count === 8) return { x: 51, y: 33.5, w: 29.5, h: 32 };
+  if (layoutId !== "travel-mosaic" || count < 3) return null;
+  const total = count + 1, columns = total === 9 ? 3 : Math.min(3, Math.ceil(Math.sqrt(total))), rows = Math.ceil(total / columns), gap = 2;
+  const index = Math.floor(total / 2), row = Math.floor(index / columns), col = index % columns;
+  const rowCount = Math.min(columns, total - row * columns), cellW = (100 - gap * (rowCount - 1)) / rowCount, cellH = (100 - gap * (rows - 1)) / rows;
+  return { x: col * (cellW + gap), y: row * (cellH + gap), w: cellW, h: cellH };
 }
 
 export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose }: {
@@ -73,7 +109,7 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
   const count = clip.spec.slots.length;
   const minCount = 1;
   const maxCount = 6;
-  const options = collageOptionsForPhotoCount(count);
+  const options = collageOptionsForPhotoCount(count, aspect);
   const motionOptions = COLLAGE_MOTIONS.filter((motion) => ALLOWED_COMBOS.some((combo) => combo.layoutId === layoutId && combo.motionId === motion.id));
   const slotsForLayout = (layout: string, slots: Collage["spec"]["slots"]) => {
     const frameAspect = Number(aspect.split(":")[0]) / Number(aspect.split(":")[1]);
@@ -150,17 +186,24 @@ export function CollagePanel({ clip, section, aspect = "9:16", onApply, onClose 
           </View>
         </View>
         <ScrollView className="min-h-0 flex-1" contentContainerClassName="pb-2">
-          {([ ["Simple", options.simple], ["With designs", options.designs] ] as const).map(([sectionTitle, layouts]) => <View key={sectionTitle} className="mb-3">
+          {([ ["Simple", options.simple], ["With designs", options.designs] ] as const).filter(([title, layouts]) => title === "Simple" || layouts.length > 0).map(([sectionTitle, layouts]) => <View key={sectionTitle} className="mb-3">
             <Text className="mb-2 font-sans text-[11px] tracking-[1px] text-[#a9b7c2]">{sectionTitle}</Text>
             <View className="flex-row flex-wrap gap-2">{layouts.map((entry) => {
               const layout = COLLAGE_LAYOUTS.find((candidate) => candidate.id === entry.id)!;
-              const current = nearestCollageOption(layoutId, count);
               const simpleRects = thumbnailRects(entry.id, count);
+              const titleRect = thumbnailTitleRect(entry.id, count);
+              const current = nearestCollageOption(layoutId, count);
+              const designed = !entry.id.startsWith("simple-");
+              const paper = entry.id === "polaroid-garland" || entry.id === "postcard-stack";
               return <Pressable key={entry.id} accessibilityRole="button" accessibilityLabel={`Layout ${entry.label}`} aria-pressed={current === entry.id} onPress={() => chooseLayout(entry.id as typeof COLLAGE_LAYOUTS[number]["id"])} className={`h-[118px] w-[31%] rounded-[14px] bg-[#050a0e] p-2 ${current === entry.id ? "border-2 border-white" : "border-2 border-transparent"}`}>
-                <View className={`relative flex-1 overflow-hidden rounded-md ${entry.id === "design-polaroid" ? "bg-[#20384b]" : entry.id === "design-film-strip" ? "bg-[#1f252a]" : "bg-[#20252a]"}`}>
-                  {simpleRects.map(({ x, y, w, h }, i) => <View key={i} className={`absolute rounded-[3px] ${entry.id === "design-polaroid" ? "border-[3px] border-b-[9px] border-[#f6f5ef] bg-[#71879a]" : entry.id === "design-film-strip" ? "bg-[#71879a]" : "border border-white bg-[#71879a]"}`} style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%`, transform: entry.id === "design-polaroid" ? `rotate(${(i % 2 ? 8 : -8)}deg)` : undefined }} />)}
-                  {entry.id === "design-magazine" ? <View className="absolute left-[12%] top-[8%] h-[4%] w-[60%] bg-[#cbd3d8]" /> : null}
-                  {entry.id === "design-film-strip" ? <><View className="absolute inset-y-0 left-[5%] w-[5%] border-l-2 border-dashed border-[#526574]"/><View className="absolute inset-y-0 right-[5%] w-[5%] border-r-2 border-dashed border-[#526574]"/></> : null}
+                <View className={`relative flex-1 overflow-hidden rounded-md ${entry.id === "route-map" ? "bg-[#d6d8c7]" : entry.id === "botanical-scrapbook" ? "bg-[#e7c9a8]" : entry.id === "photo-table" ? "bg-[#795638]" : entry.id === "torn-paper" || entry.id === "postcard-stack" ? "bg-[#eee3cc]" : entry.id === "polaroid-garland" ? "bg-[#b7c7bf]" : "bg-[#20252a]"}`}>
+                  {simpleRects.map(({ x, y, w, h }, i) => <View key={i} className={`absolute rounded-[3px] ${paper ? "border-[2px] border-b-[5px] border-[#f6f2e6] bg-[#71879a]" : entry.id === "torn-paper" ? "border-2 border-[#efe5d0] bg-[#9d765b]" : entry.id === "botanical-scrapbook" ? "border border-[#d1c79c] bg-[#778967]" : "border border-white bg-[#71879a]"}`} style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%`, transform: paper ? `rotate(${i % 2 ? 4 : -4}deg)` : undefined }} />)}
+                  {titleRect ? <View className="absolute items-center justify-center bg-[#201d20]" style={{ left: `${titleRect.x}%`, top: `${titleRect.y}%`, width: `${titleRect.w}%`, height: `${titleRect.h}%` }}><View className="h-[2px] w-2/3 bg-[#d8cbb9]" /></View> : null}
+                  {entry.id === "route-map" ? <View className="absolute left-[14%] top-[48%] h-[35%] w-[52%] border-b-2 border-dashed border-[#a34e36]" /> : null}
+                  {entry.id === "postcard-stack" ? <View className="absolute right-[5%] top-[5%] h-[15%] w-[18%] border border-[#b88852]" /> : null}
+                  {designed && entry.id === "photo-table" ? <View className="absolute inset-0 border-[5px] border-[#8e7959]" /> : null}
+                  {entry.id === "botanical-scrapbook" ? <><View className="absolute left-[7%] top-[55%] h-[16%] w-[5%] rotate-[-16deg] rounded-full bg-[#bda269]"/><View className="absolute left-[37%] top-[24%] h-[27%] w-[2%] rotate-[-11deg] bg-[#84935f]"/><View className="absolute left-[41%] top-[9%] h-[4%] w-[14%] rotate-[-8deg] bg-[#c8ab74]"/><View className="absolute left-[49%] top-[81%] h-[9%] w-[43%] rotate-[2deg] bg-[#b18a61]"/></> : null}
+                  {entry.id === "polaroid-garland" ? <View className="absolute left-0 top-[24%] h-[4%] w-full border-t border-dashed border-[#f3e7cf]" /> : null}
                 </View>
                 <Text numberOfLines={1} className="mt-1 text-center font-sans text-[9px] text-[#c4cfd6]">{layout.label}</Text>
               </Pressable>;

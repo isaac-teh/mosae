@@ -46,6 +46,25 @@ describe("TimelineSchema", () => {
     expect(safeParseTimeline({ ...valid, schemaVersion: 2, videoClips: [withCaption] }).ok).toBe(true);
   });
 
+  it("migrates saved invented design IDs to the closest approved library designs", () => {
+    const legacy = (layoutId: string, motionId: string, count = 3) => ({
+      ...collage,
+      spec: { ...collage.spec, layoutId, motionId, slots: Array.from({ length: count }, (_, index) => ({ slotId: `slot-${index}`, shotId: `shot-${index}`, kind: "photo" })) },
+    });
+    const migrated = parseTimeline({ ...valid, schemaVersion: 2, videoClips: [
+      legacy("design-polaroid", "page-turn"),
+      legacy("design-magazine", "print-drop"),
+      legacy("design-film-strip", "print-drop"),
+      legacy("design-polaroid", "page-turn", 6),
+      legacy("design-magazine", "print-drop", 1),
+      legacy("design-film-strip", "print-drop", 2),
+    ] });
+    expect(migrated.videoClips.map((clip) => clip.kind === "collage" ? [clip.spec.layoutId, clip.spec.motionId] : null)).toEqual([
+      ["polaroid-garland", "page-turn"], ["travel-story", "focus-relay"], ["postcard-stack", "stack-deal"],
+      ["botanical-scrapbook", "tape-slap"], ["simple-full", "print-drop"], ["simple-stacked", "print-drop"],
+    ]);
+  });
+
   it("rejects a collage with two video cells", () => {
     const duplicateVideo = { ...collage, spec: { ...collage.spec, slots: collage.spec.slots.map((slot) => ({ ...slot, kind: "video" })) } };
     const result = safeParseTimeline({ ...valid, schemaVersion: 2, videoClips: [duplicateVideo] });

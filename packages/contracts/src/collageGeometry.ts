@@ -77,21 +77,6 @@ export function collageGridRects(variant: CollageGridVariant, count: number): Co
   return rects;
 }
 
-/** Shared styled-template photo geometry used by the picker and final renderer. */
-export function collageDesignRects(layoutId: string, count: number): CollageGridRect[] {
-  if (!Number.isInteger(count) || count < 1 || count > 6) throw new RangeError("design photo count must be 1–6");
-  if (layoutId === "design-film-strip") return Array.from({ length: count }, (_, i) => r(13, 4 + i * (92 / count), 74, 92 / count - 2));
-  if (layoutId === "design-magazine") {
-    const gap = 4, top = 22, rows = Math.ceil(count / 2), h = (76 - gap * (rows - 1)) / rows;
-    return Array.from({ length: count }, (_, i) => { const col = i % 2, row = Math.floor(i / 2); return r(6 + col * 47, top + row * (h + gap), 41, h); });
-  }
-  if (layoutId === "design-polaroid") return Array.from({ length: count }, (_, i) => {
-    const cols = count <= 2 ? count : 2, rows = Math.ceil(count / cols), cellW = 86 / cols, cellH = 86 / rows;
-    return r(7 + (i % cols) * cellW + cellW * .08, 7 + Math.floor(i / cols) * cellH + cellH * .08, cellW * .78, cellH * .72);
-  });
-  throw new RangeError(`unknown collage design: ${layoutId}`);
-}
-
 /** Slot aspect ratios in rendered pixels (width / height), including the film frame shape. */
 export function collageSlotAspects(layoutId: string, variant: string, slotCount: number, frameAspect: number): number[] {
   if (!(frameAspect > 0) || !Number.isInteger(slotCount) || slotCount < 1) return [];

@@ -124,7 +124,7 @@ describe("CollageSpec", () => {
     };
     const reviewedKeeps = review.combos.filter((combo) => combo.verdict === "keep")
       .map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort();
-    expect(ALLOWED_COMBOS.filter(({ layoutId }) => !["single-photo", "two-photo-diptych", ...COLLAGE_GRID_VARIANTS.map(({ id }) => id), "design-polaroid", "design-magazine", "design-film-strip"].includes(layoutId)).map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort()).toEqual(reviewedKeeps);
+    expect(ALLOWED_COMBOS.filter(({ layoutId }) => !["single-photo", "two-photo-diptych", ...COLLAGE_GRID_VARIANTS.map(({ id }) => id)].includes(layoutId)).map(({ layoutId, motionId }) => `${layoutId}::${motionId}`).sort()).toEqual(reviewedKeeps);
 
     for (const layout of COLLAGE_LAYOUTS) for (const motion of COLLAGE_MOTIONS) {
       const spec = createCollageSpec(layout.id, { motionId: motion.id });
@@ -145,7 +145,7 @@ describe("Collage", () => {
   });
 
   it("renders every picker layout with its declared photo count", () => {
-    const picker = COLLAGE_LAYOUTS.filter(({ id }) => id.startsWith("simple-") || id.startsWith("design-"));
+    const picker = COLLAGE_LAYOUTS.filter(({ id }) => id.startsWith("simple-") || ALLOWED_COMBOS.some((combo) => combo.layoutId === id && !id.startsWith("grid-") && !id.startsWith("single-") && !id.startsWith("two-")));
     for (const layout of picker) {
       const spec = createCollageSpec(layout.id);
       expect(spec.slots).toHaveLength(layout.preferredSlots);
@@ -156,7 +156,7 @@ describe("Collage", () => {
   });
 
   it("renders every design template for each supported photo count", () => {
-    for (const layout of COLLAGE_LAYOUTS.filter(({ id }) => id.startsWith("design-"))) {
+    for (const layout of COLLAGE_LAYOUTS.filter(({ id }) => ["botanical-scrapbook", "nine-photo-grid", "travel-mosaic", "travel-story", "photo-table", "torn-paper", "polaroid-garland", "postcard-stack", "route-map"].includes(id))) {
       const motionId = ALLOWED_COMBOS.find(({ layoutId }) => layoutId === layout.id)!.motionId;
       for (let count = layout.minSlots; count <= layout.maxSlots; count++) {
         const base = createCollageSpec(layout.id, { motionId });

@@ -570,29 +570,30 @@ describe("editor tool operations", () => {
   it("shows the selected design and only the new layout options for the current photo count", async () => {
     const threeSlotCollage = { ...collage, spec: { ...collage.spec, layoutId: "postcard-stack" as const, slots: collage.spec.slots.slice(0, 3) } };
     await render(<CollagePanel clip={threeSlotCollage} section="Layout" onApply={apply} onClose={() => {}} />);
-    expect(host.querySelector('[aria-label="Layout Polaroid"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Layout Magazine"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Layout Film strip"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Layout Polaroid garland"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Layout Travel story"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Layout Postcard stack"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="Layout Three stacked rows"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="Layout Full-bleed"]')).toBeNull();
-    await click("Layout Magazine");
-    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "design-magazine", motionId: "print-drop" } });
-    expect(host.querySelector('[aria-label="Layout Magazine"]')?.getAttribute("aria-pressed")).toBe("true");
+    await click("Layout Travel story");
+    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "travel-story", motionId: "focus-relay" } });
+    expect(host.querySelector('[aria-label="Layout Travel story"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("keeps portrait-only styles out of landscape films and preserves slots when choosing Torn paper", async () => {
     await render(<CollagePanel clip={collage} aspect="16:9" section="Layout" onApply={apply} onClose={() => {}} />);
-    expect(host.querySelector('[aria-label="Layout Polaroid"]')).not.toBeNull();
-    await click("Layout Polaroid");
-    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: collage.clipId, spec: { ...collage.spec, layoutId: "design-polaroid", motionId: "page-turn" } });
+    expect(host.querySelector('[aria-label="Layout Polaroid garland"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Layout Torn paper mosaic"]')).not.toBeNull();
+    await click("Layout Torn paper mosaic");
+    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: collage.clipId, spec: { ...collage.spec, layoutId: "torn-paper", motionId: "print-drop" } });
   });
 
-  it("shows the three design options for two photos", async () => {
+  it("hides the designs section when no library layout supports the selected count", async () => {
     const two = { ...collage, spec: { ...collage.spec, layoutId: "two-photo-diptych" as const, motionId: "print-drop" as const, slots: collage.spec.slots.slice(0, 2) } };
     await render(<CollagePanel clip={two} section="Layout" onApply={apply} onClose={() => {}} />);
-    expect(host.querySelectorAll('[aria-label^="Layout "]')).toHaveLength(5);
+    expect(host.querySelectorAll('[aria-label^="Layout "]')).toHaveLength(2);
     expect(host.querySelector('[aria-label="Layout Two stacked"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Layout Film strip"]')).not.toBeNull();
+    expect(host.textContent).not.toContain("With designs");
   });
 
   it("shows only motion choices in the collage motion sheet", async () => {
@@ -611,8 +612,8 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="3 photos"]')?.textContent).toBe("3");
     await click("Increase number of photos");
     expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "simple-grid-2x2", motionId: "print-drop", slots: [...threeSlotCollage.spec.slots, { slotId: "empty:collage-1:4", kind: "photo", empty: true }] } });
-    await click("Layout Polaroid");
-    expect(host.querySelector('[aria-label="Layout Polaroid"]')?.getAttribute("aria-pressed")).toBe("true");
+    await click("Layout Travel story");
+    expect(host.querySelector('[aria-label="Layout Travel story"]')?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("offers the exact simple option counts per number of photos and maps legacy layouts", () => {
@@ -620,10 +621,17 @@ describe("editor tool operations", () => {
       ["simple-full", "simple-centered"], ["simple-stacked", "simple-offset"], ["simple-three-stacked", "simple-three-top", "simple-three-bottom"],
       ["simple-grid-2x2"], ["simple-five-top", "simple-five-middle", "simple-five-bottom"], ["simple-grid-2x3"],
     ]);
-    expect([1, 2, 3, 4, 5, 6].map((count) => collageOptionsForPhotoCount(count).designs.map(({ id }) => id))).toEqual(Array(6).fill(["design-polaroid", "design-magazine", "design-film-strip"]));
-    expect(nearestCollageOption("polaroid-garland", 4)).toBe("design-polaroid");
-    expect(nearestCollageOption("travel-story", 5)).toBe("design-magazine");
-    expect(nearestCollageOption("nine-photo-grid", 6)).toBe("simple-grid-2x3");
+    expect([1, 2, 3, 4, 5, 6].map((count) => collageOptionsForPhotoCount(count).designs.map(({ id }) => id))).toEqual([
+      [], [], ["botanical-scrapbook", "nine-photo-grid", "travel-mosaic", "travel-story", "torn-paper", "polaroid-garland", "postcard-stack", "route-map"],
+      ["botanical-scrapbook", "nine-photo-grid", "travel-mosaic", "travel-story", "photo-table", "torn-paper", "polaroid-garland", "postcard-stack", "route-map"],
+      ["botanical-scrapbook", "nine-photo-grid", "travel-mosaic", "travel-story", "photo-table", "torn-paper", "polaroid-garland", "postcard-stack", "route-map"],
+      ["botanical-scrapbook", "nine-photo-grid", "travel-mosaic", "travel-story", "photo-table"],
+    ]);
+    expect(nearestCollageOption("design-polaroid", 4)).toBe("polaroid-garland");
+    expect(nearestCollageOption("design-magazine", 5)).toBe("travel-story");
+    expect(nearestCollageOption("design-film-strip", 4)).toBe("postcard-stack");
+    expect(nearestCollageOption("polaroid-garland", 4)).toBe("polaroid-garland");
+    expect(nearestCollageOption("nine-photo-grid", 6)).toBe("nine-photo-grid");
   });
 
   it("applies an Ask edit as one atomic timeline change and keeps Undo available", async () => {

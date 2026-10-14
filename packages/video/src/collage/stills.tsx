@@ -28,7 +28,6 @@ const STILL_MOTION_BY_LAYOUT: Partial<Record<CollageSpec["layoutId"], CollageSpe
   "polaroid-garland": "focus-relay",
   "postcard-stack": "stack-deal",
   "route-map": "stack-deal",
-  "design-polaroid": "page-turn",
 };
 const sampleSources = process.env.MOSAE_COLLAGE_STILL_PLACEHOLDERS === "1"
   ? PLACEHOLDER_PHOTOS.map((file) => staticFile(file.replace(/^\//, "")))

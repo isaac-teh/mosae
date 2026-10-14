@@ -6,9 +6,9 @@ import { BotanicalScrapbook } from "./BotanicalScrapbook";
 import { NinePhotoGrid } from "./NinePhotoGrid";
 import { mosaicEntranceAt, mosaicTime } from "./sampleMotion";
 import { CellInteraction } from "./CellInteraction";
-import { collageDesignRects, collageGridRects, COLLAGE_GRID_VARIANTS } from "./schema";
+import { collageGridRects, COLLAGE_GRID_VARIANTS } from "./schema";
 
-export const SAMPLE_LAYOUT_IDS = new Set<string>(["single-photo", "two-photo-diptych", "travel-mosaic", "travel-story", "botanical-scrapbook", "nine-photo-grid", "design-polaroid", "design-magazine", "design-film-strip", ...COLLAGE_GRID_VARIANTS.map(({ id }) => id)]);
+export const SAMPLE_LAYOUT_IDS = new Set<string>(["single-photo", "two-photo-diptych", "travel-mosaic", "travel-story", "botanical-scrapbook", "nine-photo-grid", ...COLLAGE_GRID_VARIANTS.map(({ id }) => id)]);
 type Rect = { x: number; y: number; w: number; h: number };
 const rect = (x: number, y: number, w: number, h: number): Rect => ({ x, y, w, h });
 const box = ({ x, y, w, h }: Rect): React.CSSProperties => ({ position: "absolute", left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%`, boxSizing: "border-box" });
@@ -17,7 +17,6 @@ const box = ({ x, y, w, h }: Rect): React.CSSProperties => ({ position: "absolut
 // collages get a complete grid without duplicating or dropping their photos.
 function geometry(spec: CollageSpec, wide: boolean): { cells: Rect[]; title?: Rect; titleOrder?: number } {
   const count = spec.slots.length;
-  if (spec.layoutId.startsWith("design-")) return { cells: collageDesignRects(spec.layoutId, count) };
   if (COLLAGE_GRID_VARIANTS.some(({ id }) => id === spec.layoutId)) return { cells: collageGridRects(spec.layoutId as typeof COLLAGE_GRID_VARIANTS[number]["id"], count) };
   if (spec.layoutId === "travel-mosaic" && count === 8) return {
     cells: [rect(0,0,24,32),rect(25.5,0,24,32),rect(51,0,49,32),rect(0,33.5,49.5,32),rect(82,33.5,18,32),rect(0,67,24,33),rect(25.5,67,24,33),rect(51,67,49,33)],
@@ -60,9 +59,6 @@ export const SampleLayouts: React.FC<{ spec: CollageSpec; sources?: Record<strin
   const { cells, title, titleOrder } = geometry(spec, wide);
   if (spec.layoutId === "botanical-scrapbook") return <BotanicalScrapbook spec={spec} sources={sources} clipId={clipId} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} />;
   if (spec.layoutId === "nine-photo-grid") return <NinePhotoGrid spec={spec} sources={sources} clipId={clipId} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} />;
-  const polaroid = spec.layoutId === "design-polaroid";
-  const magazine = spec.layoutId === "design-magazine";
-  const filmStrip = spec.layoutId === "design-film-strip";
   const entranceStyle = (cell: Rect, order: number): React.CSSProperties => {
     const motion = mosaicEntranceAt(seconds, order, cell, spec.durationSec);
     return { opacity: motion.opacity, transform: `translate(${motion.translateX}%, ${motion.translateY}%) rotate(${motion.rotation}deg)` };
@@ -72,16 +68,14 @@ export const SampleLayouts: React.FC<{ spec: CollageSpec; sources?: Record<strin
   const reveal = (value: string | undefined, start: number, span: number) => value?.slice(0, Math.floor(value.length * Math.max(0, Math.min(1, (time - start) / span))));
   const headline = reveal(spec.caption?.headline ?? spec.caption?.place, .9, 1);
   const subline = reveal(spec.caption?.subline ?? spec.caption?.date, 1.1, .9);
-  return <AbsoluteFill style={{ containerType: "inline-size", background: polaroid ? "#20384b" : filmStrip ? "#101417" : magazine ? "#22272b" : spec.layoutId === "simple-centered" ? "#000" : "#fff", overflow: "hidden", padding: filmStrip ? "0 9%" : undefined, boxSizing: "border-box" }}>
-    {magazine ? <div style={{ position: "absolute", zIndex: 20, left: "8%", top: "3%", color: "#fff", fontFamily: "Figtree,sans-serif", fontSize: "5cqw", fontWeight: 700, letterSpacing: ".08em", lineHeight: 1.1 }}>{spec.caption?.headline ?? ""}<div style={{ marginTop: "1%", width: "36%", height: 3, background: "#b6c1c8" }} /></div> : null}
-    {filmStrip ? <><div style={{ position: "absolute", inset: "0 2%", borderLeft: "2px dashed #657079", borderRight: "2px dashed #657079", pointerEvents: "none" }} />{Array.from({ length: 14 }, (_, i) => <React.Fragment key={i}><div style={{ position: "absolute", left: "1%", top: `${i * 8}%`, width: "5%", height: "3%", borderRadius: 2, background: "#657079" }} /><div style={{ position: "absolute", right: "1%", top: `${i * 8}%`, width: "5%", height: "3%", borderRadius: 2, background: "#657079" }} /></React.Fragment>)}</> : null}
+  return <AbsoluteFill style={{ containerType: "inline-size", background: spec.layoutId === "simple-centered" ? "#000" : "#fff", overflow: "hidden", boxSizing: "border-box" }}>
     {spec.slots.map((slot,index) => {
       const entry = interpolate(seconds - index * .09, [0,.65], [0,1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
       const settled = 1 - Math.pow(1-entry,3);
       const relay = Math.sin(Math.PI * interpolate(seconds, [index * .35,index * .35 + 1.4], [0,1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })) * .035;
       const order = titleOrder !== undefined && index >= titleOrder ? index + 1 : index;
       const designRect = cells[index]!;
-      return <div key={slot.slotId} style={{ ...box(designRect), zIndex: index + 1, ...(mosaic ? entranceStyle(cells[index]!, order) : { opacity: settled }), background: polaroid ? "#fffdf7" : magazine ? "#fff" : "transparent", padding: polaroid ? "2% 2% 7%" : "1%", boxSizing: "border-box", transform: polaroid ? `rotate(${index % 2 ? 7 : -7}deg)` : undefined, borderRadius: magazine ? 8 : undefined, overflow: "hidden", boxShadow: polaroid ? "0 5px 14px #0008" : undefined }}>
+      return <div key={slot.slotId} style={{ ...box(designRect), zIndex: index + 1, ...(mosaic ? entranceStyle(cells[index]!, order) : { opacity: settled }), background: "transparent", padding: "1%", boxSizing: "border-box", overflow: "hidden" }}>
         <div style={{ height: "100%", overflow: "hidden", position: "relative" }}><SampleMedia slot={slot} sources={sources} scale={mosaic ? 1 : 1 + relay} /></div>
         <CellInteraction clipId={clipId} slotId={slot.slotId} crop={slot.crop} selected={selectedCollageCellId === `${clipId}:${slot.slotId}`} onSelect={onSelectCollageCell} onCommit={onCommitCollageCrop} />
       </div>;
