@@ -588,8 +588,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       setInput((current) => ({ ...current, missedPeople: all, ...(answerText ? { missedAnswer: answerText } : {}), missedReply, missedPersonTagging: null, peopleConfirmed: true, missedPeopleConfirmed: allAlreadyTagged, peopleSummaryConfirmed: false }));
     },
     async confirmMissedPeople() {
-      await commitFlowAction({ type: "missed-people-confirmed", confirmed: true });
-      setInput((current) => ({ ...current, peopleConfirmed: true, missedPeopleConfirmed: true, peopleSummaryConfirmed: false }));
+      try {
+        await commitFlowAction({ type: "missed-people-confirmed", confirmed: true });
+      } catch (cause) {
+        setError(reportFailure(cause));
+      }
+      setInput((current) => ({ ...current, flow: current.flow ? { ...current.flow, missedPeopleConfirmed: true } : current.flow, peopleConfirmed: true, missedPeopleConfirmed: true, peopleSummaryConfirmed: false }));
     },
     reopenPerson(personId: string) {
       const person = input.people?.find((entry) => entry.personId === personId && !entry.skipped);
