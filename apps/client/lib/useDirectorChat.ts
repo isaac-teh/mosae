@@ -49,7 +49,7 @@ function useProjectState<T>(epochRef: MutableRefObject<number>, epoch: number, i
   }];
 }
 
-export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository(), storyFlow?: { repository: "api" | "fixture"; projectId?: string }, localState: Pick<ChatInput, "localMediaPending" | "uploadFailuresAcknowledged" | "localUpload"> & { taggedPerson?: ChatInput["taggedPerson"]; taggedMomentCount?: number } = {}) {
+export function useDirectorChat(projectId: string, repository: StoryRepository = getStoryRepository(), storyFlow?: { repository: "api" | "fixture"; projectId?: string }, localState: Pick<ChatInput, "localMediaPending" | "uploadFailuresAcknowledged" | "localUpload"> & { taggedPerson?: ChatInput["taggedPerson"] } = {}) {
   const projectIdentity = useRef(projectId);
   const projectEpoch = useRef(0);
   if (projectIdentity.current !== projectId) { projectIdentity.current = projectId; projectEpoch.current++; }
@@ -93,9 +93,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   const planWaitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumeProjectId = useRef<string | null>(null);
   const peopleEdits = useRef(new Map<string, { name: string | null; role: string | null; skipped: boolean }>());
-  const personTagCounts = useRef(new Map<string, number>());
   const taggedPersonRef = useRef<ChatInput["taggedPerson"]>(localState.taggedPerson);
-  if (localState.taggedPerson && localState.taggedMomentCount !== undefined) personTagCounts.current.set(localState.taggedPerson.personId, localState.taggedMomentCount);
   const flowRevision = useRef(0);
   const flowSnapshot = useRef(input.flow);
   const actionSequence = useRef(0);
@@ -128,7 +126,6 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     planWaitTimer.current = null;
     resumeProjectId.current = null;
     peopleEdits.current.clear();
-    personTagCounts.current.clear();
     taggedPersonRef.current = undefined;
     flowRevision.current = 0;
     flowSnapshot.current = undefined;
@@ -223,7 +220,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const mapped = people?.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
       const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
-      return { ...person, ...(personTagCounts.current.has(person.personId) ? { momentCount: personTagCounts.current.get(person.personId)! } : {}), ...(!edit && stored ? { name: person.name ?? stored.name, role: person.role ?? stored.role, skipped: stored.skipped } : {}), ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
+      return { ...person, ...(!edit && stored ? { name: person.name ?? stored.name, role: person.role ?? stored.role, skipped: stored.skipped } : {}), ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
     }) ?? null;
     if (resumeProjectId.current !== projectId) {
       try {
@@ -633,7 +630,6 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       setInput((current) => ({ ...current, missedPeople, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null }));
     },
     updatePersonTagCount(personId: string, momentCount: number, sampleUri?: string, name?: string | null) {
-      personTagCounts.current.set(personId, momentCount);
       const person = input.people?.find((entry) => entry.personId === personId);
       if (sampleUri) taggedPersonRef.current = { personId, name: person?.name ?? (name === "this person" ? "" : name ?? ""), photos: [sampleUri] };
       // The selected grid image is a scene thumbnail, so preserve the face
