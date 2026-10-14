@@ -22,7 +22,7 @@ export const DirectorFlowSchema = z.strictObject({
   missedReply: z.string().optional(),
   missedClarifications: z.array(z.object({ question: z.string(), reply: z.string() })).optional(),
   peopleSummaryConfirmed: z.boolean().optional(),
-  peopleProgress: z.object({ completedPersonIds: z.array(z.string().min(1)) }).optional(),
+  peopleProgress: z.object({ askedPersonIds: z.array(z.string().min(1)).max(100).optional(), completedPersonIds: z.array(z.string().min(1)) }).optional(),
   missedPeopleConfirmed: z.boolean().optional(),
   missedPeople: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional(), skipped: z.boolean().optional() })).optional(),
 });
@@ -35,7 +35,7 @@ const AtomicFlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("move-photo"), faceId: z.string().min(1), personId: z.string().nullable() }),
   z.object({ type: z.literal("merge"), personId: z.string().min(1), targetPersonId: z.string().min(1) }),
   z.object({ type: z.literal("people-summary-confirmed"), confirmed: z.boolean() }),
-  z.object({ type: z.literal("people-progress"), completedPersonIds: z.array(z.string().min(1)).max(100) }),
+  z.object({ type: z.literal("people-progress"), askedPersonIds: z.array(z.string().min(1)).max(100).optional(), completedPersonIds: z.array(z.string().min(1)).max(100) }),
   z.object({ type: z.literal("missed-people-confirmed"), confirmed: z.boolean() }),
   z.object({ type: z.literal("missed-people"), people: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional(), skipped: z.boolean().optional() })).max(100), answer: z.string().optional(), reply: z.string().nullable().optional() }),
   z.object({ type: z.literal("missed-person-completed"), personId: z.string().min(1) }),

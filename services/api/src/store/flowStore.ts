@@ -99,7 +99,10 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
     return { ...flow, people: flow.people.map((person) => person.personId === action.personId ? { ...person, mergedInto: action.targetPersonId, skipped: true } : person) };
   }
   if (action.type === "people-summary-confirmed") return { ...flow, peopleSummaryConfirmed: action.confirmed };
-  if (action.type === "people-progress") return { ...flow, peopleProgress: { completedPersonIds: [...new Set(action.completedPersonIds)] } };
+  if (action.type === "people-progress") return { ...flow, peopleProgress: {
+    ...(flow.peopleProgress?.askedPersonIds?.length ? { askedPersonIds: flow.peopleProgress.askedPersonIds } : action.askedPersonIds ? { askedPersonIds: [...new Set(action.askedPersonIds)] } : {}),
+    completedPersonIds: [...new Set(action.completedPersonIds)],
+  } };
   if (action.type === "missed-people-confirmed") return { ...flow, missedPeopleConfirmed: action.confirmed };
   if (action.type === "missed-people") {
     const { missedReply: _priorReply, ...withoutPriorReply } = flow;

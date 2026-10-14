@@ -24,6 +24,15 @@ function peopleIntroCount(people: { personId: string }[], mergeEvents: NonNullab
   return people.length + mergeEvents.filter(({ personId, reconciled }) => !reconciled && !present.has(personId)).length;
 }
 
+function automaticMergeAcknowledgement(input: ChatInput, personId: string): string | null {
+  const event = input.mergeEvents?.find((item) => item.personId === personId && item.automatic);
+  const stored = input.flow?.people.find((person) => person.personId === personId);
+  if (event) return `Got it — I've added these to ${event.targetName.replace(/^my\s+/i, "")}'s moments.`;
+  if (!stored?.mergedInto) return null;
+  const targetName = input.flow?.people.find((person) => person.personId === stored.mergedInto)?.name ?? stored.name ?? "this person";
+  return `Got it — I've added these to ${targetName.replace(/^my\s+/i, "")}'s moments.`;
+}
+
 function peopleIntroText(): string {
   // Reconciliation can remove a face group after the conversation starts, so
   // avoid announcing a provisional count that can exceed the people we ask about.
@@ -47,15 +56,31 @@ function keptPeople(input: ChatInput) {
 
 function announcedPeople(input: ChatInput) {
   const people = keptPeople(input);
+  const askedIds = input.flow?.peopleProgress?.askedPersonIds ?? [];
+  const pinnedIds = askedIds;
+  const present = new Set(people.map(({ personId }) => personId));
+  for (const stored of input.flow?.people ?? []) {
+    if (!pinnedIds.includes(stored.personId) || present.has(stored.personId) || !(stored.confirmed || stored.skipped || stored.mergedInto)) continue;
+    const momentCount = Math.max(0, stored.manualShotAdds.filter((shotId) => !stored.manualShotRemoves.includes(shotId)).length);
+    people.push({ personId: stored.personId, name: stored.name, role: stored.role, answerText: stored.answerText, skipped: stored.skipped || Boolean(stored.mergedInto), forceShow: true, momentCount, sampleShotIds: [], shotIds: [], days: [] });
+  }
   const culled = new Set((input.plan?.leftOut ?? []).filter(({ reason }) => /blur|soft focus|duplicat|similar|same burst/i.test(reason)).map(({ shotId }) => shotId));
   const culledPhotoCount = culled.size;
   const keptPhotoCount = Math.max(0, (input.summary?.photos ?? 0) - culledPhotoCount);
-  return mainPeople(people, keptPhotoCount);
+  const main = mainPeople(people, keptPhotoCount);
+  const selected = new Set(main.map(({ personId }) => personId));
+  const pinned = people.filter((person) => pinnedIds.includes(person.personId) && !selected.has(person.personId));
+  if (askedIds.length) {
+    const byId = new Map([...main, ...pinned].map((person) => [person.personId, person]));
+    return askedIds.flatMap((personId) => { const person = byId.get(personId); return person ? [person] : []; });
+  }
+  return orderByProgress(main, input);
 }
 
 function orderByProgress<T extends { momentCount: number; personId: string }>(entries: T[], input: ChatInput): T[] {
   const completed = input.proceededPersonIds ?? input.flow?.peopleProgress?.completedPersonIds ?? [];
-  const order = new Map(completed.map((personId, index) => [personId, index]));
+  const asking = input.flow?.peopleProgress?.askedPersonIds ?? [];
+  const order = new Map((asking.length ? asking : completed).map((personId, index) => [personId, index]));
   return entries.sort((a, b) => {
     const aIndex = order.get(a.personId), bIndex = order.get(b.personId);
     if (aIndex !== undefined || bIndex !== undefined) return (aIndex ?? Number.MAX_SAFE_INTEGER) - (bIndex ?? Number.MAX_SAFE_INTEGER);
@@ -146,6 +171,14 @@ export function canConfirmStory(input: ChatInput): boolean {
 }
 
 export function deriveChat(input: ChatInput): ChatState {
+  if (input.flow?.people.length && input.people) {
+    const saved = new Map(input.flow.people.map((person) => [person.personId, person]));
+    input = { ...input, people: input.people.map((person) => {
+      const stored = saved.get(person.personId);
+      if (!stored || !input.flow?.peopleProgress?.askedPersonIds?.includes(person.personId) || !(stored.confirmed || stored.skipped || stored.mergedInto)) return person;
+      return { ...person, name: stored.name, role: stored.role, answerText: stored.answerText, skipped: stored.skipped || Boolean(stored.mergedInto) };
+    }) };
+  }
   if (input.flow?.story.answer && !input.intent) input = { ...input, intent: { text: input.flow.story.answer }, storySummary: input.flow.story.storySummary ?? undefined, mentionedPeople: input.flow.story.mentionedPeople };
   if (input.flow?.peopleProgress) input = {
     ...input,
@@ -315,9 +348,12 @@ export function deriveChat(input: ChatInput): ChatState {
           add({ kind: "you", id: `person-turn-${person.personId}-${index + 1}`, text: turn.question });
           if (turn.reply) add({ kind: "mosae", id: `person-turn-reply-${person.personId}-${index + 1}`, text: turn.reply });
         });
-        else add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
-        if (person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
-        for (const event of mergeEvents.filter(({ personId }) => personId === person.personId)) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
+        else if (personAnswer(person).trim()) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+        if (!person.skipped && person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
+        const personMergeEvents = mergeEvents.filter(({ personId }) => personId === person.personId);
+        const automaticAck = automaticMergeAcknowledgement(input, person.personId);
+        if (automaticAck) add({ kind: "mosae", id: `merge-${person.personId}-ack`, text: automaticAck });
+        else for (const event of personMergeEvents) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       } else {
         const { event } = entry;
         if (event.reconciled) continue;
@@ -334,6 +370,7 @@ export function deriveChat(input: ChatInput): ChatState {
       add(taggedPersonItem(awaitingProceed));
     }
     if (unanswered) {
+      placeholder = "Type a name";
       const mention = people[0]?.personId === unanswered.personId ? mentionedPerson(input.intent.text, people, input.mentionedPeople) : null;
       if (mention && !(input.dismissedPersonSuggestionIds ?? []).includes(unanswered.personId)) {
         add({ kind: "person-confirm", id: `person-confirm-${unanswered.personId}`, personId: unanswered.personId, label: mention.label, text: `Is this ${mention.phrase}?`, momentCount: unanswered.momentCount, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 2) });
@@ -432,7 +469,8 @@ export function deriveChat(input: ChatInput): ChatState {
       const { event } = entry;
       add({ kind: "mosae", id: `person-question-${event.personId}`, text: "Who is this?", photos: (event.questionFaces ?? event.sampleFaces).slice(0, 1) });
       add({ kind: "you", id: `person-answer-${event.personId}`, text: event.answer });
-      if (!event.automatic) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
+      if (event.automatic) add({ kind: "mosae", id: `${event.id}-ack`, text: `Got it — I've added these to ${event.targetName.replace(/^my\s+/i, "")}'s moments.` });
+      else add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.replace(/^my\s+/i, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
       continue;
     }
     const { person } = entry;
@@ -443,10 +481,13 @@ export function deriveChat(input: ChatInput): ChatState {
         add({ kind: "you", id: `person-turn-${person.personId}-${index + 1}`, text: turn.question });
         if (turn.reply) add({ kind: "mosae", id: `person-turn-reply-${person.personId}-${index + 1}`, text: turn.reply });
       });
-      if (!personTurns.some((turn) => turn.question === person.answerText)) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
+      if (!personTurns.some((turn) => turn.question === person.answerText) && personAnswer(person).trim()) add({ kind: "you", id: `person-answer-${person.personId}`, text: personAnswer(person) });
       if (!person.skipped && person.name && input.proceededPersonIds?.includes(person.personId)) add(taggedPersonItem(person, false));
       if (showPeopleSummary && input.taggedPerson?.personId === person.personId) add({ kind: "mosae", id: `tagged-person-${person.personId}`, text: "Got it — these are the photos of this person.", photos: input.taggedPerson.photos });
-      for (const event of input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? []) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
+      const personMergeEvents = input.mergeEvents?.filter(({ personId }) => personId === person.personId) ?? [];
+      const automaticAck = automaticMergeAcknowledgement(input, person.personId);
+      if (automaticAck) add({ kind: "mosae", id: `merge-${person.personId}-ack`, text: automaticAck });
+      else for (const event of personMergeEvents) add({ kind: "merge-followup", id: event.id, text: `Same ${event.answer.toLocaleLowerCase().replace(/^my\s+/, "")} as before?`, answer: event.targetName, photos: event.sampleFaces.slice(0, 2), faceSamples: event.faceSamples, response: event.response });
     }
   }
   if (collectingMissedPeople) {
@@ -463,8 +504,10 @@ export function deriveChat(input: ChatInput): ChatState {
     // Keep the single missed-people question before the names and photo-selection
     // turns in the reconstructed transcript, then place the final summary after them.
     addMissedPeople(true, false);
-    const announced = keptPeople(input).filter((person) => !person.skipped && person.name)
-      .sort((a, b) => b.momentCount - a.momentCount);
+    const summarySource = input.flow?.peopleProgress?.askedPersonIds?.length ? announcedPeople(input) : keptPeople(input);
+    const summaryPeople = summarySource.filter((person) => !person.skipped && person.name);
+    const asked = announcedPeople(input).filter((person) => !person.skipped && person.name && !summaryPeople.some((known) => known.personId === person.personId));
+    const announced = orderByProgress([...summaryPeople, ...asked], input);
     const peopleById = new Map(announced.map((person) => [person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri, sampleFace: person.sampleFaces?.[0] }]));
     const taggedMissed = (input.people ?? []).filter((person) => person.personId.startsWith("p-missed-") && !person.skipped && person.name && person.momentCount > 0);
     for (const person of taggedMissed) {

@@ -84,6 +84,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
   currentPlan.current = input.plan;
   const proposalId = useRef<string | null>(null);
   const personSaving = useRef(false);
+  const peopleSummaryConfirming = useRef(false);
   const occasionSaving = useRef(false);
   const interpretInFlight = useRef(false);
   const generationSaving = useRef(false);
@@ -118,6 +119,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     acceptedSummaryEpoch.current = -1;
     proposalId.current = null;
     personSaving.current = false;
+    peopleSummaryConfirming.current = false;
     occasionSaving.current = false;
     generationSaving.current = false;
     planLoad.current = false;
@@ -221,7 +223,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const mapped = people?.map((person: DirectorPerson) => {
       const edit = peopleEdits.current.get(person.personId);
       const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
-      return { ...person, ...(!edit && stored ? { name: person.name ?? stored.name, role: person.role ?? stored.role, skipped: stored.skipped } : {}), ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
+      const acceptedAnswer = stored && (stored.confirmed || stored.skipped || stored.mergedInto);
+      return { ...person, ...(!edit && acceptedAnswer ? { name: stored.name, role: stored.role, answerText: stored.answerText, skipped: stored.skipped || Boolean(stored.mergedInto) } : {}), ...(edit ?? (skipPeopleForNow.current ? { name: null, role: null, skipped: true } : { skipped: false })) };
     }) ?? null;
     if (resumeProjectId.current !== projectId) {
       try {
@@ -263,7 +266,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
             return local?.name || local?.skipped || peopleEdits.current.has(person.personId) ? { ...person, ...local, momentCount: person.momentCount } : person;
           }) ?? null : current.people,
           peopleConfirmed: hasFlowRecord ? allFlowPeopleAnswered : current.peopleConfirmed || Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)),
-          peopleSummaryConfirmed: hasFlowRecord ? peopleSummaryConfirmed : undefined,
+          peopleSummaryConfirmed: peopleSummaryConfirming.current ? true : hasFlowRecord ? peopleSummaryConfirmed : undefined,
           plan,
           directionNote: plan?.directionRecommendation ?? "For these moments, I’d suggest this.",
           momentsConfirmed: hasGeneration || Boolean(plan && !needsFilteredPhotoReview),
@@ -291,7 +294,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     setInput((current) => ({ ...current, ...(taggedPersonRef.current ? { taggedPerson: taggedPersonRef.current } : {}), summary: mergedSummary, people: mergedSummary.ready.faces ? mapped?.map((person) => {
       const local = current.people?.find((item) => item.personId === person.personId);
       return local?.name || local?.skipped || peopleEdits.current.has(person.personId) ? { ...person, ...local, momentCount: person.momentCount } : person;
-    }) ?? null : current.people, peopleConfirmed: typeof repository.getFlow !== "function" ? current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) : allFlowPeopleProceeded, peopleSummaryConfirmed: typeof repository.getFlow !== "function" ? current.peopleSummaryConfirmed : acceptedFlow?.peopleSummaryConfirmed === true || (!requiresExplicitProceed && acceptedFlow?.peopleSummaryConfirmed === undefined && (current.peopleSummaryConfirmed === true || Boolean(current.generation) || (nextSummary.ready.faces && mapped !== null && mapped.length > 0 && mapped.every((person) => {
+    }) ?? null : current.people, peopleConfirmed: typeof repository.getFlow !== "function" ? current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) : allFlowPeopleProceeded, peopleSummaryConfirmed: peopleSummaryConfirming.current ? true : typeof repository.getFlow !== "function" ? current.peopleSummaryConfirmed : acceptedFlow?.peopleSummaryConfirmed === true || (!requiresExplicitProceed && acceptedFlow?.peopleSummaryConfirmed === undefined && (current.peopleSummaryConfirmed === true || Boolean(current.generation) || (nextSummary.ready.faces && mapped !== null && mapped.length > 0 && mapped.every((person) => {
       const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
       return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto));
     })))) }));
@@ -477,7 +480,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const priorPerson = duplicate ? people.find((person) => person.personId === duplicate.personId) : undefined;
       const automaticDuplicate = duplicate?.mode === "automatic" && Boolean(priorPerson);
       const mergeEvent = duplicate && priorPerson ? {
-        id: `merge-${personId}`, personId, targetPersonId: priorPerson.personId, answer: duplicate.answer,
+        id: `merge-${personId}`, personId, targetPersonId: priorPerson.personId, answer: answerText ?? duplicate.answer,
         targetName: priorPerson.name ?? duplicate.answer,
         sampleFaces: (priorPerson.sampleFaces ?? []).slice(0, 2).map((face) => face.uri),
         questionFaces: (updated.find((person) => person.personId === personId)?.sampleFaces ?? []).slice(0, 2).map((face) => face.uri),
@@ -496,12 +499,14 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       try {
         const priorProgress = input.flow?.peopleProgress?.completedPersonIds;
         const completedPersonIds = [...new Set([...(priorProgress ?? input.proceededPersonIds ?? []), ...(role === "Skip" || automaticDuplicate ? [personId] : [])])];
+        const askedPersonIds = [...new Set([...(input.flow?.peopleProgress?.askedPersonIds ?? priorProgress ?? []), ...mainPeople(people, input.summary?.photos ?? 0).map(({ personId: id }) => id)])];
       const actionableCastPeople = mainPeople(castPeople, input.summary?.photos ?? 0);
       const allAnsweredNow = actionableCastPeople.every((person) => person.skipped || Boolean(person.name));
       const allProceededNow = actionableCastPeople.every((person) => person.skipped || completedPersonIds.includes(person.personId));
         await commitFlowAction({ type: "batch", actions: [
           { type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, ...(answerText ? { answerText } : {}), confirmed: role !== "Skip", skipped: role === "Skip" },
-          ...(priorProgress === undefined ? [{ type: "people-progress" as const, completedPersonIds }] : role === "Skip" ? [{ type: "people-progress" as const, completedPersonIds }] : []),
+          ...(automaticDuplicate && duplicate ? [{ type: "merge" as const, personId, targetPersonId: duplicate.personId }] : []),
+          { type: "people-progress", askedPersonIds, completedPersonIds },
           ...(role === "Skip" && allAnsweredNow && allProceededNow ? [{ type: "missed-people-confirmed" as const, confirmed: false }] : []),
           { type: "people-summary-confirmed", confirmed: false },
         ] });
@@ -516,7 +521,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const refreshedPeople = result ? await repository.getPeople(projectId, reconciliationPendingIds) : null;
         const emptiedReconciledIds = result ? reconciliationPendingIds.filter((id) => { const reconciled = result.cast.people.find((entry) => entry.personId === id); return Boolean(reconciled && reconciled.faceIds.length === 0); }) : [];
         const completedAfterReconciliation = [...new Set([...completedPersonIds, ...emptiedReconciledIds])];
-        if (emptiedReconciledIds.length) await commitFlowAction({ type: "people-progress", completedPersonIds: completedAfterReconciliation });
+        if (emptiedReconciledIds.length) await commitFlowAction({ type: "people-progress", askedPersonIds, completedPersonIds: completedAfterReconciliation });
         const nextPeople = refreshedPeople?.map((person) => {
           const local = castPeople.find((entry) => entry.personId === person.personId);
           const remainsPending = reconciliationPendingIds.includes(person.personId) && Boolean(result?.cast.people.find((entry) => entry.personId === person.personId)?.faceIds.length);
@@ -554,11 +559,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       personSaving.current = true;
       try {
         const completedPersonIds = [...new Set([...(input.flow?.peopleProgress?.completedPersonIds ?? input.proceededPersonIds ?? []), personId])];
+        const askedPersonIds = [...new Set([...(input.flow?.peopleProgress?.askedPersonIds ?? input.flow?.peopleProgress?.completedPersonIds ?? []), ...mainPeople(input.people ?? [], input.summary?.photos ?? 0).map(({ personId: id }) => id)])];
         const actionablePeople = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
         const allResolved = actionablePeople.every((person) => person.skipped || Boolean(person.name));
         const allProceeded = actionablePeople.every((person) => person.skipped || completedPersonIds.includes(person.personId));
         await commitFlowAction({ type: "batch", actions: [
-          { type: "people-progress", completedPersonIds },
+          { type: "people-progress", askedPersonIds, completedPersonIds },
           ...(allResolved && allProceeded ? [{ type: "missed-people-confirmed" as const, confirmed: false }] : []),
         ] });
         if (!isCurrentProject()) return;
@@ -688,15 +694,24 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     },
     beginMissedPersonTagging(personId: string, name: string) { setInput((current) => ({ ...current, missedPersonTagging: { personId, name } })); },
     async confirmPeopleSummary() {
-      if (personSaving.current) return;
-      personSaving.current = true;
+      if (input.peopleSummaryConfirmed) return;
+      // Advance on the first tap. The previous identity save can still be
+      // completing its cast refresh when the summary appears, so serialize the
+      // final cast confirmation behind it instead of silently dropping input.
+      setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true }));
+      peopleSummaryConfirming.current = true;
+      let summaryPersisted = false;
+      setError(null);
       try {
+        while (personSaving.current) await new Promise<void>((resolve) => setTimeout(resolve, 25));
         const people = input.people ?? [];
         const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: people.filter((person) => !person.personId.startsWith("p-missed-") || (input.missedPeople ?? []).some((missed) => missed.personId === person.personId)).map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
         if (result?.proposalId) proposalId.current = result.proposalId;
-        await commitFlowAction({ type: "people-summary-confirmed", confirmed: true });
+        try { await commitFlowAction({ type: "people-summary-confirmed", confirmed: true }); }
+        catch { await commitFlowAction({ type: "people-summary-confirmed", confirmed: true }); }
+        summaryPersisted = true;
         const setAside = revisedPlan ? getSetAsideSummary(revisedPlan) : null;
         const momentsConfirmed = setAside
           ? setAside.blurry + setAside.duplicates === 0
@@ -704,8 +719,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, momentsConfirmed, ...(revisedPlan ? { plan: revisedPlan } : {}) }));
         const nextPlan = revisedPlan ?? input.plan;
         if (momentsConfirmed && nextPlan && input.summary?.ready.plan) await loadDirectionOptions(nextPlan.planId);
-      } catch (cause) { setError(reportFailure(cause)); }
-      finally { if (isCurrentProject()) personSaving.current = false; }
+      } catch (cause) {
+        peopleSummaryConfirming.current = false;
+        if (!summaryPersisted) setInput((current) => ({ ...current, peopleSummaryConfirmed: false }));
+        setError(reportFailure(cause));
+      } finally { peopleSummaryConfirming.current = false; }
     },
     async confirmPeople() {
       if (personSaving.current) return;
@@ -839,6 +857,19 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         actions.discardInterpret();
       }
       const activePerson = state.items.find((item) => item.kind === "person");
+      // Names and explicit skips are unambiguous answers to the visible face
+      // question. Handle them locally so an interpreter clarification cannot
+      // swallow the user's answer or leave the same face active.
+      if (activePerson?.kind === "person") {
+        if (/^(?:i\s+)?(?:don['’]?t know(?: her| him| them)?|no idea|skip|not sure)(?:[.!?])?$/i.test(answer)) {
+          return actions.setPerson(activePerson.personId, "Skip", undefined, answer);
+        }
+        const duplicate = matchExistingPersonAnswer(answer, (input.people ?? []).filter((person) => person.personId !== activePerson.personId));
+        if (duplicate) {
+          const existing = input.people?.find((person) => person.personId === duplicate.personId);
+          if (existing?.name) return actions.setPerson(activePerson.personId, "other", existing.name, answer);
+        }
+      }
       const summaryVisible = state.items.some((item) => item.kind === "people-summary");
       const anyoneElseVisible = state.items.some((item) => item.kind === "anyone-else");
       const missedTaggingVisible = state.items.some((item) => item.kind === "missed-person") || Boolean(input.missedPersonTagging);
