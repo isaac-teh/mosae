@@ -10,13 +10,13 @@ describe("loadConfig", () => {
     expect(loadConfig(base)).toMatchObject({ production: false, tasks: null, invokerEmails: [], port: 8080, geminiApiKey: "" });
   });
 
-  it("uses the configured face matching threshold with the spike default", () => {
-    expect(loadConfig(base)).toMatchObject({ faceMatchThreshold: 0.35 });
-    expect(loadConfig({ ...base, FACE_MATCH_THRESHOLD: "0.9" })).toMatchObject({ faceMatchThreshold: 0.9 });
+  it("uses model-specific face matching thresholds", () => {
+    expect(loadConfig(base)).toMatchObject({ faceMatchThresholds: { "arcface-buffalo_l-v1": 0.35, "gemini-embedding-2": 0.85 } });
+    expect(loadConfig({ ...base, ARCFACE_MATCH_THRESHOLD: "0.4", GEMINI_FACE_MATCH_THRESHOLD: "0.9" })).toMatchObject({ faceMatchThresholds: { "arcface-buffalo_l-v1": 0.4, "gemini-embedding-2": 0.9 } });
   });
 
   it("exposes face thresholds through one shared config helper", () => {
-    expect(faceMatchingThresholds({ FACE_MATCH_THRESHOLD: "0.91" })).toEqual({ faceMatchThreshold: 0.91 });
+    expect(faceMatchingThresholds({ GEMINI_FACE_MATCH_THRESHOLD: "0.91" })).toEqual({ faceMatchThresholds: { "arcface-buffalo_l-v1": 0.35, "gemini-embedding-2": 0.91 } });
   });
 
   it("passes through GEMINI_API_KEY without requiring it", () => {

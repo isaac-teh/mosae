@@ -130,6 +130,23 @@ describe("interpret", () => {
     expect(summary.change).toMatchObject({ intent: "confirm" });
     expect(gen).not.toHaveBeenCalled();
   });
+  it.each(["no", "none", "no one else", "nobody else", "skip"])("confirms missed people for %s", async (text) => {
+    const gen = vi.fn();
+    const result = await interpret({ ...request("people", text), context: { peopleStage: "missed" } }, { generate: gen, searchShots: vi.fn() });
+    expect(result.change).toMatchObject({ intent: "confirm", needsClarification: false });
+    expect(gen).not.toHaveBeenCalled();
+  });
+  it.each(["Will", "Joy", "Mark"])("accepts %s as a short name", async (text) => {
+    const gen = vi.fn();
+    const result = await interpret({ ...request("people", text), context: { peopleStage: "identify" } }, { generate: gen, searchShots: vi.fn() });
+    expect(result.change).toMatchObject({ intent: "assign", name: text });
+    expect(gen).not.toHaveBeenCalled();
+  });
+  it("does not accept a digit-only value as a name", async () => {
+    const gen = generate({ change: { kind: "person", intent: "unclear", names: [], name: "", role: "other", needsClarification: true, clarifyingQuestion: "Who do you mean?" } });
+    await interpret({ ...request("people", "2"), context: { peopleStage: "identify" } }, { generate: gen, searchShots: vi.fn() });
+    expect(gen).toHaveBeenCalled();
+  });
   it("fast-paths background stranger answers to exclusion", async () => {
     const gen = vi.fn();
     for (const text of ["This person don't exist in my photo", "I don't know them", "random person", "background stranger"]) {

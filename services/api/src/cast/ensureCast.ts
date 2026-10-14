@@ -60,7 +60,8 @@ export async function ensureCast(
       faces.push({ faceId: face.faceId, shotId: doc.id, photoHash: hash, bbox: face.bbox, ageBand: face.ageBand, prominence: face.prominence });
       const storedVector = (data.faceEmbeddings as Record<string, { toArray?: () => number[] } | number[]> | undefined)?.[face.faceId];
       const vector = Array.isArray(storedVector) ? storedVector : storedVector?.toArray?.();
-      if (vector) vectorFaces.push({ faceId: face.faceId, shotId: doc.id, vector, modelVersion: (data.faceEmbeddingModel as string | undefined) ?? "gemini-embedding-2", ...(face.characterId ? { characterId: face.characterId } : {}) });
+      const area = Math.max(0, face.bbox[2] - face.bbox[0]) * Math.max(0, face.bbox[3] - face.bbox[1]);
+      if (vector && face.prominence !== "background" && area >= 0.002) vectorFaces.push({ faceId: face.faceId, shotId: doc.id, vector, modelVersion: (data.faceEmbeddingModel as string | undefined) ?? "gemini-embedding-2", ...(face.characterId ? { characterId: face.characterId } : {}) });
       refs.set(face.faceId, { shotId: doc.id, index });
     });
     if (analysis.kind === "photo") for (const interaction of analysis.interactions ?? []) interactions.push(interaction);
@@ -84,7 +85,7 @@ export async function ensureCast(
   const coveredLabels = labels && labelsCover(labels, [...photoHashes.values()]) ? labels : undefined;
   const thresholds = faceMatchingThresholds();
   const embeddingResolver = !coveredLabels && vectorFaces.length
-    ? embeddingIdentity({ threshold: thresholds.faceMatchThreshold })
+    ? embeddingIdentity({ thresholds: thresholds.faceMatchThresholds })
     : null;
   const resolver = coveredLabels ? labelledIdentity(coveredLabels) : embeddingResolver;
   const identities = embeddingResolver ? embeddingResolver.resolveVectors(vectorFaces) : resolver?.resolve(faces) ?? new Map<string, string>();

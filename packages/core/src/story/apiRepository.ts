@@ -429,7 +429,7 @@ export function createApiStoryRepository(
       const [charactersValue, castValue, momentsValue] = await Promise.all([
         deps.request("GET", `/api/projects/${encodeURIComponent(id)}/characters`),
         deps.request("GET", `/api/projects/${encodeURIComponent(id)}/cast`).catch(() => null),
-        deps.request("GET", `/api/projects/${encodeURIComponent(id)}/moments`).catch(() => null),
+        deps.request("GET", `/api/projects/${encodeURIComponent(id)}/moments`),
       ]);
       const characters = record(charactersValue, "characters response");
       const cast = castValue ? record(castValue, "cast response").cast as RecordData | null | undefined : null;
@@ -439,8 +439,8 @@ export function createApiStoryRepository(
       if (!cast || !Array.isArray(cast.people)) return null;
       const castPeople = cast && Array.isArray(cast.people) ? cast.people as RecordData[] : [];
       const names = new Map(castPeople.map((person) => [String(person.personId), person]));
-      const momentsRecord = momentsValue ? record(momentsValue, "moments response") : {};
-      if (!Array.isArray(momentsRecord.moments)) return null;
+      const momentsRecord = record(momentsValue, "moments response");
+      if (!Array.isArray(momentsRecord.moments)) throw new Error("Unable to load your moments. Please retry.");
       const momentById = new Map((Array.isArray(momentsRecord.moments) ? momentsRecord.moments : []).map((value) => { const moment = record(value, "moment"); return [String(moment.shotId), moment] as const; }));
       const groups = new Map<string, { shots: Set<string>; samples: Map<string, { shotId: string; assetId: string; bbox: [number, number, number, number] }>; days: Set<number> }>();
       // The tag-moments gallery is the source of truth: its moment list is

@@ -193,21 +193,22 @@ export function collageShotIds(timeline: Timeline): string[] {
 
 export type ParseResult<T> = { ok: true; timeline: T } | { ok: false; errors: string[] };
 
+export const LEGACY_DESIGN_MAPPINGS = {
+  "design-polaroid": { layoutId: "polaroid-garland", motionId: "page-turn" },
+  "design-magazine": { layoutId: "travel-story", motionId: "focus-relay" },
+  "design-film-strip": { layoutId: "postcard-stack", motionId: "stack-deal" },
+} as const;
+
 function describe(issue: { path: PropertyKey[]; message: string }): string {
   const path = issue.path.map(String).join(".");
   return path ? `${path}: ${issue.message}` : issue.message;
 }
 
 export function safeParseTimeline(value: unknown): ParseResult<Timeline> {
-  const legacyDesigns: Record<string, { layoutId: string; motionId: string }> = {
-    "design-polaroid": { layoutId: "polaroid-garland", motionId: "page-turn" },
-    "design-magazine": { layoutId: "travel-story", motionId: "focus-relay" },
-    "design-film-strip": { layoutId: "postcard-stack", motionId: "stack-deal" },
-  };
   const normalized = value && typeof value === "object" && "videoClips" in value && Array.isArray(value.videoClips)
     ? { ...value, videoClips: value.videoClips.map((clip) => {
       if (!clip || typeof clip !== "object" || !("kind" in clip) || !("spec" in clip) || !clip.spec || typeof clip.spec !== "object" || !("layoutId" in clip.spec)) return clip;
-      const legacy = legacyDesigns[String(clip.spec.layoutId)];
+      const legacy = LEGACY_DESIGN_MAPPINGS[String(clip.spec.layoutId) as keyof typeof LEGACY_DESIGN_MAPPINGS];
       if (legacy && Array.isArray(clip.spec.slots)) {
         const count = clip.spec.slots.length;
         if (count < 3) return { ...clip, spec: { ...clip.spec, layoutId: count === 1 ? "simple-full" : "simple-stacked", motionId: "print-drop" } };

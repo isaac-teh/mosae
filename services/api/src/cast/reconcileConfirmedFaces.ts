@@ -7,7 +7,7 @@ export type ReconciliationFace = { faceId: string; shotId: string; vector: numbe
 export function reconcileConfirmedFaces(
   faces: ReconciliationFace[],
   confirmedPersonId: string,
-  threshold = FACE_RECONCILE_THRESHOLD,
+  threshold?: number,
   pendingPersonIds?: ReadonlySet<string>,
   margin = FACE_RECONCILE_MARGIN,
 ): Map<string, string> {
@@ -29,7 +29,8 @@ export function reconcileConfirmedFaces(
       bestByPerson.set(personId, Math.max(bestByPerson.get(personId) ?? -1, cosine(candidate.vector, reference.vector)));
     }
     const ranked = [...bestByPerson].sort((a, b) => b[1] - a[1]);
-    if (ranked[0]?.[0] === confirmedPersonId && ranked[0][1] >= threshold && ranked[0][1] - (ranked[1]?.[1] ?? -1) >= margin) matches.set(candidate.faceId, confirmedPersonId);
+    const modelThreshold = threshold ?? (candidate.modelVersion === "gemini-embedding-2" ? 0.86 : FACE_RECONCILE_THRESHOLD);
+    if (ranked[0]?.[0] === confirmedPersonId && ranked[0][1] >= modelThreshold && ranked[0][1] - (ranked[1]?.[1] ?? -1) >= margin) matches.set(candidate.faceId, confirmedPersonId);
   }
   return matches;
 }

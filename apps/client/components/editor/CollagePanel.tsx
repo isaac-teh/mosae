@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { reassignCollageSlots, type Moment } from "@mosae/core";
-import { COLLAGE_GRID_VARIANTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, ALLOWED_COMBOS, collageGridRects, type CollageGridVariant, type EditOp, type Timeline } from "@mosae/contracts";
+import { COLLAGE_GRID_VARIANTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, ALLOWED_COMBOS, LEGACY_DESIGN_MAPPINGS, collageGridRects, type CollageGridVariant, type EditOp, type Timeline } from "@mosae/contracts";
 
 const SIMPLE_LAYOUTS = COLLAGE_GRID_VARIANTS.filter(({ id }) => id.startsWith("simple-"));
 const DESIGNED_LAYOUT_IDS = ["botanical-scrapbook", "nine-photo-grid", "travel-mosaic", "travel-story", "photo-table", "torn-paper", "polaroid-garland", "postcard-stack", "route-map"] as const;
@@ -13,7 +13,11 @@ export function collageOptionsForPhotoCount(count: number, aspect?: Timeline["as
   };
 }
 export function nearestCollageOption(layoutId: string, count: number): string {
-  const legacyDesigns: Record<string, string> = { "design-polaroid": "polaroid-garland", "design-magazine": "travel-story", "design-film-strip": "postcard-stack" };
+  const legacyDesigns = Object.fromEntries(Object.entries(LEGACY_DESIGN_MAPPINGS ?? {
+    "design-polaroid": { layoutId: "polaroid-garland", motionId: "page-turn" },
+    "design-magazine": { layoutId: "travel-story", motionId: "focus-relay" },
+    "design-film-strip": { layoutId: "postcard-stack", motionId: "stack-deal" },
+  }).map(([legacy, mapping]) => [legacy, mapping.layoutId]));
   if (legacyDesigns[layoutId]) {
     if (count < 3) return count === 1 ? "simple-full" : "simple-stacked";
     if (count > 5 && layoutId !== "design-magazine") return "botanical-scrapbook";
@@ -110,7 +114,7 @@ export function CollagePanel({ clip, section, aspect = "9:16", timeline, moments
   const motionId = isCurrentSelection ? selection.motionId : clip.spec.motionId;
   const count = clip.spec.slots.length;
   const minCount = 1;
-  const maxCount = 6;
+  const maxCount = Math.max(6, count);
   const options = collageOptionsForPhotoCount(count, aspect);
   const motionOptions = COLLAGE_MOTIONS.filter((motion) => ALLOWED_COMBOS.some((combo) => combo.layoutId === layoutId && combo.motionId === motion.id));
   const slotsForLayout = (layout: string, slots: Collage["spec"]["slots"]) => {
@@ -130,10 +134,11 @@ export function CollagePanel({ clip, section, aspect = "9:16", timeline, moments
   };
   const setPhotoCount = (nextCount: number) => {
     if (nextCount < minCount || nextCount > maxCount || nextCount === count) return;
-    const layoutId = nextCount === 1 ? "simple-full" : nextCount === 2 ? "simple-stacked" : nextCount === 3 ? "simple-three-stacked" : nextCount === 4 ? "simple-grid-2x2" : nextCount === 5 ? "simple-five-top" : "simple-grid-2x3";
-    const layout = COLLAGE_LAYOUTS.find((candidate) => candidate.id === layoutId)!;
+    const keepCurrentLayout = DESIGN_LAYOUTS.some(({ id, minSlots, maxSlots }) => id === layoutId && minSlots <= nextCount && nextCount <= maxSlots);
+    const fallbackLayoutId = nextCount === 1 ? "simple-full" : nextCount === 2 ? "simple-stacked" : nextCount === 3 ? "simple-three-stacked" : nextCount === 4 ? "simple-grid-2x2" : nextCount === 5 ? "simple-five-top" : "simple-grid-2x3";
+    const layout = COLLAGE_LAYOUTS.find((candidate) => candidate.id === (keepCurrentLayout ? layoutId : fallbackLayoutId))!;
     const allowedMotions = ALLOWED_COMBOS.filter((combo) => combo.layoutId === layout.id).map((combo) => combo.motionId);
-    const motionId = allowedMotions.includes(clip.spec.motionId) ? clip.spec.motionId : allowedMotions[0]!;
+    const nextMotionId = keepCurrentLayout && allowedMotions.includes(motionId) ? motionId : allowedMotions.includes(clip.spec.motionId) ? clip.spec.motionId : allowedMotions[0]!;
     const slots = clip.spec.slots.slice(0, nextCount);
     const usedIds = new Set(slots.map((slot) => slot.slotId));
     const usedShots = new Set(clip.spec.slots.flatMap((slot) => slot.shotId ? [slot.shotId] : []));
@@ -164,7 +169,7 @@ export function CollagePanel({ clip, section, aspect = "9:16", timeline, moments
         slots.push({ slotId: id, shotId: candidate.shotId, kind: "photo", ...(candidate.width ? { width: candidate.width } : {}), ...(candidate.height ? { height: candidate.height } : {}) });
       } else slots.push({ slotId: id, kind: "photo", empty: true });
     }
-    onApply({ op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, layoutId: layout.id, motionId, slots: slotsForLayout(layout.id, slots) } });
+    onApply({ op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, layoutId: layout.id, motionId: nextMotionId, slots: slotsForLayout(layout.id, slots) } });
   };
   const handleTouchStart = (event: any) => {
     suppressHandleClick.current = false;

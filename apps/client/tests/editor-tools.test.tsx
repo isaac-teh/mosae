@@ -612,7 +612,7 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Toggle layout drawer"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="3 photos"]')?.textContent).toBe("3");
     await click("Increase number of photos");
-    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "simple-grid-2x2", motionId: "print-drop", slots: [...threeSlotCollage.spec.slots, { slotId: "empty:collage-1:4", kind: "photo", empty: true }] } });
+    expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: "collage-1", spec: { ...threeSlotCollage.spec, layoutId: "photo-table", motionId: "stack-deal", slots: [...threeSlotCollage.spec.slots, { slotId: "empty:collage-1:4", kind: "photo", empty: true }] } });
     await click("Layout Travel story");
     expect(host.querySelector('[aria-label="Layout Travel story"]')?.getAttribute("aria-pressed")).toBe("true");
   });
@@ -636,13 +636,13 @@ describe("editor tool operations", () => {
     await click("Increase number of photos");
     await renderPanel();
     expect(host.querySelector('[aria-label="5 photos"]')?.textContent).toBe("5");
-    expect(current.spec.layoutId).toBe("simple-five-top");
+    expect(current.spec.layoutId).toBe("photo-table");
     expect(current.spec.slots.map((slot) => slot.shotId)).toContain("near-shot");
     expect(host.querySelector('[aria-label="Layout Full-bleed"]')).toBeNull();
     await click("Decrease number of photos");
     await renderPanel();
     expect(host.querySelector('[aria-label="4 photos"]')?.textContent).toBe("4");
-    expect(current.spec.layoutId).toBe("simple-grid-2x2");
+    expect(current.spec.layoutId).toBe("photo-table");
     expect(current.spec.slots).toHaveLength(4);
   });
 

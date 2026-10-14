@@ -206,7 +206,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const local = current.missedPeople?.find((entry) => entry.personId === person.personId);
         const storedCount = stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0;
         const sampleUris = stored?.samplePhotoUris?.length ? stored.samplePhotoUris : local?.sampleUris;
-        return { ...person, momentCount: Math.max(storedCount, local?.momentCount ?? 0), ...(sampleUris?.length ? { sampleUris } : {}), ...(local?.skipped ? { skipped: true } : {}) };
+        return { ...person, momentCount: storedCount, ...(sampleUris?.length ? { sampleUris } : {}), ...(person.skipped ? { skipped: true } : {}) };
       }) : current.missedPeople;
       const nextMissedPerson = missedPeople?.find((person) => !person.skipped && person.momentCount === 0);
       const historyTurns = acceptedFlow.missedClarifications?.map((turn) => ({ ...turn, stage: "missed" as const })) ?? current.interpTurns?.filter((turn) => turn.stage === "missed") ?? [];
@@ -503,13 +503,6 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const actionableCastPeople = mainPeople(castPeople, input.summary?.photos ?? 0);
       const allAnsweredNow = actionableCastPeople.every((person) => person.skipped || Boolean(person.name));
       const allProceededNow = actionableCastPeople.every((person) => person.skipped || completedPersonIds.includes(person.personId));
-        await commitFlowAction({ type: "batch", actions: [
-          { type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, ...(answerText ? { answerText } : {}), confirmed: role !== "Skip", skipped: role === "Skip" },
-          ...(automaticDuplicate && duplicate ? [{ type: "merge" as const, personId, targetPersonId: duplicate.personId }] : []),
-          { type: "people-progress", askedPersonIds, completedPersonIds },
-          ...(role === "Skip" && allAnsweredNow && allProceededNow ? [{ type: "missed-people-confirmed" as const, confirmed: false }] : []),
-          { type: "people-summary-confirmed", confirmed: false },
-        ] });
         const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, {
           people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })),
           focus: [],
@@ -517,6 +510,13 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           ...(shouldReconcile ? { reconcilePersonId: reconciliationTargetId, reconcilePendingPersonIds: reconciliationPendingIds } : {}),
           ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}),
         });
+        await commitFlowAction({ type: "batch", actions: [
+          { type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, ...(answerText ? { answerText } : {}), confirmed: role !== "Skip", skipped: role === "Skip" },
+          ...(automaticDuplicate && duplicate ? [{ type: "merge" as const, personId, targetPersonId: duplicate.personId }] : []),
+          { type: "people-progress", askedPersonIds, completedPersonIds },
+          ...(role === "Skip" && allAnsweredNow && allProceededNow ? [{ type: "missed-people-confirmed" as const, confirmed: false }] : []),
+          { type: "people-summary-confirmed", confirmed: false },
+        ] });
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         const refreshedPeople = result ? await repository.getPeople(projectId, reconciliationPendingIds) : null;
         const emptiedReconciledIds = result ? reconciliationPendingIds.filter((id) => { const reconciled = result.cast.people.find((entry) => entry.personId === id); return Boolean(reconciled && reconciled.faceIds.length === 0); }) : [];
@@ -588,7 +588,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       const missedReply = duplicates.length ? `${duplicates.join(" and ")} ${duplicates.length === 1 ? "is" : "are"} already tagged.` : undefined;
       const allAlreadyTagged = added.length === 0 && duplicates.length > 0;
       await commitFlowAction({ type: "batch", actions: [
-        { type: "missed-people", people: all.map((person) => ({ personId: person.personId, name: person.name, ...((person as { skipped?: boolean }).skipped ? { skipped: true } : {}) })), ...(answerText ? { answer: answerText } : {}), reply: missedReply ?? null },
+        ...added.map((person, index) => ({ type: "missed-person-added" as const, personId: person.personId, name: person.name, ...(index === 0 && answerText ? { answer: answerText } : {}), ...(index === added.length - 1 ? { reply: missedReply ?? null } : {}) })),
         { type: "missed-people-confirmed", confirmed: allAlreadyTagged },
       ] });
       setInput((current) => ({ ...current, missedPeople: all, ...(answerText ? { missedAnswer: answerText } : {}), missedReply, missedPersonTagging: null, peopleConfirmed: true, missedPeopleConfirmed: allAlreadyTagged, peopleSummaryConfirmed: false }));
@@ -662,26 +662,26 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (!isCurrentProject()) return;
         if (result.proposalId) proposalId.current = result.proposalId;
         setInput((current) => ({ ...current, people, peopleSummaryConfirmed: false, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: true })); setError(null);
-      } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't save this. Please try again."); }
+      } catch (cause) { setError(reportFailure(cause)); }
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
     async completeMissedPerson(personId: string, name: string, momentCount: number, sampleUri?: string, sampleUris?: string[]) {
       const sampleFaces = sampleUri ? [{ shotId: "manual-sample", uri: sampleUri, bbox: [0, 0, 1, 1] as [number, number, number, number] }] : undefined;
-      await commitFlowAction({ type: "missed-person-completed", personId });
+      try { await commitFlowAction({ type: "missed-person-completed", personId }); }
+      catch (cause) { setError(reportFailure(cause)); return; }
       setInput((current) => {
         const people = current.people ?? [];
         const updatedPeople = people.some((person) => person.personId === personId)
           ? people.map((person) => person.personId === personId ? { ...person, momentCount, ...(sampleFaces ? { sampleFaces } : {}) } : person)
           : [...people, { personId, name, role: "other", skipped: false, momentCount, sampleShotIds: [], days: [], ...(sampleFaces ? { sampleFaces } : {}) }];
         const missedPeople = (current.missedPeople ?? []).map((person) => person.personId === personId ? { ...person, momentCount, ...(sampleUris?.length ? { sampleUris: sampleUris.slice(0, 4) } : sampleUri ? { sampleUri } : {}) } : person);
-        const allMissedPeopleResolved = missedPeople.every((person) => person.skipped || person.momentCount > 0);
         const next = missedPeople.find((person) => !person.skipped && person.momentCount === 0);
-        return { ...current, people: updatedPeople, missedPeople, peopleConfirmed: true, ...(allMissedPeopleResolved ? { missedPeopleConfirmed: true } : {}), peopleSummaryConfirmed: false, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null };
+        return { ...current, people: updatedPeople, missedPeople, peopleConfirmed: true, peopleSummaryConfirmed: false, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null };
       });
     },
     async skipMissedPerson(personId: string) {
       const missedPeople = (input.missedPeople ?? []).map((person) => person.personId === personId ? { ...person, skipped: true } : person);
-      await commitFlowAction({ type: "missed-people", people: missedPeople.map(({ personId: id, name, skipped }) => ({ personId: id, name, ...(skipped ? { skipped: true } : {}) })), ...(input.missedAnswer ? { answer: input.missedAnswer } : {}), ...(input.missedReply ? { reply: input.missedReply } : {}) });
+      await commitFlowAction({ type: "missed-person-skipped", personId });
       const next = missedPeople.find((person) => !person.skipped && person.momentCount === 0);
       setInput((current) => ({ ...current, missedPeople, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null }));
     },

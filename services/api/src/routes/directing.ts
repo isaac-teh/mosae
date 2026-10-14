@@ -33,6 +33,17 @@ import { buildDerivativePath } from "../domain/ids.js";
 import { getStorage } from "firebase-admin/storage";
 import { getAdminApp } from "../firebase/admin.js";
 import { firebaseThumbnailUrlStore } from "../ingest/objectStore.js";
+
+const momentThumbnailUrlCache = new Map<string, { url: string; expiresAt: number }>();
+async function cachedThumbnailUrl(store: { signedReadUrl(path: string, expiresAt: number): Promise<string> }, path: string, now: number): Promise<string> {
+  const cached = momentThumbnailUrlCache.get(path);
+  if (cached && cached.expiresAt > now + 30_000) return cached.url;
+  const expiresAt = now + 5 * 60 * 1000;
+  const url = await store.signedReadUrl(path, expiresAt);
+  momentThumbnailUrlCache.set(path, { url, expiresAt });
+  if (momentThumbnailUrlCache.size > 1000) momentThumbnailUrlCache.delete(momentThumbnailUrlCache.keys().next().value!);
+  return url;
+}
 import type { ThumbnailUrlStore } from "../ingest/objectStore.js";
 import { FlowStoreError, mutateFlow, readFlow } from "../store/flowStore.js";
 
@@ -489,14 +500,14 @@ export function directingRouter(deps: {
       const urlStore = deps.thumbnails ?? firebaseThumbnailUrlStore(getStorage(getAdminApp()).bucket());
       const moments = await Promise.all(captures.map(async ({ doc, assetId, asset, day }) => {
         const path = asset!.derivatives!.thumbPath as string;
-        const faceIds = ((doc.get("analysis") as PhotoAnalysis | undefined)?.faces ?? []).map((face) => face.characterId).filter((id): id is string => Boolean(id));
+        const faceIds = ((doc.get("analysis") as PhotoAnalysis | undefined)?.faces ?? []).filter((face) => face.prominence !== "background").map((face) => face.characterId).filter((id): id is string => Boolean(id));
         const people = new Set(faceIds);
         for (const person of cast?.people ?? []) {
           if ((person.removedShots ?? []).includes(doc.id)) people.delete(person.personId);
           if ((person.manualShots ?? []).includes(doc.id) && !(person.removedShots ?? []).includes(doc.id)) people.add(person.personId);
         }
         return {
-          shotId: doc.id, thumbnailUrl: await urlStore.signedReadUrl(path, now() + 5 * 60 * 1000),
+          shotId: doc.id, thumbnailUrl: await cachedThumbnailUrl(urlStore, path, now()),
           kind: doc.get("mediaType") === "video" ? "video" as const : "photo" as const,
           durationSec: typeof asset!.media?.durationSec === "number" ? asset!.media.durationSec : null,
           dayIndex: dayIndexes.get(day) ?? 1, personIds: [...people], assetId,
@@ -532,14 +543,13 @@ export function directingRouter(deps: {
       const currentRef = deps.db.doc(`projects/${projectId}/cast/current`);
       const currentSnap = await currentRef.get();
       const current = (currentSnap.exists ? currentSnap.data() : { people: [], core: [], focus: [], source: "none" }) as Cast;
-      const validId = (id: string) => current.people.some((person) => person.personId === id) || id.startsWith("p-");
+      const validId = (id: string) => /^[\w:.-]+$/.test(id) && (current.people.some((person) => person.personId === id) || id.startsWith("p-"));
       const { people, moves = [], merges = [], reconcilePersonId, reconcilePendingPersonIds = [] } = parsed.data;
       let { focus } = parsed.data;
       const mergeTargets = new Map(merges.map(({ fromPersonId, toPersonId }) => [fromPersonId, toPersonId]));
       if ([...people.map((person) => person.personId), ...focus, ...moves.flatMap((move) => move.personId ? [move.personId] : []), ...merges.flatMap((merge) => [merge.fromPersonId, merge.toPersonId])].some((id) => !validId(id)) ||
           merges.some(({ fromPersonId, toPersonId }) => fromPersonId === toPersonId || !current.people.some((person) => person.personId === fromPersonId) || !people.some((person) => person.personId === toPersonId) || people.some((person) => person.personId === fromPersonId)) ||
           (reconcilePersonId !== undefined && !people.some((person) => person.personId === reconcilePersonId)) ||
-          reconcilePendingPersonIds.some((id) => !current.people.some((person) => person.personId === id) || id === reconcilePersonId) ||
           new Set(merges.map(({ fromPersonId }) => fromPersonId)).size !== merges.length ||
           focus.some((id) => people.some((person) => person.personId === id && person.excluded)) ||
           new Set(people.map((person) => person.personId)).size !== people.length || new Set(focus).size !== focus.length) {
@@ -588,10 +598,12 @@ export function directingRouter(deps: {
         const candidate = reconciliationFaces.filter((face) => face.shotId === shotId)
           .map((face) => ({ face, score: Math.max(...references.map((reference) => cosine(face.vector, reference.vector))) }))
           .sort((a, b) => b.score - a.score)[0];
-        if (candidate && candidate.score >= FACE_RECONCILE_THRESHOLD) galleryReferences.push({ ...candidate.face, faceId: `${candidate.face.faceId}:gallery:${owner}`, characterId: owner });
+        const threshold = candidate?.face.modelVersion === "gemini-embedding-2" ? 0.86 : FACE_RECONCILE_THRESHOLD;
+        if (candidate && candidate.score >= threshold) galleryReferences.push({ ...candidate.face, faceId: `${candidate.face.faceId}:gallery:${owner}`, characterId: owner });
       }
       reconciliationFaces.push(...galleryReferences);
-      const reconciliation = reconcilePersonId ? reconcileConfirmedFaces(reconciliationFaces, reconcilePersonId, undefined, new Set(reconcilePendingPersonIds)) : new Map<string, string>();
+      const knownPendingPersonIds = reconcilePendingPersonIds.filter((id) => current.people.some((person) => person.personId === id) && id !== reconcilePersonId);
+      const reconciliation = reconcilePersonId ? reconcileConfirmedFaces(reconciliationFaces, reconcilePersonId, undefined, new Set(knownPendingPersonIds)) : new Map<string, string>();
       const removedShotOwners = new Map<string, Set<string>>();
       for (const person of people) for (const shotId of person.removeShots ?? []) {
         const owners = removedShotOwners.get(shotId) ?? new Set<string>();

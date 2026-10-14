@@ -11,12 +11,12 @@ export async function getProjectMoments(projectId: string): Promise<ProjectMomen
   return body.moments as ProjectMoment[];
 }
 
-export async function savePersonMoments(projectId: string, personId: string, name: string | null, addShots: string[], removeShots: string[], sampleUris: string[] = []): Promise<string> {
+export async function savePersonMoments(projectId: string, personId: string, name: string | null, addShots: string[], removeShots: string[], sampleUris: string[] = [], source: "missed" | "cast" = "cast"): Promise<string> {
   const cast = await getCast(projectId);
   const current = cast ?? { people: [], core: [], focus: [], source: "none" as const };
   const sameName = name?.trim().toLocaleLowerCase();
   const nameMatches = sameName ? current.people.filter((person) => person.name?.trim().toLocaleLowerCase() === sameName) : [];
-  const resolvedPersonId = current.people.some((person) => person.personId === personId) ? personId : nameMatches.length === 1 ? nameMatches[0]!.personId : personId;
+  const resolvedPersonId = current.people.some((person) => person.personId === personId) ? personId : source !== "missed" && nameMatches.length === 1 ? nameMatches[0]!.personId : personId;
   const existing = current.people.find((person) => person.personId === resolvedPersonId);
   const peopleById = new Map(current.people.map((person) => [person.personId, person]));
   const people: ConfirmCastInput["people"] = [...peopleById.values()].map((person) => ({ personId: person.personId, role: person.role, name: person.name, excluded: person.excluded }));

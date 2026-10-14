@@ -104,6 +104,18 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
     completedPersonIds: [...new Set(action.completedPersonIds)],
   } };
   if (action.type === "missed-people-confirmed") return { ...flow, missedPeopleConfirmed: action.confirmed };
+  if (action.type === "missed-person-added") {
+    const missedPeople = flow.missedPeople ?? [];
+    if (missedPeople.some((person) => person.personId === action.personId)) return flow;
+    const next = { ...flow, missedPeople: [...missedPeople, { personId: action.personId, name: action.name }], ...(action.answer !== undefined ? { missedAnswer: action.answer } : {}) };
+    if (action.reply === null) delete next.missedReply;
+    else if (action.reply !== undefined) next.missedReply = action.reply;
+    return next;
+  }
+  if (action.type === "missed-person-skipped") {
+    const missedPeople = flow.missedPeople ?? [];
+    return { ...flow, missedPeople: missedPeople.map((person) => person.personId === action.personId ? { ...person, skipped: true } : person) };
+  }
   if (action.type === "missed-people") {
     const { missedReply: _priorReply, ...withoutPriorReply } = flow;
     return { ...withoutPriorReply, missedPeople: action.people, ...(action.answer !== undefined ? { missedAnswer: action.answer } : {}), ...(action.reply ? { missedReply: action.reply } : {}) };

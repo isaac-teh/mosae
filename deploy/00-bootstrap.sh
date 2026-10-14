@@ -13,7 +13,7 @@ run gcloud services enable \
 if ! probe gcloud artifacts repositories describe "$ARTIFACT_REPO" --project "$PROJECT_ID" --location "$REGION"; then
   run gcloud artifacts repositories create "$ARTIFACT_REPO" --project "$PROJECT_ID" --location "$REGION" --repository-format docker
 fi
-for name in mosae-api-sa mosae-render-sa mosae-tasks-invoker; do
+for name in mosae-api-sa mosae-render-sa mosae-tasks-invoker mosae-face-sa; do
   if ! probe gcloud iam service-accounts describe "$name@$PROJECT_ID.iam.gserviceaccount.com" --project "$PROJECT_ID"; then
     run gcloud iam service-accounts create "$name" --project "$PROJECT_ID" --display-name "$name"
   fi

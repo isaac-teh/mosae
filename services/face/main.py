@@ -8,6 +8,7 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from insightface.app import FaceAnalysis
+from starlette.concurrency import run_in_threadpool
 
 MODEL_VERSION = "arcface-buffalo_l-v1"
 started = time.perf_counter()
@@ -32,15 +33,23 @@ def health():
 
 @app.post("/v1/faces")
 async def faces(request: Request):
-    raw = await request.body()
-    if len(raw) > 20 * 1024 * 1024:
+    max_bytes = 20 * 1024 * 1024
+    if int(request.headers.get("content-length", "0") or "0") > max_bytes:
         raise HTTPException(413, "image_too_large")
+    chunks = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > max_bytes:
+            raise HTTPException(413, "image_too_large")
+        chunks.append(chunk)
+    raw = b"".join(chunks)
     image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
     if image is None:
         raise HTTPException(400, "invalid_image")
     height, width = image.shape[:2]
     output = []
-    for face in model.get(image):
+    for face in await run_in_threadpool(model.get, image):
         x0, y0, x1, y1 = face.bbox.tolist()
         box = [max(0, y0 / height), max(0, x0 / width), min(1, y1 / height), min(1, x1 / width)]
         vector = np.asarray(face.normed_embedding, dtype=np.float32)

@@ -10,8 +10,13 @@ export function createFaceService(baseUrl = process.env.FACE_SERVICE_URL ?? "", 
   return async (jpeg) => {
     const client = auth ? await auth.getIdTokenClient(baseUrl) : null;
     const headers = bearerToken ? { Authorization: `Bearer ${bearerToken}` } : await client!.getRequestHeaders(baseUrl);
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/faces`, { method: "POST", headers: { ...headers, "content-type": "image/jpeg" }, body: new Uint8Array(jpeg), signal: AbortSignal.timeout(120_000) });
-    if (!response.ok) throw new Error(`face service failed: ${response.status}`);
+    let response: Response | undefined;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/faces`, { method: "POST", headers: { ...headers, "content-type": "image/jpeg" }, body: new Uint8Array(jpeg), signal: AbortSignal.timeout(120_000) });
+      if (response.ok || ![401, 403].includes(response.status) && response.status < 500) break;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+    if (!response?.ok) throw new Error(`face service failed: ${response?.status ?? "no response"}`);
     const payload = await response.json() as { modelVersion: string; faces: ArcFaceResult[] };
     if (payload.modelVersion !== FACE_EMBEDDING_MODEL) throw new Error(`unexpected face model version: ${payload.modelVersion}`);
     return payload.faces.filter((face) => face.embedding.length === 512 && face.embedding.every(Number.isFinite));
