@@ -199,7 +199,24 @@ function describe(issue: { path: PropertyKey[]; message: string }): string {
 }
 
 export function safeParseTimeline(value: unknown): ParseResult<Timeline> {
-  const result = TimelineSchema.safeParse(value);
+  const legacyDesigns: Record<string, { layoutId: string; motionId: string }> = {
+    "design-polaroid": { layoutId: "polaroid-garland", motionId: "page-turn" },
+    "design-magazine": { layoutId: "travel-story", motionId: "focus-relay" },
+    "design-film-strip": { layoutId: "postcard-stack", motionId: "stack-deal" },
+  };
+  const normalized = value && typeof value === "object" && "videoClips" in value && Array.isArray(value.videoClips)
+    ? { ...value, videoClips: value.videoClips.map((clip) => {
+      if (!clip || typeof clip !== "object" || !("kind" in clip) || !("spec" in clip) || !clip.spec || typeof clip.spec !== "object" || !("layoutId" in clip.spec)) return clip;
+      const legacy = legacyDesigns[String(clip.spec.layoutId)];
+      if (legacy && Array.isArray(clip.spec.slots)) {
+        const count = clip.spec.slots.length;
+        if (count < 3) return { ...clip, spec: { ...clip.spec, layoutId: count === 1 ? "simple-full" : "simple-stacked", motionId: "print-drop" } };
+        if (count > 5 && clip.spec.layoutId !== "design-magazine") return { ...clip, spec: { ...clip.spec, layoutId: count <= 6 ? "botanical-scrapbook" : "nine-photo-grid", motionId: count <= 6 ? "tape-slap" : "print-drop" } };
+      }
+      return legacy ? { ...clip, spec: { ...clip.spec, ...legacy } } : clip;
+    }) }
+    : value;
+  const result = TimelineSchema.safeParse(normalized);
   if (result.success) return { ok: true, timeline: result.data };
   return { ok: false, errors: result.error.issues.map(describe) };
 }
