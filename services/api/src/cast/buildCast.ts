@@ -2,6 +2,9 @@ import type { AgeBand, Cast, CastPerson, FaceRef, Interaction } from "./types.js
 import { photoRoles } from "./prominence.js";
 import { chooseFocus } from "./focus.js";
 
+const MIN_RECURRING_FACE_AREA = 0.01;
+const MIN_DISTINCT_SUBJECT_PHOTOS = 2;
+
 const AGE_ORDER: Record<AgeBand, number> = {
   child: 0,
   teen: 1,
@@ -18,6 +21,7 @@ export function buildCast(input: {
   const { faces, identities, interactions, source } = input;
 
   const subjectShotsByPerson = new Map<string, Set<string>>();
+  const subjectPhotosByPerson = new Map<string, Set<string>>();
   const facesByShot = new Map<string, FaceRef[]>();
   for (const face of faces) {
     const shotFaces = facesByShot.get(face.shotId) ?? [];
@@ -28,17 +32,26 @@ export function buildCast(input: {
     const roles = photoRoles(shotFaces.map((face) => face.bbox));
     shotFaces.forEach((face, index) => {
       const personId = identities.get(face.faceId);
-      if (roles[index] !== "subject" || !personId) return;
+      const [ymin, xmin, ymax, xmax] = face.bbox;
+      const boxArea = Math.max(0, ymax - ymin) * Math.max(0, xmax - xmin);
+      if (roles[index] !== "subject" || face.prominence === "background" || boxArea < MIN_RECURRING_FACE_AREA || !personId) return;
       const shots = subjectShotsByPerson.get(personId) ?? new Set<string>();
       shots.add(shotId);
       subjectShotsByPerson.set(personId, shots);
+      const photos = subjectPhotosByPerson.get(personId) ?? new Set<string>();
+      photos.add(face.photoHash);
+      subjectPhotosByPerson.set(personId, photos);
     });
   }
 
   // 1. Ignore faces with prominence === "background" and faces absent from identities.
-  const keptFaces = faces.filter(
-    (f) => f.prominence !== "background" && identities.has(f.faceId),
-  );
+  // A person must be a visible subject in at least two distinct source photos.
+  // photoHash identifies the kept media moment, so repeated video-derived frames
+  // or duplicate shot records from one asset only count once.
+  const recurringPeople = new Set([...subjectPhotosByPerson]
+    .filter(([, photos]) => photos.size >= MIN_DISTINCT_SUBJECT_PHOTOS)
+    .map(([personId]) => personId));
+  const keptFaces = faces.filter((f) => f.prominence !== "background" && identities.has(f.faceId));
 
   if (keptFaces.length === 0) {
     return {
@@ -141,7 +154,7 @@ export function buildCast(input: {
   const totalPeopleShots = peopleShots.size;
 
   for (const [personId, info] of personIntermediaries.entries()) {
-    if (totalPeopleShots > 0 && info.appearances / totalPeopleShots >= 0.25) {
+    if (recurringPeople.has(personId) && totalPeopleShots > 0 && info.appearances / totalPeopleShots >= 0.25) {
       coreCandidates.push(personId);
     }
   }

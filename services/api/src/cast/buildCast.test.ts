@@ -89,7 +89,7 @@ describe("buildCast and castSummary", () => {
     expect(cast.people).toHaveLength(0);
   });
 
-  it("3. Rare person: E appears in 1 of 12 shots with primary prominence -> role 'other', not core", () => {
+  it("3. Rare person: E appears in only one kept moment and is not recurring", () => {
     const faces: FaceRef[] = [];
     const identities = new Map<string, string>();
 
@@ -115,7 +115,6 @@ describe("buildCast and castSummary", () => {
     });
 
     const personE = cast.people.find((p) => p.personId === "E");
-    expect(personE).toBeDefined();
     expect(personE?.role).toBe("other");
     expect(cast.core).not.toContain("E");
   });
@@ -337,5 +336,30 @@ describe("buildCast and castSummary", () => {
     expect(cast.focus).toEqual(["A"]);
     expect(cast.people.find((person) => person.personId === "A")?.subjectCount).toBe(6);
     expect(cast.people.find((person) => person.personId === "B")?.subjectCount).toBe(0);
+  });
+
+  it("requires subject appearances in two distinct source photos, not repeated frames of one asset", () => {
+    const repeated = [
+      { ...f("a1", "frame-1", "adult"), photoHash: "same-photo" },
+      { ...f("a2", "frame-2", "adult"), photoHash: "same-photo" },
+    ];
+    const oneAsset = buildCast({ faces: repeated, identities: new Map([["a1", "A"], ["a2", "A"]]), interactions: [], source: "labelled" });
+    expect(oneAsset.people.map((person) => person.personId)).toEqual(["A"]);
+    expect(oneAsset.core).toEqual([]);
+
+    const twoAssets = buildCast({ faces: [
+      { ...f("a1", "frame-1", "adult"), photoHash: "photo-1" },
+      { ...f("a2", "frame-2", "adult"), photoHash: "photo-2" },
+    ], identities: new Map([["a1", "A"], ["a2", "A"]]), interactions: [], source: "labelled" });
+    expect(twoAssets.people.map((person) => person.personId)).toEqual(["A"]);
+  });
+
+  it("ignores faces under one percent of the frame even when they are the only detection", () => {
+    const tinyFaces = [1, 2, 3].map((index) => ({
+      ...f(`tiny-${index}`, `shot-${index}`, "adult"),
+      bbox: [0.1, 0.1, 0.15, 0.15] as [number, number, number, number],
+    }));
+    const cast = buildCast({ faces: tinyFaces, identities: new Map(tinyFaces.map((face) => [face.faceId, "A"])), interactions: [], source: "labelled" });
+    expect(cast.core).toEqual([]);
   });
 });
