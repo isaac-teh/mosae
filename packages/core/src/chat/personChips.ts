@@ -1,9 +1,9 @@
 export type PersonAgeBand = "child" | "teen" | "adult" | "senior";
 
 /** People shown in the director flow: foreground clusters matching the existing 2-shot threshold or 10% of photos. */
-export function mainPeople<T extends { personId: string; momentCount: number; backgroundOnly?: boolean }>(clusters: readonly T[], shotCount: number): T[] {
+export function mainPeople<T extends { personId: string; momentCount: number; backgroundOnly?: boolean; forceShow?: boolean }>(clusters: readonly T[], shotCount: number): T[] {
   return clusters
-    .filter((person) => !person.backgroundOnly && (person.momentCount >= 2 || (shotCount > 0 && person.momentCount / shotCount >= 0.1)))
+    .filter((person) => !person.backgroundOnly && (person.forceShow || person.momentCount >= 2 || (shotCount > 0 && person.momentCount / shotCount >= 0.1)))
     .sort((a, b) => b.momentCount - a.momentCount)
     .slice(0, 5);
 }
@@ -25,9 +25,16 @@ export function personAnswerChips(ageBand: PersonAgeBand | null | undefined, ass
 export function matchExistingPersonAnswer(answer: string, people: readonly { personId: string; name: string | null }[]): { personId: string; mode: "automatic" | "confirm"; answer: string } | null {
   const normalized = answer.trim().replace(/^my\s+/i, "").toLocaleLowerCase();
   if (!normalized || /^(friend|family)$/.test(normalized)) return null;
-  const match = people.find((person) => person.name?.trim().replace(/^my\s+/i, "").toLocaleLowerCase() === normalized);
-  if (!match) return null;
-  return { personId: match.personId, mode: "confirm", answer: answer.trim() };
+  const named = people.find((person) => {
+    const name = person.name?.trim().replace(/^my\s+/i, "").toLocaleLowerCase();
+    return Boolean(name && (name === normalized || /^(?:that's|that is|same person as|already tagged(?: as)?|duplicate(?: of)?)\s+/i.test(normalized) && normalized.includes(name)));
+  });
+  if (named) return { personId: named.personId, mode: "automatic", answer: named.name?.replace(/^my\s+/i, "") ?? answer.trim() };
+  if (/^(?:same person|already tagged|duplicate|that's the same person)$/i.test(normalized)) {
+    const target = people[0];
+    if (target) return { personId: target.personId, mode: people.length === 1 ? "automatic" : "confirm", answer: target.name?.replace(/^my\s+/i, "") ?? answer.trim() };
+  }
+  return null;
 }
 
 export function orderPeopleByMergeSimilarity<T extends { personId: string; momentCount: number; similarPersonId?: string; similarity?: number }>(people: readonly T[]): T[] {

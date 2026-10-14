@@ -10,7 +10,7 @@ const faces = [
 
 describe("embeddingIdentity", () => {
   it("returns deterministic embedding identities for recurring people", () => {
-    const resolver = embeddingIdentity({ threshold: 0.85, groupMergeThreshold: 0.78 });
+    const resolver = embeddingIdentity({ threshold: 0.85 });
     const result = resolver.resolveVectors(faces);
     expect(resolver.source).toBe("embeddings");
     expect(result.get("a1")).toBe(result.get("a2"));
@@ -19,7 +19,7 @@ describe("embeddingIdentity", () => {
   });
 
   it("leaves a face unassigned when it appears in only one photo", () => {
-    const resolver = embeddingIdentity({ threshold: 0.85, groupMergeThreshold: 0.78 });
+    const resolver = embeddingIdentity({ threshold: 0.85 });
     const result = resolver.resolveVectors([...faces, { faceId: "singleton", shotId: "only-photo", vector: [-1, 0] }]);
 
     expect(result.has("singleton")).toBe(false);
@@ -27,7 +27,7 @@ describe("embeddingIdentity", () => {
   });
 
   it("keeps assigned ids for recurring groups and leaves a singleton unassigned", () => {
-    const resolver = embeddingIdentity({ threshold: 0.85, groupMergeThreshold: 0.78 });
+    const resolver = embeddingIdentity({ threshold: 0.85 });
     const result = resolver.resolveVectors([
       { faceId: "x", shotId: "shared", vector: [1, 0], characterId: "picked" },
       { faceId: "y", shotId: "shared", vector: [1, 0], characterId: "other" },
@@ -36,5 +36,16 @@ describe("embeddingIdentity", () => {
     expect(result.get("x")).toBe("picked");
     expect(result.has("y")).toBe(false);
     expect(result.get("z")).toBe("picked");
+  });
+
+  it("does not merge separate clusters before the person has been confirmed", () => {
+    const resolver = embeddingIdentity({ threshold: 0.85 });
+    const result = resolver.resolveVectors([
+      { faceId: "a1", shotId: "a1", vector: [1, 0] },
+      { faceId: "a2", shotId: "a2", vector: [1, 0] },
+      { faceId: "b1", shotId: "b1", vector: [0.8, 0.6] },
+      { faceId: "b2", shotId: "b2", vector: [0.8, 0.6] },
+    ]);
+    expect(result.get("a1")).not.toBe(result.get("b1"));
   });
 });

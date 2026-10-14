@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState as useReactState, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
-import { directionFocus, deriveChat, canConfirmStory, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type DurationChoice, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
+import { directionFocus, deriveChat, mainPeople, canConfirmStory, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type DurationChoice, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
 import { mapShapingProgress } from "./shapingProgress";
@@ -185,7 +185,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     const requestId = ++refreshRequest.current;
     const stillValid = () => mounted.current && isCurrentProject() && refreshEpoch === uploadEpoch.current && requestId === refreshRequest.current;
     const startedWhilePending = previousLocalPending.current;
-    const result = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId), repository.getFlow?.(projectId) ?? Promise.resolve(null)]).catch(cause => {
+    const includePendingSingles = Boolean(peopleRef.current?.some((person) => person.forceShow));
+    const result = await Promise.all([repository.getSummary(projectId), repository.getPeople(projectId, includePendingSingles), repository.getFlow?.(projectId) ?? Promise.resolve(null)]).catch(cause => {
       if (stillValid()) throw cause;
       return null;
     });
@@ -469,6 +470,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       setInput((current) => ({ ...current, people: updated, proceededPersonIds: completedPersonIds, pendingResponse: "person" }));
       const duplicate = personName && role !== "Skip" ? matchExistingPersonAnswer(personName, people.filter((person) => person.personId !== personId)) : null;
       const priorPerson = duplicate ? people.find((person) => person.personId === duplicate.personId) : undefined;
+      const automaticDuplicate = duplicate?.mode === "automatic" && Boolean(priorPerson);
       const mergeEvent = duplicate && priorPerson ? {
         id: `merge-${personId}`, personId, targetPersonId: priorPerson.personId, answer: duplicate.answer,
         targetName: priorPerson.name ?? duplicate.answer,
@@ -476,27 +478,63 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         questionFaces: (updated.find((person) => person.personId === personId)?.sampleFaces ?? []).slice(0, 2).map((face) => face.uri),
         faceSamples: [...(priorPerson.sampleFaces ?? []).slice(0, 1), ...(updated.find((person) => person.personId === personId)?.sampleFaces ?? []).slice(0, 1)],
         momentCount: updated.find((person) => person.personId === personId)?.momentCount ?? 0,
+        ...(automaticDuplicate ? { automatic: true, response: "Yes, same person" as const } : {}),
       } : null;
-      const castPeople = updated;
+      const castPeople = automaticDuplicate ? updated.filter((person) => person.personId !== personId) : updated;
+      const reconciliationTargetId = automaticDuplicate && duplicate ? duplicate.personId : personId;
+      const shouldReconcile = role !== "Skip" && (!duplicate || automaticDuplicate);
+      const reconciliationPendingIds = shouldReconcile
+        ? mainPeople(people, input.summary?.photos ?? 0).filter((person) => person.personId !== reconciliationTargetId && person.personId !== personId && !person.name && !person.skipped).map((person) => person.personId)
+        : [];
       setInput((current) => ({ ...current, people: updated, pendingResponse: "person" }));
       setPendingInterpret(null);
       try {
         const priorProgress = input.flow?.peopleProgress?.completedPersonIds;
-        const completedPersonIds = [...new Set([...(priorProgress ?? input.proceededPersonIds ?? []), ...(role === "Skip" ? [personId] : [])])];
-      const allAnsweredNow = castPeople.every((person) => person.skipped || Boolean(person.name));
-      const allProceededNow = castPeople.every((person) => person.skipped || completedPersonIds.includes(person.personId));
+        const completedPersonIds = [...new Set([...(priorProgress ?? input.proceededPersonIds ?? []), ...(role === "Skip" || automaticDuplicate ? [personId] : [])])];
+      const actionableCastPeople = mainPeople(castPeople, input.summary?.photos ?? 0);
+      const allAnsweredNow = actionableCastPeople.every((person) => person.skipped || Boolean(person.name));
+      const allProceededNow = actionableCastPeople.every((person) => person.skipped || completedPersonIds.includes(person.personId));
         await commitFlowAction({ type: "batch", actions: [
           { type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, ...(answerText ? { answerText } : {}), confirmed: role !== "Skip", skipped: role === "Skip" },
           ...(priorProgress === undefined ? [{ type: "people-progress" as const, completedPersonIds }] : role === "Skip" ? [{ type: "people-progress" as const, completedPersonIds }] : []),
           ...(role === "Skip" && allAnsweredNow && allProceededNow ? [{ type: "missed-people-confirmed" as const, confirmed: false }] : []),
           { type: "people-summary-confirmed", confirmed: false },
         ] });
-        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, {
+          people: castPeople.map((person) => ({ personId: person.personId, role: person.role as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })),
+          focus: [],
+          ...(automaticDuplicate && duplicate ? { merges: [{ fromPersonId: personId, toPersonId: duplicate.personId }] } : {}),
+          ...(shouldReconcile ? { reconcilePersonId: reconciliationTargetId, reconcilePendingPersonIds: reconciliationPendingIds } : {}),
+          ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}),
+        });
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
+        const refreshedPeople = result ? await repository.getPeople(projectId, reconciliationPendingIds.length > 0) : null;
+        const emptiedReconciledIds = result ? reconciliationPendingIds.filter((id) => { const reconciled = result.cast.people.find((entry) => entry.personId === id); return Boolean(reconciled && reconciled.faceIds.length === 0); }) : [];
+        const completedAfterReconciliation = [...new Set([...completedPersonIds, ...emptiedReconciledIds])];
+        if (emptiedReconciledIds.length) await commitFlowAction({ type: "people-progress", completedPersonIds: completedAfterReconciliation });
+        const nextPeople = refreshedPeople?.map((person) => {
+          const local = castPeople.find((entry) => entry.personId === person.personId);
+          const remainsPending = reconciliationPendingIds.includes(person.personId) && Boolean(result?.cast.people.find((entry) => entry.personId === person.personId)?.faceIds.length);
+          return { ...person, name: local?.name ?? person.name, role: local?.role ?? person.role, skipped: local?.skipped ?? false, ...(remainsPending ? { forceShow: true } : {}), ...(local?.answerText ? { answerText: local.answerText } : {}) };
+        }) ?? castPeople;
+        const reconciledEvents = result ? emptiedReconciledIds.map((emptyId) => {
+          const oldPerson = people.find((person) => person.personId === emptyId);
+          const target = people.find((person) => person.personId === reconciliationTargetId);
+          const targetName = target?.name ?? (automaticDuplicate ? priorPerson?.name : personName) ?? "this person";
+          return {
+            id: `reconciled-${emptyId}-${reconciliationTargetId}`, personId: emptyId, targetPersonId: reconciliationTargetId,
+            answer: targetName, targetName, sampleFaces: (target?.sampleFaces ?? []).slice(0, 2).map((face) => face.uri),
+            questionFaces: (oldPerson?.sampleFaces ?? []).slice(0, 2).map((face) => face.uri),
+            faceSamples: [...(target?.sampleFaces ?? []).slice(0, 1), ...(oldPerson?.sampleFaces ?? []).slice(0, 1)],
+            momentCount: oldPerson?.momentCount ?? 0, automatic: true, reconciled: true, response: "Yes, same person" as const,
+          };
+        }) : [];
         if (!isCurrentProject()) return;
         if (result?.proposalId) proposalId.current = result.proposalId;
-        const allAnswered = castPeople.every((person) => person.skipped || Boolean(person.name));
-        setInput((current) => ({ ...current, people: castPeople, proceededPersonIds: current.flow?.peopleProgress?.completedPersonIds ?? completedPersonIds, ...(mergeEvent ? { mergeEvents: [...(current.mergeEvents ?? []).filter((event) => event.id !== mergeEvent.id), mergeEvent] } : {}), pendingResponse: undefined, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: allAnswered && allProceededNow && !mergeEvent && !(current.missedPeople ?? []).length, missedPeopleConfirmed: allAnswered && allProceededNow && role === "Skip" ? false : current.missedPeopleConfirmed, peopleSummaryConfirmed: allAnswered && allProceededNow && role === "Skip" && !mergeEvent && !(current.missedPeople ?? []).length ? false : current.peopleSummaryConfirmed }));
+        const actionableNextPeople = mainPeople(nextPeople, input.summary?.photos ?? 0);
+        const allAnswered = actionableNextPeople.every((person) => person.skipped || Boolean(person.name));
+        const allProceeded = actionableNextPeople.every((person) => person.skipped || completedAfterReconciliation.includes(person.personId));
+        setInput((current) => ({ ...current, people: nextPeople, proceededPersonIds: current.flow?.peopleProgress?.completedPersonIds ?? completedAfterReconciliation, ...(mergeEvent || reconciledEvents.length ? { mergeEvents: [...(current.mergeEvents ?? []).filter((event) => event.id !== mergeEvent?.id && !reconciledEvents.some((auto) => auto.personId === event.personId)), ...(mergeEvent ? [mergeEvent] : []), ...reconciledEvents] } : {}), pendingResponse: undefined, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: allAnswered && allProceeded && (!mergeEvent || automaticDuplicate) && !(current.missedPeople ?? []).length, missedPeopleConfirmed: allAnswered && allProceeded && role === "Skip" ? false : current.missedPeopleConfirmed, peopleSummaryConfirmed: allAnswered && allProceeded && role === "Skip" && !mergeEvent && !(current.missedPeople ?? []).length ? false : current.peopleSummaryConfirmed }));
         setError(null);
       } catch (cause) {
         if (previousEdit) peopleEdits.current.set(personId, previousEdit);
@@ -511,8 +549,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       personSaving.current = true;
       try {
         const completedPersonIds = [...new Set([...(input.flow?.peopleProgress?.completedPersonIds ?? input.proceededPersonIds ?? []), personId])];
-        const allResolved = (input.people ?? []).every((person) => person.skipped || Boolean(person.name));
-        const allProceeded = (input.people ?? []).every((person) => person.skipped || completedPersonIds.includes(person.personId));
+        const actionablePeople = mainPeople(input.people ?? [], input.summary?.photos ?? 0);
+        const allResolved = actionablePeople.every((person) => person.skipped || Boolean(person.name));
+        const allProceeded = actionablePeople.every((person) => person.skipped || completedPersonIds.includes(person.personId));
         await commitFlowAction({ type: "batch", actions: [
           { type: "people-progress", completedPersonIds },
           ...(allResolved && allProceeded ? [{ type: "missed-people-confirmed" as const, confirmed: false }] : []),

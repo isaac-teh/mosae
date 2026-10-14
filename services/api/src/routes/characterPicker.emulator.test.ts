@@ -150,6 +150,36 @@ describe("character picker routes", () => {
     } finally { await close(); }
   });
 
+  it("reconciles close pending faces individually after confirmation and keeps co-present siblings separate", async () => {
+    const projectId = await seedProject();
+    await adminDb.doc(`projects/${projectId}/shots/ref-1`).set({ id: "ref-1", assetId: "ref-1", index: 0, analysis: photoShot("ref-1", [{ ...face("kara-1"), characterId: "kara" }]), faceEmbeddings: { "kara-1": [1, 0] } });
+    await adminDb.doc(`projects/${projectId}/shots/ref-2`).set({ id: "ref-2", assetId: "ref-2", index: 1, analysis: photoShot("ref-2", [{ ...face("kara-2"), characterId: "kara" }]), faceEmbeddings: { "kara-2": [0.99, 0.1] } });
+    await adminDb.doc(`projects/${projectId}/shots/split`).set({ id: "split", assetId: "split", index: 2, analysis: photoShot("split", [{ ...face("kara-split"), characterId: "pending" }, { ...face("chloe"), characterId: "pending" }]), faceEmbeddings: { "kara-split": [0.995, 0.05], chloe: [0, 1] } });
+    await adminDb.doc(`projects/${projectId}/shots/shared`).set({ id: "shared", assetId: "shared", index: 3, analysis: photoShot("shared", [{ ...face("kara-shared"), characterId: "kara" }, { ...face("sibling"), characterId: "pending" }]), faceEmbeddings: { "kara-shared": [1, 0], sibling: [1, 0] } });
+    await adminDb.doc(`projects/${projectId}/cast/current`).set({
+      people: [
+        { personId: "kara", role: "parent", ageBand: "adult", appearances: 3, subjectCount: 3, faceIds: ["kara-1", "kara-2", "kara-shared"], confidence: "high" },
+        { personId: "pending", role: "child", ageBand: "child", appearances: 4, subjectCount: 4, faceIds: ["kara-split", "chloe", "sibling"], confidence: "high" },
+      ], core: ["kara", "pending"], focus: ["kara"], source: "embeddings",
+    });
+    const { url, close } = await listen(await buildApp());
+    try {
+      const res = await fetch(`${url}/api/projects/${projectId}/cast`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
+        people: [{ personId: "kara", name: "Kara", role: "parent" }, { personId: "pending", role: "child" }], focus: ["kara"],
+        reconcilePersonId: "kara", reconcilePendingPersonIds: ["pending"],
+      }) });
+      expect(res.status).toBe(200);
+      const body = await res.json() as { cast: { people: Array<{ personId: string; faceIds: string[] }> } };
+      expect(body.cast.people.find(({ personId }) => personId === "kara")?.faceIds).toContain("kara-split");
+      expect(body.cast.people.find(({ personId }) => personId === "pending")?.faceIds).toContain("chloe");
+      expect(body.cast.people.find(({ personId }) => personId === "pending")?.faceIds).toContain("sibling");
+      const splitFaces = ((await adminDb.doc(`projects/${projectId}/shots/split`).get()).get("analysis") as PhotoAnalysis).faces;
+      expect(splitFaces?.map((item) => item.characterId)).toEqual(["kara", "pending"]);
+      const sharedFaces = ((await adminDb.doc(`projects/${projectId}/shots/shared`).get()).get("analysis") as PhotoAnalysis).faces;
+      expect(sharedFaces?.map((item) => item.characterId)).toEqual(["kara", "pending"]);
+    } finally { await close(); }
+  });
+
   it("gets and confirms the cast, moves a face, and recomputes empty focus", async () => {
     const projectId = await seedProject();
     await photo(projectId, "shot-1", [

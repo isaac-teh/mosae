@@ -678,6 +678,22 @@ describe("deriveChat state table", () => {
     expect(state.items.findIndex((item) => item.id === "merge-p2")).toBeGreaterThan(state.items.findIndex((item) => item.id === "person-answer-p2"));
   });
 
+  it("acknowledges an automatic repeat-name merge without asking again", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "kara", name: "Kara", role: "parent", skipped: false, momentCount: 9, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, mergeEvents: [
+      { id: "merge-chloe", personId: "chloe", targetPersonId: "kara", answer: "Kara", targetName: "Kara", sampleFaces: ["kara.jpg"], questionFaces: ["split.jpg"], momentCount: 2, automatic: true, response: "Yes, same person" },
+    ] });
+    expect(state.items.find((item) => item.id === "merge-chloe-ack")).toMatchObject({ kind: "mosae", text: "Got it — I've added these to Kara's moments." });
+    expect(state.items.find((item) => item.kind === "merge-followup")).toBeUndefined();
+  });
+
+  it("keeps the announced count and skips a pending cluster emptied by face reconciliation", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "kara", name: "Kara", role: "parent", skipped: false, momentCount: 11, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, mergeEvents: [
+      { id: "reconciled-chloe", personId: "chloe", targetPersonId: "kara", answer: "Kara", targetName: "Kara", sampleFaces: [], momentCount: 3, automatic: true, reconciled: true, response: "Yes, same person" },
+    ] });
+    expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Two people appear often in your moments." });
+    expect(state.items.some((item) => item.id === "person-question-chloe")).toBe(false);
+  });
+
   it("keeps merged people in their original question order and preserves the announced count", () => {
     const people = [
       { personId: "a", name: "Kara", role: null, skipped: false, momentCount: 10, sampleShotIds: [], sampleFaces: [{ shotId: "a1", uri: "kara-a.jpg", bbox: [0, 0, 1, 1] as [number, number, number, number] }], days: [] },

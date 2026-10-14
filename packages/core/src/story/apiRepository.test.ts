@@ -293,7 +293,7 @@ describe("createApiStoryRepository", () => {
     expect(person?.sampleFaces?.map(({ shotId }) => shotId)).toEqual(["video-shot", "photo-shot", "manual-tag"]);
   });
 
-  it("does not ask the user about a person who appears in only one photo", async () => {
+  it("returns one-photo clusters so the chat can keep pending faces after reconciliation", async () => {
     const deps = dependencies();
     vi.mocked(deps.request).mockImplementation(async (_method, path) => path.endsWith("/characters") ? { shots: [
       { shotId: "shot-1", assetId: "asset-1", faces: [{ faceId: "repeat-1", characterId: "repeat", bbox: [0.1, 0.2, 0.4, 0.5] }] },
@@ -305,9 +305,11 @@ describe("createApiStoryRepository", () => {
       { shotId: "shot-3", assetId: "asset-1", dayIndex: 1, personIds: ["single"] },
     ] });
 
-    const people = await createApiStoryRepository({ projectId: "project-1" }, deps).getPeople("project-1");
-
-    expect(people?.map((person) => person.personId)).toEqual(["repeat"]);
+    const repository = createApiStoryRepository({ projectId: "project-1" }, deps);
+    expect((await repository.getPeople("project-1"))?.map((person) => person.personId)).toEqual(["repeat"]);
+    const people = await repository.getPeople("project-1", true);
+    expect(people?.map((person) => person.personId)).toEqual(["repeat", "single"]);
+    expect(people?.find((person) => person.personId === "single")?.momentCount).toBe(1);
   });
 
   it("resolves one child across three photos after cast creation", async () => {

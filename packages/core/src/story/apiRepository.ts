@@ -425,7 +425,7 @@ export function createApiStoryRepository(
       return record(response.flow, "flow") as unknown as DirectorFlow;
     },
     interpret: async (id, req) => await deps.request("POST", `/api/projects/${encodeURIComponent(id)}/chat/interpret`, req) as { reply: string; change: { kind: string; [key: string]: unknown } },
-    getPeople: async (id): Promise<DirectorPerson[] | null> => {
+    getPeople: async (id, includeSinglePhoto = false): Promise<DirectorPerson[] | null> => {
       const [charactersValue, castValue, momentsValue] = await Promise.all([
         deps.request("GET", `/api/projects/${encodeURIComponent(id)}/characters`),
         deps.request("GET", `/api/projects/${encodeURIComponent(id)}/cast`).catch(() => null),
@@ -482,7 +482,8 @@ export function createApiStoryRepository(
         if (!pending) { pending = deps.getThumbnailUrl(id, assetId); thumbnailUrls.set(assetId, pending); }
         return pending;
       };
-      return (await Promise.all([...groups.entries()].filter(([personId, group]) => group.shots.size >= 2 || (names.get(personId)?.manualShots as unknown[] | undefined)?.length).map(async ([personId, group]) => {
+      const visibleGroups = [...groups.entries()].filter(([personId, group]) => includeSinglePhoto || group.shots.size >= 2 || (names.get(personId)?.manualShots as unknown[] | undefined)?.length);
+      return (await Promise.all(visibleGroups.map(async ([personId, group]) => {
         const person = names.get(personId);
         const samples = await Promise.all([...group.samples.values()].slice(0, 4).map(async ({ shotId, assetId, bbox }) => {
           try { return { shotId, uri: await thumbnail(assetId), bbox }; }

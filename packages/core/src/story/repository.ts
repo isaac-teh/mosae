@@ -25,7 +25,7 @@ export interface StoryRepository {
   getFlow?(projectId: string): Promise<DirectorFlow>;
   mutateFlow?(projectId: string, actionId: string, action: FlowAction): Promise<DirectorFlow>;
   interpret(projectId: string, req: ChatInterpretRequest): Promise<ChatInterpretResult>;
-  getPeople(projectId: string): Promise<DirectorPerson[] | null>;
+  getPeople(projectId: string, includeSinglePhoto?: boolean): Promise<DirectorPerson[] | null>;
   createPlan(storyText: string, mediaRefs: string[]): Promise<{ planId: string }>;
   getPlan(planId: string): Promise<StoryPlan>;
   setMomentSelected(planId: string, momentId: string, selected: boolean): Promise<StoryPlan>;

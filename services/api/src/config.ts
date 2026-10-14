@@ -9,11 +9,13 @@ export type Config = {
   allowedOrigins: string[];
   geminiApiKey: string;
   faceMatchThreshold: number;
-  faceGroupMergeThreshold: number;
   /** Base URL of the `mosae-render` Cloud Run service. */
   renderServiceUrl: string;
   tasks: { project: string; location: string; queue: string; invokerServiceAccount: string } | null;
 };
+
+/** Conservative post-confirmation face reconciliation cutoff (Gemini 2 spike: same-person median .8909, different-person median .7814). */
+export const FACE_RECONCILE_THRESHOLD = 0.9;
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
   const value = env[key];
@@ -23,10 +25,9 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
 
 const TASK_KEYS = ["GCP_PROJECT_ID", "TASKS_LOCATION", "TASKS_QUEUE", "TASKS_INVOKER_SERVICE_ACCOUNT"] as const;
 
-export function faceMatchingThresholds(env: NodeJS.ProcessEnv = process.env): Pick<Config, "faceMatchThreshold" | "faceGroupMergeThreshold"> {
+export function faceMatchingThresholds(env: NodeJS.ProcessEnv = process.env): Pick<Config, "faceMatchThreshold"> {
   return {
     faceMatchThreshold: Number(env.FACE_MATCH_THRESHOLD ?? 0.85),
-    faceGroupMergeThreshold: Number(env.FACE_GROUP_MERGE_THRESHOLD ?? 0.78),
   };
 }
 

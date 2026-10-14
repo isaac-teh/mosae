@@ -10,15 +10,13 @@ describe("loadConfig", () => {
     expect(loadConfig(base)).toMatchObject({ production: false, tasks: null, invokerEmails: [], port: 8080, geminiApiKey: "" });
   });
 
-  it("uses configurable face matching thresholds with spike defaults", () => {
-    expect(loadConfig(base)).toMatchObject({ faceMatchThreshold: 0.85, faceGroupMergeThreshold: 0.78 });
-    expect(loadConfig({ ...base, FACE_MATCH_THRESHOLD: "0.9", FACE_GROUP_MERGE_THRESHOLD: "0.8" }))
-      .toMatchObject({ faceMatchThreshold: 0.9, faceGroupMergeThreshold: 0.8 });
+  it("uses the configured face matching threshold with the spike default", () => {
+    expect(loadConfig(base)).toMatchObject({ faceMatchThreshold: 0.85 });
+    expect(loadConfig({ ...base, FACE_MATCH_THRESHOLD: "0.9" })).toMatchObject({ faceMatchThreshold: 0.9 });
   });
 
   it("exposes face thresholds through one shared config helper", () => {
-    expect(faceMatchingThresholds({ FACE_MATCH_THRESHOLD: "0.91", FACE_GROUP_MERGE_THRESHOLD: "0.81" }))
-      .toEqual({ faceMatchThreshold: 0.91, faceGroupMergeThreshold: 0.81 });
+    expect(faceMatchingThresholds({ FACE_MATCH_THRESHOLD: "0.91" })).toEqual({ faceMatchThreshold: 0.91 });
   });
 
   it("passes through GEMINI_API_KEY without requiring it", () => {
