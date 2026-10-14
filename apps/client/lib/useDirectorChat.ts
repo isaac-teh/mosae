@@ -260,7 +260,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
             const local = current.people?.find((item) => item.personId === person.personId);
             return local?.name || local?.skipped || peopleEdits.current.has(person.personId) ? { ...person, ...local } : person;
           }) ?? null : current.people,
-          peopleConfirmed: hasFlowRecord ? allFlowPeopleAnswered : Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)),
+          peopleConfirmed: current.peopleConfirmed || (hasFlowRecord ? allFlowPeopleAnswered : Boolean(resume.proposalId || hasGeneration) || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0))),
           peopleSummaryConfirmed: hasFlowRecord ? peopleSummaryConfirmed : undefined,
           plan,
           directionNote: plan?.directionRecommendation ?? "For these moments, I’d suggest this.",
@@ -283,10 +283,10 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     setInput((current) => ({ ...current, ...(taggedPersonRef.current ? { taggedPerson: taggedPersonRef.current } : {}), summary: mergedSummary, people: mergedSummary.ready.faces ? mapped?.map((person) => {
       const local = current.people?.find((item) => item.personId === person.personId);
       return local?.name || local?.skipped || peopleEdits.current.has(person.personId) ? { ...person, ...local } : person;
-    }) ?? null : current.people, peopleConfirmed: typeof repository.getFlow !== "function" ? current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) : nextSummary.ready.faces && mapped !== null && (mapped.length === 0 || mapped.every((person) => {
+    }) ?? null : current.people, peopleConfirmed: current.peopleConfirmed || (typeof repository.getFlow !== "function" ? nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0) : nextSummary.ready.faces && mapped !== null && (mapped.length === 0 || mapped.every((person) => {
       const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
       return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto));
-    })), peopleSummaryConfirmed: typeof repository.getFlow !== "function" ? current.peopleSummaryConfirmed : acceptedFlow?.peopleSummaryConfirmed === true || (acceptedFlow?.peopleSummaryConfirmed === undefined && (current.peopleSummaryConfirmed === true || Boolean(current.generation) || (nextSummary.ready.faces && mapped !== null && mapped.length > 0 && mapped.every((person) => {
+    }))), peopleSummaryConfirmed: typeof repository.getFlow !== "function" ? current.peopleSummaryConfirmed : acceptedFlow?.peopleSummaryConfirmed === true || (acceptedFlow?.peopleSummaryConfirmed === undefined && (current.peopleSummaryConfirmed === true || Boolean(current.generation) || (nextSummary.ready.faces && mapped !== null && mapped.length > 0 && mapped.every((person) => {
       const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
       return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto));
     })))) }));
@@ -589,12 +589,14 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     reopenPerson(personId: string) {
       const person = input.people?.find((entry) => entry.personId === personId && !entry.skipped);
       if (!person) return;
+      const completedPersonIds = [...new Set([...(input.proceededPersonIds ?? []), ...(input.flow?.peopleProgress?.completedPersonIds ?? [])])].filter((id) => id !== personId);
       peopleEdits.current.set(person.personId, { name: null, role: null, skipped: false });
       void commitFlowAction({ type: "batch", actions: [
         { type: "person", personId: person.personId, name: null, role: null, confirmed: false, skipped: false },
+        { type: "people-progress", completedPersonIds },
         { type: "people-summary-confirmed", confirmed: false },
       ] }).catch((cause) => setError(reportFailure(cause)));
-      setInput((current) => ({ ...current, people: (current.people ?? []).map((entry) => entry.personId === person.personId ? { ...entry, name: null } : entry), peopleConfirmed: false, peopleSummaryConfirmed: undefined }));
+      setInput((current) => ({ ...current, people: (current.people ?? []).map((entry) => entry.personId === person.personId ? { ...entry, name: null } : entry), proceededPersonIds: completedPersonIds, peopleConfirmed: false, peopleSummaryConfirmed: undefined }));
     },
     async resolvePersonMerge(eventId: string, samePerson: boolean) {
       const event = input.mergeEvents?.find(({ id }) => id === eventId);
