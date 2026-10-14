@@ -89,6 +89,13 @@ describe("generationsRouter", () => {
       expect(res.body.error).toBe("invalid_focus");
     });
 
+    it("rejects a multi-person focus when any id is outside the confirmed included cast", async () => {
+      const dbMock = { collection: () => ({ doc: () => ({ get: async () => ({ exists: true, get: () => "test-user" }), collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({ confirmed: true, people: [{ personId: "person-1" }, { personId: "person-2" }] }) }) }) }) }) }) };
+      const res = await request(await listeningServer(buildApp({ db: dbMock as unknown as Firestore }))).post("/api/projects/p1/generations").send({ proposalId: "proposal-1", settings: { ...settings, focus: "person-1,missing" } });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("invalid_focus");
+    });
+
     it("returns 400 when proposalId is missing", async () => {
       // Need an existing project so the route passes ownership check and reaches body validation.
       const dbMock = {
@@ -123,7 +130,7 @@ describe("generationsRouter", () => {
       expect(res.status).toBe(403);
     });
 
-    it.each([undefined, "family", "person-1"])("returns 201 for valid generation focus %s", async (focus) => {
+    it.each([undefined, "family", "person-1", "person-1,person-2,person-1"])("returns 201 for valid generation focus %s", async (focus) => {
       const dbMock = {
         collection: vi.fn((name: string) => ({
           doc: vi.fn().mockReturnValue({
@@ -138,7 +145,7 @@ describe("generationsRouter", () => {
             collection: vi.fn((subName: string) => ({
               doc: vi.fn().mockReturnValue({
                 id: "gen-123",
-                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ confirmed: true, people: [{ personId: "person-1", excluded: false }] }) }),
+                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ confirmed: true, people: [{ personId: "person-1", excluded: false }, { personId: "person-2", excluded: false }] }) }),
                 set: vi.fn().mockResolvedValue(undefined),
               }),
             })),
@@ -164,7 +171,7 @@ describe("generationsRouter", () => {
             collection: vi.fn((subName: string) => ({
               doc: vi.fn().mockReturnValue({
                 id: "gen-123",
-                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ confirmed: true, people: [{ personId: "person-1", excluded: false }] }) }),
+                get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ confirmed: true, people: [{ personId: "person-1", excluded: false }, { personId: "person-2", excluded: false }] }) }),
                 set: vi.fn().mockResolvedValue(undefined),
               }),
             })),

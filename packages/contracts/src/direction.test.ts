@@ -22,7 +22,7 @@ describe("DirectionSettingsSchema", () => {
   });
 
   it("accepts an explicit person focus or the aggregate sentinel", () => {
-    for (const focus of ["person-1", "family"]) expect(safeParseDirectionSettings({ ...valid, focus })).toMatchObject({ ok: true, settings: { focus } });
+    for (const focus of ["person-1", "person-1,person-2", "family"]) expect(safeParseDirectionSettings({ ...valid, focus })).toMatchObject({ ok: true, settings: { focus } });
     expect(safeParseDirectionSettings({ ...valid, focus: "" }).ok).toBe(false);
   });
 

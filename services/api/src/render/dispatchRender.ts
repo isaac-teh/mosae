@@ -294,7 +294,7 @@ async function renderEditRevision(
         if (analysis?.kind === "photo") facesByShot.set(shot.id, analysis.faces ?? []);
       }
       const focus = generation.settings.focus;
-      renderTimeline = fitCollageCrops(renderTimeline, facesByShot, new Set(focus && focus !== "family" ? [focus] : []));
+      renderTimeline = fitCollageCrops(renderTimeline, facesByShot, new Set(focus && focus !== "family" ? focus.split(",").filter(Boolean) : []));
     }
     sources = await resolveSources(renderTimeline, config.sources, task.projectId, "render");
     if (config.signRead) sources = Object.fromEntries(await Promise.all(
