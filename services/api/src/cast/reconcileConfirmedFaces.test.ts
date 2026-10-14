@@ -6,7 +6,7 @@ const face = (faceId: string, shotId: string, vector: number[], characterId?: st
 
 describe("reconcileConfirmedFaces", () => {
   it("uses thresholds selected from the dev face-pair similarity measurements", () => {
-    expect(FACE_RECONCILE_THRESHOLD).toBe(0.86);
+    expect(FACE_RECONCILE_THRESHOLD).toBe(0.685);
     expect(FACE_RECONCILE_MARGIN).toBe(0.08);
   });
 

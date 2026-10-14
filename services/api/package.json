@@ -13,7 +13,8 @@
     "vitest:store": "vitest run --no-file-parallelism",
     "test:emulator": "cd ../.. && firebase emulators:exec --only firestore,storage --project demo-mosae \"npm run vitest:store -w services/api -- src/directing/directing.emulator.test.ts src/routes/characterPicker.emulator.test.ts src/routes/directionOptions.emulator.test.ts src/cast/ensureCast.emulator.test.ts\"",
     "test:editor-emulator": "vitest run --no-file-parallelism src/routes/editInterpret.emulator.test.ts src/routes/editInterpret.replay.emulator.test.ts",
-    "replay:finalize": "tsx --env-file-if-exists=.env scripts/replayFinalize.ts"
+    "replay:finalize": "tsx --env-file-if-exists=.env scripts/replayFinalize.ts",
+    "reprocess:faces": "tsx --env-file-if-exists=.env scripts/reprocessFaces.ts"
   },
   "dependencies": {
     "@google-cloud/tasks": "^5.5.0",

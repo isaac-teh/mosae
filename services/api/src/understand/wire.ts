@@ -13,8 +13,10 @@ import { joinReadyVideo } from "../store/lateVideoStore.js";
 import { analyzePhoto, analyzeVideo } from "./analyze.js";
 import { embedShotAnalyses } from "./embed.js";
 import { understandAsset, type UnderstandDeps, type UnderstandResult, type UnderstandTask } from "./understandAsset.js";
+import { createFaceService } from "./faceService.js";
 export function createUnderstand(config: { db: Firestore; bucketName: string; geminiApiKey?: string; settle: (projectId: string) => Promise<void> }): (task: UnderstandTask) => Promise<UnderstandResult> {
   const usable = geminiConfigured(config.geminiApiKey);
+  const faceService = createFaceService();
   const generateContent = usable ? createGeminiClient(config.geminiApiKey) : undefined;
   const embedContent = usable ? createEmbedClient(config.geminiApiKey) : undefined;
   const embedImageContent = usable ? createImageEmbedClient(config.geminiApiKey) : undefined;
@@ -23,5 +25,5 @@ export function createUnderstand(config: { db: Firestore; bucketName: string; ge
     if (!generateContent || !embedContent) throw new PermanentIngestError("gemini_api_key_missing");
     const gemini = { generateContent, recordUsage: recordUsageToLog(config.db, { projectId: task.projectId }) };
     const unavailable = async (): Promise<never> => { throw new PermanentIngestError("gemini_api_key_missing"); };
-    const deps: UnderstandDeps = { loadAsset: (projectId, assetId) => loadAsset(config.db, projectId, assetId), loadShots: (projectId, assetId) => loadShotsForAsset(config.db, projectId, assetId), objects: firebaseObjectStore(getStorage(getAdminApp()).bucket(config.bucketName)), analyzePhoto: (input) => analyzePhoto(gemini, input), analyzeVideo: (input) => analyzeVideo(gemini, input), embedShots: (shots) => embedShotAnalyses(embedContent, shots), embedImageContent: embedImageContent!, uploadVideoFile: (filePath) => fileClient!.upload({ path: filePath, mimeType: "video/mp4" }), deleteVideoFile: (name) => fileClient!.delete(name), commitUnderstood: (input) => commitUnderstood(config.db, input), commitUnderstandFailed: (input) => commitUnderstandFailed(config.db, input), lateJoinVideo: (projectId, assetId) => joinReadyVideo(config.db, projectId, assetId), settle: config.settle, makeWorkDir: () => mkdtemp(path.join(tmpdir(), "mosae-understand-")), removeWorkDir: (dir) => rm(dir, { recursive: true, force: true }), now: Date.now }; return understandAsset(deps, task); };
+    const deps: UnderstandDeps = { loadAsset: (projectId, assetId) => loadAsset(config.db, projectId, assetId), loadShots: (projectId, assetId) => loadShotsForAsset(config.db, projectId, assetId), objects: firebaseObjectStore(getStorage(getAdminApp()).bucket(config.bucketName)), analyzePhoto: (input) => analyzePhoto(gemini, input), analyzeVideo: (input) => analyzeVideo(gemini, input), embedShots: (shots) => embedShotAnalyses(embedContent, shots), embedImageContent: embedImageContent!, faceService, uploadVideoFile: (filePath) => fileClient!.upload({ path: filePath, mimeType: "video/mp4" }), deleteVideoFile: (name) => fileClient!.delete(name), commitUnderstood: (input) => commitUnderstood(config.db, input), commitUnderstandFailed: (input) => commitUnderstandFailed(config.db, input), lateJoinVideo: (projectId, assetId) => joinReadyVideo(config.db, projectId, assetId), settle: config.settle, makeWorkDir: () => mkdtemp(path.join(tmpdir(), "mosae-understand-")), removeWorkDir: (dir) => rm(dir, { recursive: true, force: true }), now: Date.now }; return understandAsset(deps, task); };
 }

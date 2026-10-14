@@ -15,7 +15,7 @@ export type Config = {
 };
 
 /** Empirical post-confirmation face match cutoff measured from labeled dev-project pairs. */
-export const FACE_RECONCILE_THRESHOLD = 0.86;
+export const FACE_RECONCILE_THRESHOLD = 0.685;
 export const FACE_RECONCILE_MARGIN = 0.08;
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -28,7 +28,7 @@ const TASK_KEYS = ["GCP_PROJECT_ID", "TASKS_LOCATION", "TASKS_QUEUE", "TASKS_INV
 
 export function faceMatchingThresholds(env: NodeJS.ProcessEnv = process.env): Pick<Config, "faceMatchThreshold"> {
   return {
-    faceMatchThreshold: Number(env.FACE_MATCH_THRESHOLD ?? 0.85),
+    faceMatchThreshold: Number(env.FACE_MATCH_THRESHOLD ?? 0.35),
   };
 }
 

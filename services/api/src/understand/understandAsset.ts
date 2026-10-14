@@ -8,12 +8,13 @@ import type { ShotRef, UnderstandCommit } from "../store/understandStore.js";
 import type { VideoFile } from "./analyze.js";
 import { faceCropRect } from "./faceCrops.js";
 import { embedImages, type EmbedImageContent } from "./embed.js";
+import { boxIou, FACE_EMBEDDING_MODEL, type FaceService } from "./faceService.js";
 export type UnderstandTask = { projectId: string; assetId: string; generation: string; attempt?: number };
 export type UnderstandResult = "understood" | "failed" | "skipped";
 export type UnderstandDeps = {
   loadAsset(projectId: string, assetId: string): Promise<Asset | null>; loadShots(projectId: string, assetId: string): Promise<ShotRef[]>; objects: ObjectStore;
   analyzePhoto(input: { assetId: string; shotId: string; renderPath: string }): Promise<PhotoAnalysis>; analyzeVideo(input: { assetId: string; file: VideoFile; shotCount: number; durationSec: number; shotRanges?: { startSec: number | null; endSec: number | null }[] }): Promise<{ shots: VideoShotAnalysis[]; transcript: TranscriptLine[] }>;
-  embedShots(shots: { shotId: string; analysis: ShotAnalysis }[]): Promise<{ shotId: string; embedding: number[] | null }[]>; embedImageContent: EmbedImageContent; uploadVideoFile(path: string): Promise<VideoFile & { name: string }>; deleteVideoFile(name: string): Promise<void>;
+  embedShots(shots: { shotId: string; analysis: ShotAnalysis }[]): Promise<{ shotId: string; embedding: number[] | null }[]>; embedImageContent: EmbedImageContent; faceService?: FaceService | null; uploadVideoFile(path: string): Promise<VideoFile & { name: string }>; deleteVideoFile(name: string): Promise<void>;
   commitUnderstood(input: UnderstandCommit): Promise<"understood" | "skipped">; commitUnderstandFailed(input: { projectId: string; assetId: string; generation: string; reason: string; now: number }): Promise<"failed" | "skipped">; settle(projectId: string): Promise<void>; makeWorkDir(): Promise<string>; removeWorkDir(dir: string): Promise<void>; now(): number;
   lateJoinVideo?(projectId: string, assetId: string): Promise<unknown>;
 };
@@ -22,7 +23,7 @@ async function timed<T>(deps: UnderstandDeps, timings: UnderstandTimings, stage:
   const startedAt = deps.now();
   try { return await operation(); } finally { timings[stage] += Math.max(0, deps.now() - startedAt); }
 }
-async function commit(deps: UnderstandDeps, asset: Asset, shots: { shotId: string; analysis: ShotAnalysis; embedding: number[] | null; faceEmbeddings?: Record<string, number[]> }[], transcript: TranscriptLine[] | null, timings: UnderstandTimings): Promise<UnderstandResult> {
+async function commit(deps: UnderstandDeps, asset: Asset, shots: { shotId: string; analysis: ShotAnalysis; embedding: number[] | null; faceEmbeddings?: Record<string, number[]>; faceEmbeddingModel?: string }[], transcript: TranscriptLine[] | null, timings: UnderstandTimings): Promise<UnderstandResult> {
   return timed(deps, timings, "commitMs", () => deps.commitUnderstood({ projectId: asset.projectId, assetId: asset.id, generation: asset.generation, shots, transcript, now: deps.now() }));
 }
 async function understandOriginal(deps: UnderstandDeps, asset: Asset, shots: ShotRef[], workDir: string, timings: UnderstandTimings): Promise<UnderstandResult> {
@@ -34,23 +35,40 @@ async function understandOriginal(deps: UnderstandDeps, asset: Asset, shots: Sho
     timings.faces = analysis.faces?.length ?? 0;
     const embedded = await timed(deps, timings, "shotEmbedMs", () => deps.embedShots([{ shotId: shots[0].id, analysis }]));
     let faceEmbeddings: Record<string, number[]> | undefined;
-    if (analysis.faces?.length) {
+    let faceEmbeddingModel: string | undefined;
+    if (deps.faceService) {
+      try {
+        const result = await timed(deps, timings, "faceEmbedMs", async () => deps.faceService!(await sharp(renderPath).jpeg({ quality: 92 }).toBuffer()));
+        const original = analysis.faces ?? [];
+        const assigned = new Set<number>();
+        const normalized = result.map((face, index) => {
+          const best = original.map((candidate, i) => ({ i, score: boxIou(face.bbox, candidate.bbox) })).filter(({ i }) => !assigned.has(i)).sort((a, b) => b.score - a.score)[0];
+          const metadata = best && best.score >= 0.08 ? original[best.i] : undefined;
+          if (metadata && best) assigned.add(best.i);
+          const faceId = `${shots[0]!.id}-${index}`;
+          return { faceId, bbox: face.bbox, confidence: face.detScore, ...(metadata ? { ageBand: metadata.ageBand, appearance: metadata.appearance, prominence: metadata.prominence, expression: metadata.expression, lookingAtCamera: metadata.lookingAtCamera, faceVisible: metadata.faceVisible } : {}) };
+        }).sort((a, b) => a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0]);
+        // Stable IDs follow the sorted boxes; reorder vectors by those same sorted boxes.
+        const ordered = [...result].sort((a, b) => a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0]);
+        analysis.faces = normalized;
+        faceEmbeddings = Object.fromEntries(normalized.map((face, i) => [face.faceId, ordered[i]!.embedding]));
+        faceEmbeddingModel = FACE_EMBEDDING_MODEL;
+      } catch (error) {
+        console.warn("ArcFace extraction failed; retaining Gemini face metadata without identity vectors", error);
+      }
+    }
+    if (!faceEmbeddingModel && analysis.faces?.length) {
       faceEmbeddings = await timed(deps, timings, "faceEmbedMs", async () => {
         const metadata = await sharp(renderPath).metadata();
         const size = { width: metadata.width ?? 0, height: metadata.height ?? 0 };
-        const candidates = analysis.faces!.flatMap((face) => {
-          const rect = faceCropRect(face, size);
-          return rect ? [{ face, rect }] : [];
-        });
-        const images = await Promise.all(candidates.map(async ({ face, rect }) => ({
-          id: face.faceId,
-          jpeg: await sharp(renderPath).extract(rect).jpeg({ quality: 90 }).toBuffer(),
-        })));
+        const candidates = analysis.faces!.flatMap((face) => { const rect = faceCropRect(face, size); return rect ? [{ face, rect }] : []; });
+        const images = await Promise.all(candidates.map(async ({ face, rect }) => ({ id: face.faceId, jpeg: await sharp(renderPath).extract(rect).jpeg({ quality: 90 }).toBuffer() })));
         const vectors = await embedImages(deps.embedImageContent, images);
         return vectors.size > 0 ? Object.fromEntries(vectors) : undefined;
       });
+      if (faceEmbeddings) faceEmbeddingModel = "gemini-embedding-2";
     }
-    return commit(deps, asset, [{ shotId: shots[0].id, analysis, embedding: embedded[0]?.embedding ?? null, ...(faceEmbeddings ? { faceEmbeddings } : {}) }], null, timings);
+    return commit(deps, asset, [{ shotId: shots[0].id, analysis, embedding: embedded[0]?.embedding ?? null, ...(faceEmbeddings ? { faceEmbeddings, faceEmbeddingModel } : {}) }], null, timings);
   }
   if (!asset.derivatives?.proxyPath) throw new PermanentIngestError("missing_derivatives");
   const proxyPath = path.join(workDir, "proxy.mp4"); const file = await timed(deps, timings, "downloadMs", async () => { await deps.objects.downloadCurrent({ path: asset.derivatives!.proxyPath!, destination: proxyPath }); return deps.uploadVideoFile(proxyPath); });

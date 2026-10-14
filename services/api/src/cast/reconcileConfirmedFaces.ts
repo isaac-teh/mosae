@@ -1,7 +1,7 @@
 import { FACE_RECONCILE_MARGIN, FACE_RECONCILE_THRESHOLD } from "../config.js";
 import { cosine } from "./clusterFaces.js";
 
-export type ReconciliationFace = { faceId: string; shotId: string; vector: number[]; characterId?: string };
+export type ReconciliationFace = { faceId: string; shotId: string; vector: number[]; characterId?: string; modelVersion?: string };
 
 /** Find individual pending faces that closely match a user's confirmed identity. */
 export function reconcileConfirmedFaces(
@@ -23,8 +23,9 @@ export function reconcileConfirmedFaces(
     if (candidate.characterId === confirmedPersonId || references.some((reference) => reference.shotId === candidate.shotId)) continue;
     if (pendingPersonIds && (!candidate.characterId || !pendingPersonIds.has(candidate.characterId))) continue;
     const bestByPerson = new Map<string, number>();
-    for (const reference of references) bestByPerson.set(confirmedPersonId, Math.max(bestByPerson.get(confirmedPersonId) ?? -1, cosine(candidate.vector, reference.vector)));
+    for (const reference of references) if (candidate.modelVersion === reference.modelVersion) bestByPerson.set(confirmedPersonId, Math.max(bestByPerson.get(confirmedPersonId) ?? -1, cosine(candidate.vector, reference.vector)));
     for (const [personId, personFaces] of otherReferences) for (const reference of personFaces) {
+      if (candidate.modelVersion !== reference.modelVersion) continue;
       bestByPerson.set(personId, Math.max(bestByPerson.get(personId) ?? -1, cosine(candidate.vector, reference.vector)));
     }
     const ranked = [...bestByPerson].sort((a, b) => b[1] - a[1]);

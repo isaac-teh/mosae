@@ -4,6 +4,15 @@ type FaceInput = { faceId: string; shotId: string; vector: number[] };
 const loadClusterFaces = async () => (await import("./clusterFaces.js") as typeof import("./clusterFaces.js") & { clusterFaces?: (faces: FaceInput[], options: { threshold: number; minPhotos: number }) => string[][] }).clusterFaces;
 
 describe("clusterFaces", () => {
+  it("does not compare vectors from different model versions", async () => {
+    const clusterFaces = await loadClusterFaces();
+    expect(clusterFaces).toBeTypeOf("function");
+    if (!clusterFaces) return;
+    expect(clusterFaces([
+      { faceId: "a", shotId: "a", vector: [1, 0], modelVersion: "arcface-buffalo_l-v1" },
+      { faceId: "b", shotId: "b", vector: [1, 0], modelVersion: "gemini-embedding-2" },
+    ], { threshold: 0.3, minPhotos: 1 })).toEqual([["a"], ["b"]]);
+  });
   it("groups identical vectors across different photos", async () => {
     const clusterFaces = await loadClusterFaces();
     expect(clusterFaces).toBeTypeOf("function");

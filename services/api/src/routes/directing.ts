@@ -573,7 +573,7 @@ export function directingRouter(deps: {
           const value = storedVectors?.[face.faceId];
           const vector = Array.isArray(value) ? value : value?.toArray?.();
           if (!vector) return [];
-          return [{ faceId: face.faceId, shotId: doc.id, vector, characterId: moved.has(face.faceId) ? moved.get(face.faceId) ?? undefined : face.characterId }];
+          return [{ faceId: face.faceId, shotId: doc.id, vector, modelVersion: (data.faceEmbeddingModel as string | undefined) ?? "gemini-embedding-2", characterId: moved.has(face.faceId) ? moved.get(face.faceId) ?? undefined : face.characterId }];
         });
       }) : [];
       // A gallery tag marks the photo as belonging to that person. In a group

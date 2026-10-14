@@ -1,4 +1,4 @@
-export type FaceVector = { faceId: string; shotId: string; vector: number[] };
+export type FaceVector = { faceId: string; shotId: string; vector: number[]; modelVersion?: string };
 type Cluster = { id: number; faces: FaceVector[]; shots: Set<string>; key: string };
 type Candidate = { score: number; leftId: number; rightId: number };
 
@@ -89,7 +89,7 @@ export function clusterFaces(faces: FaceVector[], opts: { threshold: number; min
     const left = initial[i]!;
     const right = initial[j]!;
     if (sharesShot(left, right)) continue;
-    const score = cosine(left.faces[0]!.vector, right.faces[0]!.vector);
+    const score = left.faces[0]!.modelVersion !== right.faces[0]!.modelVersion ? -1 : cosine(left.faces[0]!.vector, right.faces[0]!.vector);
     similarities[left.id]![right.id] = score;
     similarities[right.id]![left.id] = score;
     if (score >= opts.threshold) heap.push({ score, leftId: left.id, rightId: right.id });
