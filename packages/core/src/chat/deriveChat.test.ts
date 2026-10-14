@@ -230,6 +230,22 @@ describe("deriveChat state table", () => {
       ...missedPeople.map(({ personId, name, momentCount }) => ({ personId, name, momentCount })),
     ] });
   });
+  it("reconciles stale missed-person UI state from the committed flow and summarizes every person", () => {
+    const people = ["Daughter", "Wife", "Me", "Kara", "Ben", "Alex"].map((name, index) => ({
+      personId: `p${index + 1}`, name, role: "other", skipped: false, momentCount: 3, sampleShotIds: [], days: [],
+    }));
+    const missed = [{ personId: "g1", name: "Grandpa" }, { personId: "g2", name: "Grandma" }];
+    const flowPeople = [...people.map(({ personId, name }) => ({ personId, name, role: "other", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })),
+      ...missed.map(({ personId, name }) => ({ personId, name, role: "other", confirmed: true, skipped: false, manualShotAdds: ["shared-1", "shared-2"], manualShotRemoves: [], faceIds: [], mergedInto: null }))];
+    const flow = { revision: 9, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: flowPeople, missedPeople: missed, missedPeopleConfirmed: true, peopleSummaryConfirmed: false };
+    const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false, missedPeopleConfirmed: false,
+      people, missedPeople: missed.map(({ personId, name }) => ({ personId, name, momentCount: 0 })), flow });
+    expect(state.items.filter((item) => item.kind === "missed-person")).toMatchObject([{ momentCount: 2 }, { momentCount: 2 }]);
+    expect(state.items.find((item) => item.kind === "people-summary")).toMatchObject({ people: [
+      ...people.map(({ personId, name, momentCount }) => ({ personId, name, momentCount })),
+      ...missed.map(({ personId, name }) => ({ personId, name, momentCount: 2 })),
+    ] });
+  });
   it("keeps the people intro and face crops in history after summary confirmation", () => {
     const state = deriveChat({ ...base(), intent: { text: "A trip" }, peopleConfirmed: true, peopleSummaryConfirmed: true, people: [
       { personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: ["scene"], sampleFaces: [{ shotId: "face", uri: "face-crop.jpg", bbox: [0, 0, 1, 1] }], days: [] },

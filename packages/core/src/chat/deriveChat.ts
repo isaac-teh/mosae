@@ -131,7 +131,14 @@ export function canConfirmStory(input: ChatInput): boolean {
 export function deriveChat(input: ChatInput): ChatState {
   if (input.flow?.story.answer && !input.intent) input = { ...input, intent: { text: input.flow.story.answer }, storySummary: input.flow.story.storySummary ?? undefined, mentionedPeople: input.flow.story.mentionedPeople };
   if (input.proceededPersonIds === undefined && input.flow?.peopleProgress) input = { ...input, proceededPersonIds: input.flow.peopleProgress.completedPersonIds };
-  if (input.missedPeopleConfirmed === undefined && input.flow?.missedPeopleConfirmed !== undefined) input = { ...input, missedPeopleConfirmed: input.flow.missedPeopleConfirmed };
+  if (input.flow?.missedPeople?.length) input = { ...input,
+    missedPeople: input.flow.missedPeople.map((person) => {
+      const stored = input.flow!.people.find((entry) => entry.personId === person.personId);
+      return { personId: person.personId, name: person.name, momentCount: stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0,
+        ...(person.samplePhotoUris ? { sampleUris: person.samplePhotoUris } : {}), ...(person.skipped ? { skipped: true } : {}) };
+    }),
+  };
+  if (input.flow?.missedPeopleConfirmed !== undefined) input = { ...input, missedPeopleConfirmed: input.flow.missedPeopleConfirmed };
   if (input.peopleSummaryConfirmed === undefined && input.flow?.peopleSummaryConfirmed !== undefined) input = { ...input, peopleSummaryConfirmed: input.flow.peopleSummaryConfirmed };
   if (input.missedAnswer === undefined && input.flow?.missedAnswer !== undefined) input = { ...input, missedAnswer: input.flow.missedAnswer };
   if (input.missedReply === undefined && input.flow?.missedReply !== undefined) input = { ...input, missedReply: input.flow.missedReply };
@@ -429,7 +436,8 @@ export function deriveChat(input: ChatInput): ChatState {
     // Keep the single missed-people question before the names and photo-selection
     // turns in the reconstructed transcript, then place the final summary after them.
     addMissedPeople(true, false);
-    const announced = mainPeople(input.people ?? [], input.summary?.photos ?? 0).filter((person) => !person.personId.startsWith("p-missed-") && !person.skipped && person.name);
+    const announced = (input.people ?? []).filter((person) => !person.personId.startsWith("p-missed-") && !person.skipped && person.name)
+      .sort((a, b) => b.momentCount - a.momentCount);
     const peopleById = new Map(announced.map((person) => [person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri, sampleFace: person.sampleFaces?.[0] }]));
     const taggedMissed = (input.people ?? []).filter((person) => person.personId.startsWith("p-missed-") && !person.skipped && person.name && person.momentCount > 0);
     for (const person of taggedMissed) {
