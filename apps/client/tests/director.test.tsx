@@ -1056,6 +1056,17 @@ describe("Director chat", () => {
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ focus: "person-2" })));
   });
 
+  it("submits both selected people as generation focus", async () => {
+    setup({ people: people.map((person, index) => ({ ...person, name: index ? "Ben" : "Mia", role: "other" })), readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    await renderScreen();
+    await waitFor(() => expect(hasText("Looks good")).toBe(true));
+    await click("Looks good");
+    await click("Mia");
+    await click("Ben");
+    await click("Sounds good");
+    await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ focus: "person-1,person-2", note: expect.stringContaining("Focus: Mia, Ben.") })));
+  });
+
   it("loads direction options without exposing duration choice and directs with the other chosen settings", async () => {
     await openMoments();
     await click("Looks good");

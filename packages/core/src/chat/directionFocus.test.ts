@@ -17,4 +17,7 @@ describe("directionFocus", () => {
     expect(directionFocus([person("b")], "a", true).selected).toBe("b");
     expect(directionFocus([person("a")], "family", true).selected).toBe("family");
   });
+  it("preserves multiple explicit people in the selected focus", () => {
+    expect(directionFocus([person("a", "Mia"), person("b", "Ben")], "a,b,a", true)).toMatchObject({ selected: "a,b", label: "Mia, Ben" });
+  });
 });

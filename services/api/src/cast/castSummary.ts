@@ -16,10 +16,12 @@ export function castSummary(
   const parents = people.filter((p) => p.role === "parent").length;
   const children = people.filter((p) => p.role === "child").length;
 
-  const selected = people.find(person => person.personId === explicitFocus && !person.excluded);
+  const selectedIds = explicitFocus && explicitFocus !== "family" ? [...new Set(explicitFocus.split(",").filter(Boolean))] : [];
+  const selected = selectedIds.map(id => people.find(person => person.personId === id && !person.excluded)).filter((person): person is typeof people[number] => person !== undefined);
+  const personLabel = (person: typeof people[number]) => person.name?.trim() || (person.role === "parent" ? "a parent" : person.role === "child" ? "your child" : "this person");
   const focusText = explicitFocus === undefined ? (children > 0 ? "children" : "the family")
     : explicitFocus === "family" ? "everyone"
-    : selected?.name?.trim() || (selected?.role === "parent" ? "a parent" : selected?.role === "child" ? "your child" : "this person");
+    : selected.map(personLabel).join(" and ");
 
   let k = 0;
   if (cast.core.length > 0) {
