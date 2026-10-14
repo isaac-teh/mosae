@@ -34,7 +34,7 @@ describe("deriveChat state table", () => {
       { personId: "kept", name: null, role: "child", skipped: false, momentCount: 3, sampleShotIds: ["keep-1", "keep-2", "blur-1"], shotIds: ["keep-1", "keep-2", "blur-1"], sampleFaces: [{ shotId: "keep-1", uri: "kept.jpg", bbox: [0, 0, 1, 1] as [number, number, number, number] }], days: [] },
     ];
     const state = deriveChat({ ...base(), plan: filteredPlan, momentsConfirmed: true, people, peopleConfirmed: false, proceededPersonIds: [] });
-    expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "One person appears often in your moments." });
+    expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Let’s go through the people who appear often in your moments." });
     expect(state.items.filter((item) => item.kind === "person").map((item) => item.personId)).toEqual(["kept"]);
     const tagged = deriveChat({ ...base(), plan: filteredPlan, momentsConfirmed: true, people: people.map((person) => ({ ...person, name: person.personId === "kept" ? "Mia" : null })), peopleConfirmed: false, proceededPersonIds: ["kept"] });
     expect(tagged.items.find((item) => item.kind === "person-tagged")).toMatchObject({ momentCount: 2 });
@@ -67,7 +67,7 @@ describe("deriveChat state table", () => {
     const transcript = (state: ChatState) => state.items.filter((item) => item.id === "people-intro" || /^(?:person-question-|person-answer-|person-tagged-|anyone-else$)/.test(item.id) || item.kind === "person").map(({ id }) => id);
     let state = deriveChat({ ...base(), people: clusters, peopleConfirmed: false, plan: null, proceededPersonIds: [] });
     expect(state.items.filter((item) => item.kind === "person").map((item) => item.personId)).toEqual(["p1"]);
-    expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Three people appear often in your moments." });
+    expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Let’s go through the people who appear often in your moments." });
     expect(state.items.some((item) => item.kind === "anyone-else")).toBe(false);
     expect(state.items.some((item) => item.kind === "people-summary" || item.id === "people-summary-message")).toBe(false);
     expect(transcript(state)).toEqual(["people-intro", "person-p1"]);
@@ -162,7 +162,7 @@ describe("deriveChat state table", () => {
       { personId: "dad", name: null, role: null, skipped: false, momentCount: 50, sampleShotIds: [], days: [] },
     ];
     const first = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null });
-    expect((first.items.find((item) => item.kind === "mosae" && item.id === "people-intro") as Extract<ChatItem, { kind: "mosae" }> | undefined)?.text).toBe("Three people appear often in your moments.");
+    expect((first.items.find((item) => item.kind === "mosae" && item.id === "people-intro") as Extract<ChatItem, { kind: "mosae" }> | undefined)?.text).toBe("Let’s go through the people who appear often in your moments.");
     expect(first.items.find((item) => item.kind === "person")?.kind === "person" && (first.items.find((item) => item.kind === "person") as Extract<ChatItem, { kind: "person" }>).personId).toBe("daughter");
     const second = deriveChat({ ...base(), people: people.map((person, i) => i === 1 ? { ...person, name: "My daughter" } : person), peopleConfirmed: false, plan: null });
     expect(second.items.find((item) => item.kind === "person" && item.personId === "dad")).toBeTruthy();
@@ -178,7 +178,7 @@ describe("deriveChat state table", () => {
 
   it("does not describe one main person as three", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "only", name: null, role: null, skipped: false, momentCount: 6, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
-    expect((state.items.find((item) => item.kind === "mosae" && item.id === "people-intro") as Extract<ChatItem, { kind: "mosae" }> | undefined)?.text).toBe("One person appears often in your moments.");
+    expect((state.items.find((item) => item.kind === "mosae" && item.id === "people-intro") as Extract<ChatItem, { kind: "mosae" }> | undefined)?.text).toBe("Let’s go through the people who appear often in your moments.");
   });
   it("shortens conversational story acknowledgements instead of echoing the raw input", () => {
     const state = deriveChat({ ...base(), intent: { text: "A trip. Japan in October" }, people: [], peopleConfirmed: true });
@@ -385,7 +385,7 @@ describe("deriveChat state table", () => {
     const mergeEvents = ["p4", "p5"].map((personId) => ({ id: `merge-${personId}`, personId, targetPersonId: "p0", answer: "Mia", targetName: "Mia", sampleFaces: [], momentCount: 2 }));
     const state = deriveChat({ ...base(), people, mergeEvents, peopleConfirmed: false, plan: null });
     const intro = state.items.find((item) => item.id === "people-intro");
-    expect(intro?.kind === "mosae" ? intro.text : "").toBe("Six people appear often in your moments.");
+    expect(intro?.kind === "mosae" ? intro.text : "").toBe("Let’s go through the people who appear often in your moments.");
   });
   it("keeps the original story acknowledgement when the interpreted summary changes", () => {
     const state = deriveChat({ ...base(), intent: { text: "A trip" }, storySummary: "Our trip", people: [], peopleConfirmed: false });
@@ -686,11 +686,11 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.kind === "merge-followup")).toBeUndefined();
   });
 
-  it("keeps the announced count and skips a pending cluster emptied by face reconciliation", () => {
+  it("does not ask about a cluster emptied by face reconciliation", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "kara", name: "Kara", role: "parent", skipped: false, momentCount: 11, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, mergeEvents: [
       { id: "reconciled-chloe", personId: "chloe", targetPersonId: "kara", answer: "Kara", targetName: "Kara", sampleFaces: [], momentCount: 3, automatic: true, reconciled: true, response: "Yes, same person" },
     ] });
-    expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Two people appear often in your moments." });
+    expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Let’s go through the people who appear often in your moments." });
     expect(state.items.some((item) => item.id === "person-question-chloe")).toBe(false);
   });
 
@@ -703,7 +703,7 @@ describe("deriveChat state table", () => {
     const expectedHistory = ["person-question-a", "person-answer-a", "person-question-b", "person-answer-b", "merge-b", "person-question-c", "person-answer-c"];
 
     const live = deriveChat({ ...base(), people, peopleConfirmed: false, plan: null, mergeEvents });
-    expect(live.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Three people appear often in your moments." });
+    expect(live.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Let’s go through the people who appear often in your moments." });
     expect(live.items.filter((item) => expectedHistory.includes(item.id)).map((item) => item.id)).toEqual(expectedHistory);
     expect(live.items.find((item) => item.id === "person-question-b")).toMatchObject({ photos: ["kara-b.jpg"] });
 
@@ -711,6 +711,32 @@ describe("deriveChat state table", () => {
     expect(summaryState.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "Three people appear often in your moments." });
     expect(summaryState.items.filter((item) => expectedHistory.includes(item.id)).map((item) => item.id)).toEqual(expectedHistory);
     expect(summaryState.items.find((item) => item.id === "person-question-b")).toMatchObject({ photos: ["kara-b.jpg"] });
+  });
+
+  it("uses reconciled server progress when the local proceeded ids are stale", () => {
+    const people = ["p1", "p2"].map((personId) => ({ personId, name: personId === "p1" ? "Daughter" : "Wife", role: "parent", skipped: false, momentCount: 4, sampleShotIds: [], days: [] }));
+    const flow = {
+      revision: 22,
+      story: { answer: "Our Japan trip", storySummary: "Japan", mentionedPeople: [] },
+      people: [
+        { personId: "p1", name: "Daughter", role: "parent", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null },
+        { personId: "p2", name: "Wife", role: "parent", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null },
+      ],
+      peopleProgress: { completedPersonIds: ["p1", "p2"] },
+      missedPeopleConfirmed: true,
+      missedPeople: [{ personId: "missed-grandpa", name: "Grandpa" }],
+    };
+    const state = deriveChat({ ...base(), people, peopleConfirmed: true, peopleSummaryConfirmed: false, proceededPersonIds: ["p1"], flow,
+      missedPeople: [{ personId: "missed-grandpa", name: "Grandpa", momentCount: 2 }] });
+    expect(state.items.find((item) => item.id === "people-summary-message")).toMatchObject({ text: "Thanks. I've tagged all three in your moments." });
+  });
+
+  it("does not count an automatically reconciled face cluster as another person", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "kara", name: "Kara", role: "parent", skipped: false, momentCount: 8, sampleShotIds: [], days: [] }], peopleConfirmed: true, peopleSummaryConfirmed: false,
+      missedPeopleConfirmed: true, missedPeople: [], mergeEvents: [
+        { id: "reconciled-split", personId: "split", targetPersonId: "kara", answer: "Kara", targetName: "Kara", sampleFaces: [], momentCount: 2, automatic: true, reconciled: true, response: "Yes, same person" },
+      ] });
+    expect(state.items.find((item) => item.id === "people-intro")).toMatchObject({ text: "One person appears often in your moments." });
   });
 
   it("holds the next identity question until the repeated-name merge is answered", () => {

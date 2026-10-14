@@ -21,7 +21,19 @@ function taggedPersonItem(person: NonNullable<ChatInput["people"]>[number], canP
 
 function peopleIntroCount(people: { personId: string }[], mergeEvents: NonNullable<ChatInput["mergeEvents"]>): number {
   const present = new Set(people.map(({ personId }) => personId));
-  return people.length + mergeEvents.filter(({ personId }) => !present.has(personId)).length;
+  return people.length + mergeEvents.filter(({ personId, reconciled }) => !reconciled && !present.has(personId)).length;
+}
+
+function peopleIntroText(): string {
+  // Reconciliation can remove a face group after the conversation starts, so
+  // avoid announcing a provisional count that can exceed the people we ask about.
+  return "Let’s go through the people who appear often in your moments.";
+}
+
+function peopleCountText(count: number): string {
+  const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  const label = words[count] ?? String(count);
+  return `${count === 1 ? "One person appears" : `${label[0]!.toLocaleUpperCase()}${label.slice(1)} people appear`} often in your moments.`;
 }
 
 function keptPeople(input: ChatInput) {
@@ -135,7 +147,10 @@ export function canConfirmStory(input: ChatInput): boolean {
 
 export function deriveChat(input: ChatInput): ChatState {
   if (input.flow?.story.answer && !input.intent) input = { ...input, intent: { text: input.flow.story.answer }, storySummary: input.flow.story.storySummary ?? undefined, mentionedPeople: input.flow.story.mentionedPeople };
-  if (input.proceededPersonIds === undefined && input.flow?.peopleProgress) input = { ...input, proceededPersonIds: input.flow.peopleProgress.completedPersonIds };
+  if (input.flow?.peopleProgress) input = {
+    ...input,
+    proceededPersonIds: [...new Set([...(input.proceededPersonIds ?? []), ...input.flow.peopleProgress.completedPersonIds])],
+  };
   if (input.flow?.missedPeople?.length) input = { ...input,
     missedPeople: input.flow.missedPeople.map((person) => {
       const stored = input.flow!.people.find((entry) => entry.personId === person.personId);
@@ -262,7 +277,7 @@ export function deriveChat(input: ChatInput): ChatState {
   confirmed = 1;
 
   const facesReady = facesComplete;
-  const completedPersonIds = input.proceededPersonIds ?? input.flow?.peopleProgress?.completedPersonIds;
+  const completedPersonIds = input.proceededPersonIds;
   const missedPersonIds = new Set((input.missedPeople ?? []).map(({ personId }) => personId));
   const allNamedPeopleProceeded = completedPersonIds === undefined || announcedPeople(input).filter((person) => !missedPersonIds.has(person.personId)).every((person) => person.skipped || !person.name || completedPersonIds.includes(person.personId));
   const peopleResolved = input.peopleConfirmed && allNamedPeopleProceeded || (facesReady && input.people?.length === 0);
@@ -275,10 +290,7 @@ export function deriveChat(input: ChatInput): ChatState {
 
     const people = announcedPeople(input);
     const mergeEvents = input.mergeEvents ?? [];
-    const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-    const introCount = peopleIntroCount(people, mergeEvents);
-    const countLabel = countWords[introCount] ?? String(introCount);
-    add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments.` });
+    add({ kind: "mosae", id: "people-intro", text: peopleIntroText() });
     const answered = (person: (typeof people)[number]) => person.skipped || Boolean(person.name);
     const firstUnanswered = people.findIndex((person) => !answered(person));
     const pendingProceedIndex = input.proceededPersonIds === undefined ? -1 : people.findIndex((person) => !person.skipped && Boolean(person.name) && !input.proceededPersonIds!.includes(person.personId));
@@ -370,17 +382,13 @@ export function deriveChat(input: ChatInput): ChatState {
     step = "people";
     const people = announcedPeople(input);
     const introCount = peopleIntroCount(people, mergeEvents);
-    const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-    const countLabel = countWords[introCount] ?? String(introCount);
-    add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments.` });
+    add({ kind: "mosae", id: "people-intro", text: peopleCountText(introCount) });
     for (const event of mergeEvents.filter((item) => item.automatic && !item.reconciled)) add({ kind: "mosae", id: `${event.id}-ack`, text: `Got it — I've added these to ${event.targetName.replace(/^my\s+/i, "")}'s moments.` });
   }
   if (input.peopleConfirmed && input.peopleSummaryConfirmed === true) {
     const historyPeople = announcedPeople(input);
-    const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
     const count = peopleIntroCount(historyPeople, mergeEvents);
-    const label = countWords[count] ?? String(count);
-    add({ kind: "mosae", id: "people-intro", text: `${count === 1 ? "One person appears" : `${label[0]!.toLocaleUpperCase()}${label.slice(1)} people appear`} often in your moments.` });
+    add({ kind: "mosae", id: "people-intro", text: peopleCountText(count) });
     for (const event of mergeEvents.filter((item) => item.automatic && !item.reconciled)) add({ kind: "mosae", id: `${event.id}-ack`, text: `Got it — I've added these to ${event.targetName.replace(/^my\s+/i, "")}'s moments.` });
   }
   const addMissedPeople = (showPrompt: boolean, canConfirm = showPrompt) => {
@@ -403,10 +411,7 @@ export function deriveChat(input: ChatInput): ChatState {
   };
   const people = announcedPeople(input);
   if ((collectingMissedPeople || taggingMissedPeople) && !showPeopleSummary) {
-    const introCount = peopleIntroCount(people, mergeEvents);
-    const countWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-    const countLabel = countWords[introCount] ?? String(introCount);
-    add({ kind: "mosae", id: "people-intro", text: `${introCount === 1 ? "One person appears" : `${countLabel[0]!.toLocaleUpperCase()}${countLabel.slice(1)} people appear`} often in your moments.` });
+    add({ kind: "mosae", id: "people-intro", text: peopleIntroText() });
   }
   const orderedHistory = [
     ...people.map((person) => ({ kind: "person" as const, person, personId: person.personId, momentCount: person.momentCount })),
