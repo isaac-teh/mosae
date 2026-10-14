@@ -137,6 +137,7 @@ export function useEditor(projectId: string, generationId: string, repository: S
     const next = mergeOps([...opsRef.current, ...batch]);
     const result = applyEdits(firstCut, next);
     if (!result.ok) {
+      console.warn("applyEdits rejected editor change:", result.error);
       setEditError("That change couldn’t be applied. Try another edit.");
       return false;
     }

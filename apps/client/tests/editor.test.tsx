@@ -448,10 +448,12 @@ describe("film editor", () => {
   });
 
   it("shows a message when applyEdits rejects an operation", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     await render(<Harness />);
     await click("Apply rejected edit");
     expect(host.querySelector('[role="alert"]')?.textContent).toBe("That change couldn’t be applied. Try another edit.");
     expect(host.querySelector('[data-testid="ops"]')?.textContent).toBe("[]");
+    expect(warn).toHaveBeenCalledWith("applyEdits rejected editor change:", expect.stringContaining("unknown clipId: missing"));
   });
 
   it("autosaves merged operations once after 1.5 seconds", async () => {
