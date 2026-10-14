@@ -839,6 +839,19 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         actions.discardInterpret();
       }
       const activePerson = state.items.find((item) => item.kind === "person");
+      // Names and explicit skips are unambiguous answers to the visible face
+      // question. Handle them locally so an interpreter clarification cannot
+      // swallow the user's answer or leave the same face active.
+      if (activePerson?.kind === "person") {
+        if (/^(?:i\s+)?(?:don['’]?t know(?: her| him| them)?|no idea|skip|not sure)(?:[.!?])?$/i.test(answer)) {
+          return actions.setPerson(activePerson.personId, "Skip", undefined, answer);
+        }
+        const duplicate = matchExistingPersonAnswer(answer, (input.people ?? []).filter((person) => person.personId !== activePerson.personId));
+        if (duplicate) {
+          const existing = input.people?.find((person) => person.personId === duplicate.personId);
+          if (existing?.name) return actions.setPerson(activePerson.personId, "other", existing.name, answer);
+        }
+      }
       const summaryVisible = state.items.some((item) => item.kind === "people-summary");
       const anyoneElseVisible = state.items.some((item) => item.kind === "anyone-else");
       const missedTaggingVisible = state.items.some((item) => item.kind === "missed-person") || Boolean(input.missedPersonTagging);

@@ -216,6 +216,21 @@ describe("deriveChat state table", () => {
     expect(tagging.items.find((item) => item.kind === "mosae" && item.id === "missed-select-p-missed-2")).toMatchObject({ text: "Help me select 1 photo of Uncle Tan." });
   });
 
+  it("uses the name-entry placeholder while a face question is active", () => {
+    const state = deriveChat({ ...base(), people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null });
+    expect(state.items.some((item) => item.kind === "person" && item.personId === "p1")).toBe(true);
+    expect(state.placeholder).toBe("Type a name");
+  });
+
+  it("keeps the confirmed summary in the original asking order", () => {
+    const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false,
+      people: [
+        { personId: "kara", name: "Kara", role: "other", skipped: false, momentCount: 2, sampleShotIds: [], days: [] },
+        { personId: "chloe", name: "Chloe", role: "other", skipped: false, momentCount: 8, sampleShotIds: [], days: [] },
+      ], proceededPersonIds: ["kara", "chloe"] });
+    expect(state.items.find((item) => item.kind === "people-summary")?.people.map(({ name }) => name)).toEqual(["Kara", "Chloe"]);
+  });
+
   it("renders exactly one select action for the missed person currently being tagged", () => {
     const state = deriveChat({ ...base(), people: [{ personId: "p1", name: "Emily", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: false, plan: null, missedPeople: [{ personId: "missed-1", name: "Emily", momentCount: 0 }], missedPersonTagging: { personId: "missed-1", name: "Emily" } });
     expect(state.items.filter((item) => item.kind === "missed-person" && item.personId === "missed-1")).toHaveLength(1);

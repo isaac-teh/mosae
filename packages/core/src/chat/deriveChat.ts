@@ -334,6 +334,7 @@ export function deriveChat(input: ChatInput): ChatState {
       add(taggedPersonItem(awaitingProceed));
     }
     if (unanswered) {
+      placeholder = "Type a name";
       const mention = people[0]?.personId === unanswered.personId ? mentionedPerson(input.intent.text, people, input.mentionedPeople) : null;
       if (mention && !(input.dismissedPersonSuggestionIds ?? []).includes(unanswered.personId)) {
         add({ kind: "person-confirm", id: `person-confirm-${unanswered.personId}`, personId: unanswered.personId, label: mention.label, text: `Is this ${mention.phrase}?`, momentCount: unanswered.momentCount, sampleFaces: (unanswered.sampleFaces ?? []).slice(0, 2) });
@@ -463,8 +464,7 @@ export function deriveChat(input: ChatInput): ChatState {
     // Keep the single missed-people question before the names and photo-selection
     // turns in the reconstructed transcript, then place the final summary after them.
     addMissedPeople(true, false);
-    const announced = keptPeople(input).filter((person) => !person.skipped && person.name)
-      .sort((a, b) => b.momentCount - a.momentCount);
+    const announced = orderByProgress(keptPeople(input).filter((person) => !person.skipped && person.name), input);
     const peopleById = new Map(announced.map((person) => [person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri, sampleFace: person.sampleFaces?.[0] }]));
     const taggedMissed = (input.people ?? []).filter((person) => person.personId.startsWith("p-missed-") && !person.skipped && person.name && person.momentCount > 0);
     for (const person of taggedMissed) {
