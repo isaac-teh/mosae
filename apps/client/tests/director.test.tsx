@@ -336,6 +336,11 @@ describe("Director chat", () => {
     if (choosePortrait) await click("Portrait");
     await click("Sounds good");
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledWith("proposal-1", expect.objectContaining({ aspect: expectedAspect })));
+    expect(hasText(`Orientation: ${expectedAspect === "16:9" ? "Landscape" : "Portrait"}`)).toBe(true);
+    expect(hasText("Pace:")).toBe(true);
+    expect(hasText("Focus:")).toBe(true);
+    expect(hasText("Collage:")).toBe(true);
+    expect(hasText("Length:")).toBe(false);
   });
 
   it("renders the completed chat film card in its landscape format", async () => {
