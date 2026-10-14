@@ -120,7 +120,7 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Did I miss anyone?"]')).toBeNull();
     expect([...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent)).toContain("My daughter");
     expect([...host.querySelectorAll('[data-from="you"]')].map((item) => item.textContent)).not.toContain("Daughter");
-    expect(hasText("Thanks. I've tagged her in 212 moments.")).toBe(true);
+    expect(hasText("Thanks. Click on the tagged moment below.")).toBe(true);
     expect(hasText("Tagged in 212 moments")).toBe(true);
     expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Proceed"]')?.className).toContain("border-line-strong");
@@ -139,14 +139,14 @@ describe("Director chat", () => {
     for (let index = 0; index < four.length; index++) {
       await typeAndSend(`Alpha ${index + 1}`);
       await waitFor(() => expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy());
-      expect(host.textContent).toContain("Thanks. I've tagged them in");
+      expect(host.textContent).toContain("Thanks. Click on the tagged moment below.");
       expect(host.querySelector('button[aria-label="Proceed"]')).toBeTruthy();
       if (index < four.length - 1) {
         await click("Proceed");
         await waitFor(() => expect(host.querySelector(`[data-person-question="person-${index + 2}"]`)).toBeTruthy());
       }
     }
-    expect(hasText("Thanks. I've tagged them in 37 moments.")).toBe(true);
+    expect(hasText("Thanks. Click on the tagged moment below.")).toBe(true);
     expect(host.querySelector('button[aria-label="Did I miss anyone?"]')).toBeNull();
   });
 
@@ -233,6 +233,30 @@ describe("Director chat", () => {
     await click("Looks right");
     await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull());
     expect(mocks.confirmCast).toHaveBeenCalledTimes(3);
+  });
+
+  it("treats a missing API missed-people flag as waiting for That's everyone", async () => {
+    setup({ readyPlan: true, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    const personFlow = (personId: string, name: string) => ({ personId, name, role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
+    let flow: any = {
+      revision: 4,
+      story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] },
+      people: people.map((person) => personFlow(person.personId, person.personId === "person-1" ? "Daughter" : "Son")),
+      peopleProgress: { completedPersonIds: people.map((person) => person.personId) },
+      peopleSummaryConfirmed: false,
+    };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => {
+      flow = { ...flow, revision: flow.revision + 1, ...(action.type === "missed-people-confirmed" ? { missedPeopleConfirmed: action.confirmed } : {}) };
+      return flow;
+    });
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('button[aria-label="That\'s everyone"]')).toBeTruthy());
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull();
+    await click("That's everyone");
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
+    expect(mocks.repo.mutateFlow.mock.calls.some(([, , action]: [string, string, any]) => action.type === "missed-people-confirmed" && action.confirmed === true)).toBe(true);
+    expect(hasText("Thanks. I've tagged all two in your moments.")).toBe(true);
   });
 
   it("routes a summary correction for a tagged person straight to their gallery", async () => {
@@ -409,6 +433,17 @@ describe("Director chat", () => {
     expect(host.querySelector('[aria-label="Uploading 0 of 50"]')).toBeTruthy();
     expect(hasText("MB transferred")).toBe(false);
     expect(host.querySelector('img[alt^="Photo "]')).toBeFalsy();
+  });
+
+  it("uses the same fixed progress-icon box for pending, active, and completed rows", async () => {
+    setup();
+    setPendingMedia([new File(["photo"], "trip.jpg", { type: "image/jpeg" })]);
+    setUploadProgress({ totalFiles: 1, finishedFiles: 1, failedFiles: 0, bytesSent: 100, totalBytes: 100, assetStatuses: [] });
+    setUploadPreparationProgress({ preparedFiles: 1, totalFiles: 1 });
+    await renderScreen();
+    await waitFor(() => expect(host.querySelectorAll('[data-testid="upload-progress-icon"]')).toHaveLength(3));
+    const boxes = [...host.querySelectorAll('[data-testid="upload-progress-icon"]')];
+    expect(new Set(boxes.map((box) => box.className))).toEqual(new Set(["h-4 w-4 shrink-0 items-center justify-center"]));
   });
 
   it("keeps terminal all-failed upload status visible in the chat", async () => {
@@ -1252,16 +1287,20 @@ describe("Director chat", () => {
     await waitFor(() => expect(mocks.repo.directFilm).toHaveBeenCalledTimes(2));
   });
 
-  it("shows the completed film with three direction notes and opens the editor", async () => {
+  it("shows only the film actions on the completed film card and opens the editor", async () => {
     planFixture.chapters = Array.from({ length: 5 }, (_, index) => ({ id: `chapter-${index}`, title: `Chapter ${index + 1}`, momentIds: [] }));
     await openMoments();
     await click("Looks good");
     await waitFor(() => expect(hasText("Sounds good")).toBe(true));
     await click("Sounds good");
-    await waitFor(() => expect(hasText("Japan, autumn")).toBe(true));
-    expect(hasText("5 chapters")).toBe(true);
-    expect(hasText("How I directed it")).toBe(true);
-    expect(hasText("Both moments you kept are in.")).toBe(true);
+    await waitFor(() => expect(host.querySelector('button[aria-label="Open in editor"]')).toBeTruthy());
+    expect(hasText("Japan, autumn")).toBe(false);
+    expect(hasText("Play Date Adventures")).toBe(false);
+    expect(hasText("5 chapters")).toBe(false);
+    expect(hasText("How I directed it")).toBe(false);
+    expect(host.querySelector('button[aria-label="Open in editor"]')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Save film"]')).toBeTruthy();
+    expect(hasText("Both moments you kept are in.")).toBe(false);
     expect(hasText("I left out repeated scenery shots.")).toBe(false);
     await click("Open in editor");
     expect(mocks.push).toHaveBeenCalledWith({ pathname: "/editor", params: { projectId: "project-1", planId: "proposal-1", generationId: "film-1", request: "", repository: "api" } });

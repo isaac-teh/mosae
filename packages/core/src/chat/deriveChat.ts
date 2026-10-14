@@ -278,8 +278,9 @@ export function deriveChat(input: ChatInput): ChatState {
 
   const facesReady = facesComplete;
   const completedPersonIds = input.proceededPersonIds;
+  const tracksProceedActions = input.proceededPersonIds !== undefined || input.flow?.peopleProgress !== undefined;
   const missedPersonIds = new Set((input.missedPeople ?? []).map(({ personId }) => personId));
-  const allNamedPeopleProceeded = completedPersonIds === undefined || announcedPeople(input).filter((person) => !missedPersonIds.has(person.personId)).every((person) => person.skipped || !person.name || completedPersonIds.includes(person.personId));
+  const allNamedPeopleProceeded = !tracksProceedActions || announcedPeople(input).filter((person) => !missedPersonIds.has(person.personId)).every((person) => person.skipped || !person.name || completedPersonIds?.includes(person.personId));
   const peopleResolved = input.peopleConfirmed && allNamedPeopleProceeded || (facesReady && input.people?.length === 0);
   if (!peopleResolved) {
     step = "people";
@@ -293,7 +294,8 @@ export function deriveChat(input: ChatInput): ChatState {
     add({ kind: "mosae", id: "people-intro", text: peopleIntroText() });
     const answered = (person: (typeof people)[number]) => person.skipped || Boolean(person.name);
     const firstUnanswered = people.findIndex((person) => !answered(person));
-    const pendingProceedIndex = input.proceededPersonIds === undefined ? -1 : people.findIndex((person) => !person.skipped && Boolean(person.name) && !input.proceededPersonIds!.includes(person.personId));
+    const proceededPersonIds = new Set(input.proceededPersonIds ?? []);
+    const pendingProceedIndex = tracksProceedActions ? people.findIndex((person) => !person.skipped && Boolean(person.name) && !proceededPersonIds.has(person.personId)) : -1;
     const awaitingProceed = pendingProceedIndex >= 0 ? people[pendingProceedIndex] : null;
     const unanswered = (input.mergeEvents ?? []).some((event) => !event.response) ? null : awaitingProceed ? null : firstUnanswered >= 0 ? people[firstUnanswered] : null;
     const orderedHistory = [
@@ -375,7 +377,8 @@ export function deriveChat(input: ChatInput): ChatState {
   const hasUntaggedMissedPeople = missedPeople.some((person) => !person.skipped && person.momentCount === 0);
   const collectingMissedPeople = input.peopleConfirmed && input.missedPeopleConfirmed === false && missedPeople.length === 0;
   const taggingMissedPeople = input.peopleConfirmed && missedPeople.length > 0 && hasUntaggedMissedPeople;
-  const showPeopleSummary = input.peopleConfirmed && input.peopleSummaryConfirmed !== true && !hasUntaggedMissedPeople && (input.missedPeopleConfirmed === true || missedPeople.length > 0 || input.missedPeopleConfirmed === undefined && input.peopleSummaryConfirmed === false);
+  const requiresMissedConfirmation = input.flow?.peopleProgress !== undefined;
+  const showPeopleSummary = input.peopleConfirmed && input.peopleSummaryConfirmed !== true && !hasUntaggedMissedPeople && (requiresMissedConfirmation ? input.missedPeopleConfirmed === true : input.missedPeopleConfirmed === true || missedPeople.length > 0 || input.missedPeopleConfirmed === undefined && input.peopleSummaryConfirmed === false);
   const keepPeopleSummary = showPeopleSummary || input.peopleConfirmed && input.peopleSummaryConfirmed === true;
   const mergeEvents = input.mergeEvents ?? [];
   if (showPeopleSummary) {

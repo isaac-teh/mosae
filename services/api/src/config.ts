@@ -14,8 +14,9 @@ export type Config = {
   tasks: { project: string; location: string; queue: string; invokerServiceAccount: string } | null;
 };
 
-/** Conservative post-confirmation face reconciliation cutoff (Gemini 2 spike: same-person median .8909, different-person median .7814). */
-export const FACE_RECONCILE_THRESHOLD = 0.9;
+/** Empirical post-confirmation face match cutoff measured from labeled dev-project pairs. */
+export const FACE_RECONCILE_THRESHOLD = 0.86;
+export const FACE_RECONCILE_MARGIN = 0.08;
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
   const value = env[key];

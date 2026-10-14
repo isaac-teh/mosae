@@ -27,6 +27,8 @@ import { reconcileConfirmedFaces } from "../cast/reconcileConfirmedFaces.js";
 import { z } from "zod";
 import { FlowMutationRequestSchema } from "@mosae/contracts";
 import type { PhotoAnalysis } from "../domain/understanding.js";
+import { cosine } from "../cast/clusterFaces.js";
+import { FACE_RECONCILE_THRESHOLD } from "../config.js";
 import { buildDerivativePath } from "../domain/ids.js";
 import { getStorage } from "firebase-admin/storage";
 import { getAdminApp } from "../firebase/admin.js";
@@ -555,16 +557,41 @@ export function directingRouter(deps: {
       if (moves.some((move) => !faceLookup.has(move.faceId))) { res.status(400).json({ error: "invalid_cast" }); return; }
       const moved = new Map(moves.map((move) => [move.faceId, move.personId]));
       const personInputs = new Map(people.map((person) => [person.personId, person]));
-      const reconciliation = reconcilePersonId ? reconcileConfirmedFaces(allShotDocs.docs.flatMap((doc) => {
+      const manuallyTaggedByShot = new Map<string, string[]>();
+      if (reconcilePersonId) for (const person of people) {
+        const existing = current.people.find((entry) => entry.personId === person.personId);
+        const manualShots = new Set(existing?.manualShots ?? []);
+        for (const shotId of person.removeShots ?? []) manualShots.delete(shotId);
+        for (const shotId of person.addShots ?? []) manualShots.add(shotId);
+        for (const shotId of manualShots) manuallyTaggedByShot.set(shotId, [...(manuallyTaggedByShot.get(shotId) ?? []), person.personId]);
+      }
+      const reconciliationFaces = reconcilePersonId ? allShotDocs.docs.flatMap((doc) => {
         const data = doc.data();
         const analysis = data.analysis as PhotoAnalysis | undefined;
         const storedVectors = data.faceEmbeddings as Record<string, { toArray?: () => number[] } | number[]> | undefined;
         return (analysis?.faces ?? []).flatMap((face) => {
           const value = storedVectors?.[face.faceId];
           const vector = Array.isArray(value) ? value : value?.toArray?.();
-          return vector ? [{ faceId: face.faceId, shotId: doc.id, vector, characterId: moved.has(face.faceId) ? moved.get(face.faceId) ?? undefined : face.characterId }] : [];
+          if (!vector) return [];
+          return [{ faceId: face.faceId, shotId: doc.id, vector, characterId: moved.has(face.faceId) ? moved.get(face.faceId) ?? undefined : face.characterId }];
         });
-      }), reconcilePersonId, undefined, new Set(reconcilePendingPersonIds)) : new Map<string, string>();
+      }) : [];
+      // A gallery tag marks the photo as belonging to that person. In a group
+      // photo, use its detected face that best matches the person's existing
+      // confirmed references; treating every face as a reference would merge
+      // siblings into one another. Never infer a gallery reference from a photo
+      // that already contains a reference face for that same identity.
+      const galleryReferences: typeof reconciliationFaces = [];
+      for (const [shotId, owners] of manuallyTaggedByShot) for (const owner of owners) {
+        const references = reconciliationFaces.filter((face) => face.characterId === owner && face.shotId !== shotId);
+        if (!references.length) continue;
+        const candidate = reconciliationFaces.filter((face) => face.shotId === shotId)
+          .map((face) => ({ face, score: Math.max(...references.map((reference) => cosine(face.vector, reference.vector))) }))
+          .sort((a, b) => b.score - a.score)[0];
+        if (candidate && candidate.score >= FACE_RECONCILE_THRESHOLD) galleryReferences.push({ ...candidate.face, faceId: `${candidate.face.faceId}:gallery:${owner}`, characterId: owner });
+      }
+      reconciliationFaces.push(...galleryReferences);
+      const reconciliation = reconcilePersonId ? reconcileConfirmedFaces(reconciliationFaces, reconcilePersonId, undefined, new Set(reconcilePendingPersonIds)) : new Map<string, string>();
       const removedShotOwners = new Map<string, Set<string>>();
       for (const person of people) for (const shotId of person.removeShots ?? []) {
         const owners = removedShotOwners.get(shotId) ?? new Set<string>();

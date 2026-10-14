@@ -23,4 +23,34 @@ describe("savePersonMoments", () => {
       type: "person", personId: "person-1", name: null, role: "other", confirmed: false, skipped: false,
     });
   });
+
+  it("drops duplicate cast rows and absorbed identities from gallery focus saves", async () => {
+    boundary.getCast.mockResolvedValue({ people: [
+      { personId: "chloe", role: "child", faceIds: [], excluded: false },
+      { personId: "chloe", role: "child", faceIds: [], excluded: false },
+      { personId: "kara", role: "child", faceIds: [], excluded: false },
+    ], focus: ["chloe", "absorbed-kara", "chloe"], source: "embeddings" });
+    await savePersonMoments("project-1", "chloe", "Chloe", ["shot-4"], []);
+    expect(boundary.confirmCast).toHaveBeenCalledWith("project-1", {
+      people: [
+        { personId: "chloe", role: "child", name: "Chloe", excluded: false, addShots: ["shot-4"], removeShots: [] },
+        { personId: "kara", role: "child", name: undefined, excluded: false },
+      ],
+      focus: ["chloe"],
+    });
+  });
+
+  it("resolves a stale merged gallery id to the unique live cast person with the same name", async () => {
+    boundary.getCast.mockResolvedValue({ people: [
+      { personId: "chloe-current", name: "Chloe", role: "child", faceIds: [], excluded: false },
+      { personId: "kara", name: "Kara", role: "child", faceIds: [], excluded: false },
+    ], focus: ["chloe-current", "absorbed-chloe"], source: "embeddings" });
+    await expect(savePersonMoments("project-1", "absorbed-chloe", "Chloe", ["shot-5"], [])).resolves.toBe("chloe-current");
+    expect(boundary.confirmCast).toHaveBeenCalledWith("project-1", expect.objectContaining({
+      people: expect.arrayContaining([expect.objectContaining({ personId: "chloe-current", addShots: ["shot-5"] })]),
+      focus: ["chloe-current"],
+    }));
+    expect(boundary.mutateProjectFlow).toHaveBeenCalledWith("project-1", expect.objectContaining({ type: "person", personId: "chloe-current" }));
+    expect(boundary.mutateProjectFlow).toHaveBeenCalledWith("project-1", expect.objectContaining({ type: "manual-shot", personId: "chloe-current", shotId: "shot-5" }));
+  });
 });

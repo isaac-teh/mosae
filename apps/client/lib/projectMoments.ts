@@ -11,17 +11,24 @@ export async function getProjectMoments(projectId: string): Promise<ProjectMomen
   return body.moments as ProjectMoment[];
 }
 
-export async function savePersonMoments(projectId: string, personId: string, name: string | null, addShots: string[], removeShots: string[], sampleUris: string[] = []): Promise<void> {
+export async function savePersonMoments(projectId: string, personId: string, name: string | null, addShots: string[], removeShots: string[], sampleUris: string[] = []): Promise<string> {
   const cast = await getCast(projectId);
   const current = cast ?? { people: [], core: [], focus: [], source: "none" as const };
-  const existing = current.people.find((person) => person.personId === personId);
-  const people: ConfirmCastInput["people"] = current.people.map((person) => ({ personId: person.personId, role: person.role, name: person.name, excluded: person.excluded }));
-  if (!existing) people.push({ personId, role: "other", ...(name ? { name } : {}), excluded: false });
-  await confirmCast(projectId, { people: people.map((person) => person.personId === personId ? { ...person, ...(name ? { name } : {}), addShots, removeShots } : person), focus: current.focus });
+  const sameName = name?.trim().toLocaleLowerCase();
+  const nameMatches = sameName ? current.people.filter((person) => person.name?.trim().toLocaleLowerCase() === sameName) : [];
+  const resolvedPersonId = current.people.some((person) => person.personId === personId) ? personId : nameMatches.length === 1 ? nameMatches[0]!.personId : personId;
+  const existing = current.people.find((person) => person.personId === resolvedPersonId);
+  const peopleById = new Map(current.people.map((person) => [person.personId, person]));
+  const people: ConfirmCastInput["people"] = [...peopleById.values()].map((person) => ({ personId: person.personId, role: person.role, name: person.name, excluded: person.excluded }));
+  if (!existing) people.push({ personId: resolvedPersonId, role: "other", ...(name ? { name } : {}), excluded: false });
+  const livePersonIds = new Set(people.map(({ personId }) => personId));
+  const focus = [...new Set(current.focus.filter((id) => livePersonIds.has(id)))];
+  await confirmCast(projectId, { people: people.map((person) => person.personId === resolvedPersonId ? { ...person, ...(name ? { name } : {}), addShots, removeShots } : person), focus });
   await Promise.all([
-    mutateProjectFlow(projectId, { type: "person", personId, name: name ?? existing?.name ?? null, role: existing?.role ?? "other", confirmed: Boolean(name ?? existing?.name), skipped: false }),
-    ...addShots.map((shotId) => mutateProjectFlow(projectId, { type: "manual-shot", personId, shotId, included: true })),
-    ...removeShots.map((shotId) => mutateProjectFlow(projectId, { type: "manual-shot", personId, shotId, included: false })),
-    ...(sampleUris.length ? [mutateProjectFlow(projectId, { type: "sample-photos", personId, uris: sampleUris.slice(0, 4) })] : []),
+    mutateProjectFlow(projectId, { type: "person", personId: resolvedPersonId, name: name ?? existing?.name ?? null, role: existing?.role ?? "other", confirmed: Boolean(name ?? existing?.name), skipped: false }),
+    ...addShots.map((shotId) => mutateProjectFlow(projectId, { type: "manual-shot", personId: resolvedPersonId, shotId, included: true })),
+    ...removeShots.map((shotId) => mutateProjectFlow(projectId, { type: "manual-shot", personId: resolvedPersonId, shotId, included: false })),
+    ...(sampleUris.length ? [mutateProjectFlow(projectId, { type: "sample-photos", personId: resolvedPersonId, uris: sampleUris.slice(0, 4) })] : []),
   ]);
+  return resolvedPersonId;
 }
