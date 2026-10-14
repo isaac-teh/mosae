@@ -115,15 +115,19 @@ describe("director chat components", () => {
     expect(onToggle).toHaveBeenCalledWith("mia");
   });
 
-  it("shows one large face and a free-text identity question", async () => {
-    await render(<ChatPersonQuestion samples={["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"].map((uri, index) => ({ uri, bbox: [0.4, 0.2, 0.7, 0.5] as [number, number, number, number], shotId: `s${index}` }))} question="Who is this?" />);
+  it("shows one compact, tappable face and a free-text identity question", async () => {
+    const onSamplePress = vi.fn();
+    await render(<ChatPersonQuestion samples={["/a.jpg", "/b.jpg", "/c.jpg", "/d.jpg"].map((uri, index) => ({ uri, bbox: [0.4, 0.2, 0.7, 0.5] as [number, number, number, number], shotId: `s${index}` }))} question="Who is this?" onSamplePress={onSamplePress} />);
     expect(host.textContent).toContain("Who is this?");
     expect(host.querySelectorAll('[data-face-preview="true"]')).toHaveLength(1);
     expect(host.querySelector('[data-face-preview="true"]')?.className).toContain("rounded-md");
+    expect((host.querySelector('[data-face-preview="true"]') as HTMLElement).style.width).toBe("160px");
+    expect((host.querySelector('[data-face-preview="true"]') as HTMLElement).style.height).toBe("160px");
     const firstImage = host.querySelector('[data-face-preview="true"] img') as HTMLImageElement;
     await act(async () => firstImage.dispatchEvent(new Event("load")));
     expect(firstImage.style.position).toBe("absolute");
-    expect(host.querySelectorAll("[role=button]")).toHaveLength(0);
+    await click("Open person photo 1");
+    expect(onSamplePress).toHaveBeenCalledWith("/a.jpg");
   });
 
   it("cycles inline moment tiles and reports kept and left out counts", async () => {

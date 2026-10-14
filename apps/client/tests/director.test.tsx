@@ -5,9 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("expo-asset", () => ({ Asset: { fromModule: (module: unknown) => ({ uri: String(module) }) } }));
 vi.mock("@/lib/demoAssets", () => ({ demoImage: () => 1 }));
 
-const scrollMock = vi.hoisted(() => ({ scrollToEnd: vi.fn() }));
+const scrollMock = vi.hoisted(() => ({ scrollToEnd: vi.fn(), onScroll: null as ((event: any) => void) | null, onScrollBeginDrag: null as (() => void) | null }));
 vi.mock("react-native", () => {
-  const ScrollView = React.forwardRef(({ children, accessibilityLabel, onScrollBeginDrag: _onScrollBeginDrag, scrollEventThrottle: _scrollEventThrottle, contentContainerStyle, contentContainerClassName, keyboardShouldPersistTaps: _keyboardShouldPersistTaps, ...props }: any, ref: any) => {
+  const ScrollView = React.forwardRef(({ children, accessibilityLabel, onScroll, onScrollBeginDrag, scrollEventThrottle: _scrollEventThrottle, contentContainerStyle, contentContainerClassName, keyboardShouldPersistTaps: _keyboardShouldPersistTaps, ...props }: any, ref: any) => {
+    scrollMock.onScroll = onScroll;
+    scrollMock.onScrollBeginDrag = onScrollBeginDrag;
     React.useImperativeHandle(ref, () => ({ scrollToEnd: scrollMock.scrollToEnd }), []);
     return React.createElement("div", { ...props, "aria-label": accessibilityLabel, "data-content-container-class-name": contentContainerClassName, "data-content-container-style": JSON.stringify(contentContainerStyle ?? null) }, children);
   });
@@ -348,6 +350,35 @@ describe("Director chat", () => {
     expect(history).not.toBeNull();
     expect(history!.style.minHeight).toBe("0");
     expect(history!.style.flexGrow).toBe("1");
+  });
+
+  it("keeps the director history pinned through keyboard viewport resize only when it was near the bottom", async () => {
+    const viewport = new EventTarget() as EventTarget & { height: number; offsetTop: number };
+    viewport.height = 768;
+    viewport.offsetTop = 0;
+    Object.defineProperty(window, "visualViewport", { configurable: true, value: viewport });
+    setup(); await renderScreen();
+    scrollMock.scrollToEnd.mockClear();
+    const composer = host.querySelector('input[aria-label]') as HTMLInputElement;
+    scrollMock.onScroll?.({ nativeEvent: { contentOffset: { y: 500 }, contentSize: { height: 900 }, layoutMeasurement: { height: 340 } } });
+    await act(async () => composer.dispatchEvent(new FocusEvent("focus")));
+    await act(async () => {
+      viewport.height = 440;
+      viewport.dispatchEvent(new Event("resize"));
+    });
+    await waitFor(() => expect(scrollMock.scrollToEnd).toHaveBeenCalled());
+
+    scrollMock.scrollToEnd.mockClear();
+    scrollMock.onScrollBeginDrag?.();
+    scrollMock.onScroll?.({ nativeEvent: { contentOffset: { y: 0 }, contentSize: { height: 900 }, layoutMeasurement: { height: 400 } } });
+    await act(async () => composer.dispatchEvent(new FocusEvent("focus")));
+    await act(async () => {
+      viewport.height = 768;
+      viewport.dispatchEvent(new Event("resize"));
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 180)));
+    expect(scrollMock.scrollToEnd).not.toHaveBeenCalled();
+    delete (window as any).visualViewport;
   });
 
   it("shows the compact upload card and occasion question while preparing", async () => {
