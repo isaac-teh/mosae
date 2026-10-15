@@ -62,7 +62,21 @@ export async function loadEditContext(db: Firestore, userId: string, projectId: 
     working.push({ id: shot.id, assetId, assetStatus: asset.status, dupOf: asset.dupOf ?? null, analysis, eventId: asset.eventId ?? null, localTime: asset.media?.localTime ?? null, sourceStartSec: start ?? null, sourceEndSec: end ?? null });
   }
   const constraints = proposal?.constraints ?? {};
-  const candidates = buildWorkingSet(working, { cap: 40, excludedShotIds: [...(constraints.excludedShotIds ?? []), ...(constraints.hiddenShotIds ?? [])] }).shots.map(shot => ({
+  const excludedShotIds = [...(constraints.excludedShotIds ?? []), ...(constraints.hiddenShotIds ?? [])];
+  const rankedCandidates = buildWorkingSet(working, { cap: 40, excludedShotIds }).shots;
+  const candidateIds = new Set(rankedCandidates.map(shot => shot.id));
+  // Keep one grounded project photo for each confirmed person even when the
+  // general relevance ranking would otherwise leave that person out.
+  const allEligibleShots = buildWorkingSet(working, { cap: Math.max(40, working.length), excludedShotIds }).shots;
+  for (const person of people) {
+    if (rankedCandidates.some(shot => shot.analysis?.kind === "photo" && shot.analysis.faces?.some(face => face.characterId === person.personId))) continue;
+    const representative = allEligibleShots.find(shot => shot.analysis?.kind === "photo" && shot.analysis.faces?.some(face => face.characterId === person.personId));
+    if (representative && !candidateIds.has(representative.id)) {
+      candidateIds.add(representative.id);
+      rankedCandidates.push(representative);
+    }
+  }
+  const candidates = rankedCandidates.map(shot => ({
     shotId: shot.id, assetId: (shot as typeof working[number]).assetId, kind: shot.analysis!.kind,
     caption: (shot.analysis!.kind === "photo" ? shot.analysis!.caption : shot.analysis!.description).slice(0, 2000),
     personIds: shot.analysis!.kind === "photo" ? [...new Set((shot.analysis!.faces ?? []).flatMap(face => face.characterId && personIds.has(face.characterId) ? [face.characterId] : []))] : [],

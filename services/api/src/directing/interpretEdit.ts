@@ -98,10 +98,10 @@ const formatTime = (sec: number) => {
   return `${String(Math.floor(whole / 60)).padStart(2, "0")}:${String(whole % 60).padStart(2, "0")}`;
 };
 function compactTimeline(timeline: Timeline) {
-  return timeline.videoClips.map((clip) => {
+  return timeline.videoClips.map((clip, index) => {
     const chapter = [...timeline.chapters].reverse().find((item) => item.startSec <= clip.startSec)?.title ?? "";
     const caption = timeline.captions.find((item) => item.startSec < clip.startSec + clip.durationSec && item.endSec > clip.startSec)?.text ?? "";
-    return { chapter, caption, kind: "kind" in clip ? "collage" : clip.source.kind, time: `${formatTime(clip.startSec)}–${formatTime(clip.startSec + clip.durationSec)}` };
+    return { id: "kind" in clip ? clip.clipId : clip.id, index, shotIds: "kind" in clip ? clip.spec.slots.flatMap(slot => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId], chapter, caption, kind: "kind" in clip ? "collage" : clip.source.kind, durationSec: clip.durationSec, time: `${formatTime(clip.startSec)}–${formatTime(clip.startSec + clip.durationSec)}` };
   });
 }
 
@@ -112,9 +112,11 @@ function promptContext(req: InterpretEditRequest) {
     storyIntent: context.storyIntent,
     constraints: context.constraints,
     people: context.people,
-    selected: context.selected ? { captions: context.selected.captions } : null,
-    candidates: context.candidates.map(({ shotId: _shotId, ...candidate }) => candidate),
-    soundtracks: context.soundtracks.map(({ id: _id, storagePath: _storagePath, ...track }) => track),
+    selected: context.selected ? { clipId: context.selected.clipId, ...(context.selected.slotId ? { slotId: context.selected.slotId } : {}), shotIds: context.selected.shotIds, captions: context.selected.captions } : null,
+    candidates: context.candidates,
+    soundtracks: context.soundtracks.map(({ storagePath: _storagePath, ...track }) => track),
+    collageLayouts: COLLAGE_LAYOUTS.map(({ id, label, minSlots, maxSlots }) => ({ id, label, minSlots, maxSlots })),
+    peopleToMoments: context.people.map(person => ({ personId: person.personId, name: person.name, candidateShotIds: context.candidates.filter(candidate => candidate.personIds.includes(person.personId)).map(candidate => candidate.shotId) })),
     conversation: context.conversation,
   };
 }
@@ -181,6 +183,7 @@ function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
   const people = context.people;
   if (!people.length) return { kind: "unsupported", reply: "I can reorder moments, change music or framing, and adjust clips. This film has no confirmed people to focus on yet.", ops: [] };
   const text = req.text;
+  const scope = isWholeFilmRequest(text) ? { kind: "film" as const } : context.scope;
   const everyone = /\b(?:everyone|everybody|family|all (?:the )?people|all of us)\b/i.test(text);
   const matched = people.filter(person => person.name && mentionsPerson(text, person.name));
   const requested = everyone ? people : matched;
@@ -190,7 +193,7 @@ function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
   }
   const wanted = new Set(requested.map(person => person.personId));
   const candidates = new Map(context.candidates.map(candidate => [candidate.shotId, candidate]));
-  const relevantIds = context.scope.kind === "film" ? undefined : new Set(context.selected?.shotIds ?? []);
+  const relevantIds = scope.kind === "film" ? undefined : new Set(context.selected?.shotIds ?? []);
   const clipMatches = req.timeline.videoClips.map(clip => {
     const id = "kind" in clip ? clip.clipId : clip.id;
     const shotIds = "kind" in clip ? clip.spec.slots.flatMap(slot => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId];
@@ -198,13 +201,16 @@ function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
     const matchedCount = [...wanted].filter(personId => peopleInClip.has(personId)).length;
     return { id, shotIds, matchedCount, personIds: [...peopleInClip] };
   });
-  if (context.scope.kind === "slot") {
+  const addCandidate = (candidate: NonNullable<(typeof context.candidates)[number]>) => candidate.kind === "video"
+    ? { op: "add" as const, shotId: candidate.shotId, kind: "video" as const, afterClipId: null, durationSec: Math.min(3, candidate.sourceEndSec! - candidate.sourceStartSec!), sourceInSec: candidate.sourceStartSec!, sourceOutSec: candidate.sourceStartSec! + Math.min(3, candidate.sourceEndSec! - candidate.sourceStartSec!) }
+    : { op: "add" as const, shotId: candidate.shotId, kind: "photo" as const, afterClipId: null, durationSec: 3 };
+  if (scope.kind === "slot") {
     const candidate = context.candidates.find(item => item.kind === "photo" && item.personIds.some(id => wanted.has(id)) && !relevantIds?.has(item.shotId));
     if (!candidate) return { kind: "clarify", reply: "I couldn't find another confirmed photo of that person for this collage. I can focus the whole film on them instead.", ops: [] };
-    return { kind: "edit", reply: `I'll feature ${everyone ? "everyone" : requested.map(person => person.name || person.role).join(" and ")} in this collage.`, ops: [{ op: "replaceCollageSlot", clipId: context.scope.clipId, slotId: context.scope.slotId, shotId: candidate.shotId, kind: "photo", ...(candidate.width ? { width: candidate.width } : {}), ...(candidate.height ? { height: candidate.height } : {}) }] };
+    return { kind: "edit", reply: `I'll feature ${everyone ? "everyone" : requested.map(person => person.name || person.role).join(" and ")} in this collage.`, ops: [{ op: "replaceCollageSlot", clipId: scope.clipId, slotId: scope.slotId, shotId: candidate.shotId, kind: "photo", ...(candidate.width ? { width: candidate.width } : {}), ...(candidate.height ? { height: candidate.height } : {}) }] };
   }
-  if (context.scope.kind === "clip") {
-    const selectedScope = context.scope;
+  if (scope.kind === "clip") {
+    const selectedScope = scope;
     const selected = clipMatches.find(clip => clip.id === selectedScope.clipId);
     if (selected?.matchedCount === wanted.size) return { kind: "clarify", reply: "This moment already includes the requested focus. I can replace it with another matching moment if you want.", ops: [] };
     const current = req.timeline.videoClips.find(clip => ("kind" in clip ? clip.clipId : clip.id) === selectedScope.clipId);
@@ -216,10 +222,17 @@ function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
       const slot = [...current.spec.slots].reverse().find(item => !item.empty && (!item.shotId || !candidates.get(item.shotId)?.personIds.some(id => missing.has(id))));
       if (slot) return { kind: "edit", reply: `I'll add a photo featuring ${candidate.personIds.filter(id => missing.has(id)).map(id => requested.find(person => person.personId === id)?.name ?? "that person").join(" and ")} to this collage.`, ops: [{ op: "replaceCollageSlot", clipId: selectedScope.clipId, slotId: slot.slotId, shotId: candidate.shotId, kind: "photo", ...(candidate.width ? { width: candidate.width } : {}), ...(candidate.height ? { height: candidate.height } : {}) }] };
     }
-    return { kind: "clarify", reply: "I couldn't find a matching moment to use here. I can move matching moments toward the start of the whole film instead.", ops: [] };
+    return { kind: "clarify", reply: "I couldn't find a matching moment in this selection. I can focus the whole film on them instead.", ops: [] };
   }
   const available = clipMatches.filter(clip => clip.matchedCount > 0);
-  if (!available.length) return { kind: "clarify", reply: "I couldn't find any moments featuring those confirmed people. I can still change the framing, soundtrack, or clip order.", ops: [] };
+  if (!available.length) {
+    const used = usedShotIdsForTimeline(req.timeline);
+    const candidate = context.candidates.find(item => !used.has(item.shotId) && item.personIds.some(id => wanted.has(id)) && (item.kind !== "video" || item.sourceStartSec !== null && item.sourceEndSec !== null));
+    if (scope.kind === "film" && candidate) return { kind: "edit", reply: `I'll add a project photo featuring ${requested.map(person => person.name || person.role).join(" and ")} at the start.`, ops: [addCandidate(candidate)] };
+    return scope.kind === "film"
+      ? { kind: "clarify", reply: `I couldn't find project photos tagged with ${requested.map(person => person.name || person.role).join(" or ")}. I can still change the framing, soundtrack, or clip order.`, ops: [] }
+      : { kind: "clarify", reply: "I couldn't find a matching moment in this selection. I can focus the whole film on them instead.", ops: [] };
+  }
   // For Everyone, favor moments with more distinct confirmed people; for a
   // named focus, place matching moments first. Keep the current order on ties.
   const ranked = [...clipMatches].sort((a, b) => b.matchedCount - a.matchedCount || clipMatches.indexOf(a) - clipMatches.indexOf(b));
@@ -233,9 +246,115 @@ function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
       order.splice(toIndex, 0, clip.id);
     }
   });
-  return ops.length
-    ? { kind: "edit", reply: `I'll bring moments featuring ${everyone ? "everyone" : requested.map(person => person.name || person.role).join(" and ")} forward.`, ops }
-    : { kind: "clarify", reply: "The current order already brings the requested focus forward. Tell me if you want a different edit.", ops: [] };
+  if (ops.length) return { kind: "edit", reply: `I'll bring moments featuring ${everyone ? "everyone" : requested.map(person => person.name || person.role).join(" and ")} forward.`, ops };
+  if (scope.kind === "film") {
+    const used = usedShotIdsForTimeline(req.timeline);
+    const candidate = context.candidates.find(item => item.kind === "photo" && !used.has(item.shotId) && item.personIds.some(id => wanted.has(id)));
+    if (candidate) return { kind: "edit", reply: `I'll add a project photo featuring ${requested.map(person => person.name || person.role).join(" and ")} at the start to give them more focus.`, ops: [addCandidate(candidate)] };
+    const featured = req.timeline.videoClips.find(clip => {
+      const ids = "kind" in clip ? clip.spec.slots.flatMap(slot => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId];
+      return ids.some(id => wanted.size && candidates.get(id)?.personIds.some(personId => wanted.has(personId)));
+    });
+    if (featured) {
+      const clipId = "kind" in featured ? featured.clipId : featured.id;
+      const nextDuration = Math.min("kind" in featured ? 600 : 6, Math.round((featured.durationSec + 0.5) * 10) / 10);
+      if (nextDuration > featured.durationSec) return { kind: "edit", reply: `I'll hold a moment featuring ${requested.map(person => person.name || person.role).join(" and ")} a little longer.`, ops: [{ op: "kind" in featured ? "setCollageDuration" : "setPhotoDuration", clipId, sec: nextDuration }] };
+    }
+    return { kind: "clarify", reply: `The current order already brings ${requested.map(person => person.name || person.role).join(" and ")} forward. Tell me if you want a different focus.`, ops: [] };
+  }
+  return { kind: "clarify", reply: "This selected moment already includes the requested person. I can focus the whole film on them instead.", ops: [] };
+}
+
+function musicIntentEdit(req: InterpretEditRequest): InterpretEditResult | null {
+  const text = req.text;
+  if (!/\b(?:music|soundtrack|sound track|song|track)\b/i.test(text)) return null;
+  const music = req.timeline.audioClips.find(clip => clip.role === "music" && clip.source.kind === "soundtrack");
+  const volumeIntent = /\b(?:volume|louder|quieter|softer|turn\s+(?:the\s+)?music\s+(?:down|up)|(?:lower|raise)\s+(?:(?:the\s+)?music|music\s+volume)|mute\s+(?:the\s+)?music|music\s+(?:down|up))\b/i.test(text);
+  if (volumeIntent) {
+    if (!music) return { kind: "clarify", reply: "There isn't a soundtrack in this film to adjust yet. Ask me to choose a soundtrack first.", ops: [] };
+    const direction = /\b(?:down|lower|quieter|softer|mute)\b/i.test(text) ? -1 : 1;
+    const explicitGain = text.match(/(-?\d+(?:\.\d+)?)\s*(?:db|decibels?)\b/i);
+    if (explicitGain && (Number(explicitGain[1]) < -60 || Number(explicitGain[1]) > 12)) return { kind: "clarify", reply: "Music volume must be between -60 dB and 12 dB. Choose a value in that range.", ops: [] };
+    const gainDb = explicitGain ? Number(explicitGain[1]) : Math.max(-60, Math.min(12, Math.round((music.gainDb + direction * 6) * 10) / 10));
+    if (gainDb === music.gainDb) return { kind: "clarify", reply: direction < 0 ? "The music is already at its quietest supported level." : "The music is already at its loudest supported level.", ops: [] };
+    return { kind: "edit", reply: `I'll turn the music ${direction < 0 ? "down" : "up"}.`, ops: [{ op: "setMusicVolume", audioClipId: music.id, gainDb }] };
+  }
+
+  const context = req.groundedContext;
+  if (!context?.soundtracks.length) return null;
+  const currentId = music?.source.kind === "soundtrack" ? music.source.soundtrackId : null;
+  const named = context.soundtracks.find(track => mentionsPerson(text, track.name));
+  const mood = /\b(?:upbeat|energetic|lively|playful|exciting|bright|happy|cheerful)\b/i.test(text) ? "upbeat"
+    : /\b(?:calm|gentle|soft|quiet|peaceful|relaxed|reflective|tender)\b/i.test(text) ? "gentle" : null;
+  const choices = named ? [named] : mood === "upbeat"
+    ? context.soundtracks.filter(track => /playful|energetic|celebratory/i.test(`${track.cadence} ${track.description}`))
+    : mood === "gentle" ? context.soundtracks.filter(track => /tender|reflective/i.test(`${track.cadence} ${track.description}`))
+      : context.soundtracks;
+  const choice = choices.find(track => track.id !== currentId);
+  if (!choice) return { kind: "clarify", reply: "The current soundtrack already matches that request. Choose another track or ask me to adjust its volume.", ops: [] };
+  return { kind: "edit", reply: `I'll switch the film to ${choice.name}.`, ops: [{ op: "setSoundtrack", soundtrackId: choice.id }] };
+}
+
+function deterministicTimelineIntent(req: InterpretEditRequest): InterpretEditResult | null {
+  const text = req.text;
+  const suppliedScope = req.groundedContext?.scope ?? req.scope ?? { kind: "film" as const };
+  const scope = isWholeFilmRequest(text) ? { kind: "film" as const } : suppliedScope;
+  const musicEdit = musicIntentEdit(req);
+  if (musicEdit) return musicEdit;
+
+  if (/\b(?:collage|layout|grid|mosaic|tiles?)\b/i.test(text)) {
+    const collages = req.timeline.videoClips.filter((clip): clip is Extract<Timeline["videoClips"][number], { kind: "collage" }> => "kind" in clip);
+    const targetCollages = scope.kind === "film" ? collages : collages.filter(clip => clip.clipId === scope.clipId);
+    const asksLayout = /\b(?:layout|grid|mosaic|tiles?)\b/i.test(text);
+    if (targetCollages.length && asksLayout) {
+      const requestedLayoutId = /\b2\s*(?:x|by)\s*2\b/i.test(text) ? "simple-grid-2x2"
+        : /\b2\s*(?:x|by)\s*3\b/i.test(text) ? "simple-grid-2x3" : null;
+      const ops: EditOp[] = [];
+      for (const clip of targetCollages) {
+        const layout = requestedLayoutId
+          ? COLLAGE_LAYOUTS.find(item => item.id === requestedLayoutId)
+          : COLLAGE_LAYOUTS.find(item => item.id.startsWith("simple-") && item.minSlots <= clip.spec.slots.length && item.maxSlots >= clip.spec.slots.length && item.id !== clip.spec.layoutId);
+        if (!layout || clip.spec.slots.length < layout.minSlots || clip.spec.slots.length > layout.maxSlots) return { kind: "clarify", reply: `This collage has ${clip.spec.slots.length} photos, so that layout won't fit. Ask for a layout that uses ${clip.spec.slots.length} photos.`, ops: [] };
+        const pair = ALLOWED_COMBOS.find(item => item.layoutId === layout.id && item.motionId === clip.spec.motionId)
+          ?? ALLOWED_COMBOS.find(item => item.layoutId === layout.id);
+        if (!pair) return { kind: "clarify", reply: "I couldn't find an approved layout for that collage. Choose another layout or ask me to change its motion.", ops: [] };
+        if (clip.spec.layoutId !== pair.layoutId) ops.push({ op: "setCollageLayout", clipId: clip.clipId, layoutId: pair.layoutId });
+        if (clip.spec.motionId !== pair.motionId) ops.push({ op: "setCollageMotion", clipId: clip.clipId, motionId: pair.motionId });
+      }
+      if (ops.length) return { kind: "edit", reply: "I'll update the collage layout.", ops };
+      return { kind: "clarify", reply: "The collage already uses that layout. Ask for a different grid or collage style.", ops: [] };
+    }
+  }
+
+  const ordered = req.timeline.videoClips;
+  const byId = (id: string) => ordered.findIndex(clip => ("kind" in clip ? clip.clipId : clip.id) === id);
+  const selectedId = scope.kind === "clip" || scope.kind === "slot" ? scope.clipId : null;
+  const relevant = selectedId ? ordered.filter(clip => ("kind" in clip ? clip.clipId : clip.id) === selectedId) : ordered;
+  if (!/\b(?:collage|cell|slot)\b/i.test(text) && /\b(?:remove|delete|take out|drop)\b/i.test(text) && /\b(?:moment|clip|last|final|first|selected|this)\b/i.test(text)) {
+    const target = selectedId && /\b(?:this|selected)\b/i.test(text) ? relevant.at(0)
+      : /\b(?:last|final)\b/i.test(text) ? ordered.at(-1)
+        : /\b(?:first|initial|opening)\b/i.test(text) ? ordered.at(0) : null;
+    if (target) {
+      const clipId = "kind" in target ? target.clipId : target.id;
+      const result = applyEdits(req.timeline, [{ op: "remove", clipId }]);
+      if (result.ok) return { kind: "edit", reply: "I'll remove that moment from the film.", ops: [{ op: "remove", clipId }] };
+      return { kind: "clarify", reply: "A film needs at least one moment. Choose another moment to remove.", ops: [] };
+    }
+  }
+  if (/\b(?:move|reorder|put|place)\b/i.test(text) && /\b(?:beginning|start|opening|end|last|final)\b/i.test(text)) {
+    const fromLast = /\b(?:last|final)\b/i.test(text) && !/\b(?:to|at|toward|towards)\s+(?:the\s+)?(?:last|final|end)\b/i.test(text);
+    const fromFirst = /\b(?:first|initial|opening)\b/i.test(text) && !/\b(?:to|at|toward|towards)\s+(?:the\s+)?(?:first|opening|beginning|start)\b/i.test(text);
+    const target = selectedId && /\b(?:this|selected)\b/i.test(text) ? relevant.at(0) : fromLast ? ordered.at(-1) : fromFirst ? ordered.at(0) : null;
+    const toIndex = /\b(?:beginning|start|opening|first)\b/i.test(text) ? 0 : ordered.length - 1;
+    if (target) {
+      const clipId = "kind" in target ? target.clipId : target.id;
+      if (byId(clipId) === toIndex) return { kind: "clarify", reply: "That moment is already there. Choose another destination for it.", ops: [] };
+      const op: EditOp = { op: "move", clipId, toIndex };
+      const result = applyEdits(req.timeline, [op]);
+      return result.ok ? { kind: "edit", reply: "I'll move that moment.", ops: [op] } : { kind: "clarify", reply: "I couldn't move that moment to that position. Choose another destination.", ops: [] };
+    }
+  }
+  return null;
 }
 
 function durationRequest(text: string): number | null {
@@ -249,7 +368,8 @@ function durationRequest(text: string): number | null {
 function timingEdit(req: InterpretEditRequest): InterpretEditResult | null {
   const text = req.text;
   const targetDuration = durationRequest(text);
-  const pace = /\b(?:faster|quicker|speed(?:ier)? up|more upbeat)\b/i.test(text) ? 0.8
+  const hasMusicIntent = /\b(?:music|soundtrack|sound track|song|track)\b/i.test(text);
+  const pace = /\b(?:faster|quicker|speed(?:ier)? up)\b/i.test(text) || (!hasMusicIntent && /\bmore upbeat\b/i.test(text)) ? 0.8
     : /\b(?:slower|more slowly|slow down|more relaxed)\b/i.test(text) ? 1.2 : null;
   if (targetDuration === null && pace === null) return null;
 
@@ -295,18 +415,43 @@ function timingEdit(req: InterpretEditRequest): InterpretEditResult | null {
     }
     if (Math.abs(difference) > 0.1) return { kind: "clarify", reply: "That total length can’t be reached within the supported photo and collage durations. Try a nearby film length, or ask me to retime a specific moment.", ops: [] };
   }
-  const ops: EditOp[] = adjustable.map((clip, index) => {
+  let ops: EditOp[] = adjustable.map((clip, index) => {
     const value = values[index]!;
     return "kind" in clip ? { op: "setCollageDuration", clipId: clip.clipId, sec: value }
       : { op: "setPhotoDuration", clipId: clip.id, sec: value };
   });
+  let applied = applyEdits(req.timeline, ops);
+  if (targetDuration !== null && (scope.kind === "film" || isWholeFilmRequest(text)) && applied.ok) {
+    // Timeline duration includes transition overlaps, so matching the sum of
+    // source durations alone can miss the user's requested film length.
+    for (let pass = 0; pass < adjustable.length * 2; pass++) {
+      const difference = round(targetDuration - applied.timeline.durationSec);
+      if (Math.abs(difference) < 0.1) break;
+      let improved = false;
+      for (let index = ops.length - 1; index >= 0; index--) {
+        const op = ops[index]!;
+        if ((op.op !== "setPhotoDuration" && op.op !== "setCollageDuration") || !("sec" in op)) continue;
+        const clip = adjustable[index]!;
+        const min = 0.5, max = "kind" in clip ? 600 : 6;
+        const nextSec = round(Math.max(min, Math.min(max, op.sec + difference)));
+        if (nextSec === op.sec) continue;
+        const nextOps = ops.map((item, itemIndex) => itemIndex === index && (item.op === "setPhotoDuration" || item.op === "setCollageDuration") ? { ...item, sec: nextSec } : item);
+        const nextApplied = applyEdits(req.timeline, nextOps);
+        if (nextApplied.ok && Math.abs(targetDuration - nextApplied.timeline.durationSec) < Math.abs(targetDuration - applied.timeline.durationSec)) {
+          ops = nextOps;
+          applied = nextApplied;
+          improved = true;
+        }
+      }
+      if (!improved) break;
+    }
+  }
   if (ops.every((op, index) => "sec" in op && op.sec === adjustable[index]!.durationSec)) {
     return { kind: "clarify", reply: "Those photos and collages are already at the closest supported timing. I can reorder moments, change framing or collage layout, or adjust music.", ops: [] };
   }
   if (targetDuration !== null && scope.kind !== "film" && !isWholeFilmRequest(text) && Math.abs(values[0]! - targetDuration) > 0.1) {
     return { kind: "clarify", reply: "A photo can be 0.5–6 seconds and a collage can be at least 0.5 seconds. Choose a length within that range for this moment.", ops: [] };
   }
-  const applied = applyEdits(req.timeline, ops);
   if (!applied.ok || (targetDuration !== null && (scope.kind === "film" || isWholeFilmRequest(text)) && Math.abs(applied.timeline.durationSec - targetDuration) > 0.11)) {
     return { kind: "clarify", reply: "That total length can’t be reached within the supported photo and collage durations. Try a nearby film length, or ask me to retime a specific moment.", ops: [] };
   }
@@ -337,26 +482,44 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
   if (unavailableFeature(req.text)) return { kind: "unsupported", reply: unavailableFeatureReply, ops: [] };
   const focus = focusEdit(req);
   if (focus) return focus;
+  const deterministic = deterministicTimelineIntent(req);
+  if (deterministic) return deterministic;
   const timing = timingEdit(req);
   if (timing) return timing;
   if (req.groundedContext && hasAmbiguousPerson(req.text, req.groundedContext.people)) {
     return { kind: "clarify", reply: "Which person did you mean?", ops: [] };
   }
   try {
-    const filmWide = isWholeFilmRequest(req.text) && req.scope?.kind !== "film";
-    const scope = filmWide ? { kind: "film" as const } : req.scope;
+    const suppliedScope = req.groundedContext?.scope ?? req.scope ?? { kind: "film" as const };
+    const filmWide = isWholeFilmRequest(req.text) && suppliedScope.kind !== "film";
+    const scope = filmWide ? { kind: "film" as const } : suppliedScope;
     const request = { ...req, scope };
+    const context = req.groundedContext;
     const responseSchema = responseSchemaFor();
-    const result = validate(await deps.generate({
+    const modelPrompt = `Translate the user's request into a small ordered list of allowed edit operations for this film. Return kind=edit with a complete supported batch, kind=clarify for an ambiguous reference, or kind=unsupported for unavailable capabilities. Never return partial operations. The editor can replace, add, remove, duplicate, reorder, trim, or retime moments; change aspect ratio; change collage layout, motion, effects, and cells; reframe photos; and choose or adjust soundtrack music. Use these operations whenever requested. Do not claim a supported timeline edit is impossible or a design limitation. Use only IDs from the allowed IDs block; never invent an ID. Every clip summary includes its exact clip id, index, and shot ids. The grounded context maps candidate shot ids to confirmed people and soundtrack ids to track names. The collage layout catalog lists each layout id, label, and slot range. For addCollageSlot, use the literal slotId "new-slot"; the editor assigns its internal slot id. Preserve current collage sources unless changing them is necessary. For "add more collage", use addCollageSlot with an unused owned photo candidate when one is available; otherwise ask which photos to include. Check collage capacity before adding; if full, choose a layout with enough slots and a compatible motion from the approved combinations below, or ask whether to add the photos as a new collage. Prefer the smallest number of operations and return no more than 20. Respect the actual clip id and selected scope when resolving "this". An explicit request for all clips or the whole film can affect clips outside the selected clip. For collage layouts and motions, keep the selected layout-motion pair in this allowed list: ${JSON.stringify(ALLOWED_COMBOS)}. Reply briefly and factually. If the request refers to captions, transitions, or another value with no edit operation, say so briefly and offer a nearby supported change.\nAllowed operation schema: ${JSON.stringify(responseSchema)}\nAllowed IDs: ${JSON.stringify(allowedIdsFor(req))}\nClips: ${JSON.stringify(compactTimeline(req.timeline))}\nGrounded context (owned candidates, confirmed people, story, soundtracks, prior conversation): ${JSON.stringify(promptContext(req))}\nScope: ${JSON.stringify(request.scope?.kind === "clip" ? { kind: "clip", clipId: request.scope.clipId, clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId) } : request.scope?.kind === "slot" ? { kind: "slot", clipId: request.scope.clipId, slotId: request.scope.slotId, clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId), slotIndex: allowedIdsFor(req).slotIds.indexOf(request.scope.slotId) } : { kind: "film" })}\nRequest: ${req.text}`;
+    const generated = await deps.generate({
       model: MODELS.analyze,
       stage: "editor.interpret",
       thinking: "MINIMAL",
       maxSchemaRepairs: 0,
-      contents: [{ text: `Translate the user's request into a small ordered list of allowed edit operations for this film. Return kind=edit with a complete supported batch, kind=clarify for an ambiguous reference, or kind=unsupported for unavailable capabilities. Never return partial operations. The editor can replace, add, remove, duplicate, reorder, trim, or retime moments; change aspect ratio; change collage layout, motion, effects, and cells; reframe photos; and choose or adjust soundtrack music. Use these operations whenever requested. Do not claim a supported timeline edit is impossible or a design limitation. Use only IDs from the allowed IDs block; never invent an ID. For addCollageSlot, use the literal slotId "new-slot"; the editor assigns its internal slot id. Preserve current collage sources unless changing them is necessary. For "add more collage", use addCollageSlot with an unused owned photo candidate when one is available; otherwise ask which photos to include. Check collage capacity before adding; if full, choose a layout with enough slots and a compatible motion from the approved combinations below, or ask whether to add the photos as a new collage. Prefer the smallest number of operations and return no more than 20. The clips summary and clipIds list use the same order. Respect selected scope when resolving "this". An explicit request for all clips or the whole film can affect clips outside the selected clip. For collage layouts and motions, keep the selected layout-motion pair in this allowed list: ${JSON.stringify(ALLOWED_COMBOS)}. Reply briefly and factually. If the request refers to captions, transitions, overall pace, or another value with no edit operation, say so briefly and offer a nearby supported change.\nAllowed operation schema: ${JSON.stringify(responseSchema)}\nAllowed IDs: ${JSON.stringify(allowedIdsFor(req))}\nClips: ${JSON.stringify(compactTimeline(req.timeline))}\nGrounded context (owned candidates, confirmed people, story, soundtracks, prior conversation): ${JSON.stringify(promptContext(req))}\nScope: ${JSON.stringify(request.scope?.kind === "clip" ? { kind: "clip", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId) } : request.scope?.kind === "slot" ? { kind: "slot", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId), slotIndex: allowedIdsFor(req).slotIds.indexOf(request.scope.slotId) } : { kind: "film" })}\nRequest: ${req.text}` }],
+      contents: [{ text: modelPrompt }],
       responseSchema,
       validate,
-    }));
-    const context = req.groundedContext;
+    });
+    if (process.env.EDIT_INTERPRET_TRACE === "1") {
+      console.info("EDIT_INTERPRET_TRACE_CONTEXT", JSON.stringify({
+        request: req.text,
+        scope: request.scope,
+        clipIds: allowedIdsFor(req).clipIds,
+        collageLayouts: COLLAGE_LAYOUTS.map(({ id, label, minSlots, maxSlots }) => ({ id, label, minSlots, maxSlots })),
+        collages: req.timeline.videoClips.flatMap((clip, index) => "kind" in clip ? [{ clipIndex: index, clipId: clip.clipId, layoutId: clip.spec.layoutId, motionId: clip.spec.motionId, slotIds: clip.spec.slots.map(slot => slot.slotId), shotIds: clip.spec.slots.flatMap(slot => slot.shotId ? [slot.shotId] : []) }] : []),
+        soundtracks: context?.soundtracks.map(({ id, name, description, cadence }) => ({ id, name, description, cadence })),
+        peopleToMoments: context?.people.map(person => ({ personId: person.personId, name: person.name, candidateShotIds: context.candidates.filter(candidate => candidate.personIds.includes(person.personId)).map(candidate => candidate.shotId), clipIds: req.timeline.videoClips.flatMap(clip => { const clipId = "kind" in clip ? clip.clipId : clip.id; const shotIds = "kind" in clip ? clip.spec.slots.flatMap(slot => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId]; return shotIds.some(shotId => context.candidates.find(candidate => candidate.shotId === shotId)?.personIds.includes(person.personId)) ? [clipId] : []; }) })),
+        prompt: modelPrompt,
+      }));
+      console.info("EDIT_INTERPRET_TRACE_MODEL_OUTPUT", JSON.stringify(generated));
+    }
+    const result = validate(generated);
     const allowedIds = allowedIdsFor(req);
     const foreignReference = opsReferenceClarification(result.ops, allowedIds);
     if (foreignReference) return { kind: "clarify", reply: foreignReference, ops: [] };
@@ -424,7 +587,7 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
 }
 
 export function isWholeFilmRequest(text: string): boolean {
-  return /\b(all|every|entire|whole)\b.{0,40}\b(clips?|film|video|timeline|photos?|collages?)\b|\b(clips?|film|video|timeline|photos?|collages?)\b.{0,40}\b(all|every|entire|whole)\b|\bfor\s+all\b/i.test(text);
+  return /\b(all|each|every|entire|whole)\b.{0,40}\b(clips?|film|video|timeline|photos?|collages?)\b|\b(clips?|film|video|timeline|photos?|collages?)\b.{0,40}\b(all|each|every|entire|whole)\b|\bfor\s+(?:all|each|every)\b/i.test(text);
 }
 
 function usedShotIdsForTimeline(timeline: Timeline): Set<string> {
