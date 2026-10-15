@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Firestore } from "firebase-admin/firestore";
-import { EditOpSchema, applyEdits, type EditOp, type Timeline } from "@mosae/contracts";
+import { EditOpSchema, applyEdits, mergeOps, type EditOp, type Timeline } from "@mosae/contracts";
 import { addSourceDimensions } from "../compose/resolveSources.js";
 import { loadSourceForShot } from "../store/sourceStore.js";
 
@@ -9,6 +9,7 @@ export class EditInterpretationStaleRevision extends Error {
   constructor(readonly currentRevision: number) { super("stale_revision"); }
 }
 export const emptyEdits = (): EditDocument => ({ revision: 0, ops: [], updatedAt: null, sourceDimensions: {} });
+export const expectedAcknowledgedOps = (priorOps: EditOp[], interpretedOps: EditOp[]): EditOp[] => mergeOps([...priorOps, ...interpretedOps]);
 
 function sourceDimensionsOf(timeline: Timeline): NonNullable<EditDocument["sourceDimensions"]> {
   return Object.fromEntries(timeline.videoClips.flatMap((clip) => "source" in clip
@@ -183,7 +184,7 @@ export async function acknowledgeEditInterpretation(db: Firestore, userId: strin
     const result = stored.get("result") as StoredEditInterpretation | undefined;
     if (!turn || result?.kind !== "edit") return "invalid" as const;
     if (turn.status === "applied") return turn.appliedRevision === revision ? "applied" as const : "conflict" as const;
-    const expected = [...(stored.get("priorOps") ?? []), ...result.ops];
+    const expected = expectedAcknowledgedOps((stored.get("priorOps") ?? []) as EditOp[], result.ops);
     if (revision !== turn.revision + 1 || saved.get("revision") !== revision || JSON.stringify(saved.get("ops")) !== JSON.stringify(expected)) return "conflict" as const;
     const applied = { ...turn, status: "applied" as const, appliedRevision: revision };
     tx.update(request, { turn: applied });

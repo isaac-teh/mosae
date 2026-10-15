@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Timeline } from "@mosae/contracts";
+import { applyEdits, type EditOp } from "@mosae/contracts";
 import { askEditSummary, changedClipIds, suggestedAskRequests } from "./askEditUx";
 
 const base: Timeline = { schemaVersion: 1, projectId: "p", mode: "memory", aspect: "9:16", fps: 30, durationSec: 4, chapters: [], audioClips: [], captions: [], videoClips: [{ id: "a", source: { kind: "photo", shotId: "s" }, startSec: 0, durationSec: 4, transitionIn: { kind: "cut", durationSec: 0 } }] };
@@ -30,5 +31,16 @@ describe("Ask edit UX helpers", () => {
   it("lists requests by scope and current orientation", () => {
     expect(suggestedAskRequests("film", ["Alex", "Sam", "Lee", "Jo"], "9:16")).toEqual(["Focus on everyone", "Focus on Alex", "Focus on Sam", "Focus on Lee", "Make it faster", "Make it slower", "Change the music", "Make it 30 seconds", "Make it landscape"]);
     expect(suggestedAskRequests("clip")).toEqual(["Remove this moment", "Show it longer", "Replace this photo", "Move it earlier"]);
+  });
+  it("describes a merge plus duration batch from the final timeline, matching the film length", () => {
+    const photos = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, source: { kind: "photo" as const, shotId: `s${i}` }, startSec: i * 3, durationSec: 3, transitionIn: { kind: "cut" as const, durationSec: 0 } }));
+    const film: Timeline = { ...base, schemaVersion: 2, durationSec: 18, chapters: [{ title: "One", startSec: 0, durationSec: 18 }], videoClips: photos };
+    const ops: EditOp[] = [{ op: "mergeIntoCollage", clipIds: ["p1", "p2", "p3"] }, { op: "setPhotoDuration", clipId: "p0", sec: 2 }, { op: "setCollageDuration", clipId: "merge:p1", sec: 4 }, { op: "setPhotoDuration", clipId: "p4", sec: 2 }, { op: "setPhotoDuration", clipId: "p5", sec: 2 }];
+    const applied = applyEdits(film, ops);
+    if (!applied.ok) throw new Error(applied.error);
+    const toast = askEditSummary(ops, applied.timeline.durationSec, undefined, "Make it 10s with most collage", applied.timeline);
+    expect(applied.timeline.durationSec).toBe(10);
+    expect(toast).toBe("Made it 10 seconds and grouped 3 photos into a collage.");
+    expect(toast).not.toMatch(/;|0:\d\d/);
   });
 });

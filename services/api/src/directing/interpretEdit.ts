@@ -3,8 +3,10 @@ import type { GenerateOptions } from "../gemini/client.js";
 import { MODELS } from "../gemini/pricing.js";
 import { DemoLimitReached } from "../gemini/errors.js";
 import type { EditContext } from "./editContext.js";
+import { describeApplied, describeSkipped } from "./editReply.js";
+import { collageAmountEdit } from "./collageAmount.js";
 
-export type InterpretEditRequest = { text: string; timeline: Timeline; groundedContext?: import("./loadEditContext.js").EditContext } & Partial<EditContext>;
+export type InterpretEditRequest = { text: string; timeline: Timeline; groundedContext?: import("./loadEditContext.js").EditContext; intentRouting?: boolean } & Partial<EditContext>;
 export type InterpretEditModelResult = { kind?: "edit" | "clarify" | "unsupported"; reply?: string; ops: EditOp[] };
 export type InterpretEditResult = { kind: "edit" | "clarify" | "unsupported"; reply: string; ops: EditOp[] };
 const fallbackReply = "I can reorder or trim moments, swap photos, change framing or collage layout, and adjust the soundtrack. What would you like to change?";
@@ -138,6 +140,7 @@ function opsReferenceClarification(ops: EditOp[], allowed: ReturnType<typeof all
         if (!allowed.slotIds.includes(slot.slotId)) return `I couldn't find collage slot “${slot.slotId}”. Which existing collage photo should I keep or change?`;
       }
     }
+    if (op.op === "mergeIntoCollage" && op.clipIds.some((id) => !allowed.clipIds.includes(id))) return "I couldn't find one of those moments in this film. Which moments should I combine?";
     if (op.op === "setSoundtrack" && !allowed.soundtrackIds.includes(op.soundtrackId)) return `I couldn't find soundtrack “${op.soundtrackId}” in the available music. Which soundtrack did you mean?`;
     if (op.op === "setMusicVolume" && !allowed.audioClipIds.includes(op.audioClipId)) return `I couldn't find audio clip “${op.audioClipId}” in this film. Which music or audio track did you mean?`;
   }
@@ -354,7 +357,10 @@ function deterministicTimelineIntent(req: InterpretEditRequest): InterpretEditRe
   const selectedId = scope.kind === "clip" || scope.kind === "slot" ? scope.clipId : null;
   const relevant = selectedId ? ordered.filter(clip => ("kind" in clip ? clip.clipId : clip.id) === selectedId) : ordered;
   if (!/\b(?:collage|cell|slot)\b/i.test(text) && /\b(?:remove|delete|take out|drop)\b/i.test(text) && /\b(?:moment|clip|last|final|first|selected|this)\b/i.test(text)) {
-    const target = selectedId && /\b(?:this|selected)\b/i.test(text) ? relevant.at(0)
+    const ordinal = text.match(/\b(?:remove|delete|take out|drop)\s+(?:the\s+)?(\d+(?:st|nd|rd|th)|first|second|third|fourth|fifth)\b/i)?.[1]?.toLowerCase();
+    const ordinalIndex = ordinal ? ({ first: 0, second: 1, third: 2, fourth: 3, fifth: 4 } as Record<string, number>)[ordinal] ?? Math.max(0, Number(ordinal.match(/^\d+/)?.[0] ?? "1") - 1) : null;
+    const target = ordinalIndex !== null ? ordered[ordinalIndex]
+      : selectedId && /\b(?:this|selected)\b/i.test(text) ? relevant.at(0)
       : /\b(?:last|final)\b/i.test(text) ? ordered.at(-1)
         : /\b(?:first|initial|opening)\b/i.test(text) ? ordered.at(0) : null;
     if (target) {
@@ -397,8 +403,29 @@ function timingEdit(req: InterpretEditRequest): InterpretEditResult | null {
   const text = req.text;
   const targetDuration = durationRequest(text);
   const hasMusicIntent = /\b(?:music|soundtrack|sound track|song|track)\b/i.test(text);
+  const relative = /\b(longer|shorter)\b/i.exec(text)?.[1]?.toLowerCase() as "longer" | "shorter" | undefined;
   const pace = /\b(?:faster|quicker|speed(?:ier)? up)\b/i.test(text) || (!hasMusicIntent && /\bmore upbeat\b/i.test(text)) ? 0.8
     : /\b(?:slower|more slowly|slow down|more relaxed)\b/i.test(text) ? 1.2 : null;
+  if (targetDuration === null && relative) {
+    const scope = req.groundedContext?.scope ?? req.scope ?? { kind: "film" as const };
+    const clips = scope.kind === "film" ? req.timeline.videoClips : req.timeline.videoClips.filter(clip => ("kind" in clip ? clip.clipId : clip.id) === scope.clipId);
+    const ordinal = /\b(?:first|initial|opening|1st)\b/i.test(text) ? 0
+      : /\b(?:second|2nd)\b/i.test(text) ? 1
+        : /\b(?:third|3rd)\b/i.test(text) ? 2
+          : /\b(?:fourth|4th)\b/i.test(text) ? 3
+            : /\b(?:last|final)\b/i.test(text) ? clips.length - 1
+              : /\b(?:this|selected|current)\b/i.test(text) && scope.kind !== "film" ? 0 : -1;
+    const target = ordinal >= 0 ? clips[ordinal] : undefined;
+    if (!target) return null;
+    if (!("kind" in target) && target.source.kind !== "photo") return { kind: "clarify", reply: "I can change the length of photos and collages, but not this video moment.", ops: [] };
+    const id = "kind" in target ? target.clipId : target.id;
+    const max = "kind" in target ? 600 : 6;
+    const delta = relative === "longer" ? 1 : -1;
+    const sec = Math.round(Math.max(0.5, Math.min(max, target.durationSec + delta)) * 10) / 10;
+    if (sec === target.durationSec) return { kind: "clarify", reply: `That moment is already at the ${relative === "longer" ? "longest" : "shortest"} supported length.`, ops: [] };
+    const op: EditOp = "kind" in target ? { op: "setCollageDuration", clipId: id, sec } : { op: "setPhotoDuration", clipId: id, sec };
+    return { kind: "edit", reply: `I'll make the ${ordinal === 0 ? "first" : ordinal === 1 ? "second" : ordinal === 2 ? "third" : ordinal === clips.length - 1 ? "last" : "selected"} moment ${relative}.`, ops: [op] };
+  }
   if (targetDuration === null && pace === null) return null;
 
   const scope = req.groundedContext?.scope ?? req.scope ?? { kind: "film" as const };
@@ -486,6 +513,60 @@ function timingEdit(req: InterpretEditRequest): InterpretEditResult | null {
   return { kind: "edit", reply: targetDuration !== null ? `I’ll set the ${scope.kind === "film" || isWholeFilmRequest(text) ? "film" : "selected moment"} to about ${targetDuration} seconds.` : `I’ll make the selected ${scope.kind === "film" || isWholeFilmRequest(text) ? "film" : "moments"} ${pace! < 1 ? "faster" : "slower"}.`, ops };
 }
 
+function splitIntents(text: string): string[] {
+  return text.split(/\s+(?:and|with)\s+/i).map(part => part.trim().replace(/^[,;]+|[,;.!?]+$/g, "")).filter(Boolean);
+}
+
+function intentGroup(text: string): string {
+  if (/\b(?:\d+(?:\.\d+)?\s*(?:seconds?|secs?|s|minutes?|mins?|m)|faster|quicker|speed(?:ier)? up|slower|slow down|more relaxed|longer|shorter)\b/i.test(text)) return "timing";
+  if (/\b(?:focus|feature|emphasize)\b/i.test(text)) return "focus";
+  if (/\b(?:most|fewer|less|no)\s+collages?\b|\bmore\s+collages?\b|\bmore\s+collage(?:\s+moments)?\b/i.test(text)) return "collage";
+  if (/\b(?:landscape|portrait|wide|vertical|horizontal)\b/i.test(text)) return "aspect";
+  if (/\b(?:music|soundtrack|sound\s+track|song|track)\b/i.test(text)) return "music";
+  if (/\b(?:remove|delete|take out|drop|move|reorder|add|replace|duplicate|second|2nd|third|3rd|first|last|moment|clip)\b/i.test(text)) return "structure";
+  return "model";
+}
+
+async function interpretCombined(req: InterpretEditRequest, deps: { generate: (options: GenerateOptions<InterpretEditModelResult>) => Promise<unknown> }): Promise<InterpretEditResult | null> {
+  const parts = splitIntents(req.text);
+  const groups = new Set(parts.map(intentGroup));
+  if (parts.length < 2 || groups.size < 2 || !["timing", "focus", "music", "collage"].some(group => groups.has(group))) return null;
+  // The requested structure is established first; explicit timing is last so it
+  // targets the final set of clips and determines the final film duration.
+  const ordered = [...parts].sort((a, b) => {
+    const order: Record<string, number> = { structure: 0, collage: 1, focus: 2, aspect: 3, music: 3, model: 4, timing: 5 };
+    return order[intentGroup(a)]! - order[intentGroup(b)]!;
+  });
+  const grouped: string[] = [];
+  for (const part of ordered) {
+    if (grouped.length && intentGroup(grouped.at(-1)!) === "structure" && intentGroup(part) === "structure" && !/\b(?:longer|shorter|faster|slower)\b/i.test(part)) grouped[grouped.length - 1] += ` and ${part}`;
+    else grouped.push(part);
+  }
+  let current = req.timeline;
+  const batch: EditOp[] = [];
+  const skipped: string[] = [];
+  const peopleNames = (req.groundedContext?.people ?? []).flatMap(person => person.name ? [person.name] : []);
+  for (const part of grouped) {
+    const result = await interpretEdit({ ...req, text: part, timeline: current, intentRouting: true }, deps);
+    if (result.kind !== "edit") {
+      skipped.push(describeSkipped(part, result.reply, result.kind, peopleNames));
+      continue;
+    }
+    const applied = applyEdits(current, result.ops);
+    if (!applied.ok) {
+      skipped.push("I couldn't apply one of those changes together with the others. You can ask for it separately.");
+      continue;
+    }
+    current = applied.timeline;
+    batch.push(...result.ops);
+  }
+  if (!batch.length) return { kind: "unsupported", reply: skipped[0] ?? fallbackReply, ops: [] };
+  const combined = applyEdits(req.timeline, batch);
+  if (!combined.ok) return { kind: "unsupported", reply: "I couldn't apply the requested changes together.", ops: [] };
+  const reply = describeApplied(req.text, batch, combined.timeline, req.groundedContext?.soundtracks);
+  return { kind: "edit", reply: skipped.length ? `${reply} ${skipped.join(" ")}` : reply, ops: batch };
+}
+
 function unavailableFeature(text: string): boolean {
   return /\b(?:captions?|subtitles?|transitions?|titles?|cover(?:s)?|filters?|color grade|colour grade)\b/i.test(text);
 }
@@ -507,7 +588,32 @@ function violatesScope(op: EditOp, scope: InterpretEditRequest["scope"]): boolea
 export async function interpretEdit(req: InterpretEditRequest, deps: {
   generate: (options: GenerateOptions<InterpretEditModelResult>) => Promise<unknown>;
 }): Promise<InterpretEditResult> {
+  if (!req.intentRouting) {
+    const combined = await interpretCombined(req, deps);
+    if (combined) return combined;
+  }
   if (unavailableFeature(req.text)) return { kind: "unsupported", reply: unavailableFeatureReply, ops: [] };
+  const collageAmount = collageAmountEdit(req);
+  if (collageAmount) return collageAmount;
+  // Focus and pace/length are handled by bounded deterministic operations. Run
+  // both and validate their combined batch so neither intent gets short-circuited.
+  const hasTimingIntent = durationRequest(req.text) !== null || /\b(?:faster|quicker|speed(?:ier)? up|slower|more slowly|slow down|more relaxed)\b/i.test(req.text);
+  const hasFocusIntent = /\b(?:focus|feature|emphasize)\b/i.test(req.text);
+  if (hasTimingIntent && hasFocusIntent) {
+    const focus = focusEdit(req);
+    if (focus?.kind === "edit") {
+      const focused = applyEdits(req.timeline, focus.ops);
+      if (focused.ok) {
+        const timing = timingEdit({ ...req, timeline: focused.timeline });
+        if (timing?.kind === "edit") {
+          const ops = [...focus.ops, ...timing.ops];
+          const combined = applyEdits(req.timeline, ops);
+          if (combined.ok) return { kind: "edit", reply: `${focus.reply.replace(/[.]$/, "")} ${timing.reply}`, ops };
+        }
+        if (timing?.kind !== "edit") return focus;
+      }
+    }
+  }
   const focus = focusEdit(req);
   if (focus) return focus;
   const deterministic = deterministicTimelineIntent(req);
@@ -605,7 +711,7 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
       console.warn("Ask AI edit could not be applied", { error: applied.error, opIndex: applied.opIndex });
       return { kind: "unsupported", reply: "I couldn't apply that combination. I can reorder or retime clips, change framing or collage layout, swap a project photo, or adjust music.", ops: [] };
     }
-    return { kind: "edit", reply: result.reply?.trim() || "Here are the edits I suggest.", ops: fittedOps };
+    return { kind: "edit", reply: describeApplied(req.text, fittedOps, applied.timeline, req.groundedContext?.soundtracks), ops: fittedOps };
   } catch (error) {
     if (error instanceof DemoLimitReached) throw error;
     if (error instanceof InvalidEditReply) return { kind: error.kind, reply: error.reply, ops: [] };

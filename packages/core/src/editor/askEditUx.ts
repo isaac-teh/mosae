@@ -1,4 +1,4 @@
-import type { EditOp, Timeline } from "@mosae/contracts";
+import { describeApplied, type EditOp, type Timeline } from "@mosae/contracts";
 
 const idOf = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
 const stable = (value: unknown) => JSON.stringify(value);
@@ -10,8 +10,10 @@ export function changedClipIds(before: Timeline, after: Timeline): string[] {
   return [...new Set([...previous.keys(), ...next.keys()])].filter((id) => stable(previous.get(id)) !== stable(next.get(id)));
 }
 
-export function askEditSummary(ops: EditOp[], durationSec?: number, soundtrackName?: string, requestText?: string): string {
+export function askEditSummary(ops: EditOp[], durationSec?: number, soundtrackName?: string, requestText?: string, after?: Timeline): string {
   const op = ops[0];
+  // Collage merges/splits are described from the final timeline so the toast matches the reply bubble and the player length.
+  if (after && ops.some((item) => item.op === "mergeIntoCollage" || item.op === "splitCollage")) return describeApplied(requestText ?? "", ops, after, soundtrackName ? [{ id: ops.find((item) => item.op === "setSoundtrack")?.op === "setSoundtrack" ? (ops.find((item) => item.op === "setSoundtrack") as { soundtrackId: string }).soundtrackId : "", name: soundtrackName }] : []);
   const focus = requestText?.match(/\bfocus\s+on\s+(everyone|[^.!?]+)|\bchange\s+the\s+focus\s+to\s+(everyone|[^.!?]+)/i);
   const focusName = focus?.[1] ?? focus?.[2];
   const moves = ops.filter((item) => item.op === "move");
@@ -29,6 +31,8 @@ export function askEditSummary(ops: EditOp[], durationSec?: number, soundtrackNa
   if (soundtrack?.op === "setSoundtrack") return `Switched music to ${soundtrackName || soundtrack.soundtrackId}`;
   const aspect = ops.find((item) => item.op === "setAspect");
   if (aspect?.op === "setAspect") return `Changed to ${aspect.aspect === "16:9" ? "landscape" : "portrait"}`;
+  const merges = ops.filter((item) => item.op === "mergeIntoCollage").length;
+  if (merges) return `Combined photos into ${merges === 1 ? "a collage" : `${merges} collages`}${filmLengthLabel && durationSec !== undefined ? `; film is now ${filmLengthLabel}` : ""}`;
   if (ops.some((item) => ["setPhotoDuration", "setCollageDuration"].includes(item.op))) return `Showed a moment longer`;
   if (ops.some((item) => item.op === "swapShot" || item.op === "replaceCollageSlot")) return "Replaced a moment";
   if (ops.some((item) => item.op === "duplicate" || item.op === "add")) return "Added a moment";

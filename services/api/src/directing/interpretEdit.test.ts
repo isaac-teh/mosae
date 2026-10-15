@@ -19,6 +19,163 @@ function collageFixture(): Timeline {
 }
 
 describe("interpretEdit", () => {
+  it.each([
+    {
+      request: "Make it 10s with most collage", fixture: timeline,
+      outputs: [], expectedOps: [
+        { op: "mergeIntoCollage", clipIds: ["monkeys", "temple"] },
+        { op: "setCollageDuration", clipId: "merge:monkeys", sec: 10 },
+      ], reply: /^Made it 10 seconds and grouped 2 photos into a collage\.$/, duration: 10,
+    },
+    {
+      request: "Make it 10s with more collage", fixture: timeline,
+      outputs: [], expectedOps: [
+        { op: "mergeIntoCollage", clipIds: ["monkeys", "temple"] },
+        { op: "setCollageDuration", clipId: "merge:monkeys", sec: 10 },
+      ], reply: /^Made it 10 seconds and grouped 2 photos into a collage\.$/, duration: 10,
+    },
+    {
+      request: "focus on Jamie and make it faster", fixture: timeline,
+      outputs: [], expectedOps: [{ op: "move", clipId: "temple", toIndex: 0 }], reply: /^Made it faster and brought Jamie forward\.$/,
+    },
+    {
+      request: "landscape and change the music", fixture: timeline,
+      outputs: [{ kind: "edit", ops: [{ op: "setAspect", aspect: "16:9" }] }],
+      expectedOps: [{ op: "setAspect", aspect: "16:9" }, { op: "setSoundtrack", soundtrackId: "new-track" }], reply: /^Switched to landscape and changed the music to New music\.$/,
+    },
+    {
+      request: "remove the 2nd moment and make the first one longer", fixture: timeline,
+      outputs: [],
+      expectedOps: [{ op: "remove", clipId: "temple" }, { op: "setPhotoDuration", clipId: "monkeys", sec: 4 }], reply: /^Removed the 2nd moment and showed the first one longer\.$/,
+    },
+    {
+      request: "Make it 10s with no collages", fixture: collageFixture(),
+      outputs: [], expectedOps: [{ op: "splitCollage", clipId: "collage" }], reply: /^Made it 10 seconds and split the collage back into single photos\.$/, duration: 10,
+    },
+  ])("decomposes and applies every doable request part in one batch: $request", async ({ request, fixture, outputs, expectedOps, reply, duration }) => {
+    const modelCalls = outputs.length;
+    const generate = vi.fn(async () => outputs.shift() ?? { kind: "edit", ops: [] });
+    const context = {
+      scope: { kind: "film" as const }, storyIntent: null, constraints: {},
+      people: [{ personId: "jamie", name: "Jamie", role: "friend", focused: false }], selected: null,
+      candidates: ["monkeys", "temple"].map(id => ({ shotId: `shot-${id}`, assetId: `asset-${id}`, kind: "photo" as const, caption: id, personIds: [id === "temple" ? "jamie" : "other"], sourceStartSec: null, sourceEndSec: null })),
+      soundtracks: [{ id: "new-track", name: "New music", description: "Warm", cadence: "gentle", durationSec: 60, storagePath: "new.mp3" }], conversation: [],
+    };
+    const result = await interpretEdit({ text: request, timeline: fixture, groundedContext: context }, { generate });
+    expect(result.kind).toBe("edit");
+    if (result.kind !== "edit") return;
+    for (const expected of expectedOps) expect(result.ops).toContainEqual(expected);
+    expect(reply.test(result.reply)).toBe(true);
+    const applied = applyEdits(fixture, result.ops);
+    expect(applied.ok).toBe(true);
+    if (applied.ok && duration) expect(applied.timeline.durationSec).toBeCloseTo(duration, 1);
+    if (applied.ok && request === "focus on Jamie and make it faster") expect(applied.timeline.durationSec).toBeLessThan(fixture.durationSec);
+    expect(generate).toHaveBeenCalledTimes(modelCalls);
+  });
+
+  describe("collage amount on a multi-photo film", () => {
+    const photos = Array.from({ length: 8 }, (_, i) => ({ id: `p${i}`, source: { kind: "photo" as const, shotId: `shot-p${i}` }, startSec: i * 3, durationSec: 3, transitionIn: { kind: "cut" as const, durationSec: 0 } }));
+    const multi: Timeline = { ...timeline, schemaVersion: 2, durationSec: 24, chapters: [{ title: "One", startSec: 0, durationSec: 24 }], videoClips: photos, captions: [] };
+    const collageCount = (t: Timeline) => t.videoClips.filter(clip => "kind" in clip).length;
+    const run = async (text: string, fixture: Timeline) => {
+      const generate = vi.fn();
+      const result = await interpretEdit({ text, timeline: fixture }, { generate });
+      expect(generate).not.toHaveBeenCalled();
+      return result;
+    };
+
+    it("adds one or two collages for 'more collage'", async () => {
+      const result = await run("More collage please", multi);
+      expect(result.kind).toBe("edit");
+      if (result.kind !== "edit") return;
+      expect(result.ops.every(op => op.op === "mergeIntoCollage")).toBe(true);
+      expect(result.reply).toMatch(/^Grouped \d+ photos into (?:a collage|2 collages)\.$/);
+      const applied = applyEdits(multi, result.ops);
+      expect(applied.ok && collageCount(applied.timeline)).toBe(2);
+      expect(applied.ok && "source" in applied.timeline.videoClips[0]!).toBe(true);
+      expect(applied.ok && "source" in applied.timeline.videoClips.at(-1)!).toBe(true);
+    });
+
+    it("merges every eligible group for 'most collage', then 'no collages' splits them all", async () => {
+      const most = await run("most collage", multi);
+      expect(most.kind).toBe("edit");
+      if (most.kind !== "edit") return;
+      const applied = applyEdits(multi, most.ops);
+      if (!applied.ok) throw new Error(applied.error);
+      expect(collageCount(applied.timeline)).toBeGreaterThanOrEqual(1);
+      const none = await run("no collages", applied.timeline);
+      expect(none.kind).toBe("edit");
+      expect(none.reply).toMatch(/^Split (?:the collage|all collages) back into single photos\.$/);
+      if (none.kind !== "edit") return;
+      const split = applyEdits(applied.timeline, none.ops);
+      expect(split.ok && collageCount(split.timeline)).toBe(0);
+    });
+
+    it("splits about half for 'fewer collages'", async () => {
+      const withCollages = applyEdits(multi, [{ op: "mergeIntoCollage", clipIds: ["p1", "p2"] }, { op: "mergeIntoCollage", clipIds: ["p4", "p5"] }]);
+      if (!withCollages.ok) throw new Error(withCollages.error);
+      const fewer = await run("fewer collages", withCollages.timeline);
+      expect(fewer.kind).toBe("edit");
+      if (fewer.kind !== "edit") return;
+      expect(fewer.ops).toEqual([{ op: "splitCollage", clipId: "merge:p4" }]);
+    });
+
+    it("applies collage changes before timing for 'Make it 10s with most collage'", async () => {
+      const result = await run("Make it 10s with most collage", multi);
+      expect(result.kind).toBe("edit");
+      if (result.kind !== "edit") return;
+      const firstTiming = result.ops.findIndex(op => op.op === "setPhotoDuration" || op.op === "setCollageDuration");
+      const lastMerge = result.ops.map(op => op.op).lastIndexOf("mergeIntoCollage");
+      expect(lastMerge).toBeGreaterThanOrEqual(0);
+      expect(lastMerge).toBeLessThan(firstTiming);
+      const applied = applyEdits(multi, result.ops);
+      expect(applied.ok && applied.timeline.durationSec).toBeCloseTo(10, 1);
+      expect(applied.ok && collageCount(applied.timeline)).toBeGreaterThan(0);
+    });
+
+    it.each([8, 10, 15, 25])("lands within 0.3s of a %is target after collage merges", async (target) => {
+      const crossfaded: Timeline = { ...multi, videoClips: photos.map((clip, index) => index % 3 === 1 ? { ...clip, transitionIn: { kind: "crossfade" as const, durationSec: 0.4 } } : clip) };
+      const result = await run(`Make it ${target}s with most collage`, crossfaded);
+      expect(result.kind).toBe("edit");
+      if (result.kind !== "edit") return;
+      const applied = applyEdits(crossfaded, result.ops);
+      expect(applied.ok).toBe(true);
+      if (applied.ok) expect(Math.abs(applied.timeline.durationSec - target)).toBeLessThanOrEqual(0.3);
+      expect(result.reply).toContain(`Made it ${target} seconds`);
+    });
+
+    it("explains when no neighbouring photos can be combined", async () => {
+      const lonely: Timeline = { ...multi, durationSec: 3, videoClips: [photos[0]!] };
+      const result = await run("more collage", lonely);
+      expect(result.kind).toBe("clarify");
+    });
+  });
+
+  it("explains an unmatched focus in plain sentences while applying the pace", async () => {
+    const context = {
+      scope: { kind: "film" as const }, storyIntent: null, constraints: {},
+      people: [{ personId: "daughter", name: "Daughter", role: "child", focused: false }, { personId: "wife", name: "Wife", role: "parent", focused: false }, { personId: "me", name: "Me", role: "self", focused: false }],
+      selected: null, candidates: [], soundtracks: [], conversation: [],
+    };
+    const result = await interpretEdit({ text: "focus on Jamie and make it faster", timeline, groundedContext: context }, { generate: vi.fn() });
+    expect(result.kind).toBe("edit");
+    expect(result.reply).toBe("Made it faster. I couldn't find Jamie. Did you mean Daughter, Wife or Me?");
+    expect(result.reply).not.toMatch(/skipped|operation|editor|;/i);
+  });
+
+  it("reduces collage count by splitting existing collages for fewer-collage requests", async () => {
+    const first = collageFixture().videoClips[0]!;
+    const second = { ...first, clipId: "collage-2", startSec: 6 };
+    const fixture: Timeline = { ...timeline, schemaVersion: 2, durationSec: 12, videoClips: [first, second] };
+    const result = await interpretEdit({ text: "Show fewer collages", timeline: fixture }, { generate: vi.fn() });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "splitCollage", clipId: "collage-2" }] });
+    if (result.kind === "edit") {
+      const applied = applyEdits(fixture, result.ops);
+      expect(applied.ok).toBe(true);
+      if (applied.ok) expect(applied.timeline.videoClips.filter(clip => "kind" in clip)).toHaveLength(1);
+    }
+  });
+
   const operationCases: { request: string; timeline: Timeline; op: EditOp | EditOp[]; candidates?: any[]; soundtracks?: any[] }[] = [
     { request: "Replace the monkeys photo", timeline, op: { op: "swapShot", clipId: "monkeys", shotId: "replacement", kind: "photo" }, candidates: [{ shotId: "replacement", assetId: "asset-r", kind: "photo", caption: "A lake", personIds: [], sourceStartSec: null, sourceEndSec: null }] },
     { request: "Trim the video from two to four seconds", timeline: { ...timeline, videoClips: [{ id: "video", source: { kind: "video", shotId: "video-source", sourceInSec: 0, sourceOutSec: 6, sourceDurationSec: 6 }, startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 } }] }, op: { op: "trim", clipId: "video", inSec: 2, outSec: 4 } },
@@ -308,7 +465,7 @@ describe("interpretEdit", () => {
         return { reply: "Move the snow monkeys before the temple?", ops: [{ op: "move", clipId: "monkeys", toIndex: 0 }] } satisfies InterpretEditModelResult;
       }),
     });
-    expect(result).toEqual({ kind: "edit", reply: "Move the snow monkeys before the temple?", ops: [{ op: "move", clipId: "monkeys", toIndex: 0 }] });
+    expect(result).toEqual({ kind: "edit", reply: "Reordered the moments.", ops: [{ op: "move", clipId: "monkeys", toIndex: 0 }] });
     expect(prompt).toContain('"clipIds":["monkeys","temple"]');
     expect(prompt).toContain('"chapter":"Snow monkeys"');
     expect(prompt).toContain('"caption":"Watching the snow monkeys"');
@@ -667,14 +824,14 @@ describe("interpretEdit", () => {
     expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/foreign-shot|clip/i), ops: [] });
   });
 
-  it("rejects operations that escape the selected clip or collage slot", async () => {
+  it("retimes the requested selected moment and rejects collage operations that escape a slot", async () => {
     const clipResult = await interpretEdit({ text: "make this longer", timeline, scope: { kind: "clip", clipId: "monkeys" } }, {
       generate: async () => ({ kind: "edit", ops: [{ op: "setPhotoDuration", clipId: "temple", sec: 4 }] }),
     });
     const slotResult = await interpretEdit({ text: "replace this photo", timeline, scope: { kind: "slot", clipId: "collage", slotId: "slot-1" } }, {
       generate: async () => ({ kind: "edit", ops: [{ op: "setCollageDuration", clipId: "collage", sec: 5 }] }),
     });
-    expect(clipResult).toMatchObject({ kind: "unsupported", ops: [] });
+    expect(clipResult).toMatchObject({ kind: "edit", ops: [{ op: "setPhotoDuration", clipId: "monkeys", sec: 4 }] });
     expect(slotResult).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/collage|clip/i), ops: [] });
   });
 
