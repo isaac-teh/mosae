@@ -72,6 +72,7 @@ export default function EditorScreen() {
   const [askToastSnapshotKey, setAskToastSnapshotKey] = useState<string | null>(null);
   const [askClipFocus, setAskClipFocus] = useState<{ clipId: string; nonce: number } | null>(null);
   const askChangedIdsRef = useRef<string[]>([]);
+  const askAfterRef = useRef<Timeline | null>(null);
   const [selectedCollageCellId, setSelectedCollageCellId] = useState<string | null>(null);
   const [selectedAudioClipId, setSelectedAudioClipId] = useState<string | null>(null);
   const [preparingDownload, setPreparingDownload] = useState(false);
@@ -159,14 +160,16 @@ export default function EditorScreen() {
     const before = editor.timeline;
     const result = before ? applyEdits(before, ops) : null;
     const applied = applyPreparedOps(ops);
-    if (applied && before && result?.ok) askChangedIdsRef.current = changedClipIds(before, result.timeline);
+    if (applied && before && result?.ok) { askChangedIdsRef.current = changedClipIds(before, result.timeline); askAfterRef.current = result.timeline; }
     return applied;
   };
   const onAskApplied = (ops: EditOp[], _reply: string, requestText: string) => {
     const ids = askChangedIdsRef.current;
     askChangedIdsRef.current = [];
     setAskHighlightIds(ids);
-    setAskToast(askEditSummary(ops, editor.timeline?.durationSec, soundtrackName ?? undefined, requestText));
+    const finalTimeline = askAfterRef.current ?? editor.timeline ?? undefined;
+    askAfterRef.current = null;
+    setAskToast(askEditSummary(ops, finalTimeline?.durationSec, soundtrackName ?? undefined, requestText, finalTimeline));
     setAskToastSnapshotKey(editor.getSnapshotKey());
     setAskToastNonce((n) => n + 1);
     if (ids.length) {

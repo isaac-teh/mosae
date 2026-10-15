@@ -52,8 +52,8 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
       {timeline.chapters.map((chapter, index) => {
         const endSec = chapter.durationSec !== undefined ? chapter.startSec + chapter.durationSec : timeline.chapters[index + 1]?.startSec ?? timeline.durationSec;
         const width = Math.max(0, (endSec - chapter.startSec) * pixelsPerSecond);
-        return width > 0 ? <View key={`${chapter.title}-${index}`} accessibilityLabel={`Chapter ${chapter.title}`} style={{ position: "absolute", left: timeToX(chapter.startSec, pixelsPerSecond, leadingPadding), width, height: 21 }}>
-          <Text numberOfLines={1} ellipsizeMode="tail" className="font-sans text-caption text-on-screen-muted">{chapter.title}</Text>
+        return width > 0 ? <View key={`${chapter.title}-${index}`} accessibilityLabel={`Chapter ${chapter.title}`} style={{ position: "absolute", left: timeToX(chapter.startSec, pixelsPerSecond, leadingPadding), width, height: 21, overflow: "hidden" }}>
+          {width >= 40 ? <Text numberOfLines={1} ellipsizeMode="tail" className="font-sans text-caption text-on-screen-muted">{chapter.title}</Text> : null}
         </View> : null;
       })}
     </View>

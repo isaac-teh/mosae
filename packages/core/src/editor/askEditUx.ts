@@ -1,4 +1,4 @@
-import type { EditOp, Timeline } from "@mosae/contracts";
+import { describeApplied, type EditOp, type Timeline } from "@mosae/contracts";
 
 const idOf = (clip: Timeline["videoClips"][number]) => "kind" in clip ? clip.clipId : clip.id;
 const stable = (value: unknown) => JSON.stringify(value);
@@ -10,8 +10,10 @@ export function changedClipIds(before: Timeline, after: Timeline): string[] {
   return [...new Set([...previous.keys(), ...next.keys()])].filter((id) => stable(previous.get(id)) !== stable(next.get(id)));
 }
 
-export function askEditSummary(ops: EditOp[], durationSec?: number, soundtrackName?: string, requestText?: string): string {
+export function askEditSummary(ops: EditOp[], durationSec?: number, soundtrackName?: string, requestText?: string, after?: Timeline): string {
   const op = ops[0];
+  // Collage merges/splits are described from the final timeline so the toast matches the reply bubble and the player length.
+  if (after && ops.some((item) => item.op === "mergeIntoCollage" || item.op === "splitCollage")) return describeApplied(requestText ?? "", ops, after, soundtrackName ? [{ id: ops.find((item) => item.op === "setSoundtrack")?.op === "setSoundtrack" ? (ops.find((item) => item.op === "setSoundtrack") as { soundtrackId: string }).soundtrackId : "", name: soundtrackName }] : []);
   const focus = requestText?.match(/\bfocus\s+on\s+(everyone|[^.!?]+)|\bchange\s+the\s+focus\s+to\s+(everyone|[^.!?]+)/i);
   const focusName = focus?.[1] ?? focus?.[2];
   const moves = ops.filter((item) => item.op === "move");

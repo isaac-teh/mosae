@@ -133,6 +133,17 @@ describe("interpretEdit", () => {
       expect(applied.ok && collageCount(applied.timeline)).toBeGreaterThan(0);
     });
 
+    it.each([8, 10, 15, 25])("lands within 0.3s of a %is target after collage merges", async (target) => {
+      const crossfaded: Timeline = { ...multi, videoClips: photos.map((clip, index) => index % 3 === 1 ? { ...clip, transitionIn: { kind: "crossfade" as const, durationSec: 0.4 } } : clip) };
+      const result = await run(`Make it ${target}s with most collage`, crossfaded);
+      expect(result.kind).toBe("edit");
+      if (result.kind !== "edit") return;
+      const applied = applyEdits(crossfaded, result.ops);
+      expect(applied.ok).toBe(true);
+      if (applied.ok) expect(Math.abs(applied.timeline.durationSec - target)).toBeLessThanOrEqual(0.3);
+      expect(result.reply).toContain(`Made it ${target} seconds`);
+    });
+
     it("explains when no neighbouring photos can be combined", async () => {
       const lonely: Timeline = { ...multi, durationSec: 3, videoClips: [photos[0]!] };
       const result = await run("more collage", lonely);
