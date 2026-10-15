@@ -1,4 +1,5 @@
 import { applyEdits, planCollageMerges, type EditOp, type Timeline } from "@mosae/contracts";
+import { describeApplied } from "./editReply.js";
 import type { InterpretEditRequest, InterpretEditResult } from "./interpretEdit.js";
 
 /** Deterministic "more / most / fewer / no collages" requests. Returns null when the text is not a collage-amount request. */
@@ -14,7 +15,7 @@ export function collageAmountEdit(req: InterpretEditRequest): InterpretEditResul
     if (!ops.length) return { kind: "clarify", reply: "There are no collages to split in this film.", ops: [] };
     const applied = applyEdits(req.timeline, ops);
     if (!applied.ok) return { kind: "unsupported", reply: "I couldn't reduce the collages because one of them has no photos to split.", ops: [] };
-    return { kind: "edit", reply: `Split ${ops.length} collage${ops.length === 1 ? "" : "s"} into separate moments.`, ops };
+    return { kind: "edit", reply: describeApplied(text, ops, applied.timeline), ops };
   }
   const most = /\bmost\s+collages?\b/i.test(text);
   const peopleByShot = new Map((req.groundedContext?.candidates ?? []).map(candidate => [candidate.shotId, candidate.personIds] as const));
@@ -22,5 +23,5 @@ export function collageAmountEdit(req: InterpretEditRequest): InterpretEditResul
   if (!ops.length) return { kind: "clarify", reply: "I couldn't find neighbouring photos from the same part of the story to combine into a collage. Try asking for a layout change instead.", ops: [] };
   const applied = applyEdits(req.timeline, ops);
   if (!applied.ok) return { kind: "unsupported", reply: "I couldn't combine those photos into a collage.", ops: [] };
-  return { kind: "edit", reply: `Combined neighbouring photos into ${ops.length} new collage${ops.length === 1 ? "" : "s"}.`, ops };
+  return { kind: "edit", reply: describeApplied(text, ops, applied.timeline), ops };
 }

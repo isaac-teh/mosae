@@ -3,6 +3,7 @@ import type { GenerateOptions } from "../gemini/client.js";
 import { MODELS } from "../gemini/pricing.js";
 import { DemoLimitReached } from "../gemini/errors.js";
 import type { EditContext } from "./editContext.js";
+import { describeApplied, describeSkipped } from "./editReply.js";
 import { collageAmountEdit } from "./collageAmount.js";
 
 export type InterpretEditRequest = { text: string; timeline: Timeline; groundedContext?: import("./loadEditContext.js").EditContext; intentRouting?: boolean } & Partial<EditContext>;
@@ -544,15 +545,16 @@ async function interpretCombined(req: InterpretEditRequest, deps: { generate: (o
   let current = req.timeline;
   const batch: EditOp[] = [];
   const skipped: string[] = [];
+  const peopleNames = (req.groundedContext?.people ?? []).flatMap(person => person.name ? [person.name] : []);
   for (const part of grouped) {
     const result = await interpretEdit({ ...req, text: part, timeline: current, intentRouting: true }, deps);
     if (result.kind !== "edit") {
-      skipped.push(`${part}: ${result.reply.replace(/[.!?]+$/, "")}`);
+      skipped.push(describeSkipped(part, result.reply, result.kind, peopleNames));
       continue;
     }
     const applied = applyEdits(current, result.ops);
     if (!applied.ok) {
-      skipped.push(`${part}: the requested changes could not be applied together`);
+      skipped.push("I couldn't apply one of those changes together with the others. You can ask for it separately.");
       continue;
     }
     current = applied.timeline;
@@ -561,26 +563,12 @@ async function interpretCombined(req: InterpretEditRequest, deps: { generate: (o
   if (!batch.length) return { kind: "unsupported", reply: skipped[0] ?? fallbackReply, ops: [] };
   const combined = applyEdits(req.timeline, batch);
   if (!combined.ok) return { kind: "unsupported", reply: "I couldn't apply the requested changes together.", ops: [] };
-  const reply = appliedOpsReply(batch, combined.timeline);
-  const appliedSummary = reply.replace(/^Done — /, "").replace(/[.!?]+$/, "");
-  return { kind: "edit", reply: skipped.length ? `${appliedSummary}; skipped ${skipped.join("; ")}.` : reply, ops: batch };
+  const reply = describeApplied(req.text, batch, combined.timeline, req.groundedContext?.soundtracks);
+  return { kind: "edit", reply: skipped.length ? `${reply} ${skipped.join(" ")}` : reply, ops: batch };
 }
 
 function unavailableFeature(text: string): boolean {
   return /\b(?:captions?|subtitles?|transitions?|titles?|cover(?:s)?|filters?|color grade|colour grade)\b/i.test(text);
-}
-
-function appliedOpsReply(ops: EditOp[], timeline: Timeline): string {
-  const actions: string[] = [];
-  if (ops.some(op => op.op === "remove")) actions.push("removed moments");
-  if (ops.some(op => op.op === "move")) actions.push("reordered moments");
-  if (ops.some(op => op.op === "setPhotoDuration" || op.op === "setCollageDuration" || op.op === "trim")) actions.push("adjusted timing");
-  if (ops.some(op => op.op === "setAspect")) actions.push(`changed framing to ${timeline.aspect === "16:9" ? "landscape" : "portrait"}`);
-  if (ops.some(op => op.op === "setSoundtrack" || op.op === "setMusicVolume")) actions.push("updated the music");
-  if (ops.some(op => ["setCollageSpec", "setCollageLayout", "setCollageMotion", "setCollageEffect", "addCollageSlot", "removeCollageSlot", "splitCollage", "mergeIntoCollage"].includes(op.op))) actions.push("updated collages");
-  if (ops.some(op => op.op === "swapShot" || op.op === "replaceCollageSlot")) actions.push("replaced a moment");
-  if (ops.some(op => op.op === "add" || op.op === "duplicate")) actions.push("added a moment");
-  return actions.length ? `Done — ${actions.join(" and ")}.` : "Done — applied the requested timeline changes.";
 }
 
 function violatesScope(op: EditOp, scope: InterpretEditRequest["scope"]): boolean {
@@ -723,7 +711,7 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
       console.warn("Ask AI edit could not be applied", { error: applied.error, opIndex: applied.opIndex });
       return { kind: "unsupported", reply: "I couldn't apply that combination. I can reorder or retime clips, change framing or collage layout, swap a project photo, or adjust music.", ops: [] };
     }
-    return { kind: "edit", reply: appliedOpsReply(fittedOps, applied.timeline), ops: fittedOps };
+    return { kind: "edit", reply: describeApplied(req.text, fittedOps, applied.timeline, req.groundedContext?.soundtracks), ops: fittedOps };
   } catch (error) {
     if (error instanceof DemoLimitReached) throw error;
     if (error instanceof InvalidEditReply) return { kind: error.kind, reply: error.reply, ops: [] };

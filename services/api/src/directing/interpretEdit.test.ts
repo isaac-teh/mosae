@@ -25,32 +25,32 @@ describe("interpretEdit", () => {
       outputs: [], expectedOps: [
         { op: "mergeIntoCollage", clipIds: ["monkeys", "temple"] },
         { op: "setCollageDuration", clipId: "merge:monkeys", sec: 10 },
-      ], reply: /adjusted timing and updated collages/i, duration: 10,
+      ], reply: /^Made it 10 seconds and grouped 2 photos into a collage\.$/, duration: 10,
     },
     {
       request: "Make it 10s with more collage", fixture: timeline,
       outputs: [], expectedOps: [
         { op: "mergeIntoCollage", clipIds: ["monkeys", "temple"] },
         { op: "setCollageDuration", clipId: "merge:monkeys", sec: 10 },
-      ], reply: /adjusted timing and updated collages/i, duration: 10,
+      ], reply: /^Made it 10 seconds and grouped 2 photos into a collage\.$/, duration: 10,
     },
     {
       request: "focus on Jamie and make it faster", fixture: timeline,
-      outputs: [], expectedOps: [{ op: "move", clipId: "temple", toIndex: 0 }], reply: /adjusted timing/i,
+      outputs: [], expectedOps: [{ op: "move", clipId: "temple", toIndex: 0 }], reply: /^Made it faster and brought Jamie forward\.$/,
     },
     {
       request: "landscape and change the music", fixture: timeline,
       outputs: [{ kind: "edit", ops: [{ op: "setAspect", aspect: "16:9" }] }],
-      expectedOps: [{ op: "setAspect", aspect: "16:9" }, { op: "setSoundtrack", soundtrackId: "new-track" }], reply: /framing.*music|music.*framing/i,
+      expectedOps: [{ op: "setAspect", aspect: "16:9" }, { op: "setSoundtrack", soundtrackId: "new-track" }], reply: /^Switched to landscape and changed the music to New music\.$/,
     },
     {
       request: "remove the 2nd moment and make the first one longer", fixture: timeline,
       outputs: [],
-      expectedOps: [{ op: "remove", clipId: "temple" }, { op: "setPhotoDuration", clipId: "monkeys", sec: 4 }], reply: /removed.*timing|timing.*removed/i,
+      expectedOps: [{ op: "remove", clipId: "temple" }, { op: "setPhotoDuration", clipId: "monkeys", sec: 4 }], reply: /^Removed the 2nd moment and showed the first one longer\.$/,
     },
     {
       request: "Make it 10s with no collages", fixture: collageFixture(),
-      outputs: [], expectedOps: [{ op: "splitCollage", clipId: "collage" }], reply: /adjusted timing.*collages/i, duration: 10,
+      outputs: [], expectedOps: [{ op: "splitCollage", clipId: "collage" }], reply: /^Made it 10 seconds and split the collage back into single photos\.$/, duration: 10,
     },
   ])("decomposes and applies every doable request part in one batch: $request", async ({ request, fixture, outputs, expectedOps, reply, duration }) => {
     const modelCalls = outputs.length;
@@ -89,6 +89,7 @@ describe("interpretEdit", () => {
       expect(result.kind).toBe("edit");
       if (result.kind !== "edit") return;
       expect(result.ops.every(op => op.op === "mergeIntoCollage")).toBe(true);
+      expect(result.reply).toMatch(/^Grouped \d+ photos into (?:a collage|2 collages)\.$/);
       const applied = applyEdits(multi, result.ops);
       expect(applied.ok && collageCount(applied.timeline)).toBe(2);
       expect(applied.ok && "source" in applied.timeline.videoClips[0]!).toBe(true);
@@ -104,6 +105,7 @@ describe("interpretEdit", () => {
       expect(collageCount(applied.timeline)).toBeGreaterThanOrEqual(1);
       const none = await run("no collages", applied.timeline);
       expect(none.kind).toBe("edit");
+      expect(none.reply).toMatch(/^Split (?:the collage|all collages) back into single photos\.$/);
       if (none.kind !== "edit") return;
       const split = applyEdits(applied.timeline, none.ops);
       expect(split.ok && collageCount(split.timeline)).toBe(0);
@@ -136,6 +138,18 @@ describe("interpretEdit", () => {
       const result = await run("more collage", lonely);
       expect(result.kind).toBe("clarify");
     });
+  });
+
+  it("explains an unmatched focus in plain sentences while applying the pace", async () => {
+    const context = {
+      scope: { kind: "film" as const }, storyIntent: null, constraints: {},
+      people: [{ personId: "daughter", name: "Daughter", role: "child", focused: false }, { personId: "wife", name: "Wife", role: "parent", focused: false }, { personId: "me", name: "Me", role: "self", focused: false }],
+      selected: null, candidates: [], soundtracks: [], conversation: [],
+    };
+    const result = await interpretEdit({ text: "focus on Jamie and make it faster", timeline, groundedContext: context }, { generate: vi.fn() });
+    expect(result.kind).toBe("edit");
+    expect(result.reply).toBe("Made it faster. I couldn't find Jamie. Did you mean Daughter, Wife or Me?");
+    expect(result.reply).not.toMatch(/skipped|operation|editor|;/i);
   });
 
   it("reduces collage count by splitting existing collages for fewer-collage requests", async () => {
@@ -440,7 +454,7 @@ describe("interpretEdit", () => {
         return { reply: "Move the snow monkeys before the temple?", ops: [{ op: "move", clipId: "monkeys", toIndex: 0 }] } satisfies InterpretEditModelResult;
       }),
     });
-    expect(result).toEqual({ kind: "edit", reply: "Done — reordered moments.", ops: [{ op: "move", clipId: "monkeys", toIndex: 0 }] });
+    expect(result).toEqual({ kind: "edit", reply: "Reordered the moments.", ops: [{ op: "move", clipId: "monkeys", toIndex: 0 }] });
     expect(prompt).toContain('"clipIds":["monkeys","temple"]');
     expect(prompt).toContain('"chapter":"Snow monkeys"');
     expect(prompt).toContain('"caption":"Watching the snow monkeys"');

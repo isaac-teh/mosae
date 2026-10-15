@@ -35,7 +35,7 @@ export function AskSheet({ visible, projectId, generationId, repository, scope, 
   const ask = () => void submit(text, scope);
   const suggestions = suggestedAskRequests(scope.kind, people, aspect);
   const historyRef = useRef<ScrollView>(null);
-  useEffect(() => { requestAnimationFrame(() => historyRef.current?.scrollToEnd({ animated: true })); }, [messages.length, busy]);
+  useEffect(() => { requestAnimationFrame(() => historyRef.current?.scrollToEnd?.({ animated: true })); }, [messages.length, busy]);
   const older = messages.slice(0, -1);
   const visibleMessages = showEarlier ? messages : messages.slice(-1);
 
