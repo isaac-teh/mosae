@@ -249,7 +249,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
           return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto) && (!requiresExplicitProceed || completedPeople.has(person.personId)));
         }));
-        const peopleSummaryConfirmed = acceptedFlow?.peopleSummaryConfirmed === true || (!requiresExplicitProceed && hasFlowRecord && acceptedFlow?.peopleSummaryConfirmed === undefined && (hasGeneration || allFlowPeopleAnswered));
+        // Answering the last identity card is not the same as accepting the
+        // people summary. Legacy flows without an explicit progress marker may
+        // still need that summary; only an existing generation proves the user
+        // already moved past it.
+        const peopleSummaryConfirmed = acceptedFlow?.peopleSummaryConfirmed === true || (!requiresExplicitProceed && hasFlowRecord && acceptedFlow?.peopleSummaryConfirmed === undefined && hasGeneration);
         const setAside = getSetAsideSummary(plan);
         const needsFilteredPhotoReview = setAside.blurry + setAside.duplicates > 0;
         const isFilmReady = Boolean(film) && (resume.generationStatus === "playable" || resume.generationStatus === "rendering" || resume.generationStatus === "saved");
@@ -295,10 +299,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     setInput((current) => ({ ...current, ...(taggedPersonRef.current ? { taggedPerson: taggedPersonRef.current } : {}), summary: mergedSummary, people: mergedSummary.ready.faces ? mapped?.map((person) => {
       const local = current.people?.find((item) => item.personId === person.personId);
       return local?.name || local?.skipped || peopleEdits.current.has(person.personId) ? { ...person, ...local, momentCount: person.momentCount } : person;
-    }) ?? null : current.people, peopleConfirmed: typeof repository.getFlow !== "function" ? current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) : allFlowPeopleProceeded, peopleSummaryConfirmed: peopleSummaryConfirming.current ? true : typeof repository.getFlow !== "function" ? current.peopleSummaryConfirmed : acceptedFlow?.peopleSummaryConfirmed === true || (!requiresExplicitProceed && acceptedFlow?.peopleSummaryConfirmed === undefined && (current.peopleSummaryConfirmed === true || Boolean(current.generation) || (nextSummary.ready.faces && mapped !== null && mapped.length > 0 && mapped.every((person) => {
-      const stored = acceptedFlow?.people.find((entry) => entry.personId === person.personId);
-      return Boolean(stored && (stored.confirmed || stored.skipped || stored.mergedInto));
-    })))) }));
+    }) ?? null : current.people, peopleConfirmed: typeof repository.getFlow !== "function" ? current.peopleConfirmed || (nextSummary.ready.faces && mapped !== null && (skipPeopleForNow.current || mapped.length === 0)) : allFlowPeopleProceeded, peopleSummaryConfirmed: peopleSummaryConfirming.current ? true : typeof repository.getFlow !== "function" ? current.peopleSummaryConfirmed : acceptedFlow?.peopleSummaryConfirmed === true || (!requiresExplicitProceed && acceptedFlow?.peopleSummaryConfirmed === undefined && (current.peopleSummaryConfirmed === true || Boolean(current.generation))) }));
     setResumeLoaded(true);
     if (proposalId.current && nextSummary.ready.plan && !planLoad.current && !currentPlan.current) {
       planLoad.current = true;
@@ -668,14 +669,13 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
     async completeMissedPerson(personId: string, name: string, momentCount: number, sampleUri?: string, sampleUris?: string[]) {
-      const sampleFaces = sampleUri ? [{ shotId: "manual-sample", uri: sampleUri, bbox: [0, 0, 1, 1] as [number, number, number, number] }] : undefined;
       try { await commitFlowAction({ type: "missed-person-completed", personId }); }
       catch (cause) { setError(reportFailure(cause)); return; }
       setInput((current) => {
         const people = current.people ?? [];
         const updatedPeople = people.some((person) => person.personId === personId)
-          ? people.map((person) => person.personId === personId ? { ...person, momentCount, ...(sampleFaces ? { sampleFaces } : {}) } : person)
-          : [...people, { personId, name, role: "other", skipped: false, momentCount, sampleShotIds: [], days: [], ...(sampleFaces ? { sampleFaces } : {}) }];
+          ? people.map((person) => person.personId === personId ? { ...person, momentCount } : person)
+          : [...people, { personId, name, role: "other", skipped: false, momentCount, sampleShotIds: [], days: [] }];
         const missedPeople = (current.missedPeople ?? []).map((person) => person.personId === personId ? { ...person, momentCount, ...(sampleUris?.length ? { sampleUris: sampleUris.slice(0, 4) } : sampleUri ? { sampleUri } : {}) } : person);
         const next = missedPeople.find((person) => !person.skipped && person.momentCount === 0);
         return { ...current, people: updatedPeople, missedPeople, peopleConfirmed: true, peopleSummaryConfirmed: false, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null };
@@ -872,7 +872,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           if (existing?.name) return actions.setPerson(activePerson.personId, "other", existing.name, answer);
         }
       }
-      const summaryVisible = state.items.some((item) => item.kind === "people-summary");
+      const summaryVisible = !input.peopleSummaryConfirmed && state.items.some((item) => item.kind === "people-summary");
       const anyoneElseVisible = state.items.some((item) => item.kind === "anyone-else");
       const missedTaggingVisible = state.items.some((item) => item.kind === "missed-person") || Boolean(input.missedPersonTagging);
       const missedFlowActive = summaryVisible || anyoneElseVisible || missedTaggingVisible;
@@ -896,6 +896,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           const step = state.step === "people" || state.step === "moments" || state.step === "direction" ? state.step : "occasion";
           const peopleStage = activePerson?.kind === "person" ? "identify" : state.items.some((item) => item.kind === "person-tagged" && item.canProceed !== false) ? "tagged" : summaryVisible ? "summary" : missedFlowActive ? "missed" : undefined;
           const result = await repository.interpret(projectId, { step, text, context: { summary, people: (input.people ?? []).map(({ personId, name, role }) => ({ personId, name, role })), ...(peopleStage ? { peopleStage } : {}) } });
+          if (input.peopleSummaryConfirmed) {
+            const reply = result.reply || "I'll keep the people as confirmed.";
+            await commitFlowAction({ type: "missed-clarification-turn", question: text.trim(), reply, stage: "post-confirmation" });
+            setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { question: text.trim(), reply, stage: "post-confirmation" }] }));
+            return;
+          }
           if (canConfirmStory({ ...input, ...confirmationState }) && result.change.kind === "occasion") {
             // Ready to confirm: an occasion answer waits for explicit confirmation.
             setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).slice(0, -1), interpReplying: false }));
@@ -930,6 +936,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         }
         const summaryFollowupAwaitingName = peopleStage === "summary" && input.flow?.peopleSummaryFollowupActive === true && input.flow.peopleSummaryFollowups?.at(-1)?.reply === "Who did I miss? Type their name.";
         const result = await repository.interpret(projectId, { step, text, context: { summary, people: (input.people ?? []).map(({ personId, name, role }) => ({ personId, name, role })), ...(peopleStage ? { peopleStage } : {}), ...(summaryFollowupAwaitingName ? { summaryFollowupAwaitingName: true } : {}) } });
+        if (input.peopleSummaryConfirmed) {
+          const reply = result.reply || "I'll keep the people as confirmed.";
+          await commitFlowAction({ type: "missed-clarification-turn", question: text.trim(), reply, stage: "post-confirmation" });
+          setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { question: text.trim(), reply, stage: "post-confirmation" }] }));
+          return;
+        }
         if (result.change.kind === "unclear") {
           if (peopleStage === "summary") await commitFlowAction({ type: "people-summary-followup", question: text.trim(), reply: result.reply || UNCLEAR });
           setInput((current) => ({ ...current, interpTurns: [...(current.interpTurns ?? []), { ...(activePerson?.kind === "person" ? { personId: activePerson.personId } : {}), ...(step === "people" && peopleStage === "summary" ? { stage: "summary" as const } : step === "people" && peopleStage === "missed" ? { stage: "missed" as const } : {}), question: text.trim(), reply: result.reply || UNCLEAR }] }));
@@ -1030,5 +1042,5 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     else if (activeFilmId.current) void pollFilm(activeFilmId.current);
     else if (pendingDirectionOptions.current) void recoverDirectionOptions(pendingDirectionOptions.current);
     else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); });
-  }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection: { ...directionSelection, aspect: effectiveAspect }, people: input.people ?? [], missedPeopleConfirmed: input.missedPeopleConfirmed };
+  }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection: { ...directionSelection, aspect: effectiveAspect }, people: input.people ?? [], proceededPersonIds: input.proceededPersonIds ?? [], missedPeopleConfirmed: input.missedPeopleConfirmed };
 }

@@ -14,7 +14,7 @@ import { demoImage } from "@/lib/demoAssets";
 import { PendingPreviewUrls } from "@/lib/pendingPreviewUrls";
 import { StableUriImage } from "@/components/StableUriImage";
 import type { Timeline } from "@mosae/contracts";
-import { createUploadRecoveryOwner, directionFocus, contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, getUploadRecoveryOwner, subscribeUploadProgress, retryPendingMedia, hasPendingMediaRetry, setPendingMedia, setPendingMediaRetry, setUploadFailure, setUploadProgress, setUploadRecoveryOwner, uploadMedia, runUploadRecovery, type UploadRecoveryEntry } from "@mosae/core";
+import { createUploadRecoveryOwner, directionFocus, mainPeople, contentTypeFor, getPendingMediaAssets, getPendingMediaProjectId, getUploadFailure, getUploadPreparationProgress, getUploadProgress, getUploadRecoveryOwner, subscribeUploadProgress, retryPendingMedia, hasPendingMediaRetry, setPendingMedia, setPendingMediaRetry, setUploadFailure, setUploadProgress, setUploadRecoveryOwner, uploadMedia, runUploadRecovery, type UploadRecoveryEntry } from "@mosae/core";
 import { MediaPicker, type MediaPickerHandle } from "@/components/MediaPicker";
 import { consumeTaggedPersonResult } from "@/lib/taggedPersonResult";
 
@@ -131,7 +131,7 @@ export default function DirectorScreen() {
   const [uploadFailuresAcknowledged, setUploadFailuresAcknowledged] = useState(false);
   const localMediaPending = Boolean(preparationProgress) || Boolean(uploadProgress && (uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles || uploadProgress.finishedFiles === 0)) || Boolean((uploadFailure || uploadProgress?.failedFiles) && !uploadFailuresAcknowledged);
   const localUpload = uploadProgress || preparationProgress ? { total: uploadProgress?.totalFiles ?? preparationProgress!.totalFiles, settled: uploadProgress?.finishedFiles ?? 0, failed: uploadProgress?.failedFiles ?? 0, photos: pendingPhotos.length, clips: (ownsPendingMedia ? pendingMedia : []).length - pendingPhotos.length } : undefined;
-  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged, ...(localUpload ? { localUpload } : {}), ...(params.completedPersonId && params.completedSampleUri ? { taggedPerson: { personId: params.completedPersonId, name: params.completedPersonName ?? "", photos: [params.completedSampleUri] } } : {}) });
+  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people, proceededPersonIds } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged, ...(localUpload ? { localUpload } : {}), ...(params.completedPersonId && params.completedSampleUri ? { taggedPerson: { personId: params.completedPersonId, name: params.completedPersonName ?? "", photos: [params.completedSampleUri] } } : {}) });
   const tagActions = useRef(actions);
   tagActions.current = actions;
   useFocusEffect(useCallback(() => {
@@ -309,13 +309,23 @@ export default function DirectorScreen() {
   const hasUploadFailure = Boolean(uploadFailure || failedUploads > 0 || missingPending > 0);
   const canRetryLocal = hasPendingMediaRetry(projectId) && (!recoveryOwner || Boolean(recoveryOwner.closeRetry) || recoveryOwner.entries.some((entry) => entry.status !== "uploaded"));
   const uploadBusy = Boolean(preparationProgress || recoveryOwner?.initialUploadInFlight || recoveryOwner?.retryInFlight || (!recoveryOwner && uploadProgress && uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles));
+  const chatPeople = mainPeople(people, projectSummary?.photos ?? 0);
+  const currentPeopleSummary = [...state.items].reverse().find((item) => item.kind === "people-summary");
+  const summaryPeopleIds = new Set(currentPeopleSummary?.kind === "people-summary" ? currentPeopleSummary.people.map(({ personId }) => personId) : []);
+  const taggedMissedCount = state.items.filter((item) => item.kind === "missed-person" && !item.skipped && item.momentCount > 0 && !summaryPeopleIds.has(item.personId)).length;
+  const summaryPeopleCount = (currentPeopleSummary?.kind === "people-summary" ? currentPeopleSummary.people.length : 0) + taggedMissedCount;
+  const peopleProgress = summaryPeopleCount > 0
+    ? { confirmed: summaryPeopleCount, total: summaryPeopleCount }
+    : chatPeople.length > 0
+      ? { confirmed: Math.min(chatPeople.length, proceededPersonIds.filter((id) => chatPeople.some((person) => person.personId === id)).length + chatPeople.filter((person) => person.personId.startsWith("p-missed-") && person.momentCount > 0).length), total: chatPeople.length }
+    : undefined;
   const uploadFailureAlert = hasUploadFailure ? <View key="upload-failure-alert" accessibilityRole="alert" className="gap-2 rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure ?? (missingPending ? `${failedUploads} files failed and ${missingPending} still need to upload.` : `${failedUploads} files could not upload.`)}</Text>
     <Button label={canRetryLocal ? "Retry uploads" : "Pick the missing files again"} variant="secondary" disabled={uploadBusy} onPress={() => { if (canRetryLocal) { setUploadFailuresAcknowledged(false); void retryPendingMedia(projectId); } else mediaPicker.current?.open(); }} />
     {Boolean(uploadProgress ? uploadProgress.finishedFiles : projectSummary && projectSummary.total > 0 && projectSummary.processed.understood > 0) && !uploadFailuresAcknowledged && <Button label="Continue with uploaded files" onPress={() => setUploadFailuresAcknowledged(true)} />}
   </View> : null;
   return <View className="flex-1 bg-surface" style={Platform.OS === "web" && visibleViewport ? { position: "fixed", top: visibleViewport.top, left: 0, right: 0, height: visibleViewport.height, maxHeight: visibleViewport.height, overflow: "hidden" } as never : undefined}>
     <MediaPicker ref={mediaPicker} onFiles={(files) => { void replaceMissingMedia(files); }} />
-    <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} ready={state.step === "ready"} onBack={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} />
+    <ChatHeader title={titleFromSummary(projectSummary)} confirmed={state.confirmed} peopleProgress={peopleProgress} ready={state.step === "ready"} onBack={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} />
     <ScrollView ref={chatScroll} accessibilityLabel="Director chat history" className="min-h-0 flex-1 px-5" contentContainerClassName="gap-5 pt-6 pb-4" contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" onScrollBeginDrag={() => { userDragging.current = true; }} onScroll={(event: any) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       if (contentOffset && contentSize && layoutMeasurement) {
@@ -422,7 +432,7 @@ export default function DirectorScreen() {
         if (item.kind === "people-summary") return <View key={item.id} className="gap-3">
           <View className="overflow-hidden rounded-md border border-line bg-surface-raised">{item.people.map((person) => <View key={person.personId} className="flex-row items-center gap-2 border-b border-line p-3">
             <Pressable role="button" accessibilityLabel={`Review ${person.name}`} onPress={() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: person.personId, name: person.name } } as any)} style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })} className="active:scale-[0.97] active:bg-surface-sunken flex-1 flex-row items-center gap-3">
-              {person.sampleFace ? <FacePreviewStrip samples={[person.sampleFace]} limit={1} size={48} rounded /> : person.sampleUri ? <StableUriImage uri={person.sampleUri} accessibilityLabel={`${person.name} face`} className="size-12 rounded-full" /> : <View className="size-12 rounded-full bg-surface-sunken" />}
+              {person.sampleFace && !person.personId.startsWith("p-missed-") ? <FacePreviewStrip samples={[person.sampleFace]} limit={1} size={48} rounded /> : person.sampleUri && !person.personId.startsWith("p-missed-") ? <StableUriImage uri={person.sampleUri} accessibilityLabel={`${person.name} face`} className="size-12 rounded-full" /> : <View className="size-12 items-center justify-center rounded-full bg-surface-sunken"><Text className="font-sans-semibold text-label text-ink-muted">{person.name.slice(0, 1).toLocaleUpperCase()}</Text></View>}
               <View className="flex-1"><Text className="font-sans-semibold text-label text-ink">{person.name}</Text><Text className="font-sans text-caption text-ink-muted">Tagged in {person.momentCount} {person.momentCount === 1 ? "moment" : "moments"}</Text></View><Text className="text-heading text-ink-muted">›</Text>
             </Pressable>
           </View>)}</View>

@@ -112,6 +112,49 @@ function setup(options: { faces?: boolean; orientation?: { portrait: number; lan
 }
 
 describe("Director chat", () => {
+  it("requires the visible people summary confirmation when resuming a legacy answered flow", async () => {
+    const namedPeople = people.map((person, index) => ({ ...person, name: index === 0 ? "Daughter" : "Jamie", role: "other", skipped: false }));
+    setup({ readyPlan: true, people: namedPeople, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    const flow: any = {
+      revision: 12,
+      story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] },
+      people: namedPeople.map(({ personId, name, role }) => ({ personId, name, role, confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })),
+      missedPeopleConfirmed: true,
+      missedPeople: [],
+    };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    await renderScreen();
+    await waitFor(() => expect(hasText("Thanks. I've tagged all two in your moments.")).toBe(true));
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy();
+    expect(host.querySelector('[aria-label="Orientation"]')).toBeNull();
+    const transcript = host.textContent ?? "";
+    expect(transcript.indexOf("Looks right")).toBeGreaterThan(transcript.indexOf("Thanks. I've tagged all two in your moments."));
+  });
+
+  it("keeps post-Looks-right text at the end without reopening people", async () => {
+    const namedPeople = people.map((person, index) => ({ ...person, name: index === 0 ? "Kara" : "Jamie", role: "other", skipped: false }));
+    setup({ readyPlan: true, people: namedPeople, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    const flow: any = {
+      revision: 13,
+      story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] },
+      people: namedPeople.map(({ personId, name, role }) => ({ personId, name, role, confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })),
+      peopleProgress: { askedPersonIds: namedPeople.map(({ personId }) => personId), completedPersonIds: namedPeople.map(({ personId }) => personId) },
+      missedPeopleConfirmed: true,
+      missedPeople: [],
+      peopleSummaryConfirmed: true,
+    };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull());
+    if (host.querySelector('button[aria-label="Looks good"]')) await click("Looks good");
+    await waitFor(() => expect(hasText("Orientation")).toBe(true));
+    await typeAndSend("Add Kara again");
+    await waitFor(() => expect(hasText("I understood the Japan trip.")).toBe(true));
+    expect(host.querySelector('[data-person-question]')).toBeNull();
+    expect(host.textContent?.match(/Thanks\. I've tagged all two in your moments\./g)).toHaveLength(1);
+    expect((host.textContent ?? "").lastIndexOf("Add Kara again")).toBeGreaterThan((host.textContent ?? "").lastIndexOf("Putting together a direction"));
+  });
+
   it("names each recurring person in chat, shows the matching tag count, and waits for Proceed", async () => {
     setup(); await renderScreen(); await click("A trip");
     for (const label of ["Me", "My partner", "Friend", "Type a name", "Skip", "Not the same person? Tag it"]) expect(host.querySelector(`button[aria-label="${label}"]`)).toBeNull();
@@ -1006,10 +1049,10 @@ describe("Director chat", () => {
     errorLog.mockRestore(); infoLog.mockRestore();
   });
 
-  it("renders confirmation progress in the header only", async () => {
+  it("renders the confirmed-people count in the header only", async () => {
     setup(); await renderScreen(); await click("A trip");
-    await waitFor(() => expect(hasText("1 of 4 confirmed")).toBe(true));
-    expect(host.textContent?.match(/1 of 4 confirmed/g)).toHaveLength(1);
+    await waitFor(() => expect(host.textContent).toMatch(/\d+ of \d+ confirmed/));
+    expect(host.textContent?.match(/0 of 2 confirmed/g)).toHaveLength(1);
   });
 
   it("interprets typed text and waits for an explicit confirmation before saving", async () => {
@@ -1027,7 +1070,7 @@ describe("Director chat", () => {
     expect(hasText("Not quite")).toBe(true);
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
     expect(host.querySelector('button[aria-label="A trip"]')).toBeFalsy();
-    expect(host.textContent?.match(/0 of 4 confirmed/g) ?? []).toHaveLength(1);
+    expect(host.textContent?.match(/0 of 2 confirmed/g) ?? []).toHaveLength(1);
     await click("Yes, that's right");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("our family trip", []));
   });

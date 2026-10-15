@@ -26,7 +26,7 @@ export type ChatInput = {
   localUpload?: { total: number; settled: number; failed: number; photos: number; clips: number };
   earlyOccasionAnswer?: string;
   earlyOccasionStoryText?: string;
-  interpTurns?: { question: string; reply?: string; personId?: string; stage?: "missed" | "summary" }[];
+  interpTurns?: { question: string; reply?: string; personId?: string; stage?: "missed" | "summary" | "post-confirmation" }[];
   summaryFollowups?: { question: string; reply?: string }[];
   interpReplying?: boolean;
   pendingResponse?: "occasion" | "person";
@@ -81,6 +81,7 @@ export type ChatItem =
   | { kind: "film"; id: string; film: Film };
 
 export type ChatState = {
+  /** The canonical chronological event stream rendered by the chat. */
   items: ChatItem[];
   step: "occasion" | "people" | "moments" | "direction" | "shaping" | "ready";
   confirmed: 0 | 1 | 2 | 3 | 4;
