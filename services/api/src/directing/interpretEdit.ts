@@ -364,14 +364,19 @@ function deterministicTimelineIntent(req: InterpretEditRequest): InterpretEditRe
       return { kind: "clarify", reply: "A film needs at least one moment. Choose another moment to remove.", ops: [] };
     }
   }
-  if (/\b(?:move|reorder|put|place)\b/i.test(text) && /\b(?:beginning|start|opening|end|last|final)\b/i.test(text)) {
+  const asksEarlier = /\b(?:earlier|before\s+that)\b/i.test(text);
+  const asksLater = /\b(?:later|after\s+that)\b/i.test(text);
+  if (/\b(?:move|reorder|put|place)\b/i.test(text) && (/\b(?:beginning|start|opening|end|last|final)\b/i.test(text) || asksEarlier || asksLater)) {
     const fromLast = /\b(?:last|final)\b/i.test(text) && !/\b(?:to|at|toward|towards)\s+(?:the\s+)?(?:last|final|end)\b/i.test(text);
     const fromFirst = /\b(?:first|initial|opening)\b/i.test(text) && !/\b(?:to|at|toward|towards)\s+(?:the\s+)?(?:first|opening|beginning|start)\b/i.test(text);
-    const target = selectedId && /\b(?:this|selected)\b/i.test(text) ? relevant.at(0) : fromLast ? ordered.at(-1) : fromFirst ? ordered.at(0) : null;
-    const toIndex = /\b(?:beginning|start|opening|first)\b/i.test(text) ? 0 : ordered.length - 1;
+    const target = selectedId && /\b(?:it|this|selected)\b/i.test(text) ? relevant.at(0) : fromLast ? ordered.at(-1) : fromFirst ? ordered.at(0) : null;
     if (target) {
       const clipId = "kind" in target ? target.clipId : target.id;
-      if (byId(clipId) === toIndex) return { kind: "clarify", reply: "That moment is already there. Choose another destination for it.", ops: [] };
+      const currentIndex = byId(clipId);
+      const toIndex = asksEarlier ? currentIndex - 1 : asksLater ? currentIndex + 1 : /\b(?:beginning|start|opening|first)\b/i.test(text) ? 0 : ordered.length - 1;
+      if (toIndex < 0) return { kind: "clarify", reply: "That moment is already first. Choose another moment to move earlier.", ops: [] };
+      if (toIndex >= ordered.length) return { kind: "clarify", reply: "That moment is already last. Choose another moment to move later.", ops: [] };
+      if (currentIndex === toIndex) return { kind: "clarify", reply: "That moment is already there. Choose another destination for it.", ops: [] };
       const op: EditOp = { op: "move", clipId, toIndex };
       const result = applyEdits(req.timeline, [op]);
       return result.ok ? { kind: "edit", reply: "I'll move that moment.", ops: [op] } : { kind: "clarify", reply: "I couldn't move that moment to that position. Choose another destination.", ops: [] };

@@ -130,6 +130,22 @@ describe("interpretEdit", () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
+  it("moves the selected moment one position earlier", async () => {
+    const scope = { kind: "clip" as const, clipId: "temple" };
+    const result = await interpretEdit({ text: "Move it earlier", timeline, scope }, { generate: vi.fn() });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "move", clipId: "temple", toIndex: 0 }] });
+  });
+
+  it("moves the literal last moment one position earlier", async () => {
+    const result = await interpretEdit({ text: "Move the last moment earlier", timeline, scope: { kind: "film" } }, { generate: vi.fn() });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "move", clipId: "temple", toIndex: 0 }] });
+  });
+
+  it("gives a friendly clarification when the selected moment is already first", async () => {
+    const result = await interpretEdit({ text: "Move it earlier", timeline, scope: { kind: "clip", clipId: "monkeys" } }, { generate: vi.fn() });
+    expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/already first/i) });
+  });
+
   it.each([
     ["Remove the last moment from the film", { op: "remove", clipId: "temple" }],
     ["Move the last moment to the beginning", { op: "move", clipId: "temple", toIndex: 0 }],

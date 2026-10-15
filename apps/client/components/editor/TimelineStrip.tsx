@@ -13,6 +13,7 @@ type TimelineRowsProps = {
   sources: Record<string, string>;
   thumbnails: Record<string, string>;
   selectedClipId: string | null;
+  highlightedClipIds: string[];
   selectedAudioClipId: string | null;
   soundtrackName: string | null;
   pixelsPerSecond: number;
@@ -32,7 +33,7 @@ type TimelineRowsProps = {
   onAddClip: () => void;
 };
 
-const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails, selectedClipId, selectedAudioClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, onDeselect, onSlotPointerDown, onSlotPointerMove, onSlotPointerUp, reorderPreview, onSoundtrack, onSelectAudio, onAddClip }: TimelineRowsProps) {
+const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails, selectedClipId, highlightedClipIds, selectedAudioClipId, soundtrackName, pixelsPerSecond, leadingPadding, contentWidth, onSelect, onTrimPointerDown, onTrimPointerMove, onTrimPointerUp, onDeselect, onSlotPointerDown, onSlotPointerMove, onSlotPointerUp, reorderPreview, onSoundtrack, onSelectAudio, onAddClip }: TimelineRowsProps) {
   const musicClips = timeline.audioClips.filter((clip) => clip.role === "music" && clip.source.kind === "soundtrack");
   const music = musicClips[0];
   const musicStartSec = musicClips.length ? Math.min(...musicClips.map((clip) => clip.startSec)) : 0;
@@ -85,7 +86,8 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
           style={{ position: "absolute", zIndex: 20, left: edge === "start" ? -22 : undefined, right: edge === "end" ? -22 : undefined, top: 7, height: 44, width: 44, borderRadius: 22, backgroundColor: "transparent", borderWidth: 0, alignItems: "center", justifyContent: "center", ...(Platform.OS === "web" ? ({ touchAction: "none" } as unknown as ViewStyle) : {}) }}><View pointerEvents="none" style={{ height: 34, width: 12, borderRadius: 6, backgroundColor: "#F5C842", borderWidth: 1, borderColor: "#2B2B20" }} /></Pressable>;
         const end = Math.min(timeline.durationSec, start + duration);
         const width = Math.max(1, (end - start) * pixelsPerSecond);
-        return <View key={id} className="transition-all duration-200" style={{ position: "absolute", zIndex: lifted ? 30 : selected ? 10 : 1, left: lifted && reorderPreview ? reorderPreview.pointerContentX - width / 2 : timeToX(start, pixelsPerSecond, leadingPadding), width, top: 0, height: 58, borderWidth: 2, borderRadius: 7, overflow: "visible", borderColor: selected ? "#FF8F70" : typeColor, backgroundColor: typeColor, transform: lifted ? [{ scale: 1.04 }] : undefined, boxShadow: lifted ? "0px 8px 22px rgba(0,0,0,0.35)" : undefined, elevation: lifted ? 8 : 0 }}>
+        const changed = highlightedClipIds.includes(id);
+        return <View key={id} className="transition-all duration-200" style={{ position: "absolute", zIndex: lifted ? 30 : selected || changed ? 10 : 1, left: lifted && reorderPreview ? reorderPreview.pointerContentX - width / 2 : timeToX(start, pixelsPerSecond, leadingPadding), width, top: 0, height: 58, borderWidth: changed ? 3 : 2, borderRadius: 7, overflow: "visible", borderColor: changed ? "#FFC27A" : selected ? "#FF8F70" : typeColor, backgroundColor: typeColor, boxShadow: changed ? "0px 0px 16px rgba(255,178,99,0.95)" : lifted ? "0px 8px 22px rgba(0,0,0,0.35)" : undefined, elevation: lifted || changed ? 8 : 0 }}>
           <Pressable role="button" accessibilityLabel={`Select clip ${id}`} aria-pressed={selected} data-timeline-slot="true"
             onPointerDown={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), event)} onPointerMove={onSlotPointerMove} onPointerUp={(event: any) => onSlotPointerUp(event, true)} onPointerCancel={(event: any) => onSlotPointerUp(event, false)}
             onTouchStart={(event: any) => onSlotPointerDown(clip, timeline.videoClips.findIndex((item) => clipId(item) === id), { ...event.nativeEvent, currentTarget: event.currentTarget, pointerId: 0 })}
@@ -98,6 +100,7 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
               {Array.from({ length: Math.max(1, Math.ceil(width / 48)) }, (_, frame) => <Image key={frame} source={{ uri }} accessibilityLabel="Video thumbnail frame" data-video-frame="true" resizeMode="cover" {...({ draggable: false } as any)} style={{ width: 48, height: "100%", borderRightWidth: 1, borderRightColor: "rgba(255,255,255,0.35)", pointerEvents: "none" }} />)}
             </View> : uri ? <Image source={{ uri }} resizeMode="cover" pointerEvents="none" {...({ draggable: false } as any)} style={{ width: "100%", height: "100%", pointerEvents: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }} /> : null}
             {isVideo ? <View pointerEvents="none" accessibilityLabel="Video clip badge" className="absolute right-1 top-1 rounded-sm bg-black/75 px-1"><Text className="font-sans-medium text-[8px] text-white">VIDEO</Text></View> : null}
+            {changed ? <View pointerEvents="none" accessibilityLabel="Changed moment" className="absolute -right-1 -top-1 h-3 w-3 rounded-full border border-[#111d26] bg-[#FFC27A]" /> : null}
             {"kind" in clip ? <View pointerEvents="none" className="absolute bottom-0 left-0 right-0 items-center bg-screen/75"><Text className="font-sans text-[9px] text-on-screen">Collage</Text></View> : null}
           </Pressable>
           {selected ? <>{makeHandle("start")}{makeHandle("end")}</> : null}
@@ -115,7 +118,7 @@ type TrimDragState = { clipId: string; edge: "start" | "end"; startX: number; ed
 type PendingSlotPress = { clipId: string; fromIndex: number; startX: number; startY: number; pointerId: number; target: any } | null;
 type ActiveSlotReorder = { clipId: string; fromIndex: number; toIndex: number; pointerId: number } | null;
 
-export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, selectedAudioClipId = null, playheadSec, soundtrackName = null, isPlaying = false, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {}, onSelectAudio = () => {}, onAddClip = () => {} }: {
+export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, selectedAudioClipId = null, playheadSec, soundtrackName = null, isPlaying = false, highlightedClipIds = [], focusClipRequest = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {}, onSelectAudio = () => {}, onAddClip = () => {} }: {
   timeline: Timeline;
   sources: Record<string, string>;
   thumbnails?: Record<string, string>;
@@ -124,6 +127,8 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
   playheadSec: number;
   soundtrackName?: string | null;
   isPlaying?: boolean;
+  highlightedClipIds?: string[];
+  focusClipRequest?: { clipId: string; nonce: number } | null;
   onSelect: (clipId: string, startSec: number) => void;
   onScrub: (seconds: number) => void;
   onScrubStart?: () => void;
@@ -242,6 +247,11 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
 
   // Player frames move the content under the fixed playhead. This imperative sync never calls onScrub.
   useEffect(() => { if (slideFrame.current === null) syncScrollToTime(playheadSec); }, [playheadSec, syncScrollToTime]);
+  useEffect(() => {
+    if (!focusClipRequest) return;
+    const clip = timeline.videoClips.find((candidate) => clipId(candidate) === focusClipRequest.clipId);
+    if (clip) syncScrollToTime(clip.startSec, false);
+  }, [focusClipRequest, syncScrollToTime, timeline.videoClips]);
 
   const zoom = useCallback((delta: number) => {
     cancelSlide();
@@ -490,7 +500,7 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
     </View>
     <View ref={viewportRef} className="relative overflow-hidden" style={{ touchAction: "pan-x", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} {...webHandlers}>
       <ScrollView ref={scrollView} horizontal accessibilityLabel="Unified timeline" showsHorizontalScrollIndicator={false} onLayout={updateViewport} onScrollBeginDrag={beginInteraction} onScrollEndDrag={endInteractionSoon} onMomentumScrollBegin={beginInteraction} onMomentumScrollEnd={endInteractionSoon} onScroll={onScroll} scrollEventThrottle={16} style={{ width: "100%" }}>
-      <TimelineRows timeline={timeline} sources={sources} thumbnails={thumbnails} selectedClipId={selectedClipId} selectedAudioClipId={selectedAudioClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => {
+      <TimelineRows timeline={timeline} sources={sources} thumbnails={thumbnails} selectedClipId={selectedClipId} highlightedClipIds={highlightedClipIds} selectedAudioClipId={selectedAudioClipId} soundtrackName={soundtrackName} pixelsPerSecond={pixelsPerSecond} leadingPadding={leadingPadding} contentWidth={contentWidth} onSelect={(id, start) => {
         if (suppressNextPress.current) return;
         if (id === selectedClipId) { onDeselect(); return; }
         const tapped = timeline.videoClips.find((clip) => clipId(clip) === id);
