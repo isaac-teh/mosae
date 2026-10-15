@@ -27,7 +27,7 @@ if [[ -n "$face_url" ]]; then face_env="|FACE_SERVICE_URL=$face_url"; fi
 run gcloud run deploy "$API_SERVICE" --project "$PROJECT_ID" --region "$REGION" \
   --image "$image" --service-account "$API_SA" --cpu 4 --memory 8Gi \
   --concurrency 40 --max-instances 1 --timeout 3600 --allow-unauthenticated \
-  --set-env-vars "^|^NODE_ENV=production|SERVICE_URL=$initial_url|RENDER_SERVICE_URL=$render_url$face_env|ALLOWED_ORIGINS=$ALLOWED_ORIGINS|FIREBASE_STORAGE_BUCKET=$BUCKET|INVOKER_SERVICE_ACCOUNTS=$INVOKER_SA,$RENDER_SA|GCP_PROJECT_ID=$PROJECT_ID|TASKS_LOCATION=$REGION|TASKS_QUEUE=$TASKS_QUEUE|TASKS_INVOKER_SERVICE_ACCOUNT=$INVOKER_SA|PLACE_RESOLVER=nominatim|NOMINATIM_CONTACT=$NOMINATIM_CONTACT" \
+  --set-env-vars "^|^NODE_ENV=production|SERVICE_URL=$initial_url|RENDER_SERVICE_URL=$render_url$face_env|ALLOWED_ORIGINS=$ALLOWED_ORIGINS|FIREBASE_STORAGE_BUCKET=$BUCKET|INVOKER_SERVICE_ACCOUNTS=$INVOKER_SA,$RENDER_SA|GCP_PROJECT_ID=$PROJECT_ID|TASKS_LOCATION=$REGION|TASKS_QUEUE=$TASKS_QUEUE|TASKS_INVOKER_SERVICE_ACCOUNT=$INVOKER_SA|PLACE_RESOLVER=nominatim|NOMINATIM_CONTACT=$NOMINATIM_CONTACT|EDIT_INTERPRET_TRACE=${EDIT_INTERPRET_TRACE:-0}" \
   --set-secrets "$secrets"
 api_url="$(service_url "$API_SERVICE")"
 # Eventarc signs its OIDC token for the full handler URL. Accept that audience

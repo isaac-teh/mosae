@@ -69,15 +69,19 @@ export function editInterpretRouter(deps: {
       if (!current.ok) return res.status(409).json({ error: "invalid_current_edits" });
       const validatedContext = validateEditContext(current.timeline, rawContext);
       if (!validatedContext) return res.status(400).json({ error: "invalid_scope" });
+      const trace = process.env.EDIT_INTERPRET_TRACE === "1";
+      if (trace) console.info("EDIT_INTERPRET_TRACE_INPUT", JSON.stringify({ requestId: validatedContext.requestId, revision, text: text.trim(), rawScope: rawContext.scope, validatedScope: validatedContext.scope, currentClipIds: current.timeline.videoClips.map(clip => "kind" in clip ? clip.clipId : clip.id), currentAudio: current.timeline.audioClips.map(clip => ({ id: clip.id, role: clip.role, kind: clip.source.kind, soundtrackId: clip.source.kind === "soundtrack" ? clip.source.soundtrackId : undefined, gainDb: clip.gainDb })), currentAspect: current.timeline.aspect, totalDurationSec: current.timeline.durationSec }));
       // The Release 2 spec allows an explicit whole-film request to affect
       // clips beyond the current selection. Load and validate context at that
       // broader scope before asking Gemini to form an atomic batch.
       const context = isWholeFilmRequest(text.trim()) ? { ...validatedContext, scope: { kind: "film" as const } } : validatedContext;
       const groundedContext = await loadEditContext(deps.db, res.locals.userId, req.params.projectId, req.params.generationId, context.scope);
+      if (trace) console.info("EDIT_INTERPRET_TRACE_GROUNDED", JSON.stringify({ requestId: validatedContext.requestId, people: groundedContext.people.map(person => ({ ...person, shotIds: groundedContext.candidates.filter(candidate => candidate.personIds.includes(person.personId)).map(candidate => candidate.shotId) })), selected: groundedContext.selected, candidates: groundedContext.candidates.map(({ shotId, kind, personIds, caption }) => ({ shotId, kind, personIds, caption })), soundtrackCatalog: groundedContext.soundtracks.map(({ id, name, description, cadence }) => ({ id, name, description, cadence })), collageSpecs: current.timeline.videoClips.flatMap(clip => "kind" in clip ? [{ clipId: clip.clipId, layoutId: clip.spec.layoutId, motionId: clip.spec.motionId, slotIds: clip.spec.slots.map(slot => slot.slotId), shotIds: clip.spec.slots.flatMap(slot => slot.shotId ? [slot.shotId] : []) }] : []) }));
       const result = await interpretEdit({ text: text.trim(), timeline: current.timeline, ...context, groundedContext }, {
         generate: (options) => deps.generate(options, req.params.projectId),
       });
       const response = { ...result, ...(result.kind === "edit" ? { baseRevision: document.revision } : {}), requestId: context.requestId } as StoredEditInterpretation;
+      if (trace) console.info("EDIT_INTERPRET_TRACE_RESPONSE", JSON.stringify(response));
       response.reply = response.reply.slice(0, 2000);
       if (response.kind === "edit") response.baseRevision = document.revision;
       if (leaseWasLost) throw new EditInterpretationLeaseLost();

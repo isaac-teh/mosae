@@ -74,9 +74,9 @@ describe("editor tool operations", () => {
   it("swaps a clip using same event alternatives", async () => {
     await render(<SwapSheet visible clipId="a" planId="proposal-1" momentId="m1" repository={repo} onApply={apply} onSource={onSource} onClose={() => {}} />);
     await act(async () => { await Promise.resolve(); });
-    await click("Use alternative shot-alt");
+    await click("Replace with Alternative photo");
     expect(repo.getAlternatives).toHaveBeenCalledWith("proposal-1", "m1");
-    expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "shot-alt" });
+    expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "shot-alt", kind: "photo" });
     expect(onSource).toHaveBeenCalledWith("shot-alt", "alt.jpg");
   });
 
@@ -85,6 +85,24 @@ describe("editor tool operations", () => {
     await click("Replace with Left out moment");
     expect(onSource).toHaveBeenCalledWith("shot-left", "left.jpg");
     expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "shot-left", kind: "photo" });
+  });
+
+  it("shows project photos in a tagged thumbnail grid and applies the selected photo", async () => {
+    await render(<SwapSheet visible clipId="a" kind="photo" moments={moments} personTagsByShot={{ "shot-left": ["Mia", "Noah"] }} planId={null} momentId={null} repository={repo} onApply={apply} onSource={onSource} onClose={() => {}} />);
+    expect(host.textContent).toContain("Project photos");
+    expect(host.textContent).toContain("Mia");
+    expect(host.textContent).toContain("Noah");
+    expect(host.querySelector(".flex-row.flex-wrap.gap-2")).not.toBeNull();
+    await click("Replace with Left out moment");
+    expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "shot-left", kind: "photo" });
+  });
+
+  it("shows a video fallback tile when its poster image fails to load", async () => {
+    await render(<SwapSheet visible clipId="a" kind="photo" moments={[videoMoment]} sources={{ "video-shot": "video.mp4" }} planId={null} momentId={null} repository={repo} onApply={apply} onSource={onSource} onClose={() => {}} />);
+    const image = host.querySelector('img[src="video-poster.jpg"]')!;
+    await act(async () => image.dispatchEvent(new Event("error")));
+    expect(host.querySelector('[aria-label="Video preview fallback"]')).not.toBeNull();
+    expect(host.textContent).toContain("VIDEO");
   });
 
   it("replaces a photo clip with a playable video window and stores its thumbnail", async () => {

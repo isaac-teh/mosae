@@ -38,6 +38,13 @@ describe("owned edit context", () => {
     expect(context.people).toEqual([]);
     expect(context.candidates[0].shotId).toBe("p69");
   });
+  it("keeps one owned moment for a confirmed person outside the top 40 ranked shots", async () => {
+    const photos = Object.fromEntries(Array.from({ length: 50 }, (_, index) => [`projects/p/shots/p${index}`, { assetId: "a", assetGeneration: 1, analysis: { kind: "photo", caption: `photo ${index}`, setting: "", mood: "", activities: [], tags: [], keyMomentScore: 50 - index, faces: index === 49 ? [{ characterId: "two" }] : [] } }]));
+    const context = await loadEditContext(fixture(photos), "owner", "p", "g", { kind: "film" });
+    expect(context.candidates).toHaveLength(42);
+    expect(context.candidates.some(candidate => candidate.shotId === "photo" && candidate.personIds.includes("one"))).toBe(true);
+    expect(context.candidates.some(candidate => candidate.shotId === "p49" && candidate.personIds.includes("two"))).toBe(true);
+  });
   it("loads generation-pinned story and constraints", async () => {
     const context = await loadEditContext(fixture({ "projects/p/generations/g": { proposalId: "proposal", settings: { focus: "two" } }, "projects/p/storyProposals/proposal": { storyIntentId: "intent", constraints: { excludedShotIds: ["photo"] } }, "projects/p/storyIntents/intent": { projectId: "p", text: "Our lake trip", focus: ["family"] } }), "owner", "p", "g", { kind: "film" });
     expect(context.storyIntent).toEqual({ text: "Our lake trip", focus: ["family"] });

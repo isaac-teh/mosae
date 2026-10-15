@@ -105,6 +105,9 @@ export async function generateStructured<T>(options: GenerateOptions<T>, deps: G
 
       const tokens = usageFrom(response);
       const text = (response as { text?: string } | null)?.text;
+      if (options.stage === "editor.interpret" && process.env.EDIT_INTERPRET_TRACE === "1") {
+        console.info("EDIT_INTERPRET_TRACE_RAW_MODEL_TEXT", JSON.stringify(text));
+      }
 
       try {
         if (typeof text !== "string" || text.length === 0) throw new Error("empty response text");

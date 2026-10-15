@@ -11,7 +11,277 @@ const timeline: Timeline = {
   audioClips: [], captions: [{ text: "Watching the snow monkeys", startSec: 0, endSec: 2 }],
 };
 
+function collageFixture(): Timeline {
+  return { ...timeline, schemaVersion: 2, videoClips: [{ kind: "collage", clipId: "collage", startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
+    layoutId: "torn-paper", motionId: "print-drop", effectId: null, seed: "fixture", durationSec: 6,
+    slots: [1, 2, 3, 4].map(index => ({ slotId: `slot-${index}`, shotId: `photo-${index}`, kind: "photo" as const })),
+  } }] };
+}
+
 describe("interpretEdit", () => {
+  const operationCases: { request: string; timeline: Timeline; op: EditOp | EditOp[]; candidates?: any[]; soundtracks?: any[] }[] = [
+    { request: "Replace the monkeys photo", timeline, op: { op: "swapShot", clipId: "monkeys", shotId: "replacement", kind: "photo" }, candidates: [{ shotId: "replacement", assetId: "asset-r", kind: "photo", caption: "A lake", personIds: [], sourceStartSec: null, sourceEndSec: null }] },
+    { request: "Trim the video from two to four seconds", timeline: { ...timeline, videoClips: [{ id: "video", source: { kind: "video", shotId: "video-source", sourceInSec: 0, sourceOutSec: 6, sourceDurationSec: 6 }, startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 } }] }, op: { op: "trim", clipId: "video", inSec: 2, outSec: 4 } },
+    { request: "Hold the monkeys photo for five seconds", timeline, op: { op: "setPhotoDuration", clipId: "monkeys", sec: 5 } },
+    { request: "Make the collage five seconds long", timeline: collageFixture(), op: { op: "setCollageDuration", clipId: "collage", sec: 5 } },
+    { request: "Move the temple before the monkeys", timeline, op: { op: "move", clipId: "temple", toIndex: 0 } },
+    { request: "Remove the temple moment", timeline, op: { op: "remove", clipId: "temple" } },
+    { request: "Duplicate the monkeys moment", timeline, op: { op: "duplicate", clipId: "monkeys" } },
+    { request: "Add a lake photo at the start", timeline, op: { op: "add", shotId: "replacement", kind: "photo", afterClipId: null, durationSec: 3 }, candidates: [{ shotId: "replacement", assetId: "asset-r", kind: "photo", caption: "A lake", personIds: [], sourceStartSec: null, sourceEndSec: null }] },
+    { request: "Switch the collage to a photo table", timeline: collageFixture(), op: [{ op: "setCollageLayout", clipId: "collage", layoutId: "photo-table" }, { op: "setCollageMotion", clipId: "collage", motionId: "stack-deal" }] },
+    { request: "Give the collage a tape slap motion", timeline: collageFixture(), op: { op: "setCollageMotion", clipId: "collage", motionId: "tape-slap" } },
+    { request: "Add a warm grade to the collage", timeline: collageFixture(), op: { op: "setCollageEffect", clipId: "collage", effectId: "warm-grade" } },
+    { request: "Replace the first collage photo with a lake", timeline: collageFixture(), op: { op: "replaceCollageSlot", clipId: "collage", slotId: "slot-1", shotId: "replacement", kind: "photo" }, candidates: [{ shotId: "replacement", assetId: "asset-r", kind: "photo", caption: "A lake", personIds: [], sourceStartSec: null, sourceEndSec: null }] },
+    { request: "Reframe the first collage photo", timeline: collageFixture(), op: { op: "setCollageCrop", clipId: "collage", slotId: "slot-1", crop: { x: 0.5, y: 0.5, scale: 1.2 } } },
+    { request: "Reframe the monkeys photo", timeline, op: { op: "setPhotoCrop", clipId: "monkeys", crop: { x: 0.4, y: 0.5, scale: 1.2 } } },
+    { request: "Set a new spec for the collage", timeline: collageFixture(), op: { op: "setCollageSpec", clipId: "collage", spec: { layoutId: "torn-paper", motionId: "tape-slap", effectId: "vignette", seed: "test", durationSec: 6, slots: [1, 2, 3, 4].map(index => ({ slotId: `slot-${index}`, shotId: `photo-${index}`, kind: "photo" })) } } },
+    { request: "Add a lake to the collage", timeline: collageFixture(), op: { op: "addCollageSlot", clipId: "collage", slotId: "new-slot", shotId: "replacement", kind: "photo" }, candidates: [{ shotId: "replacement", assetId: "asset-r", kind: "photo", caption: "A lake", personIds: [], sourceStartSec: null, sourceEndSec: null }] },
+    { request: "Remove the first collage photo", timeline: collageFixture(), op: { op: "removeCollageSlot", clipId: "collage", slotId: "slot-1" } },
+    { request: "Split the collage into separate moments", timeline: collageFixture(), op: { op: "splitCollage", clipId: "collage" } },
+    { request: "Make the film landscape", timeline, op: { op: "setAspect", aspect: "16:9" } },
+    { request: "Use the soft piano soundtrack", timeline, op: { op: "setSoundtrack", soundtrackId: "soft-piano" }, soundtracks: [{ id: "soft-piano", name: "Soft piano", description: "Warm", cadence: "slow", durationSec: 60, storagePath: "music/soft-piano.mp3" }] },
+    { request: "Turn the music down", timeline: { ...timeline, audioClips: [{ id: "music", source: { kind: "soundtrack", soundtrackId: "soft-piano", sourceInSec: 0, sourceOutSec: 6 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0, fadeOutSec: 0 }] }, op: { op: "setMusicVolume", audioClipId: "music", gainDb: -24 } },
+  ];
+  it.each(operationCases)("applies a natural-language request through the shared operation path: $request", async ({ request, timeline: fixture, op, candidates, soundtracks }) => {
+    const result = await interpretEdit({ text: request, timeline: fixture, groundedContext: {
+      scope: { kind: "film" }, storyIntent: null, constraints: {}, people: [], selected: null,
+      candidates: candidates ?? [], soundtracks: soundtracks ?? [], conversation: [],
+    } }, { generate: async () => ({ kind: "edit", ops: Array.isArray(op) ? op : [op] }) });
+    expect(result.kind).toBe("edit");
+    if (result.kind !== "edit") return;
+    const applied = applyEdits(fixture, result.ops);
+    expect(applied.ok).toBe(true);
+    expect(applied.ok && JSON.stringify(applied.timeline)).not.toBe(JSON.stringify(fixture));
+  });
+
+  it.each([
+    { request: "Make the whole film faster", expected: [2.4, 2.4] },
+    { request: "Make the whole film slower", expected: [3.6, 3.6] },
+  ])("applies $request to photo and collage durations", async ({ request, expected }) => {
+    const fixture: Timeline = { ...timeline, schemaVersion: 2, videoClips: [
+      timeline.videoClips[0]!,
+      { kind: "collage", clipId: "collage", startSec: 3, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
+        layoutId: "torn-paper", motionId: "print-drop", effectId: null, seed: "fixture", durationSec: 3,
+        slots: [1, 2, 3, 4].map(index => ({ slotId: `slot-${index}`, shotId: `photo-${index}`, kind: "photo" as const })),
+      } },
+    ] };
+    const result = await interpretEdit({ text: request, timeline: fixture, scope: { kind: "film" } }, { generate: vi.fn() });
+    expect(result.kind).toBe("edit");
+    if (result.kind === "edit") {
+      expect(result.ops).toEqual([
+        { op: "setPhotoDuration", clipId: "monkeys", sec: expected[0] },
+        { op: "setCollageDuration", clipId: "collage", sec: expected[1] },
+      ]);
+      const applied = applyEdits(fixture, result.ops);
+      expect(applied.ok).toBe(true);
+      expect(applied.ok && applied.timeline.durationSec).not.toBe(fixture.durationSec);
+    }
+  });
+
+  it("routes an upbeat soundtrack request to a track choice instead of pace", async () => {
+    const audioTimeline: Timeline = { ...timeline, audioClips: [{ id: "audio-1", source: { kind: "soundtrack", soundtrackId: "soft-piano", sourceInSec: 0, sourceOutSec: 6 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0, fadeOutSec: 0 }] };
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, people: [], selected: null, candidates: [], soundtracks: [
+      { id: "soft-piano", name: "Soft piano", description: "Quiet and warm", cadence: "tender", durationSec: 60, storagePath: "music/soft-piano.mp3" },
+      { id: "bright-pop", name: "Bright Pop", description: "Upbeat and bouncy", cadence: "energetic", durationSec: 60, storagePath: "music/bright-pop.mp3" },
+    ], conversation: [] };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Change the soundtrack to something more upbeat", timeline: audioTimeline, groundedContext }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "setSoundtrack", soundtrackId: "bright-pop" }] });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("targets the existing soundtrack clip when turning music down", async () => {
+    const audioTimeline: Timeline = { ...timeline, audioClips: [{ id: "audio-1", source: { kind: "soundtrack", soundtrackId: "soft-piano", sourceInSec: 0, sourceOutSec: 6 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0, fadeOutSec: 0 }] };
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, people: [], selected: null, candidates: [], soundtracks: [], conversation: [] };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Turn the music down", timeline: audioTimeline, groundedContext }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "setMusicVolume", audioClipId: "audio-1", gainDb: -18 }] });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("sets the requested compatible collage layout deterministically", async () => {
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Change each collage to a simple 2 by 2 grid", timeline: collageFixture(), scope: { kind: "film" } }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "setCollageLayout", clipId: "collage", layoutId: "simple-grid-2x2" }] });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("applies an each-collage layout request to the film when a photo clip is selected", async () => {
+    const fixture = { ...collageFixture(), videoClips: [timeline.videoClips[0]!, collageFixture().videoClips[0]!] };
+    const selectedScope = { kind: "clip" as const, clipId: "monkeys" };
+    const groundedContext = { scope: selectedScope, storyIntent: null, constraints: {}, people: [], selected: { clipId: "monkeys", shotIds: ["shot-monkeys"], captions: [] }, candidates: [], soundtracks: [], conversation: [] };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Change each collage to a simple 2 by 2 grid", timeline: fixture, scope: selectedScope, groundedContext }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "setCollageLayout", clipId: "collage", layoutId: "simple-grid-2x2" }] });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("removes the requested last moment deterministically", async () => {
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Remove the last moment from the film", timeline, scope: { kind: "film" } }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "remove", clipId: "temple" }] });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("moves the requested last moment to the beginning deterministically", async () => {
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Move the last moment to the beginning", timeline, scope: { kind: "film" } }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "move", clipId: "temple", toIndex: 0 }] });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Remove the last moment from the film", { op: "remove", clipId: "temple" }],
+    ["Move the last moment to the beginning", { op: "move", clipId: "temple", toIndex: 0 }],
+  ] as const)("resolves positional edit %s across the film despite a selected photo", async (request, op) => {
+    const scope = { kind: "clip" as const, clipId: "monkeys" };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: request, timeline, scope, groundedContext: {
+      scope, storyIntent: null, constraints: {}, selected: { clipId: "monkeys", shotIds: ["shot-monkeys"], captions: [] },
+      people: [], candidates: [], soundtracks: [], conversation: [],
+    } }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [op] });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("applies the selected photo duration request without asking Gemini to resolve the selected clip", async () => {
+    const groundedContext = { scope: { kind: "clip" as const, clipId: "monkeys" }, storyIntent: null, constraints: {}, people: [], selected: { clipId: "monkeys", shotIds: ["shot-monkeys"], captions: [] }, candidates: [], soundtracks: [], conversation: [] };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Make this moment 5 seconds", timeline, scope: groundedContext.scope, groundedContext }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "setPhotoDuration", clipId: "monkeys", sec: 5 }] });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("reaches an attainable target film length with deterministic duration batches", async () => {
+    const manyPhotos: Timeline = { ...timeline, videoClips: Array.from({ length: 12 }, (_, index) => ({ id: `photo-${index}`, source: { kind: "photo" as const, shotId: `shot-${index}` }, startSec: index * 2, durationSec: 2, transitionIn: { kind: "cut" as const, durationSec: 0 } })), durationSec: 24 };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Make the whole film 35 seconds", timeline: manyPhotos, scope: { kind: "film" } }, { generate });
+    expect(result.kind).toBe("edit");
+    expect(result.ops).toHaveLength(12);
+    const applied = applyEdits(manyPhotos, result.ops);
+    expect(applied.ok && applied.timeline.durationSec).toBeCloseTo(35, 8);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("matches the rendered film length across transition overlaps despite a selected photo", async () => {
+    const fixture: Timeline = { ...timeline, durationSec: 5.5, videoClips: timeline.videoClips.map((clip, index) => ({
+      ...clip,
+      startSec: index === 0 ? 0 : 2.5,
+      transitionIn: index === 0 ? { kind: "cut" as const, durationSec: 0 } : { kind: "crossfade" as const, durationSec: 0.5 },
+    })) };
+    const selectedScope = { kind: "clip" as const, clipId: "monkeys" };
+    const groundedContext = { scope: selectedScope, storyIntent: null, constraints: {}, people: [], selected: { clipId: "monkeys", shotIds: ["shot-monkeys"], captions: [] }, candidates: [], soundtracks: [], conversation: [] };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Make the whole film 8 seconds", timeline: fixture, scope: selectedScope, groundedContext }, { generate });
+    expect(result.kind).toBe("edit");
+    expect(result.ops).toHaveLength(2);
+    const applied = applyEdits(fixture, result.ops);
+    expect(applied.ok && applied.timeline.durationSec).toBeCloseTo(8, 8);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("promotes an unused confirmed-person moment when that person is already represented throughout the film", async () => {
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, selected: null,
+      people: [{ personId: "wife", name: "Wife", role: "parent", focused: false }],
+      candidates: [
+        { shotId: "shot-monkeys", assetId: "a", kind: "photo" as const, caption: "Wife at the park", personIds: ["wife"], sourceStartSec: null, sourceEndSec: null },
+        { shotId: "shot-temple", assetId: "b", kind: "photo" as const, caption: "Wife at temple", personIds: ["wife"], sourceStartSec: null, sourceEndSec: null },
+        { shotId: "unused-wife", assetId: "c", kind: "photo" as const, caption: "Wife smiling", personIds: ["wife"], sourceStartSec: null, sourceEndSec: null },
+      ], soundtracks: [], conversation: [] };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Focus on Wife", timeline, groundedContext }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "add", shotId: "unused-wife", kind: "photo", afterClipId: null }, { op: "setPhotoDuration", clipId: "monkeys", sec: 3.5 }, { op: "setPhotoDuration", clipId: "temple", sec: 3.5 }] });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("gives a confirmed person's moments more screen time across the whole film", async () => {
+    const context = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, selected: null,
+      people: [{ personId: "wife", name: "Wife", role: "parent", focused: false }],
+      candidates: ["shot-monkeys", "shot-temple"].map((shotId, index) => ({ shotId, assetId: `asset-${index}`, kind: "photo" as const, caption: "Wife at an event", personIds: ["wife"], sourceStartSec: null, sourceEndSec: null })), soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Focus on Wife", timeline, groundedContext: context }, { generate: vi.fn() });
+    expect(result.kind).toBe("edit");
+    if (result.kind !== "edit") return;
+    expect(result.ops.filter(op => op.op === "setPhotoDuration")).toHaveLength(2);
+    const applied = applyEdits(timeline, result.ops);
+    expect(applied.ok).toBe(true);
+    if (applied.ok) expect(applied.timeline.videoClips.reduce((sum, clip) => sum + clip.durationSec, 0)).toBeGreaterThan(6);
+  });
+
+  it("offers Whole film when the selected clip has no match for the confirmed person", async () => {
+    const groundedContext = { scope: { kind: "clip" as const, clipId: "monkeys" }, storyIntent: null, constraints: {}, selected: { clipId: "monkeys", shotIds: ["shot-monkeys"], captions: [] },
+      people: [{ personId: "grandpa", name: "Grandpa", role: "other", focused: false }], candidates: [], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Focus on Grandpa", timeline, groundedContext }, { generate: vi.fn() });
+    expect(result).toMatchObject({ kind: "clarify", ops: [] });
+    expect(result.reply).toMatch(/whole film/i);
+  });
+
+  it("can focus a confirmed person by adding their unused project photo when no current moment matches", async () => {
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, selected: null,
+      people: [{ personId: "grandpa", name: "Grandpa", role: "other", focused: false }],
+      candidates: [{ shotId: "grandpa-photo", assetId: "asset", kind: "photo" as const, caption: "Grandpa smiling", personIds: ["grandpa"], sourceStartSec: null, sourceEndSec: null }], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Focus on Grandpa", timeline, groundedContext }, { generate: vi.fn() });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "add", shotId: "grandpa-photo", kind: "photo", afterClipId: null }] });
+    expect(applyEdits(timeline, result.ops).ok).toBe(true);
+  });
+
+  it("updates a selected collage moment to include the missing confirmed focus", async () => {
+    const fixture = collageFixture();
+    const context = { scope: { kind: "clip" as const, clipId: "collage" }, storyIntent: null, constraints: {}, selected: null,
+      people: [{ personId: "mia", name: "Mia", role: "child", focused: true }, { personId: "ben", name: "Ben", role: "child", focused: true }],
+      candidates: [
+        ...[1, 2, 3, 4].map(index => ({ shotId: `photo-${index}`, assetId: `asset-${index}`, kind: "photo" as const, caption: `Photo ${index}`, personIds: index === 1 ? ["mia"] : [], sourceStartSec: null, sourceEndSec: null })),
+        { shotId: "ben-photo", assetId: "ben-asset", kind: "photo" as const, caption: "Ben outside", personIds: ["ben"], sourceStartSec: null, sourceEndSec: null },
+      ], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Change the focus to everyone", timeline: fixture, groundedContext: context }, { generate: vi.fn() });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "replaceCollageSlot", clipId: "collage", shotId: "ben-photo", kind: "photo" }] });
+    expect(applyEdits(fixture, result.ops).ok).toBe(true);
+  });
+
+  it("matches a confirmed person's full name instead of a matching substring", async () => {
+    const fixture: Timeline = { ...timeline, videoClips: [
+      timeline.videoClips[0]!, timeline.videoClips[1]!,
+    ] };
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, selected: null,
+      people: [{ personId: "al", name: "Al", role: "other", focused: false }, { personId: "malik", name: "Malik", role: "other", focused: false }],
+      candidates: [
+        { shotId: "shot-monkeys", assetId: "a", kind: "photo" as const, caption: "Al at the park", personIds: ["al"], sourceStartSec: null, sourceEndSec: null },
+        { shotId: "shot-temple", assetId: "b", kind: "photo" as const, caption: "Malik at a temple", personIds: ["malik"], sourceStartSec: null, sourceEndSec: null },
+      ], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Focus on Malik", timeline: fixture, groundedContext }, { generate: vi.fn() });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "move", clipId: "temple", toIndex: 0 }, { op: "setPhotoDuration", clipId: "temple", sec: 3.5 }] });
+  });
+
+  it("scales photo and collage durations to a requested film length", async () => {
+    const fixture: Timeline = { ...timeline, schemaVersion: 2, videoClips: [timeline.videoClips[0]!, {
+      kind: "collage", clipId: "collage", startSec: 3, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 }, spec: {
+        layoutId: "torn-paper", motionId: "print-drop", effectId: null, seed: "fixture", durationSec: 3,
+        slots: [1, 2, 3, 4].map(index => ({ slotId: `slot-${index}`, shotId: `photo-${index}`, kind: "photo" as const })),
+      },
+    }] };
+    const result = await interpretEdit({ text: "Make the whole film 8 seconds", timeline: fixture }, { generate: vi.fn() });
+    expect(result.kind).toBe("edit");
+    if (result.kind === "edit") {
+      expect(result.ops).toEqual([
+        { op: "setPhotoDuration", clipId: "monkeys", sec: 4 },
+        { op: "setCollageDuration", clipId: "collage", sec: 4 },
+      ]);
+      const applied = applyEdits(fixture, result.ops);
+      expect(applied.ok && applied.timeline.durationSec).toBe(8);
+    }
+  });
+
+  it.each(["Add captions", "Add a transition between moments", "Change the title", "Apply a vintage filter"])(
+    "offers supported alternatives for unavailable request: %s", async (request) => {
+      const generate = vi.fn();
+      const result = await interpretEdit({ text: request, timeline }, { generate });
+      expect(result.kind).toBe("unsupported");
+      expect(result.reply).toMatch(/reorder|retime|music|framing|collage/i);
+      expect(result.reply).not.toMatch(/designed to|design limitation/i);
+      expect(result.ops).toEqual([]);
+      expect(generate).not.toHaveBeenCalled();
+    },
+  );
+
   it("interprets an edit using compact clip context and validates its operations", async () => {
     let prompt = "";
     let schema: unknown;
@@ -70,6 +340,27 @@ describe("interpretEdit", () => {
     expect(variants.find((variant: any) => variant.properties.op.enum[0] === "setSoundtrack").properties.soundtrackId.enum).toBeUndefined();
     expect(prompt).toContain('"shotIds":["shot-monkeys","shot-temple","owned-shot"]');
     expect(prompt).toContain('"soundtrackIds":["owned-track"]');
+    expect(prompt).toContain('"shotId":"owned-shot"');
+    expect(prompt).toContain('"id":"owned-track","name":"Piano"');
+    expect(prompt).toContain('"collageLayouts"');
+    expect(prompt).toContain('"label":"2 × 2 grid"');
+  });
+
+  it("sends selected clip IDs and the confirmed-person-to-shot map in interpreter context", async () => {
+    let prompt = "";
+    const groundedContext = { scope: { kind: "clip" as const, clipId: "temple" }, storyIntent: null, constraints: {}, selected: { clipId: "temple", shotIds: ["shot-temple"], captions: [] },
+      people: [{ personId: "mia", name: "Mia", role: "child", focused: false }],
+      candidates: [{ shotId: "shot-temple", assetId: "asset", kind: "photo" as const, caption: "Mia at the temple", personIds: ["mia"], sourceStartSec: null, sourceEndSec: null }], soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Change the framing", timeline, groundedContext }, { generate: async options => {
+      prompt = (options.contents as { text: string }[])[0]!.text;
+      return { kind: "clarify", reply: "Which framing?", ops: [] };
+    } });
+    expect(result.kind).toBe("clarify");
+    expect(prompt).toContain('"id":"temple"');
+    expect(prompt).toContain('"clipId":"temple","clipIndex":1');
+    expect(prompt).toContain('"selected":{"clipId":"temple","shotIds":["shot-temple"],"captions":[]}');
+    expect(prompt).toContain('"peopleToMoments":[{"personId":"mia","name":"Mia","candidateShotIds":["shot-temple"]}]');
+    expect(prompt).toContain('"shotId":"shot-temple","assetId":"asset"');
   });
 
   it("keeps the response schema under 20K and constant as film ID counts grow", async () => {
@@ -95,7 +386,7 @@ describe("interpretEdit", () => {
 
   it("normalizes the known durationSec alias and logs the repair", async () => {
     const log = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const result = await interpretEdit({ text: "set this to two seconds", timeline, scope: { kind: "clip", clipId: "monkeys" } }, {
+    const result = await interpretEdit({ text: "change the selected photo length", timeline, scope: { kind: "clip", clipId: "monkeys" } }, {
       generate: async () => ({ kind: "edit", ops: [{ op: "setPhotoDuration", clipId: "monkeys", durationSec: 2 }] }),
     });
     expect(result).toMatchObject({ kind: "edit", ops: [{ op: "setPhotoDuration", clipId: "monkeys", sec: 2 }] });
@@ -125,7 +416,7 @@ describe("interpretEdit", () => {
       } }],
     };
     const warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const result = await interpretEdit({ text: "Adjust duration to 2s for all", timeline: collageTimeline }, {
+    const result = await interpretEdit({ text: "Use a different timing for every clip", timeline: collageTimeline }, {
       generate: async () => ({ kind: "edit", ops: [
         { op: "setPhotoDuration", clipId: "monkeys", durationSec: 2 },
         { op: "setCollageDuration", clipId: "collage", durationSec: 2 },
@@ -238,7 +529,10 @@ describe("interpretEdit", () => {
     const result = await interpretEdit({ text: "Adjust duration to 2s for all", timeline, scope: { kind: "clip", clipId: "monkeys" } }, {
       generate: async () => ({ kind: "clarify", reply: "Apply to all clips?", ops: [] }),
     });
-    expect(result).toMatchObject({ kind: "clarify", reply: "Apply to all clips?", ops: [] });
+    expect(result).toMatchObject({ kind: "edit", ops: [
+      { op: "setPhotoDuration", clipId: "monkeys", sec: 1 },
+      { op: "setPhotoDuration", clipId: "temple", sec: 1 },
+    ] });
   });
 
   it("reports missing required operation fields in plain language", async () => {
@@ -261,7 +555,7 @@ describe("interpretEdit", () => {
       .mockResolvedValueOnce({ reply: "Done", ops: [{ op: "move", clipId: "missing", toIndex: 0 }] });
     const empty = await interpretEdit({ text: "make it calmer", timeline }, { generate });
     const invalid = await interpretEdit({ text: "make it calmer", timeline }, { generate });
-    expect(empty).toEqual({ kind: "unsupported", reply: "I couldn't turn that into an edit. Try the tools below, or say it another way.", ops: [] });
+    expect(empty).toEqual({ kind: "unsupported", reply: "I can reorder or trim moments, swap photos, change framing or collage layout, and adjust the soundtrack. What would you like to change?", ops: [] });
     expect(invalid).toMatchObject({ kind: "clarify", reply: expect.stringContaining("clip"), ops: [] });
   });
 
@@ -296,14 +590,54 @@ describe("interpretEdit", () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["focus on Mia", "mia"],
+    ["change the focus to everyone", "everyone"],
+  ])("turns the chat focus choice %s into an applicable timeline edit", async (text, focus) => {
+    const focusedTimeline: Timeline = { ...timeline, videoClips: [
+      { id: "unfocused", source: { kind: "photo", shotId: "shot-unfocused" }, startSec: 0, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } },
+      { id: "mia", source: { kind: "photo", shotId: "shot-mia" }, startSec: 3, durationSec: 3, transitionIn: { kind: "cut", durationSec: 0 } },
+    ] };
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, selected: null,
+      people: [{ personId: "mia-id", name: "Mia", role: "child", focused: false }, { personId: "ben-id", name: "Ben", role: "parent", focused: false }],
+      candidates: [
+        { shotId: "shot-unfocused", assetId: "a", kind: "photo" as const, caption: "Landscape", personIds: [], sourceStartSec: null, sourceEndSec: null },
+        { shotId: "shot-mia", assetId: "b", kind: "photo" as const, caption: "Mia at the park", personIds: ["mia-id"], sourceStartSec: null, sourceEndSec: null },
+      ], soundtracks: [], conversation: [] };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text, timeline: focusedTimeline, groundedContext }, { generate });
+    expect(result.kind).toBe("edit");
+    expect(result.ops).toEqual([{ op: "move", clipId: "mia", toIndex: 0 }, { op: "setPhotoDuration", clipId: "mia", sec: 3.5 }]);
+    expect(generate).not.toHaveBeenCalled();
+    const applied = applyEdits(focusedTimeline, result.ops);
+    expect(applied.ok && applied.timeline.videoClips.map(clip => "kind" in clip ? clip.clipId : clip.id)).toEqual(["mia", "unfocused"]);
+    expect(result.reply.toLocaleLowerCase()).toContain(focus === "mia" ? "mia" : "everyone");
+  });
+
+  it("allows a named focus to target the whole film when a photo is selected", async () => {
+    const scope = { kind: "clip" as const, clipId: "monkeys" };
+    const groundedContext = { scope, storyIntent: null, constraints: {}, selected: { clipId: "monkeys", shotIds: ["shot-monkeys"], captions: [] },
+      people: [{ personId: "wife-id", name: "Wife", role: "parent", focused: false }],
+      candidates: [
+        { shotId: "shot-monkeys", assetId: "a", kind: "photo" as const, caption: "At the park", personIds: [], sourceStartSec: null, sourceEndSec: null },
+        { shotId: "wife-unused", assetId: "b", kind: "photo" as const, caption: "Wife at the beach", personIds: ["wife-id"], sourceStartSec: null, sourceEndSec: null },
+      ], soundtracks: [], conversation: [] };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "Focus the whole film on Wife", timeline, scope, groundedContext }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "add", shotId: "wife-unused", afterClipId: null }] });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
   it("uses the owned soundtrack and accepts music gain only within supported edit bounds", async () => {
     const withMusic: Timeline = { ...timeline, audioClips: [{ id: "music", source: { kind: "soundtrack", soundtrackId: "soft-piano", sourceInSec: 0, sourceOutSec: 6 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0, fadeOutSec: 0 }] };
     const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, people: [], selected: null,
       candidates: [], soundtracks: [{ id: "soft-piano", name: "Soft piano", description: "Warm", cadence: "slow", durationSec: 60, storagePath: "music/soft-piano.mp3" }], conversation: [] };
-    const result = await interpretEdit({ text: "lower the music", timeline: withMusic, groundedContext }, { generate: async () => ({ kind: "edit", reply: "Lowered", ops: [{ op: "setMusicVolume", audioClipId: "music", gainDb: -20 }] }) });
-    expect(result.kind).toBe("edit");
-    const invalidGain = await interpretEdit({ text: "raise music", timeline: withMusic, groundedContext }, { generate: async () => ({ kind: "edit", ops: [{ op: "setMusicVolume", audioClipId: "music", gainDb: 13 }] }) });
-    expect(invalidGain).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/required detail|invalid/i), ops: [] });
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "lower the music", timeline: withMusic, groundedContext }, { generate });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "setMusicVolume", audioClipId: "music", gainDb: -18 }] });
+    expect(generate).not.toHaveBeenCalled();
+    const invalidGain = await interpretEdit({ text: "Set music volume to 13 dB", timeline: withMusic, groundedContext }, { generate });
+    expect(invalidGain).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/between -60 dB and 12 dB/i), ops: [] });
   });
 
   it("rejects a partly invalid batch instead of returning a partial edit", async () => {
