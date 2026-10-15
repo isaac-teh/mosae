@@ -7,6 +7,15 @@ describe("director flow transcript text", () => {
     expect(DirectorFlowSchema.parse(legacy)).toMatchObject(legacy);
     expect(FlowActionSchema.parse({ type: "person", personId: "p1", name: "Daughter", answerText: "My daughter" })).toMatchObject({ answerText: "My daughter" });
     expect(FlowActionSchema.parse({ type: "missed-people", answer: "Grandpa and Grandma", people: [{ personId: "g1", name: "Grandpa" }, { personId: "g2", name: "Grandma" }] })).toMatchObject({ answer: "Grandpa and Grandma" });
-    expect(DirectorFlowSchema.parse({ ...legacy, people: [{ personId: "p1", name: "Daughter", role: "child", confirmed: true, skipped: false, answerText: "My daughter", manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null }], missedAnswer: "Grandpa and Grandma" })).toMatchObject({ missedAnswer: "Grandpa and Grandma", people: [{ answerText: "My daughter" }] });
+    expect(FlowActionSchema.parse({ type: "missed-people-confirmed", confirmed: true, answer: "That's everyone" })).toMatchObject({ answer: "That's everyone" });
+    expect(FlowActionSchema.parse({ type: "people-summary-confirmed", confirmed: true, answer: "Looks right", peopleCount: 4 })).toMatchObject({ answer: "Looks right", peopleCount: 4 });
+    expect(DirectorFlowSchema.parse({ ...legacy, people: [{ personId: "p1", name: "Daughter", role: "child", confirmed: true, skipped: false, answerText: "My daughter", manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null }], missedAnswer: "Grandpa and Grandma", peopleSummaryAnswer: "Looks right", peopleSummaryCount: 4 })).toMatchObject({ missedAnswer: "Grandpa and Grandma", peopleSummaryAnswer: "Looks right", peopleSummaryCount: 4, people: [{ answerText: "My daughter" }] });
+  });
+
+  it("persists typed turns made after people have been confirmed", () => {
+    const legacy = { revision: 0, story: { answer: "Japan trip", storySummary: null, mentionedPeople: [] }, people: [] };
+    const action = { type: "missed-clarification-turn", question: "Add Kara again", reply: "I'll keep the people as confirmed.", stage: "post-confirmation" };
+    expect(FlowActionSchema.parse(action)).toEqual(action);
+    expect(DirectorFlowSchema.parse({ ...legacy, missedClarifications: [{ question: action.question, reply: action.reply, stage: action.stage }] })).toMatchObject({ missedClarifications: [{ question: action.question, reply: action.reply, stage: action.stage }] });
   });
 });

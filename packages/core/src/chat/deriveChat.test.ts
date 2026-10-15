@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveChat } from "./deriveChat.js";
+import { directionFocus } from "./directionFocus.js";
 import type { ChatInput, ChatItem, ChatState, ProjectSummary } from "./types.js";
 import type { Film, StoryPlan } from "../story/types.js";
 
@@ -645,8 +646,8 @@ describe("deriveChat state table", () => {
       { name: "people confirmed and plan ready", input: { ...base(), people: [{ personId: "p1", name: "Mia", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] }], peopleConfirmed: true }, step: "direction", confirmed: 3, kinds: ["you", "you", "typing"] },
       { name: "planning conflict", input: { ...base(), conflict: { shotIds: ["m1"], message: "This moment is both kept and left out." } }, step: "direction", confirmed: 3, kinds: ["you", "typing"] },
       { name: "direction options ready", input: { ...base(), momentsConfirmed: true, direction: { confirmed: false, pace: "gentle", lengthSec: 120, focus: "family" } }, step: "direction", confirmed: 3, kinds: ["you", "direction"] },
-      { name: "direction confirmed and generation running", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "running", stage: "rendering", progress: 0.7, stepsDone: 2, film: null } }, step: "shaping", confirmed: 4, kinds: ["you", "you", "shaping"] },
-      { name: "generation done", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } }, step: "ready", confirmed: 4, kinds: ["you", "you", "film"] },
+      { name: "direction confirmed and generation running", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "running", stage: "rendering", progress: 0.7, stepsDone: 2, film: null } }, step: "shaping", confirmed: 4, kinds: ["you", "direction", "you", "shaping"] },
+      { name: "generation done", input: { ...base(), momentsConfirmed: true, direction: { confirmed: true, pace: "gentle", lengthSec: 120, focus: "family" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } }, step: "ready", confirmed: 4, kinds: ["you", "direction", "you", "film"] },
     ];
 
     for (const row of cases) {
@@ -1025,5 +1026,167 @@ describe("contextual direction copy", () => {
     const questions = state.items.filter(item => item.id === "direction-question");
     expect(questions).toHaveLength(1);
     expect(questions[0]).toMatchObject({ text: copy ?? "For these moments, I’d suggest this." });
+  });
+});
+
+describe("canonical people-to-film transcript", () => {
+  const flowPeople = (people: NonNullable<ChatInput["people"]>) => people!.map(({ personId, name, role, skipped }) => ({ personId, name, role, confirmed: true, skipped, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null }));
+  const tagged = [
+    { personId: "p1", name: "Kara", role: "parent", skipped: false, momentCount: 4, sampleShotIds: ["kara-shot"], sampleFaces: [{ shotId: "kara-shot", uri: "kara-own-face.jpg", bbox: [0.1, 0.2, 0.3, 0.4] as [number, number, number, number] }], days: [] },
+    { personId: "p2", name: "Jamie", role: "child", skipped: false, momentCount: 3, sampleShotIds: ["jamie-shot"], sampleFaces: [{ shotId: "jamie-shot", uri: "jamie-own-face.jpg", bbox: [0.4, 0.3, 0.2, 0.1] as [number, number, number, number] }], days: [] },
+  ];
+  const makeInput = (scenario: string): ChatInput => {
+    const common: ChatInput = { ...base(), people: tagged, peopleConfirmed: true, proceededPersonIds: ["p1", "p2"], missedPeopleConfirmed: true, missedAnswer: "That's everyone",
+      flow: { revision: 7, story: { answer: "Our Japan trip", storySummary: "Japan trip", mentionedPeople: [] }, people: flowPeople(tagged), peopleProgress: { askedPersonIds: ["p1", "p2"], completedPersonIds: ["p1", "p2"] }, missedPeopleConfirmed: true, peopleSummaryConfirmed: false },
+      plan, momentsConfirmed: true, direction: { confirmed: false, pace: "lively", lengthSec: 60, focus: "everyone" } };
+    if (scenario === "missed people added") return { ...common, missedAnswer: "Grandma", missedPeople: [{ personId: "p-missed-grandma", name: "Grandma", momentCount: 2, sampleUris: ["grandma.jpg"] }], flow: { ...common.flow!, missedPeople: [{ personId: "p-missed-grandma", name: "Grandma" }] } };
+    if (scenario === "none" || scenario === "no" || scenario === "skip") return { ...common, missedAnswer: scenario === "no" ? "No" : scenario === "skip" ? "Skip" : "None" };
+    if (scenario === "short names") {
+      const people = tagged.map((person, index) => ({ ...person, name: index ? "Will" : "Zx" }));
+      return { ...common, people, flow: { ...common.flow!, people: flowPeople(people) } };
+    }
+    if (scenario === "summary follow-up add person" || scenario === "page reload mid-flow") {
+      const flow = { ...common.flow!, peopleSummaryHistory: [[{ personId: "p1", name: "Kara", momentCount: 4 }, { personId: "p2", name: "Jamie", momentCount: 3 }]],
+        peopleSummaryFollowups: [{ question: "One more person missing", reply: "Who did I miss? Type their name." }, { question: "Grandma" }],
+        peopleSummaryFollowupActive: scenario === "page reload mid-flow", missedPeopleConfirmed: true,
+        missedPeople: [{ personId: "p-missed-grandma", name: "Grandma" }] };
+      return { ...common, missedPeople: [{ personId: "p-missed-grandma", name: "Grandma", momentCount: 2, sampleUris: ["grandma.jpg"] }], flow };
+    }
+    if (scenario.startsWith("typed name merge")) return { ...common,
+      people: tagged.map((person, index) => index === 1 ? { ...person, answerText: "That's Kara again", name: "Kara", skipped: true } : person),
+      flow: { ...common.flow!, people: flowPeople(tagged).map((person) => person.personId === "p2" ? { ...person, mergedInto: "p1", skipped: true } : person) },
+      mergeEvents: [{ id: "merge-p2", personId: "p2", targetPersonId: "p1", answer: "That's Kara again", targetName: "Kara", sampleFaces: ["kara.jpg"], momentCount: 3, automatic: true, response: "Yes, same person" }] };
+    if (scenario.startsWith("exclude:")) {
+      const people = [...tagged, { personId: "p3", name: null, role: null, answerText: "This person don't exist", skipped: true, momentCount: 2, sampleShotIds: [], days: [] }];
+      return { ...common, people, proceededPersonIds: ["p1", "p2", "p3"], flow: { ...common.flow!, people: flowPeople(people), peopleProgress: { askedPersonIds: ["p1", "p2", "p3"], completedPersonIds: ["p1", "p2", "p3"] } } };
+    }
+    if (scenario === "zero-photo person") {
+      const people = [...tagged, { personId: "p0", name: "Will", role: "other", skipped: false, momentCount: 0, sampleShotIds: [], days: [] }];
+      return { ...common, people, proceededPersonIds: ["p1", "p2", "p0"], flow: { ...common.flow!, people: flowPeople(people), peopleProgress: { askedPersonIds: ["p1", "p2", "p0"], completedPersonIds: ["p1", "p2", "p0"] } } };
+    }
+    if (scenario === "post-confirmation typing") return { ...common, flow: { ...common.flow!, missedClarifications: [{ question: "Add Kara again", reply: "I'll keep the people as confirmed.", stage: "post-confirmation" }] } };
+    if (scenario === "culled-only person") {
+      const people = [...tagged, { personId: "culled", name: "Stranger", role: "other", skipped: false, momentCount: 1, sampleShotIds: ["c1"], shotIds: ["c1"], days: [] }];
+      return { ...common, people, plan: { ...plan, leftOut: [{ shotId: "c1", thumbnailUrl: "", reason: "Blurry" }] }, flow: { ...common.flow!, people: flowPeople(people) } };
+    }
+    if (scenario === "background stranger") {
+      const people = [...tagged, { personId: "background", name: null, role: null, skipped: false, momentCount: 8, sampleShotIds: [], days: [], backgroundOnly: true }];
+      return { ...common, people, flow: { ...common.flow!, people: flowPeople(people) } };
+    }
+    if (scenario === "same photo faces") {
+      const people = [...tagged, { personId: "p3", name: "Grandpa", role: "grandparent", skipped: false, momentCount: 2, sampleShotIds: ["shared"], shotIds: ["shared"], days: [] }];
+      return { ...common, people, proceededPersonIds: ["p1", "p2", "p3"], flow: { ...common.flow!, people: flowPeople(people), peopleProgress: { askedPersonIds: ["p1", "p2", "p3"], completedPersonIds: ["p1", "p2", "p3"] } } };
+    }
+    return common;
+  };
+  const scenarios = [
+    ["no missed people", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["missed people added", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "missed-select-p-missed-grandma", "missed-person-p-missed-grandma", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["none", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["no", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["skip", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["summary follow-up add person", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-history-message-1", "people-summary-history-1", "summary-followup-1", "summary-followup-reply-1", "summary-followup-2", "missed-select-p-missed-grandma", "missed-person-p-missed-grandma", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["typed name merge: that's Kara again", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "merge-p2-ack", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["exclude: this person don't exist", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "person-question-p3", "person-answer-p3", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["zero-photo person", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "person-question-p0", "person-answer-p0", "person-tagged-p0", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["short names", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["culled-only person", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "set-aside-message", "moments-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["background stranger", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["same photo faces", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "person-question-p3", "person-answer-p3", "person-tagged-p3", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["post-confirmation typing", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film", "post-confirmation-question-1", "post-confirmation-reply-1"]],
+    ["page reload mid-flow", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-history-message-1", "people-summary-history-1", "summary-followup-1", "summary-followup-reply-1", "summary-followup-2", "missed-select-p-missed-grandma", "missed-person-p-missed-grandma"]],
+  ] as const;
+
+  it.each(scenarios)("keeps the full transcript in canonical order for %s", (scenario, expectedTranscript) => {
+    const input = makeInput(scenario);
+    const awaitingConfirmation = deriveChat({ ...input, peopleSummaryConfirmed: false, flow: { ...input.flow!, peopleSummaryConfirmed: false } });
+    const summaryIds = awaitingConfirmation.items.filter((item) => item.kind === "people-summary").map(({ id }) => id);
+    const unconfirmedIds = awaitingConfirmation.items.map(({ id }) => id);
+    expect(summaryIds).toHaveLength(scenario === "summary follow-up add person" ? 2 : 1);
+    expect(unconfirmedIds).not.toContain("direction");
+    expect(unconfirmedIds).not.toContain("direction-answer");
+    expect(summaryIds.every((id) => unconfirmedIds.includes(id))).toBe(true);
+
+    const accepted = deriveChat({ ...input, peopleSummaryConfirmed: true, peopleSummaryAnswer: scenario === "page reload mid-flow" ? undefined : "Looks right", flow: { ...input.flow!, peopleSummaryConfirmed: true, peopleSummaryAnswer: scenario === "page reload mid-flow" ? undefined : "Looks right" } });
+    const acceptedIds = accepted.items.map(({ id }) => id);
+    expect(accepted.items.filter((item) => item.kind === "people-summary")).toHaveLength(scenario === "summary follow-up add person" ? 2 : 1);
+    if (scenario === "page reload mid-flow") {
+      expect(accepted.items.some((item) => item.kind === "direction")).toBe(false);
+    } else {
+      expect(acceptedIds.indexOf("people-summary")).toBeLessThan(acceptedIds.indexOf("direction"));
+      expect(accepted.items.find((item) => item.kind === "direction")).toBeTruthy();
+    }
+
+    const finished = deriveChat({ ...input, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right", flow: { ...input.flow!, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right" },
+      direction: { confirmed: true, pace: "lively", lengthSec: 60, focus: "everyone" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } });
+    const completeIds = finished.items.map(({ id }) => id);
+    const fullTranscript = scenario === "page reload mid-flow" ? unconfirmedIds : completeIds;
+    expect(fullTranscript).toEqual(expectedTranscript);
+    const currentSummary = awaitingConfirmation.items.find((item) => item.kind === "people-summary" && item.id === "people-summary");
+    if (currentSummary?.kind === "people-summary") {
+      for (const row of currentSummary.people) {
+        const sourcePerson = input.people?.find((person) => person.personId === row.personId);
+        const taggedCard = awaitingConfirmation.items.find((item) => item.kind === "person-tagged" && item.personId === row.personId);
+        if (sourcePerson?.sampleFaces?.[0]) expect(row.sampleFace).toEqual(sourcePerson.sampleFaces[0]);
+        if (taggedCard?.kind === "person-tagged") expect(row.sampleFace).toEqual(taggedCard.sampleFace);
+      }
+    }
+    const missedAnswer = awaitingConfirmation.items.findIndex((item) => item.id === "missed-answer");
+    const anyoneElse = awaitingConfirmation.items.findIndex((item) => item.id === "anyone-else");
+    if (missedAnswer >= 0) {
+      const missedText = scenario === "missed people added" ? "Grandma" : scenario === "none" ? "None" : scenario === "no" ? "No" : scenario === "skip" ? "Skip" : "That's everyone";
+      expect(awaitingConfirmation.items[missedAnswer]).toMatchObject({ kind: "you", text: missedText });
+      expect(missedAnswer).toBeGreaterThan(anyoneElse);
+    }
+    const summaryAnswer = finished.items.findIndex((item) => item.id === "people-summary-answer");
+    if (scenario !== "page reload mid-flow") {
+      expect(finished.items[summaryAnswer]).toMatchObject({ kind: "you", text: "Looks right" });
+      expect(summaryAnswer).toBeGreaterThan(completeIds.indexOf("people-summary"));
+      expect(summaryAnswer).toBeLessThan(completeIds.indexOf("direction-question"));
+    }
+    if (scenario === "zero-photo person") {
+      const summaryCard = awaitingConfirmation.items.find((item) => item.kind === "people-summary");
+      expect(summaryCard?.kind === "people-summary" && summaryCard.people.some((person) => person.personId === "p0")).toBe(false);
+      expect(directionFocus(input.people).options.some((person) => person.id === "p0")).toBe(false);
+    }
+    if (scenario === "missed people added") {
+      const summaryCard = awaitingConfirmation.items.find((item) => item.kind === "people-summary" && item.id === "people-summary");
+      expect(summaryCard?.kind === "people-summary" && summaryCard.people.find((person) => person.personId === "p-missed-grandma")).toMatchObject({ personId: "p-missed-grandma", sampleUri: undefined, sampleFace: undefined });
+    }
+    if (scenario === "culled-only person") {
+      expect(awaitingConfirmation.items.some((item) => "personId" in item && item.personId === "culled")).toBe(false);
+      const currentSummary = awaitingConfirmation.items.find((item) => item.kind === "people-summary" && item.id === "people-summary");
+      expect(currentSummary?.kind === "people-summary" && currentSummary.people.some((person) => person.personId === "culled")).toBe(false);
+    }
+    if (scenario === "background stranger") {
+      expect(awaitingConfirmation.items.some((item) => "personId" in item && item.personId === "background")).toBe(false);
+      const currentSummary = awaitingConfirmation.items.find((item) => item.kind === "people-summary" && item.id === "people-summary");
+      expect(currentSummary?.kind === "people-summary" && currentSummary.people.some((person) => person.personId === "background")).toBe(false);
+    }
+    if (scenario === "post-confirmation typing") {
+      expect(completeIds.indexOf("film")).toBeLessThan(completeIds.indexOf("post-confirmation-question-1"));
+      expect(awaitingConfirmation.items.some((item) => item.kind === "direction")).toBe(false);
+    }
+    if (scenario.startsWith("typed name merge")) {
+      expect(awaitingConfirmation.items.find((item) => item.id === "merge-p2-ack")).toMatchObject({ text: "Got it — I've added these to Kara's moments." });
+      expect(awaitingConfirmation.items.filter((item) => item.id === "merge-p2-ack")).toHaveLength(1);
+    }
+    if (scenario === "page reload mid-flow") {
+      expect(finished.items.some((item) => item.kind === "film")).toBe(false);
+    } else {
+      expect(completeIds.indexOf("direction-answer")).toBeLessThan(completeIds.indexOf("film"));
+      expect(finished.items.filter((item) => item.kind === "film")).toHaveLength(1);
+    }
+    if (scenario !== "page reload mid-flow") expect(unconfirmedIds).toContain("people-summary-message");
+  });
+
+  it("keeps the accepted summary and Looks right bubble when a refresh reports people as unconfirmed", () => {
+    const input = makeInput("no missed people");
+    const state = deriveChat({ ...input, peopleConfirmed: false, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right", flow: { ...input.flow!, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right" } });
+    const ids = state.items.map(({ id }) => id);
+    expect(state.items.filter((item) => item.kind === "people-summary")).toHaveLength(1);
+    expect(state.items.find((item) => item.id === "people-summary-answer")).toMatchObject({ kind: "you", text: "Looks right" });
+    expect(ids.indexOf("people-summary")).toBeLessThan(ids.indexOf("people-summary-answer"));
+    expect(state.items.some((item) => item.kind === "person")).toBe(false);
   });
 });

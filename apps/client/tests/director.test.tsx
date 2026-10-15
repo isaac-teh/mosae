@@ -112,6 +112,49 @@ function setup(options: { faces?: boolean; orientation?: { portrait: number; lan
 }
 
 describe("Director chat", () => {
+  it("requires the visible people summary confirmation when resuming a legacy answered flow", async () => {
+    const namedPeople = people.map((person, index) => ({ ...person, name: index === 0 ? "Daughter" : "Jamie", role: "other", skipped: false }));
+    setup({ readyPlan: true, people: namedPeople, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    const flow: any = {
+      revision: 12,
+      story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] },
+      people: namedPeople.map(({ personId, name, role }) => ({ personId, name, role, confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })),
+      missedPeopleConfirmed: true,
+      missedPeople: [],
+    };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    await renderScreen();
+    await waitFor(() => expect(hasText("Thanks. I've tagged all two in your moments.")).toBe(true));
+    expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy();
+    expect(host.querySelector('[aria-label="Orientation"]')).toBeNull();
+    const transcript = host.textContent ?? "";
+    expect(transcript.indexOf("Looks right")).toBeGreaterThan(transcript.indexOf("Thanks. I've tagged all two in your moments."));
+  });
+
+  it("keeps post-Looks-right text at the end without reopening people", async () => {
+    const namedPeople = people.map((person, index) => ({ ...person, name: index === 0 ? "Kara" : "Jamie", role: "other", skipped: false }));
+    setup({ readyPlan: true, people: namedPeople, getProjectResume: async () => ({ proposalId: "proposal-1", storyText: "Japan trip", generationId: null, generationStatus: null }) });
+    const flow: any = {
+      revision: 13,
+      story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] },
+      people: namedPeople.map(({ personId, name, role }) => ({ personId, name, role, confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })),
+      peopleProgress: { askedPersonIds: namedPeople.map(({ personId }) => personId), completedPersonIds: namedPeople.map(({ personId }) => personId) },
+      missedPeopleConfirmed: true,
+      missedPeople: [],
+      peopleSummaryConfirmed: true,
+    };
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull());
+    if (host.querySelector('button[aria-label="Looks good"]')) await click("Looks good");
+    await waitFor(() => expect(hasText("Orientation")).toBe(true));
+    await typeAndSend("Add Kara again");
+    await waitFor(() => expect(hasText("I understood the Japan trip.")).toBe(true));
+    expect(host.querySelector('[data-person-question]')).toBeNull();
+    expect(host.textContent?.match(/Thanks\. I've tagged all two in your moments\./g)).toHaveLength(1);
+    expect((host.textContent ?? "").lastIndexOf("Add Kara again")).toBeGreaterThan((host.textContent ?? "").lastIndexOf("Putting together a direction"));
+  });
+
   it("names each recurring person in chat, shows the matching tag count, and waits for Proceed", async () => {
     setup(); await renderScreen(); await click("A trip");
     for (const label of ["Me", "My partner", "Friend", "Type a name", "Skip", "Not the same person? Tag it"]) expect(host.querySelector(`button[aria-label="${label}"]`)).toBeNull();
@@ -239,6 +282,9 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy();
     expect(mocks.repo.mutateFlow.mock.calls.filter(([, , action]: [string, string, any]) => action.type === "missed-person-completed").map(([, , action]: [string, string, any]) => action.personId)).toEqual([grandpaId, grandmaId]);
     expect([...host.querySelectorAll('[data-from="you"]')].filter((item) => item.textContent === "Grandpa and Grandma")).toHaveLength(1);
+    await click("Looks right");
+    await waitFor(() => expect([...host.querySelectorAll('[data-from="you"]')].some((item) => item.textContent === "Looks right")).toBe(true));
+    expect([...host.querySelectorAll('[data-from="you"]')].filter((item) => item.textContent === "Looks right")).toHaveLength(1);
   });
 
   it("appends a summary name response after the historical summary and clarification", async () => {
@@ -260,6 +306,7 @@ describe("Director chat", () => {
       const changes = action.type === "batch" ? action.actions : [action];
       for (const change of changes) {
         if (change.type === "people-summary-snapshot") { flow.peopleSummaryHistory = [...(flow.peopleSummaryHistory ?? []), change.people]; flow.peopleSummaryFollowupActive = true; }
+        if (change.type === "people-summary-confirmed") { flow.peopleSummaryConfirmed = change.confirmed; flow.peopleSummaryAnswer = change.answer; flow.peopleSummaryCount = change.peopleCount; }
         if (change.type === "people-summary-followup") flow.peopleSummaryFollowups = [...(flow.peopleSummaryFollowups ?? []), { question: change.question, ...(change.reply ? { reply: change.reply } : {}) }];
         if (change.type === "missed-person-added") flow.missedPeople = [...(flow.missedPeople ?? []), { personId: change.personId, name: change.name }];
         if (change.type === "missed-people-confirmed") flow.missedPeopleConfirmed = change.confirmed;
@@ -397,7 +444,7 @@ describe("Director chat", () => {
     const personFlow = (personId: string, name: string) => ({ personId, name, role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
     let flow: any = { revision: 7, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map((person) => personFlow(person.personId, "Mia")), peopleSummaryConfirmed: false };
     mocks.repo.getFlow = vi.fn(async () => flow);
-    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, peopleSummaryConfirmed: action.confirmed }; return flow; });
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, peopleSummaryConfirmed: action.confirmed, peopleSummaryAnswer: action.answer, peopleSummaryCount: action.peopleCount }; return flow; });
     await renderScreen();
     await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
     expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
@@ -408,12 +455,13 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="My daughter"]')).toBeNull();
     expect(mocks.repo.mutateFlow.mock.calls.some(([, , action]: [string, string, any]) => action.type === "batch" && action.actions.some((change: any) => change.type === "person" && change.personId === "person-1" && change.name === null))).toBe(false);
     await click("Looks right");
-    await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), { type: "people-summary-confirmed", confirmed: true }));
+    await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), { type: "people-summary-confirmed", confirmed: true, answer: "Looks right", peopleCount: 2 }));
     await act(async () => root.unmount());
     root = createRoot(host);
     await renderScreen();
     await waitFor(() => expect(mocks.repo.getPlan).toHaveBeenCalledWith("proposal-1"));
     expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
+    expect(hasText("Looks right")).toBe(true);
     expect(hasText("Thanks. I've tagged all")).toBe(true);
     expect(host.querySelector('[aria-label="Filtered photos"]')).toBeTruthy();
   });
@@ -1006,10 +1054,10 @@ describe("Director chat", () => {
     errorLog.mockRestore(); infoLog.mockRestore();
   });
 
-  it("renders confirmation progress in the header only", async () => {
+  it("renders the confirmed-people count in the header only", async () => {
     setup(); await renderScreen(); await click("A trip");
-    await waitFor(() => expect(hasText("1 of 4 confirmed")).toBe(true));
-    expect(host.textContent?.match(/1 of 4 confirmed/g)).toHaveLength(1);
+    await waitFor(() => expect(host.textContent).toMatch(/\d+ of \d+ confirmed/));
+    expect(host.textContent?.match(/0 of 2 confirmed/g)).toHaveLength(1);
   });
 
   it("interprets typed text and waits for an explicit confirmation before saving", async () => {
@@ -1027,7 +1075,7 @@ describe("Director chat", () => {
     expect(hasText("Not quite")).toBe(true);
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
     expect(host.querySelector('button[aria-label="A trip"]')).toBeFalsy();
-    expect(host.textContent?.match(/0 of 4 confirmed/g) ?? []).toHaveLength(1);
+    expect(host.textContent?.match(/0 of 2 confirmed/g) ?? []).toHaveLength(1);
     await click("Yes, that's right");
     await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("our family trip", []));
   });

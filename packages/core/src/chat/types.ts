@@ -26,7 +26,7 @@ export type ChatInput = {
   localUpload?: { total: number; settled: number; failed: number; photos: number; clips: number };
   earlyOccasionAnswer?: string;
   earlyOccasionStoryText?: string;
-  interpTurns?: { question: string; reply?: string; personId?: string; stage?: "missed" | "summary" }[];
+  interpTurns?: { question: string; reply?: string; personId?: string; stage?: "missed" | "summary" | "post-confirmation" }[];
   summaryFollowups?: { question: string; reply?: string }[];
   interpReplying?: boolean;
   pendingResponse?: "occasion" | "person";
@@ -35,6 +35,8 @@ export type ChatInput = {
   intent: { text: string } | null;
   mentionedPeople?: string[];
   missedAnswer?: string;
+  peopleSummaryAnswer?: string;
+  peopleSummaryCount?: number;
   missedReply?: string;
   storySummary?: string;
   people: { personId: string; name: string | null; role: string | null; answerText?: string; ageBand?: PersonAgeBand; skipped: boolean; forceShow?: boolean; momentCount: number; sampleShotIds: string[]; shotIds?: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;
@@ -81,6 +83,7 @@ export type ChatItem =
   | { kind: "film"; id: string; film: Film };
 
 export type ChatState = {
+  /** The canonical chronological event stream rendered by the chat. */
   items: ChatItem[];
   step: "occasion" | "people" | "moments" | "direction" | "shaping" | "ready";
   confirmed: 0 | 1 | 2 | 3 | 4;

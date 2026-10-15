@@ -98,12 +98,12 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
     if (!source || !flow.people.some((person) => person.personId === action.targetPersonId)) throw new FlowStoreError("invalid_action");
     return { ...flow, people: flow.people.map((person) => person.personId === action.personId ? { ...person, mergedInto: action.targetPersonId, skipped: true } : person) };
   }
-  if (action.type === "people-summary-confirmed") return { ...flow, peopleSummaryConfirmed: action.confirmed };
+  if (action.type === "people-summary-confirmed") return { ...flow, peopleSummaryConfirmed: action.confirmed, ...(action.answer ? { peopleSummaryAnswer: action.answer } : {}), ...(action.peopleCount !== undefined ? { peopleSummaryCount: action.peopleCount } : {}) };
   if (action.type === "people-progress") return { ...flow, peopleProgress: {
     ...(flow.peopleProgress?.askedPersonIds?.length ? { askedPersonIds: flow.peopleProgress.askedPersonIds } : action.askedPersonIds ? { askedPersonIds: [...new Set(action.askedPersonIds)] } : {}),
     completedPersonIds: [...new Set(action.completedPersonIds)],
   } };
-  if (action.type === "missed-people-confirmed") return { ...flow, missedPeopleConfirmed: action.confirmed, ...(action.confirmed ? { peopleSummaryFollowupActive: false } : {}) };
+  if (action.type === "missed-people-confirmed") return { ...flow, missedPeopleConfirmed: action.confirmed, ...(action.answer ? { missedAnswer: action.answer } : {}), ...(action.confirmed ? { peopleSummaryFollowupActive: false } : {}) };
   if (action.type === "missed-person-added") {
     const missedPeople = flow.missedPeople ?? [];
     if (missedPeople.some((person) => person.personId === action.personId)) return flow;
