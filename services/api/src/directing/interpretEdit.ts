@@ -588,6 +588,16 @@ function violatesScope(op: EditOp, scope: InterpretEditRequest["scope"]): boolea
   return op.op === "add" || op.op === "setMusicVolume";
 }
 
+/** Applied replies are always the past-tense sentence built from the ops that really applied; model/planner wording is only kept for clarify/unsupported. */
+function pastTenseReply(req: InterpretEditRequest, result: InterpretEditResult): InterpretEditResult {
+  if (result.kind !== "edit") return result;
+  // Selected-moment timing replies are already deterministic past tense and name the scope.
+  if (/^(?:Set|Made) the selected moments?\b/.test(result.reply)) return result;
+  const applied = applyEdits(req.timeline, result.ops);
+  if (!applied.ok) return result;
+  return { ...result, reply: describeApplied(req.text, result.ops, applied.timeline, req.groundedContext?.soundtracks, req.timeline) };
+}
+
 export async function interpretEdit(req: InterpretEditRequest, deps: {
   generate: (options: GenerateOptions<InterpretEditModelResult>) => Promise<unknown>;
 }): Promise<InterpretEditResult> {
@@ -595,6 +605,12 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
     const combined = await interpretCombined(req, deps);
     if (combined) return combined;
   }
+  return pastTenseReply(req, await interpretSingle(req, deps));
+}
+
+async function interpretSingle(req: InterpretEditRequest, deps: {
+  generate: (options: GenerateOptions<InterpretEditModelResult>) => Promise<unknown>;
+}): Promise<InterpretEditResult> {
   if (unavailableFeature(req.text)) return { kind: "unsupported", reply: unavailableFeatureReply, ops: [] };
   const collageAmount = collageAmountEdit(req);
   if (collageAmount) return collageAmount;

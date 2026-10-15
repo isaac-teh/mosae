@@ -304,10 +304,30 @@ describe("film editor", () => {
     await click("Suggest edit");
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip c", "Select clip a", "Select clip b"]);
     expect(boundary.repository.acknowledgeEditInterpretation).toHaveBeenCalled();
-    expect(host.querySelector('[aria-label="Ask for an edit"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Ask for an edit"]')).toBeNull();
     expect(host.querySelector('[role="status"]')?.textContent).toContain("Moved 1 moment earlier");
     await click("Undo");
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
+  });
+
+  it("closes Ask after a film-wide edit, then reopening shows the newest reply, Undo and an empty input", async () => {
+    boundary.params = { ...boundary.params, request: "Change the music to something more happy" };
+    const turns: unknown[] = [];
+    boundary.repository.getEditConversation = vi.fn(async () => turns as never);
+    boundary.repository.interpretEdit = vi.fn(async (_p: string, _g: string, _text: string, revision: number, context?: { requestId: string }) => {
+      turns.push({ requestId: context!.requestId, user: "Change the music to something more happy", reply: "Changed the music to Sandcastle Days.", status: "applied", kind: "edit", revision });
+      return { kind: "edit" as const, baseRevision: revision, requestId: context!.requestId, reply: "Changed the music to Sandcastle Days.", ops: [{ op: "setAspect" as const, aspect: "16:9" as const }] };
+    }) as never;
+    await render(<EditorScreen />);
+    await click("Suggest edit");
+    expect(host.querySelector('[aria-label="Ask for an edit"]')).toBeNull();
+    expect(host.querySelector('[role="status"]')).not.toBeNull();
+    await click("Ask AI");
+    expect(host.textContent).toContain("Changed the music to Sandcastle Days.");
+    expect(host.textContent).not.toMatch(/I'll /);
+    expect(host.querySelector('[aria-label="Undo applied edit"]')).not.toBeNull();
+    expect((host.querySelector('[aria-label="Ask for an edit"]') as HTMLInputElement).value).toBe("");
+    expect(host.textContent).toContain("Editing the whole film · tap a clip to edit just one moment");
   });
 
   it("keeps the editor's rendered film ready for download", async () => {

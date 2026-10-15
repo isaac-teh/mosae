@@ -876,4 +876,36 @@ describe("interpretEdit", () => {
     const limit = new DemoLimitReached();
     await expect(interpretEdit({ text: "make it calmer", timeline }, { generate: async () => { throw limit; } })).rejects.toBe(limit);
   });
+
+  describe("applied replies are past tense", () => {
+    const audio: Timeline = { ...timeline, audioClips: [{ id: "audio-1", source: { kind: "soundtrack", soundtrackId: "soft-piano", sourceInSec: 0, sourceOutSec: 6 }, role: "music", startSec: 0, gainDb: -12, fadeInSec: 0, fadeOutSec: 0 }] };
+    const grounded = (scope: { kind: "film" } | { kind: "clip"; clipId: string } = { kind: "film" }) => ({ scope, storyIntent: null, constraints: {},
+      people: [{ personId: "jamie", name: "Jamie", role: "friend", focused: false }], selected: null,
+      candidates: ["monkeys", "temple", "extra"].map(id => ({ shotId: `shot-${id}`, assetId: `asset-${id}`, kind: "photo" as const, caption: id, personIds: id === "extra" ? ["jamie"] : [], sourceStartSec: null, sourceEndSec: null })),
+      soundtracks: [
+        { id: "soft-piano", name: "Soft piano", description: "Quiet", cadence: "tender", durationSec: 60, storagePath: "a.mp3" },
+        { id: "sandcastle", name: "Sandcastle Days", description: "Happy upbeat", cadence: "energetic", durationSec: 60, storagePath: "b.mp3" },
+      ], conversation: [] });
+    const cases: { name: string; text: string; timeline: Timeline; scope?: { kind: "film" } | { kind: "clip"; clipId: string }; model?: EditOp[]; expected: RegExp }[] = [
+      { name: "setSoundtrack", text: "Change the music to something more happy", timeline: audio, expected: /^Changed the music to Sandcastle Days\.$/ },
+      { name: "setMusicVolume", text: "Turn the music down", timeline: audio, expected: /^Changed the music volume\.$/ },
+      { name: "setAspect", text: "Make it landscape", timeline, model: [{ op: "setAspect", aspect: "16:9" }], expected: /^Switched to landscape\.$/ },
+      { name: "move", text: "Move the last moment to the beginning", timeline, expected: /^Reordered the moments\.$/ },
+      { name: "remove", text: "Remove this moment", timeline, scope: { kind: "clip", clipId: "temple" }, expected: /^Removed that moment\.$/ },
+      { name: "duplicate", text: "Repeat the first moment", timeline, model: [{ op: "duplicate", clipId: "monkeys" } as EditOp], expected: /^Duplicated a moment\.$/ },
+      { name: "swapShot", text: "Use another photo here", timeline, scope: { kind: "clip", clipId: "monkeys" }, model: [{ op: "swapShot", clipId: "monkeys", shotId: "shot-extra", kind: "photo" }], expected: /^Replaced a photo\.$/ },
+      { name: "setPhotoDuration", text: "Show it longer", timeline, scope: { kind: "clip", clipId: "monkeys" }, model: [{ op: "setPhotoDuration", clipId: "monkeys", sec: 4 }], expected: /^Changed how long moments are shown\.$/ },
+      { name: "pace", text: "Make it faster", timeline, expected: /^Made it faster/ },
+      { name: "merge", text: "Make it 10s with more collage", timeline, expected: /^Made it 10 seconds and grouped 2 photos into a collage\.$/ },
+      { name: "split", text: "Make it 10s with no collages", timeline: collageFixture(), expected: /^Made it 10 seconds and split the collage back/ },
+      { name: "focus", text: "Focus on Jamie", timeline, expected: /^(?:Brought Jamie forward|Used a moment featuring Jamie|Added a photo featuring Jamie|Changed how long)/ },
+    ];
+    it.each(cases)("$name reply is built from describeApplied, never the model's future tense", async ({ text, timeline: fixture, scope = { kind: "film" as const }, model, expected }) => {
+      const generate = vi.fn(async () => ({ kind: "edit", reply: "I'll do that for you.", ops: model ?? [] }));
+      const result = await interpretEdit({ text, timeline: fixture, scope, groundedContext: grounded(scope) }, { generate });
+      expect(result.kind).toBe("edit");
+      expect(result.reply).toMatch(expected);
+      expect(result.reply).not.toMatch(/\bI(?:'ll| will)\b/);
+    });
+  });
 });

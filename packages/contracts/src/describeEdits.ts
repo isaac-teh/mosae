@@ -54,8 +54,11 @@ export function describeApplied(text: string, ops: EditOp[], after: Timeline, so
     clauses.push(remaining === 0 ? (splits === 1 ? "split the collage back into single photos" : "split all collages back into single photos") : `split ${splits === 1 ? "a collage" : `${splits} collages`} back into single photos`);
   }
   if (has("setCollageSpec", "setCollageLayout", "setCollageMotion", "setCollageEffect", "addCollageSlot", "removeCollageSlot")) clauses.push("updated the collage");
-  if (has("swapShot", "replaceCollageSlot")) clauses.push("replaced a photo");
-  if (has("add", "duplicate")) clauses.push("added a moment");
+  const focusTarget = /\b(?:focus|feature|emphasize)\s+(?:on\s+)?(everyone|[^,.;]+?)(?=\s+(?:and|with)\b|[,.;]|$)/i.exec(text)?.[1]?.trim();
+  if (has("setPhotoCrop", "setCollageCrop")) clauses.push("adjusted the framing");
+  if (has("swapShot", "replaceCollageSlot")) clauses.push(focusTarget && !has("move") ? `used a moment featuring ${focusTarget}` : "replaced a photo");
+  if (has("add")) clauses.push(focusTarget && !has("move") ? `added a photo featuring ${focusTarget}` : "added a moment");
+  else if (has("duplicate")) clauses.push("duplicated a moment");
   return joinClauses(clauses) || "Made the change.";
 }
 

@@ -711,6 +711,23 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Undo applied edit"]')).not.toBeNull();
   });
 
+  it("shows a clear scope line, a thumbnail for a selected clip, and Undo on the newest applied reply after reopening", async () => {
+    const repo = { getEditConversation: vi.fn(async () => [{ requestId: "r9", user: "Make it landscape", reply: "Switched to landscape.", status: "applied" as const, kind: "edit" as const, revision: 1 }]), acknowledgeEditInterpretation: vi.fn(async () => {}), interpretEdit: vi.fn() };
+    const undoLatest = vi.fn();
+    await render(<AskSheet visible projectId="p1" generationId="g1" repository={repo as any} scope={{ kind: "film" }} savePending={async () => true} getSnapshotKey={() => "k2"} getSavedRevision={() => 0} applyMany={() => true} undo={() => {}} onPlayAt={() => {}} lastApplied={{ requestId: "r9", snapshotKey: "k2" }} onUndoLatest={undoLatest} onClose={() => {}} />);
+    expect(host.querySelector('[aria-label="Edit scope"]')?.textContent).toBe("Editing the whole film · tap a clip to edit just one moment");
+    expect(host.querySelector('img[src="a.jpg"]')).toBeNull();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(host.textContent).toContain("Switched to landscape.");
+    await click("Undo applied edit");
+    expect(undoLatest).toHaveBeenCalledOnce();
+    await render(<AskSheet visible projectId="p1" generationId="g1" repository={repo as any} scope={{ kind: "clip", clipId: "a" }} scopeThumbnail="a.jpg" savePending={async () => true} getSnapshotKey={() => "k3"} getSavedRevision={() => 0} applyMany={() => true} undo={() => {}} onPlayAt={() => {}} lastApplied={{ requestId: "r9", snapshotKey: "k2" }} onClose={() => {}} />);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(host.querySelector('[aria-label="Edit scope"]')?.textContent).toBe("Editing this moment");
+    expect(host.querySelector('img[src="a.jpg"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Undo applied edit"]')).toBeNull();
+  });
+
   it("renders Ask suggestion chips as one horizontal scroller with full labels", async () => {
     const repo = { getEditConversation: vi.fn(async () => []), acknowledgeEditInterpretation: vi.fn(async () => {}), interpretEdit: vi.fn(async () => ({ kind: "edit" as const, baseRevision: 0, requestId: "r", reply: "ok", ops: [] })) };
     await render(<AskSheet visible projectId="p1" generationId="g1" repository={repo} scope={{ kind: "film" }} people={["Alex"]} savePending={async () => true} getSnapshotKey={() => "k"} getSavedRevision={() => 0} applyMany={() => true} undo={() => {}} onPlayAt={() => {}} onClose={() => {}} />);
