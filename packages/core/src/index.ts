@@ -21,6 +21,7 @@ export { mainPeople, matchExistingPersonAnswer, orderPeopleByMergeSimilarity, pe
 export { trimRange, videoTrimBounds, type TimelineTrimEdge, type TrimRangeInput } from "./editor/timelineTrim";
 export { reorderSlots, reassignCollageSlots, fitEditedCollageSlots } from "./editor/reorderSlots";
 export { duplicateClip } from "./editor/duplicateClip";
+export { changedClipIds, askEditSummary, suggestedAskRequests } from "./editor/askEditUx";
 export { contextToolbar, type EditorSelection, type ContextToolbarAction } from "./editor/contextToolbar";
 export type { ChatInput, ChatItem, ChatState, ProjectSummary } from "./chat/types";
 export { directionFocus } from "./chat/directionFocus";

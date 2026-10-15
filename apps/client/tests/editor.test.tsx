@@ -304,7 +304,9 @@ describe("film editor", () => {
     await click("Suggest edit");
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip c", "Select clip a", "Select clip b"]);
     expect(boundary.repository.acknowledgeEditInterpretation).toHaveBeenCalled();
-    await click("Undo AI edit");
+    expect(host.querySelector('[aria-label="Ask for an edit"]')).toBeNull();
+    expect(host.querySelector('[role="status"]')?.textContent).toContain("Move the last photo earlier.");
+    await click("Undo");
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
   });
 
