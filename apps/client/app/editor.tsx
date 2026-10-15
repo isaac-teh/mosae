@@ -79,6 +79,7 @@ export default function EditorScreen() {
   const [tool, setTool] = useState<Tool>(params.request ? "Ask" : null);
   const [plan, setPlan] = useState<StoryPlan | null>(null);
   const [directions, setDirections] = useState<DirectionOptions | null>(null);
+  const [personTagsByShot, setPersonTagsByShot] = useState<Record<string, string[]>>({});
   const onTimeChange = useCallback((seconds: number) => setPlayhead(seconds), []);
   const seekTo = useCallback((seconds: number) => {
     const target = Math.max(0, Math.min(editor.timeline?.durationSec ?? 0, seconds));
@@ -111,6 +112,23 @@ export default function EditorScreen() {
       .catch(() => { if (active) setDirections(null); });
     return () => { active = false; };
   }, [params.planId, repository]);
+  useEffect(() => {
+    let active = true;
+    setPersonTagsByShot({});
+    if (!params.projectId || typeof repository.getPeople !== "function") return () => { active = false; };
+    void repository.getPeople(params.projectId).then(people => {
+      if (!active) return;
+      const tags: Record<string, string[]> = {};
+      for (const person of people ?? []) {
+        const label = person.name?.trim() || person.role?.trim() || "Person";
+        for (const shotId of new Set([...(person.shotIds ?? []), ...person.sampleShotIds])) {
+          tags[shotId] = [...(tags[shotId] ?? []), label];
+        }
+      }
+      setPersonTagsByShot(tags);
+    }).catch(() => { if (active) setPersonTagsByShot({}); });
+    return () => { active = false; };
+  }, [params.projectId, repository]);
   const selectedClip = editor.timeline?.videoClips.find((clip) => clipId(clip) === editor.selectedClipId) ?? null;
   const collageMoments = useMemo(() => {
     const listed = [...(plan?.moments ?? []), ...editor.unusedMedia.map((media) => ({
@@ -131,6 +149,7 @@ export default function EditorScreen() {
     const fitted = editor.timeline ? fitEditedCollageSlots(editor.timeline, batch) : batch;
     return fitted.length === 1 && !Array.isArray(op) ? editor.apply(fitted[0]!) : editor.applyMany(fitted);
   };
+  const applyAiOps = (ops: EditOp[]) => applyPreparedOps(ops);
   const onApply = (op: EditOp | EditOp[]) => {
     const applied = applyPreparedOps(op);
     if (applied) { replacementUploadNonce.current.invalidate(); setTool(null); }
@@ -354,8 +373,8 @@ export default function EditorScreen() {
     {tool === "Add" ? <AddSheet visible moments={collageMoments} inFilmShotIds={inFilmShotIds} selectedClipId={editor.selectedClipId} playheadSec={playhead} timeline={editor.timeline ?? undefined} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFiles={story.flow.repository === "api" && Boolean(params.projectId) ? uploadDeviceAdditions : undefined} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {(tool === "CollageLayout" || tool === "CollageMotion") && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} aspect={editor.timeline?.aspect} timeline={editor.timeline ?? undefined} moments={collageMoments} section={tool === "CollageLayout" ? "Layout" : "Motion"} onApply={onApplyCollage} onClose={closePicker} /> : null}
     {(tool === "CollageCellAdd" || (tool === "CollageCellReplace" && selectedCellSlotId)) && selectedClip && "kind" in selectedClip ? <CollageCellSheet mode={tool === "CollageCellAdd" ? "add" : "replace"} clip={selectedClip} slotId={selectedCellSlotId ?? undefined} moments={collageMoments} inFilmShotIds={inFilmShotIds} sources={editor.sources} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) ? uploadDeviceReplacement : undefined} onSource={editor.setSource} onApply={onApply} onClose={closePicker} /> : null}
-    {tool === "Replace" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={clipId(selectedClip)} kind={selectedClip.source.kind} clipDurationSec={selectedClip.durationSec} moments={collageMoments} sources={editor.sources} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && selectedClip.source.kind === "photo" ? (file) => uploadDeviceReplacement(file, clipId(selectedClip)) : undefined} onApply={onApply} onSource={editor.setSource} onThumbnail={editor.setThumbnail} onDimensions={editor.setDimensions} onClose={closePicker} /> : null}
-    {tool === "Format" && editor.timeline ? <RatioSheet visible aspect={editor.timeline.aspect} onApply={onApply} onClose={() => setTool(null)} /> : null}{tool === "Ask" && editor.timeline ? <AskSheet visible projectId={params.projectId || "fixture"} generationId={params.generationId || "demo-film"} repository={repository} scope={selectedClip && selectedCellSlotId ? { kind: "slot", clipId: clipId(selectedClip), slotId: selectedCellSlotId } : selectedClip ? { kind: "clip", clipId: clipId(selectedClip) } : { kind: "film" }} initialRequest={typeof params.request === "string" ? params.request : ""} savePending={editor.savePendingNow} getSnapshotKey={editor.getSnapshotKey} getSavedRevision={editor.getSavedRevision} applyMany={editor.applyMany} undo={editor.undo} onPlayAt={playAiAt} onClose={() => setTool(null)} /> : null}
+    {tool === "Replace" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={clipId(selectedClip)} kind={selectedClip.source.kind} clipDurationSec={selectedClip.durationSec} moments={collageMoments} sources={editor.sources} personTagsByShot={personTagsByShot} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && selectedClip.source.kind === "photo" ? (file) => uploadDeviceReplacement(file, clipId(selectedClip)) : undefined} onApply={onApply} onSource={editor.setSource} onThumbnail={editor.setThumbnail} onDimensions={editor.setDimensions} onClose={closePicker} /> : null}
+    {tool === "Format" && editor.timeline ? <RatioSheet visible aspect={editor.timeline.aspect} onApply={onApply} onClose={() => setTool(null)} /> : null}{tool === "Ask" && editor.timeline ? <AskSheet visible projectId={params.projectId || "fixture"} generationId={params.generationId || "demo-film"} repository={repository} scope={selectedClip && selectedCellSlotId ? { kind: "slot", clipId: clipId(selectedClip), slotId: selectedCellSlotId } : selectedClip ? { kind: "clip", clipId: clipId(selectedClip) } : { kind: "film" }} initialRequest={typeof params.request === "string" ? params.request : ""} savePending={editor.savePendingNow} getSnapshotKey={editor.getSnapshotKey} getSavedRevision={editor.getSavedRevision} applyMany={applyAiOps} undo={editor.undo} onPlayAt={playAiAt} onClose={() => setTool(null)} /> : null}
     {tool === "Soundtrack" ? <SoundtrackSheet visible soundtracks={directions?.soundtracks ?? []} currentSoundtrackId={soundtrackId} previewSourceForTrack={(track) => editor.sources[track.id] ?? null} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {tool === "Volume" && soundtrack && selectedAudioClipId ? <AudioVolumeSheet visible audioClipId={selectedAudioClipId} gainDb={soundtrack.gainDb} onApply={onApply} onClose={() => setTool(null)} /> : null}
   </View>;

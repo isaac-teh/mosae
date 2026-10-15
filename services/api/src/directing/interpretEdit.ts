@@ -7,7 +7,7 @@ import type { EditContext } from "./editContext.js";
 export type InterpretEditRequest = { text: string; timeline: Timeline; groundedContext?: import("./loadEditContext.js").EditContext } & Partial<EditContext>;
 export type InterpretEditModelResult = { kind?: "edit" | "clarify" | "unsupported"; reply?: string; ops: EditOp[] };
 export type InterpretEditResult = { kind: "edit" | "clarify" | "unsupported"; reply: string; ops: EditOp[] };
-const fallbackReply = "I couldn't turn that into an edit. Try the tools below, or say it another way.";
+const fallbackReply = "I can reorder or trim moments, swap photos, change framing or collage layout, and adjust the soundtrack. What would you like to change?";
 
 type ModelSchema = Record<string, any>;
 
@@ -166,6 +166,67 @@ function hasAmbiguousPerson(text: string, people: NonNullable<NonNullable<Interp
     && people.filter((candidate) => candidate.name?.toLocaleLowerCase() === person.name!.toLocaleLowerCase()).length > 1);
 }
 
+/** Resolve chat-form focus choices against confirmed people and owned media.
+ * An existing film cannot change its generator settings, so focus edits promote
+ * moments containing the requested people through the normal timeline move op.
+ */
+function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
+  const context = req.groundedContext;
+  if (!context || !/\b(?:focus|feature|emphasize)\b/i.test(req.text)) return null;
+  const people = context.people;
+  if (!people.length) return { kind: "unsupported", reply: "I can reorder moments, change music or framing, and adjust clips. This film has no confirmed people to focus on yet.", ops: [] };
+  const text = req.text.toLocaleLowerCase();
+  const everyone = /\b(?:everyone|everybody|family|all (?:the )?people|all of us)\b/i.test(text);
+  const matched = people.filter(person => person.name && text.includes(person.name.toLocaleLowerCase()));
+  const requested = everyone ? people : matched;
+  if (!requested.length) return { kind: "clarify", reply: `Who should I focus on? Choose Everyone or a confirmed person: ${people.map(person => person.name || person.role).join(", ")}.`, ops: [] };
+  if (!everyone && matched.some(person => people.filter(candidate => candidate.name?.toLocaleLowerCase() === person.name!.toLocaleLowerCase()).length > 1)) {
+    return { kind: "clarify", reply: "I found more than one person with that name. Which one should I focus on?", ops: [] };
+  }
+  const wanted = new Set(requested.map(person => person.personId));
+  const candidates = new Map(context.candidates.map(candidate => [candidate.shotId, candidate]));
+  const relevantIds = context.scope.kind === "film" ? undefined : new Set(context.selected?.shotIds ?? []);
+  const clipMatches = req.timeline.videoClips.map(clip => {
+    const id = "kind" in clip ? clip.clipId : clip.id;
+    const shotIds = "kind" in clip ? clip.spec.slots.flatMap(slot => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId];
+    const peopleInClip = new Set(shotIds.flatMap(shotId => candidates.get(shotId)?.personIds ?? []));
+    const matchedCount = [...wanted].filter(personId => peopleInClip.has(personId)).length;
+    return { id, shotIds, matchedCount };
+  });
+  if (context.scope.kind === "slot") {
+    const candidate = context.candidates.find(item => item.kind === "photo" && item.personIds.some(id => wanted.has(id)) && !relevantIds?.has(item.shotId));
+    if (!candidate) return { kind: "clarify", reply: "I couldn't find another confirmed photo of that person for this collage. I can focus the whole film on them instead.", ops: [] };
+    return { kind: "edit", reply: `I'll feature ${everyone ? "everyone" : requested.map(person => person.name || person.role).join(" and ")} in this collage.`, ops: [{ op: "replaceCollageSlot", clipId: context.scope.clipId, slotId: context.scope.slotId, shotId: candidate.shotId, kind: "photo", ...(candidate.width ? { width: candidate.width } : {}), ...(candidate.height ? { height: candidate.height } : {}) }] };
+  }
+  if (context.scope.kind === "clip") {
+    const selectedScope = context.scope;
+    const selected = clipMatches.find(clip => clip.id === selectedScope.clipId);
+    if (selected?.matchedCount) return { kind: "clarify", reply: "This moment already includes the requested focus. I can replace it with another matching moment if you want.", ops: [] };
+    const current = req.timeline.videoClips.find(clip => ("kind" in clip ? clip.clipId : clip.id) === selectedScope.clipId);
+    const candidate = context.candidates.find(item => item.personIds.some(id => wanted.has(id)) && (!current || item.kind === ("kind" in current ? "collage" : current.source.kind)));
+    if (candidate && current && !("kind" in current)) return { kind: "edit", reply: `I'll use a moment featuring ${requested.map(person => person.name || person.role).join(" and ")}.`, ops: [{ op: "swapShot", clipId: selectedScope.clipId, shotId: candidate.shotId, kind: candidate.kind, ...(candidate.width ? { width: candidate.width } : {}), ...(candidate.height ? { height: candidate.height } : {}) }] };
+    return { kind: "clarify", reply: "I couldn't find a matching moment to use here. I can move matching moments toward the start of the whole film instead.", ops: [] };
+  }
+  const available = clipMatches.filter(clip => clip.matchedCount > 0);
+  if (!available.length) return { kind: "clarify", reply: "I couldn't find any moments featuring those confirmed people. I can still change the framing, soundtrack, or clip order.", ops: [] };
+  // For Everyone, favor moments with more distinct confirmed people; for a
+  // named focus, place matching moments first. Keep the current order on ties.
+  const ranked = [...clipMatches].sort((a, b) => b.matchedCount - a.matchedCount || clipMatches.indexOf(a) - clipMatches.indexOf(b));
+  const order = clipMatches.map(clip => clip.id);
+  const ops: EditOp[] = [];
+  ranked.forEach((clip, toIndex) => {
+    const fromIndex = order.indexOf(clip.id);
+    if (fromIndex !== toIndex) {
+      ops.push({ op: "move", clipId: clip.id, toIndex });
+      order.splice(fromIndex, 1);
+      order.splice(toIndex, 0, clip.id);
+    }
+  });
+  return ops.length
+    ? { kind: "edit", reply: `I'll bring moments featuring ${everyone ? "everyone" : requested.map(person => person.name || person.role).join(" and ")} forward.`, ops }
+    : { kind: "clarify", reply: "The current order already brings the requested focus forward. Tell me if you want a different edit.", ops: [] };
+}
+
 function violatesScope(op: EditOp, scope: InterpretEditRequest["scope"]): boolean {
   if (!scope || scope.kind === "film") return false;
   if (scope.kind === "clip") {
@@ -183,6 +244,8 @@ function violatesScope(op: EditOp, scope: InterpretEditRequest["scope"]): boolea
 export async function interpretEdit(req: InterpretEditRequest, deps: {
   generate: (options: GenerateOptions<InterpretEditModelResult>) => Promise<unknown>;
 }): Promise<InterpretEditResult> {
+  const focus = focusEdit(req);
+  if (focus) return focus;
   if (req.groundedContext && hasAmbiguousPerson(req.text, req.groundedContext.people)) {
     return { kind: "clarify", reply: "Which person did you mean?", ops: [] };
   }
@@ -196,7 +259,7 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
       stage: "editor.interpret",
       thinking: "MINIMAL",
       maxSchemaRepairs: 0,
-      contents: [{ text: `Translate the user's request into a small ordered list of allowed edit operations for this film. Return kind=edit with a complete supported batch, kind=clarify for an ambiguous reference, or kind=unsupported for unavailable capabilities. Never return partial operations. Use only IDs from the allowed IDs block; never invent an ID. For addCollageSlot, use the literal slotId "new-slot"; the editor assigns its internal slot id. Preserve current collage sources unless changing them is necessary. For "add more collage", use addCollageSlot with an unused owned photo candidate when one is available; otherwise ask which photos to include. Check collage capacity before adding; if full, choose a layout with enough slots and a compatible motion from the approved combinations below, or ask whether to add the photos as a new collage. Prefer the smallest number of operations and return no more than 20. The clips summary and clipIds list use the same order. Respect selected scope when resolving "this". An explicit request for all clips or the whole film can affect clips outside the selected clip. For collage layouts and motions, keep the selected layout-motion pair in this allowed list: ${JSON.stringify(ALLOWED_COMBOS)}. Reply briefly and factually.\nAllowed operation schema: ${JSON.stringify(responseSchema)}\nAllowed IDs: ${JSON.stringify(allowedIdsFor(req))}\nClips: ${JSON.stringify(compactTimeline(req.timeline))}\nGrounded context (owned candidates, confirmed people, story, soundtracks, prior conversation): ${JSON.stringify(promptContext(req))}\nScope: ${JSON.stringify(request.scope?.kind === "clip" ? { kind: "clip", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId) } : request.scope?.kind === "slot" ? { kind: "slot", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId), slotIndex: allowedIdsFor(req).slotIds.indexOf(request.scope.slotId) } : { kind: "film" })}\nRequest: ${req.text}` }],
+      contents: [{ text: `Translate the user's request into a small ordered list of allowed edit operations for this film. Return kind=edit with a complete supported batch, kind=clarify for an ambiguous reference, or kind=unsupported for unavailable capabilities. Never return partial operations. The editor can replace, add, remove, duplicate, reorder, trim, or retime moments; change aspect ratio; change collage layout, motion, effects, and cells; reframe photos; and choose or adjust soundtrack music. Use these operations whenever requested. Do not claim a supported timeline edit is impossible or a design limitation. Use only IDs from the allowed IDs block; never invent an ID. For addCollageSlot, use the literal slotId "new-slot"; the editor assigns its internal slot id. Preserve current collage sources unless changing them is necessary. For "add more collage", use addCollageSlot with an unused owned photo candidate when one is available; otherwise ask which photos to include. Check collage capacity before adding; if full, choose a layout with enough slots and a compatible motion from the approved combinations below, or ask whether to add the photos as a new collage. Prefer the smallest number of operations and return no more than 20. The clips summary and clipIds list use the same order. Respect selected scope when resolving "this". An explicit request for all clips or the whole film can affect clips outside the selected clip. For collage layouts and motions, keep the selected layout-motion pair in this allowed list: ${JSON.stringify(ALLOWED_COMBOS)}. Reply briefly and factually. If the request refers to captions, transitions, overall pace, or another value with no edit operation, say so briefly and offer a nearby supported change.\nAllowed operation schema: ${JSON.stringify(responseSchema)}\nAllowed IDs: ${JSON.stringify(allowedIdsFor(req))}\nClips: ${JSON.stringify(compactTimeline(req.timeline))}\nGrounded context (owned candidates, confirmed people, story, soundtracks, prior conversation): ${JSON.stringify(promptContext(req))}\nScope: ${JSON.stringify(request.scope?.kind === "clip" ? { kind: "clip", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId) } : request.scope?.kind === "slot" ? { kind: "slot", clipIndex: allowedIdsFor(req).clipIds.indexOf(request.scope.clipId), slotIndex: allowedIdsFor(req).slotIds.indexOf(request.scope.slotId) } : { kind: "film" })}\nRequest: ${req.text}` }],
       responseSchema,
       validate,
     }));
@@ -242,17 +305,21 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
       return false;
     });
     if (result.kind === "clarify") return { kind: "clarify", reply: result.reply?.trim() || "Could you clarify what you mean?", ops: [] };
-    if (result.kind === "unsupported") return { kind: "unsupported", reply: result.reply?.trim() || fallbackReply, ops: [] };
+    if (result.kind === "unsupported") {
+      const reply = result.reply?.trim() ?? "";
+      const offersSupportedEdit = /\b(?:reorder|retime|swap|replace|frame|collage|soundtrack|music)\b/i.test(reply);
+      return { kind: "unsupported", reply: reply && offersSupportedEdit ? reply : fallbackReply, ops: [] };
+    }
     if (ops.length > 20 || !ops.length) return { kind: "unsupported", reply: fallbackReply, ops: [] };
     if (invalidContextOp && ops.some((op) => op.op === "addCollageSlot")) return { kind: "clarify", reply: "Which unused photos from this project should I add to the collage?", ops: [] };
-    if (invalidContextOp) return { kind: "unsupported", reply: "I couldn't apply that because it refers to a clip or source outside the available project context.", ops: [] };
+    if (invalidContextOp) return { kind: "unsupported", reply: "That clip or photo isn't available here. I can use project photos, reorder moments, change framing or collage layout, or adjust music.", ops: [] };
     const capacityFit = fitAddedCollageSlots(req.timeline, ops, req.groundedContext?.candidates ?? []);
     if (capacityFit.clarify) return { kind: "clarify", reply: capacityFit.clarify, ops: [] };
     const fittedOps = capacityFit.ops;
     const applied = applyEdits(req.timeline, fittedOps);
     if (!applied.ok) {
       console.warn("Ask AI edit could not be applied", { error: applied.error, opIndex: applied.opIndex });
-      return { kind: "unsupported", reply: "I couldn't apply that edit as requested. Please try a different edit or clarify which clip to change.", ops: [] };
+      return { kind: "unsupported", reply: "I couldn't apply that combination. I can reorder or retime clips, change framing or collage layout, swap a project photo, or adjust music.", ops: [] };
     }
     return { kind: "edit", reply: result.reply?.trim() || "Here are the edits I suggest.", ops: fittedOps };
   } catch (error) {
