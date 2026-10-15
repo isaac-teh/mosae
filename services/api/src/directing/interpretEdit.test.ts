@@ -190,8 +190,21 @@ describe("interpretEdit", () => {
       ], soundtracks: [], conversation: [] };
     const generate = vi.fn();
     const result = await interpretEdit({ text: "Focus on Wife", timeline, groundedContext }, { generate });
-    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "add", shotId: "unused-wife", kind: "photo", afterClipId: null }] });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "add", shotId: "unused-wife", kind: "photo", afterClipId: null }, { op: "setPhotoDuration", clipId: "monkeys", sec: 3.5 }, { op: "setPhotoDuration", clipId: "temple", sec: 3.5 }] });
     expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("gives a confirmed person's moments more screen time across the whole film", async () => {
+    const context = { scope: { kind: "film" as const }, storyIntent: null, constraints: {}, selected: null,
+      people: [{ personId: "wife", name: "Wife", role: "parent", focused: false }],
+      candidates: ["shot-monkeys", "shot-temple"].map((shotId, index) => ({ shotId, assetId: `asset-${index}`, kind: "photo" as const, caption: "Wife at an event", personIds: ["wife"], sourceStartSec: null, sourceEndSec: null })), soundtracks: [], conversation: [] };
+    const result = await interpretEdit({ text: "Focus on Wife", timeline, groundedContext: context }, { generate: vi.fn() });
+    expect(result.kind).toBe("edit");
+    if (result.kind !== "edit") return;
+    expect(result.ops.filter(op => op.op === "setPhotoDuration")).toHaveLength(2);
+    const applied = applyEdits(timeline, result.ops);
+    expect(applied.ok).toBe(true);
+    if (applied.ok) expect(applied.timeline.videoClips.reduce((sum, clip) => sum + clip.durationSec, 0)).toBeGreaterThan(6);
   });
 
   it("offers Whole film when the selected clip has no match for the confirmed person", async () => {
@@ -235,7 +248,7 @@ describe("interpretEdit", () => {
         { shotId: "shot-temple", assetId: "b", kind: "photo" as const, caption: "Malik at a temple", personIds: ["malik"], sourceStartSec: null, sourceEndSec: null },
       ], soundtracks: [], conversation: [] };
     const result = await interpretEdit({ text: "Focus on Malik", timeline: fixture, groundedContext }, { generate: vi.fn() });
-    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "move", clipId: "temple", toIndex: 0 }] });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "move", clipId: "temple", toIndex: 0 }, { op: "setPhotoDuration", clipId: "temple", sec: 3.5 }] });
   });
 
   it("scales photo and collage durations to a requested film length", async () => {
@@ -594,7 +607,7 @@ describe("interpretEdit", () => {
     const generate = vi.fn();
     const result = await interpretEdit({ text, timeline: focusedTimeline, groundedContext }, { generate });
     expect(result.kind).toBe("edit");
-    expect(result.ops).toEqual([{ op: "move", clipId: "mia", toIndex: 0 }]);
+    expect(result.ops).toEqual([{ op: "move", clipId: "mia", toIndex: 0 }, { op: "setPhotoDuration", clipId: "mia", sec: 3.5 }]);
     expect(generate).not.toHaveBeenCalled();
     const applied = applyEdits(focusedTimeline, result.ops);
     expect(applied.ok && applied.timeline.videoClips.map(clip => "kind" in clip ? clip.clipId : clip.id)).toEqual(["mia", "unfocused"]);

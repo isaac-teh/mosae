@@ -246,11 +246,34 @@ function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
       order.splice(toIndex, 0, clip.id);
     }
   });
-  if (ops.length) return { kind: "edit", reply: `I'll bring moments featuring ${everyone ? "everyone" : requested.map(person => person.name || person.role).join(" and ")} forward.`, ops };
+  const extendFeaturedMoments = () => {
+    if (scope.kind !== "film") return;
+    // Focus means sustained screen time as well as earlier placement. Extend
+    // every matching moment that has room, keeping the batch bounded.
+    for (const clip of ranked.filter(item => item.matchedCount > 0)) {
+      if (ops.length >= 20) break;
+      const timelineClip = req.timeline.videoClips.find(item => ("kind" in item ? item.clipId : item.id) === clip.id);
+      if (!timelineClip) continue;
+      const maxDuration = "kind" in timelineClip ? 600 : 6;
+      const nextDuration = Math.min(maxDuration, Math.round((timelineClip.durationSec + 0.5) * 10) / 10);
+      if (nextDuration <= timelineClip.durationSec) continue;
+      ops.push({ op: "kind" in timelineClip ? "setCollageDuration" : "setPhotoDuration", clipId: clip.id, sec: nextDuration });
+    }
+  };
+  if (ops.some(op => op.op === "move")) {
+    extendFeaturedMoments();
+    return { kind: "edit", reply: `I'll bring moments featuring ${everyone ? "everyone" : requested.map(person => person.name || person.role).join(" and ")} forward and give them more screen time.`, ops };
+  }
   if (scope.kind === "film") {
     const used = usedShotIdsForTimeline(req.timeline);
     const candidate = context.candidates.find(item => item.kind === "photo" && !used.has(item.shotId) && item.personIds.some(id => wanted.has(id)));
-    if (candidate) return { kind: "edit", reply: `I'll add a project photo featuring ${requested.map(person => person.name || person.role).join(" and ")} at the start to give them more focus.`, ops: [addCandidate(candidate)] };
+    if (candidate) {
+      ops.push(addCandidate(candidate));
+      extendFeaturedMoments();
+      return { kind: "edit", reply: `I'll add a project photo featuring ${requested.map(person => person.name || person.role).join(" and ")} and give their moments more screen time across the film.`, ops };
+    }
+    extendFeaturedMoments();
+    if (ops.length) return { kind: "edit", reply: `I'll give moments featuring ${requested.map(person => person.name || person.role).join(" and ")} more screen time across the film.`, ops };
     const featured = req.timeline.videoClips.find(clip => {
       const ids = "kind" in clip ? clip.spec.slots.flatMap(slot => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId];
       return ids.some(id => wanted.size && candidates.get(id)?.personIds.some(personId => wanted.has(personId)));

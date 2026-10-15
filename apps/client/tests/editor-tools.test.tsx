@@ -97,6 +97,14 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "shot-left", kind: "photo" });
   });
 
+  it("shows a video fallback tile when its poster image fails to load", async () => {
+    await render(<SwapSheet visible clipId="a" kind="photo" moments={[videoMoment]} sources={{ "video-shot": "video.mp4" }} planId={null} momentId={null} repository={repo} onApply={apply} onSource={onSource} onClose={() => {}} />);
+    const image = host.querySelector('img[src="video-poster.jpg"]')!;
+    await act(async () => image.dispatchEvent(new Event("error")));
+    expect(host.querySelector('[aria-label="Video preview fallback"]')).not.toBeNull();
+    expect(host.textContent).toContain("VIDEO");
+  });
+
   it("replaces a photo clip with a playable video window and stores its thumbnail", async () => {
     const onThumbnail = vi.fn();
     const onDimensions = vi.fn();
