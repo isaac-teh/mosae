@@ -70,6 +70,7 @@ export default function EditorScreen() {
   const [askToast, setAskToast] = useState<string | null>(null);
   const [askToastNonce, setAskToastNonce] = useState(0);
   const [askToastSnapshotKey, setAskToastSnapshotKey] = useState<string | null>(null);
+  const [askClipFocus, setAskClipFocus] = useState<{ clipId: string; nonce: number } | null>(null);
   const askChangedIdsRef = useRef<string[]>([]);
   const [selectedCollageCellId, setSelectedCollageCellId] = useState<string | null>(null);
   const [selectedAudioClipId, setSelectedAudioClipId] = useState<string | null>(null);
@@ -161,17 +162,21 @@ export default function EditorScreen() {
     if (applied && before && result?.ok) askChangedIdsRef.current = changedClipIds(before, result.timeline);
     return applied;
   };
-  const onAskApplied = (ops: EditOp[], reply: string) => {
+  const onAskApplied = (ops: EditOp[], _reply: string, requestText: string) => {
     const ids = askChangedIdsRef.current;
     askChangedIdsRef.current = [];
     setAskHighlightIds(ids);
-    setAskToast(reply.trim().length > 0 && reply.trim().length < 55 && !/^applied \d+ changes?\.?$/i.test(reply.trim()) ? reply.trim() : askEditSummary(ops, editor.timeline?.durationSec, soundtrackName ?? undefined));
+    setAskToast(askEditSummary(ops, editor.timeline?.durationSec, soundtrackName ?? undefined, requestText));
     setAskToastSnapshotKey(editor.getSnapshotKey());
     setAskToastNonce((n) => n + 1);
     setTool(null);
     if (ids.length) {
       const start = Math.min(...(editor.timeline?.videoClips.filter((clip) => ids.includes(idOf(clip))).map((clip) => clip.startSec) ?? []));
-      if (Number.isFinite(start)) { setPauseRequest((request) => request + 1); seekTo(start); setTogglePlayRequest((request) => request + 1); }
+      if (Number.isFinite(start)) {
+        const firstChanged = editor.timeline?.videoClips.filter((clip) => ids.includes(idOf(clip))).sort((a, b) => a.startSec - b.startSec)[0];
+        if (firstChanged) setAskClipFocus({ clipId: idOf(firstChanged), nonce: askToastNonce + 1 });
+        setPauseRequest((request) => request + 1); seekTo(start); setTogglePlayRequest((request) => request + 1);
+      }
       else playAiAt(ops);
     } else {
       // Film-wide edits (format, music, volume) should keep the viewer's current position.
@@ -398,7 +403,7 @@ export default function EditorScreen() {
             <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="h-[40px] w-[40px] items-center justify-start"><View className="h-5 w-5 items-center justify-center"><RedoIcon size={18} disabled={!editor.canRedo} /></View><Text className={`mt-0.5 font-sans text-[9px] leading-[11px] text-on-screen-muted ${editor.canRedo ? "" : "opacity-50"}`}>Redo</Text></Pressable>
           </View>
         </View>
-        <TimelineStrip timeline={editor.timeline} sources={editor.sources} thumbnails={editor.thumbnails} selectedClipId={editor.selectedClipId} selectedAudioClipId={selectedAudioClipId} highlightedClipIds={askHighlightIds} playheadSec={playhead} isPlaying={playing} soundtrackName={soundtrackName ? `${soundtrackName} · paced to the film` : null}
+        <TimelineStrip timeline={editor.timeline} sources={editor.sources} thumbnails={editor.thumbnails} selectedClipId={editor.selectedClipId} selectedAudioClipId={selectedAudioClipId} highlightedClipIds={askHighlightIds} focusClipRequest={askClipFocus} playheadSec={playhead} isPlaying={playing} soundtrackName={soundtrackName ? `${soundtrackName} · paced to the film` : null}
           onSelect={onTimelineSelect} onScrub={seekTo} onScrubStart={() => setPauseRequest((request) => request + 1)}
           onSelectAudio={onSelectAudio} onAddClip={onAddTimelineClip}
           onTrim={(id, edge, delta) => {
@@ -407,8 +412,7 @@ export default function EditorScreen() {
             if (clip && original && editor.firstCut) editor.apply(trimEdit(clip, original, edge, delta, editor.firstCut.durationSec));
           }} onReorder={(id, toIndex) => editor.apply({ op: "move", clipId: id, toIndex })} onDeselect={() => { editor.select(null); setSelectedAudioClipId(null); setSelectedCollageCellId(null); }} onSoundtrack={openSoundtrackPicker} />
       </ScrollView>}
-    <ToolBar selection={toolbarSelection} onTool={openTool} disabledActions={disabledToolbarActions} emptyCollageCell={Boolean(selectedClip && "kind" in selectedClip && selectedCellSlotId && selectedClip.spec.slots.find((slot) => slot.slotId === selectedCellSlotId)?.empty)} hasEmptyCollageSlot={Boolean(selectedClip && "kind" in selectedClip && selectedClip.spec.slots.some((slot) => slot.empty))} />
-    {askToast ? <View {...({ role: "status", "aria-live": "polite" } as any)} className="absolute bottom-[92px] left-4 right-4 z-30 flex-row items-center justify-between rounded-xl border border-[#52616B] bg-[#172630] px-4 py-3"><Text className="mr-3 flex-1 font-sans-medium text-caption text-on-screen">{askToast}</Text><Pressable role="button" accessibilityLabel="Undo" disabled={editor.getSnapshotKey() !== askToastSnapshotKey} onPress={() => { if (editor.getSnapshotKey() !== askToastSnapshotKey) return; editor.undo(); setAskToast(null); setAskHighlightIds([]); }} className="min-h-10 justify-center rounded-full bg-[#294655] px-4"><Text className="font-sans-semibold text-button text-on-screen">Undo</Text></Pressable></View> : null}
+    <ToolBar selection={toolbarSelection} onTool={openTool} disabledActions={disabledToolbarActions} statusMessage={askToast} statusUndoDisabled={editor.getSnapshotKey() !== askToastSnapshotKey} onStatusUndo={() => { if (editor.getSnapshotKey() !== askToastSnapshotKey) return; editor.undo(); setAskToast(null); setAskHighlightIds([]); }} emptyCollageCell={Boolean(selectedClip && "kind" in selectedClip && selectedCellSlotId && selectedClip.spec.slots.find((slot) => slot.slotId === selectedCellSlotId)?.empty)} hasEmptyCollageSlot={Boolean(selectedClip && "kind" in selectedClip && selectedClip.spec.slots.some((slot) => slot.empty))} />
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
     {tool === "Add" ? <AddSheet visible moments={collageMoments} inFilmShotIds={inFilmShotIds} selectedClipId={editor.selectedClipId} playheadSec={playhead} timeline={editor.timeline ?? undefined} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFiles={story.flow.repository === "api" && Boolean(params.projectId) ? uploadDeviceAdditions : undefined} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {(tool === "CollageLayout" || tool === "CollageMotion") && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} aspect={editor.timeline?.aspect} timeline={editor.timeline ?? undefined} moments={collageMoments} section={tool === "CollageLayout" ? "Layout" : "Motion"} onApply={onApplyCollage} onClose={closePicker} /> : null}

@@ -118,7 +118,7 @@ type TrimDragState = { clipId: string; edge: "start" | "end"; startX: number; ed
 type PendingSlotPress = { clipId: string; fromIndex: number; startX: number; startY: number; pointerId: number; target: any } | null;
 type ActiveSlotReorder = { clipId: string; fromIndex: number; toIndex: number; pointerId: number } | null;
 
-export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, selectedAudioClipId = null, playheadSec, soundtrackName = null, isPlaying = false, highlightedClipIds = [], onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {}, onSelectAudio = () => {}, onAddClip = () => {} }: {
+export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, selectedAudioClipId = null, playheadSec, soundtrackName = null, isPlaying = false, highlightedClipIds = [], focusClipRequest = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {}, onSelectAudio = () => {}, onAddClip = () => {} }: {
   timeline: Timeline;
   sources: Record<string, string>;
   thumbnails?: Record<string, string>;
@@ -128,6 +128,7 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
   soundtrackName?: string | null;
   isPlaying?: boolean;
   highlightedClipIds?: string[];
+  focusClipRequest?: { clipId: string; nonce: number } | null;
   onSelect: (clipId: string, startSec: number) => void;
   onScrub: (seconds: number) => void;
   onScrubStart?: () => void;
@@ -246,6 +247,11 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
 
   // Player frames move the content under the fixed playhead. This imperative sync never calls onScrub.
   useEffect(() => { if (slideFrame.current === null) syncScrollToTime(playheadSec); }, [playheadSec, syncScrollToTime]);
+  useEffect(() => {
+    if (!focusClipRequest) return;
+    const clip = timeline.videoClips.find((candidate) => clipId(candidate) === focusClipRequest.clipId);
+    if (clip) syncScrollToTime(clip.startSec, false);
+  }, [focusClipRequest, syncScrollToTime, timeline.videoClips]);
 
   const zoom = useCallback((delta: number) => {
     cancelSlide();

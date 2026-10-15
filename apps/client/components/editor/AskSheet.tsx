@@ -20,7 +20,7 @@ export function AskSheet({ visible, projectId, generationId, repository, scope, 
   onPlayAt: (ops: EditOp[]) => void;
   people?: string[];
   aspect?: "9:16" | "16:9";
-  onApplied?: (ops: EditOp[], reply: string) => void;
+  onApplied?: (ops: EditOp[], reply: string, requestText: string, scope: EditScope) => void;
   onReplace?: () => void;
   onClose: () => void;
 }) {
@@ -39,7 +39,7 @@ export function AskSheet({ visible, projectId, generationId, repository, scope, 
     <View className="mb-4 flex-row items-center justify-between"><Text className="font-sans-semibold text-[18px] text-on-screen">Ask for an edit</Text><Pressable accessibilityLabel="Close Ask" onPress={() => { cancel(); onClose(); }}><Text className="text-[24px] text-on-screen">×</Text></Pressable></View>
     <Text accessibilityLabel="Edit scope" className="mb-2 font-sans text-caption text-on-screen-muted">{scopeLabel}</Text>
     {messages.map((message) => <View key={message.requestId} className="mb-3 rounded-lg bg-[#1a2c38] px-3 py-2"><Text className="mb-1 font-sans-medium text-caption text-on-screen">{message.text}</Text><Text className="font-sans text-body text-on-screen">{message.reply}</Text></View>)}
-    {!busy ? <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3"><View className="flex-row gap-2">{suggestions.map((suggestion) => <Pressable key={suggestion} role="button" accessibilityLabel={suggestion} onPress={() => { if (suggestion === "Replace this photo") { onReplace?.(); return; } setText(suggestion); void submit(suggestion, scope); }} className="min-h-9 justify-center rounded-full border border-[#49606d] px-3"><Text className="font-sans text-caption text-on-screen">{suggestion}</Text></Pressable>)}</View></ScrollView> : null}
+    {!busy ? <View className="mb-3 flex-row flex-wrap gap-2">{suggestions.map((suggestion) => <Pressable key={suggestion} role="button" accessibilityLabel={suggestion} onPress={() => { if (suggestion === "Replace this photo") { onReplace?.(); return; } setText(suggestion); void submit(suggestion, scope); }} className="min-h-9 justify-center rounded-full border border-[#49606d] px-3"><Text className="font-sans text-caption text-on-screen">{suggestion}</Text></Pressable>)}</View> : null}
     <TextInput accessibilityLabel="Ask for an edit" value={text} onChangeText={setText} multiline placeholder="Tell me what you want to change." placeholderTextColor="#9fb1bc" className="mb-3 min-h-20 rounded-lg border border-[#49606d] bg-[#1a2c38] px-4 py-3 font-sans text-body text-on-screen" />
     <Pressable role="button" accessibilityLabel="Suggest edit" disabled={busy || !text.trim()} onPress={ask} className="mb-4 min-h-12 items-center justify-center rounded-full bg-[#294655]"><Text className="font-sans-semibold text-button text-on-screen">{busy ? "Thinking…" : "Apply edit"}</Text></Pressable>
     {error ? <Text className="mb-3 font-sans text-caption text-critical">{error}</Text> : null}

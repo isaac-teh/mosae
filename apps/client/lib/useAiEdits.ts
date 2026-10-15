@@ -9,7 +9,7 @@ export function useAiEdits(options: {
   projectId: string; generationId: string; repository: Pick<StoryRepository, "interpretEdit" | "getEditConversation" | "acknowledgeEditInterpretation">;
   savePending: () => Promise<boolean>; getSnapshotKey: () => string; getSavedRevision: () => number;
   applyMany: (ops: EditOp[]) => boolean; undo: () => void; onPlayAt: (ops: EditOp[]) => void;
-  onApplied?: (ops: EditOp[], reply: string) => void;
+  onApplied?: (ops: EditOp[], reply: string, requestText: string, scope: EditScope) => void;
 }) {
   const [messages, setMessages] = useState<AiEditMessage[]>([]);
   const [busy, setBusy] = useState(false);
@@ -90,7 +90,7 @@ export function useAiEdits(options: {
       if (epoch.current !== activeEpoch) return;
       pendingRetry.current = null;
       updateMessage({ requestId: request.requestId, text, reply: `Applied ${result.ops.length} ${result.ops.length === 1 ? "change" : "changes"}.`, status: "applied", ops: result.ops });
-      options.onApplied?.(result.ops, result.reply);
+      options.onApplied?.(result.ops, result.reply, text, scope);
     } catch (cause) {
       if (epoch.current !== activeEpoch) return;
       const errorCode = cause && typeof cause === "object" && "code" in cause ? (cause as { code?: unknown }).code : undefined;
