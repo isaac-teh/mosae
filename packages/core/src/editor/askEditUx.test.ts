@@ -29,7 +29,7 @@ describe("Ask edit UX helpers", () => {
     expect(askEditSummary([{ op: "remove", clipId: "a" }, { op: "setAspect", aspect: "16:9" }])).toBe("Removed 1 moment");
   });
   it("lists requests by scope and current orientation", () => {
-    expect(suggestedAskRequests("film", ["Alex", "Sam", "Lee", "Jo"], "9:16")).toEqual(["Focus on everyone", "Focus on Alex", "Focus on Sam", "Focus on Lee", "Make it faster", "Make it slower", "Change the music", "Make it 30 seconds", "Make it landscape"]);
+    expect(suggestedAskRequests("film", ["Alex", "Sam", "Lee", "Jo"], "9:16")).toEqual(["Focus on everyone", "Make it faster", "Make it slower", "Make it 30 seconds", "Change the music", "Make it landscape", "Focus on Alex", "Focus on Sam", "Focus on Lee"]);
     expect(suggestedAskRequests("clip")).toEqual(["Remove this moment", "Show it longer", "Replace this photo", "Move it earlier"]);
   });
   it("describes a merge plus duration batch from the final timeline, matching the film length", () => {

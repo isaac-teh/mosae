@@ -424,7 +424,7 @@ function timingEdit(req: InterpretEditRequest): InterpretEditResult | null {
     const sec = Math.round(Math.max(0.5, Math.min(max, target.durationSec + delta)) * 10) / 10;
     if (sec === target.durationSec) return { kind: "clarify", reply: `That moment is already at the ${relative === "longer" ? "longest" : "shortest"} supported length.`, ops: [] };
     const op: EditOp = "kind" in target ? { op: "setCollageDuration", clipId: id, sec } : { op: "setPhotoDuration", clipId: id, sec };
-    return { kind: "edit", reply: `I'll make the ${ordinal === 0 ? "first" : ordinal === 1 ? "second" : ordinal === 2 ? "third" : ordinal === clips.length - 1 ? "last" : "selected"} moment ${relative}.`, ops: [op] };
+    return { kind: "edit", reply: `Made the ${ordinal === 0 ? "first" : ordinal === 1 ? "second" : ordinal === 2 ? "third" : ordinal === clips.length - 1 ? "last" : "selected"} moment ${relative}.`, ops: [op] };
   }
   if (targetDuration === null && pace === null) return null;
 
@@ -510,7 +510,10 @@ function timingEdit(req: InterpretEditRequest): InterpretEditResult | null {
   if (!applied.ok || (targetDuration !== null && (scope.kind === "film" || isWholeFilmRequest(text)) && Math.abs(applied.timeline.durationSec - targetDuration) > 0.11)) {
     return { kind: "clarify", reply: "That total length can’t be reached within the supported photo and collage durations. Try a nearby film length, or ask me to retime a specific moment.", ops: [] };
   }
-  return { kind: "edit", reply: targetDuration !== null ? `I’ll set the ${scope.kind === "film" || isWholeFilmRequest(text) ? "film" : "selected moment"} to about ${targetDuration} seconds.` : `I’ll make the selected ${scope.kind === "film" || isWholeFilmRequest(text) ? "film" : "moments"} ${pace! < 1 ? "faster" : "slower"}.`, ops };
+  const wholeFilm = scope.kind === "film" || isWholeFilmRequest(text);
+  const reply = wholeFilm ? describeApplied(text, ops, applied.timeline, req.groundedContext?.soundtracks, req.timeline)
+    : targetDuration !== null ? `Set the selected moment to about ${targetDuration} seconds.` : `Made the selected moments ${pace! < 1 ? "faster" : "slower"}.`;
+  return { kind: "edit", reply, ops };
 }
 
 function splitIntents(text: string): string[] {
@@ -563,7 +566,7 @@ async function interpretCombined(req: InterpretEditRequest, deps: { generate: (o
   if (!batch.length) return { kind: "unsupported", reply: skipped[0] ?? fallbackReply, ops: [] };
   const combined = applyEdits(req.timeline, batch);
   if (!combined.ok) return { kind: "unsupported", reply: "I couldn't apply the requested changes together.", ops: [] };
-  const reply = describeApplied(req.text, batch, combined.timeline, req.groundedContext?.soundtracks);
+  const reply = describeApplied(req.text, batch, combined.timeline, req.groundedContext?.soundtracks, req.timeline);
   return { kind: "edit", reply: skipped.length ? `${reply} ${skipped.join(" ")}` : reply, ops: batch };
 }
 
@@ -711,7 +714,7 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
       console.warn("Ask AI edit could not be applied", { error: applied.error, opIndex: applied.opIndex });
       return { kind: "unsupported", reply: "I couldn't apply that combination. I can reorder or retime clips, change framing or collage layout, swap a project photo, or adjust music.", ops: [] };
     }
-    return { kind: "edit", reply: describeApplied(req.text, fittedOps, applied.timeline, req.groundedContext?.soundtracks), ops: fittedOps };
+    return { kind: "edit", reply: describeApplied(req.text, fittedOps, applied.timeline, req.groundedContext?.soundtracks, req.timeline), ops: fittedOps };
   } catch (error) {
     if (error instanceof DemoLimitReached) throw error;
     if (error instanceof InvalidEditReply) return { kind: error.kind, reply: error.reply, ops: [] };

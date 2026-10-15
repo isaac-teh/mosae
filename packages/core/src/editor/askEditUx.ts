@@ -44,6 +44,6 @@ export function askEditSummary(ops: EditOp[], durationSec?: number, soundtrackNa
 }
 
 export function suggestedAskRequests(scope: "film" | "clip" | "slot", people: string[] = [], aspect: "9:16" | "16:9" = "9:16"): string[] {
-  if (scope === "film") return ["Focus on everyone", ...people.slice(0, 3).map((name) => `Focus on ${name}`), "Make it faster", "Make it slower", "Change the music", "Make it 30 seconds", aspect === "9:16" ? "Make it landscape" : "Make it portrait"];
+  if (scope === "film") return ["Focus on everyone", "Make it faster", "Make it slower", "Make it 30 seconds", "Change the music", aspect === "9:16" ? "Make it landscape" : "Make it portrait", ...people.slice(0, 3).map((name) => `Focus on ${name}`)];
   return ["Remove this moment", "Show it longer", "Replace this photo", "Move it earlier"];
 }

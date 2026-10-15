@@ -307,6 +307,11 @@ describe("editor tool operations", () => {
     const labels = [...host.querySelectorAll('[aria-label^="Chapter "] [data-number-of-lines="1"]')];
     expect(labels).toHaveLength(2);
     expect(labels.every((label) => Number.parseFloat((label.parentElement as HTMLElement).style.width) > 0)).toBe(true);
+    for (const label of labels) {
+      const chapterWidth = Number.parseFloat((label.parentElement as HTMLElement).style.width);
+      expect(Number.parseFloat((label as HTMLElement).style.width)).toBeLessThan(chapterWidth);
+      expect((label.parentElement as HTMLElement).style.overflow).toBe("hidden");
+    }
   });
 
   it("renders video poster frames repeatedly across a timeline slot without a video element", async () => {
@@ -704,6 +709,32 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledWith([{ op: "move", clipId: "b", toIndex: 0 }]);
     expect(host.querySelector('[aria-label="Undo applied edit"]')).not.toBeNull();
+  });
+
+  it("renders Ask suggestion chips as one horizontal scroller with full labels", async () => {
+    const repo = { getEditConversation: vi.fn(async () => []), acknowledgeEditInterpretation: vi.fn(async () => {}), interpretEdit: vi.fn(async () => ({ kind: "edit" as const, baseRevision: 0, requestId: "r", reply: "ok", ops: [] })) };
+    await render(<AskSheet visible projectId="p1" generationId="g1" repository={repo} scope={{ kind: "film" }} people={["Alex"]} savePending={async () => true} getSnapshotKey={() => "k"} getSavedRevision={() => 0} applyMany={() => true} undo={() => {}} onPlayAt={() => {}} onClose={() => {}} />);
+    const row = host.querySelector('[aria-label="Suggested edits"]') as HTMLElement;
+    expect(row).not.toBeNull();
+    const chips = [...row.querySelectorAll('[role="button"]')].map((chip) => chip.getAttribute("aria-label"));
+    expect(chips).toEqual(["Focus on everyone", "Make it faster", "Make it slower", "Make it 30 seconds", "Change the music", "Make it landscape", "Focus on Alex"]);
+    expect(row.querySelector('[class*="flex-wrap"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Suggested edits fade"]')).not.toBeNull();
+  });
+
+  it("clears the Ask input once a request is sent and keeps it only when the request fails", async () => {
+    let fail = false;
+    const repo = { getEditConversation: vi.fn(async () => []), acknowledgeEditInterpretation: vi.fn(async () => {}),
+      interpretEdit: vi.fn(async () => { if (fail) throw new Error("boom"); return { kind: "edit" as const, baseRevision: 0, requestId: "r", reply: "Made it faster: 0:27 → 0:21.", ops: [{ op: "move" as const, clipId: "b", toIndex: 0 }] }; }) };
+    const snapshot = { key: "k0" };
+    const input = () => host.querySelector('[aria-label="Ask for an edit"]') as HTMLTextAreaElement;
+    await render(<AskSheet visible projectId="p1" generationId="g1" repository={repo} scope={{ kind: "film" }} savePending={async () => true} getSnapshotKey={() => snapshot.key} getSavedRevision={() => 0} applyMany={() => { snapshot.key += "x"; return true; }} undo={() => {}} onPlayAt={() => {}} initialRequest="Make it faster" onClose={() => {}} />);
+    await click("Suggest edit");
+    expect(input().value).toBe("");
+    expect(host.textContent).toContain("Made it faster: 0:27 → 0:21.");
+    fail = true;
+    await click("Make it slower");
+    expect(input().value).toBe("Make it slower");
   });
 
   it("seeks soundtrack preview from its touch-sized range and updates the time", async () => {

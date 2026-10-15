@@ -36,7 +36,7 @@ describe("interpretEdit", () => {
     },
     {
       request: "focus on Jamie and make it faster", fixture: timeline,
-      outputs: [], expectedOps: [{ op: "move", clipId: "temple", toIndex: 0 }], reply: /^Made it faster and brought Jamie forward\.$/,
+      outputs: [], expectedOps: [{ op: "move", clipId: "temple", toIndex: 0 }], reply: /^Made it faster: \d+:\d\d → \d+:\d\d and brought Jamie forward\.$/,
     },
     {
       request: "landscape and change the music", fixture: timeline,
@@ -159,7 +159,7 @@ describe("interpretEdit", () => {
     };
     const result = await interpretEdit({ text: "focus on Jamie and make it faster", timeline, groundedContext: context }, { generate: vi.fn() });
     expect(result.kind).toBe("edit");
-    expect(result.reply).toBe("Made it faster. I couldn't find Jamie. Did you mean Daughter, Wife or Me?");
+    expect(result.reply).toBe("Made it faster: 0:06 → 0:05. I couldn't find Jamie. Did you mean Daughter, Wife or Me?");
     expect(result.reply).not.toMatch(/skipped|operation|editor|;/i);
   });
 
@@ -209,6 +209,13 @@ describe("interpretEdit", () => {
     const applied = applyEdits(fixture, result.ops);
     expect(applied.ok).toBe(true);
     expect(applied.ok && JSON.stringify(applied.timeline)).not.toBe(JSON.stringify(fixture));
+  });
+
+  it("replies in past tense with the before and after length and never says selected film", async () => {
+    const result = await interpretEdit({ text: "Make it faster", timeline: { ...timeline, durationSec: 27, videoClips: [{ ...timeline.videoClips[0]!, durationSec: 6 } as never] }, scope: { kind: "film" } }, { generate: vi.fn() });
+    expect(result.kind).toBe("edit");
+    expect(result.reply).toMatch(/^Made it faster: \d:\d\d → \d:\d\d\.$/);
+    expect(result.reply).not.toMatch(/selected|I[’']ll/);
   });
 
   it.each([
