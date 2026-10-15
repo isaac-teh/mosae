@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { COLLAGE_LAYOUTS, CollageSpecSchema } from "./collage.js";
 import { ALLOWED_COMBOS } from "./collageCombos.js";
+import { collageSlotAspects, assignCollageSlots } from "./collageGeometry.js";
 import { safeParseTimeline, type AudioClip, type Caption, type CollageClip, type Timeline, type VideoClip } from "./timeline.js";
 import { finalMusicFadeOutSec, refitSoundtrackToDuration } from "./soundtrack.js";
 
@@ -28,6 +29,7 @@ export const EditOpSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("addCollageSlot"), clipId, slotId: z.string().min(1), shotId, kind: z.enum(["photo", "video"]), width: positiveSeconds.optional(), height: positiveSeconds.optional() }),
   z.strictObject({ op: z.literal("removeCollageSlot"), clipId, slotId: z.string().min(1) }),
   z.strictObject({ op: z.literal("splitCollage"), clipId }),
+  z.strictObject({ op: z.literal("mergeIntoCollage"), clipIds: z.array(clipId).min(2).max(4) }),
   z.strictObject({ op: z.literal("setAspect"), aspect: z.enum(["9:16", "16:9"]) }),
   z.strictObject({ op: z.literal("setSoundtrack"), soundtrackId: z.string().min(1) }),
   z.strictObject({ op: z.literal("setMusicVolume"), audioClipId: clipId, gainDb: z.number().finite().min(-60).max(12) }),
@@ -293,6 +295,54 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
           chapter: item.chapter, captions: [], audio: [],
         }));
         work.splice(index, 1, ...split);
+        break;
+      }
+      case "mergeIntoCollage": {
+        const indices = op.clipIds.map((id) => work.findIndex((entry) => idOf(entry.clip) === id));
+        if (indices.some((found) => found < 0)) return fail(`unknown clipId: ${op.clipIds[indices.findIndex((found) => found < 0)]}`);
+        if (new Set(op.clipIds).size !== op.clipIds.length) return fail("mergeIntoCollage clipIds must be unique");
+        if (indices.some((found, position) => position > 0 && found !== indices[position - 1]! + 1)) return fail("mergeIntoCollage requires adjacent clips in timeline order");
+        const members = indices.map((found) => work[found]!);
+        if (members.some((member) => "kind" in member.clip || member.clip.source.kind !== "photo")) return fail("mergeIntoCollage only combines photo moments");
+        if (members.some((member) => member.chapter !== members[0]!.chapter)) return fail("mergeIntoCollage cannot combine moments across chapters");
+        const photos = members.map((member) => member.clip as VideoClip & { source: { kind: "photo"; shotId: string; width?: number; height?: number } });
+        const frameAspect = aspect === "16:9" ? 16 / 9 : 9 / 16;
+        const sources = photos.map((photo) => photo.source.width && photo.source.height ? photo.source.width / photo.source.height : frameAspect);
+        const sizesKnown = photos.every((photo) => photo.source.width && photo.source.height);
+        const candidates = COLLAGE_LAYOUTS.filter((layout) => layout.id.startsWith("simple-") && layout.minSlots <= photos.length && layout.maxSlots >= photos.length
+          && layout.aspect.some((supported: string) => supported === aspect) && ALLOWED_COMBOS.some((combo) => combo.layoutId === layout.id && combo.motionId === "print-drop"))
+          .map((layout) => {
+            // Without known photo sizes every layout fits equally; keep the library order (first simple layout).
+            if (!sizesKnown) return { layout, assignment: photos.map((_, position) => position), cost: 0 };
+            const targets = collageSlotAspects(layout.id, layout.id, photos.length, frameAspect);
+            const assignment = assignCollageSlots(sources, targets);
+            const cost = assignment.reduce((sum, slotIndex, sourceIndex) => sum + Math.abs(Math.log(sources[sourceIndex]! / (targets[slotIndex] ?? sources[sourceIndex]!))), 0);
+            return { layout, assignment, cost };
+          });
+        const chosen = candidates.reduce<(typeof candidates)[number] | undefined>((best, candidate) => !best || candidate.cost < best.cost - 1e-9 ? candidate : best, undefined);
+        if (!chosen) return fail(`no collage layout fits ${photos.length} photos`);
+        const clipId = `merge:${idOf(members[0]!.clip)}`;
+        if (work.some((entry, position) => !indices.includes(position) && idOf(entry.clip) === clipId)) return fail(`duplicate clipId: ${clipId}`);
+        const ordered = photos.map((photo, sourceIndex) => ({ photo, sourceIndex })).sort((a, b) => chosen.assignment[a.sourceIndex]! - chosen.assignment[b.sourceIndex]!);
+        const slots = ordered.map(({ photo }, slotIndex) => ({
+          slotId: `${clipId}:slot-${slotIndex + 1}`, shotId: photo.source.shotId, kind: "photo" as const,
+          ...(photo.source.width && Number.isInteger(photo.source.width) ? { width: photo.source.width } : {}),
+          ...(photo.source.height && Number.isInteger(photo.source.height) ? { height: photo.source.height } : {}),
+        }));
+        const total = photos.reduce((sum, photo) => sum + photo.durationSec, 0);
+        const durationSec = Math.round(Math.min(Math.max(total, 3), 8) * 10) / 10;
+        const scale = durationSec / total;
+        let elapsed = 0;
+        const captions = members.flatMap((member, memberIndex) => {
+          const shift = elapsed;
+          elapsed += photos[memberIndex]!.durationSec;
+          return member.captions.map((caption) => ({ text: caption.text, offsetStart: (caption.offsetStart + shift) * scale, offsetEnd: (caption.offsetEnd + shift) * scale }));
+        });
+        const spec = { layoutId: chosen.layout.id, slots, motionId: "print-drop" as const, effectId: null, seed: clipId, durationSec };
+        const collage: CollageClip = { kind: "collage", clipId, startSec: 0, durationSec, ...(members[0]!.clip.transitionIn ? { transitionIn: members[0]!.clip.transitionIn } : {}), spec };
+        const checked = collageWithSpec(collage, spec);
+        if (typeof checked === "string") return fail(checked);
+        work.splice(indices[0]!, photos.length, { clip: checked, chapter: members[0]!.chapter, captions, audio: [] });
         break;
       }
       case "setAspect": {

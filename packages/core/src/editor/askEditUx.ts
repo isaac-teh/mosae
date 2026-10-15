@@ -29,6 +29,8 @@ export function askEditSummary(ops: EditOp[], durationSec?: number, soundtrackNa
   if (soundtrack?.op === "setSoundtrack") return `Switched music to ${soundtrackName || soundtrack.soundtrackId}`;
   const aspect = ops.find((item) => item.op === "setAspect");
   if (aspect?.op === "setAspect") return `Changed to ${aspect.aspect === "16:9" ? "landscape" : "portrait"}`;
+  const merges = ops.filter((item) => item.op === "mergeIntoCollage").length;
+  if (merges) return `Combined photos into ${merges === 1 ? "a collage" : `${merges} collages`}${filmLengthLabel && durationSec !== undefined ? `; film is now ${filmLengthLabel}` : ""}`;
   if (ops.some((item) => ["setPhotoDuration", "setCollageDuration"].includes(item.op))) return `Showed a moment longer`;
   if (ops.some((item) => item.op === "swapShot" || item.op === "replaceCollageSlot")) return "Replaced a moment";
   if (ops.some((item) => item.op === "duplicate" || item.op === "add")) return "Added a moment";

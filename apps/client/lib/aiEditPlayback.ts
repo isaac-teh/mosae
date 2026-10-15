@@ -5,8 +5,12 @@ function clipId(clip: Timeline["videoClips"][number]) {
 }
 
 export function aiEditPlaybackStart(ops: EditOp[], current: Timeline, original: Timeline): number {
-  const target = ops.find((op) => "clipId" in op || op.op === "add");
+  const target = ops.find((op) => "clipId" in op || op.op === "add" || op.op === "mergeIntoCollage");
   if (!target) return 0;
+  if (target.op === "mergeIntoCollage") {
+    const merged = current.videoClips.find((item) => clipId(item) === `merge:${target.clipIds[0]}`);
+    return merged?.startSec ?? 0;
+  }
   if (target.op === "add") {
     if (!target.afterClipId) return 0;
     const anchor = current.videoClips.find((clip) => clipId(clip) === target.afterClipId);

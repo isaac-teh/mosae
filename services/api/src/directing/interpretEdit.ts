@@ -3,6 +3,7 @@ import type { GenerateOptions } from "../gemini/client.js";
 import { MODELS } from "../gemini/pricing.js";
 import { DemoLimitReached } from "../gemini/errors.js";
 import type { EditContext } from "./editContext.js";
+import { collageAmountEdit } from "./collageAmount.js";
 
 export type InterpretEditRequest = { text: string; timeline: Timeline; groundedContext?: import("./loadEditContext.js").EditContext; intentRouting?: boolean } & Partial<EditContext>;
 export type InterpretEditModelResult = { kind?: "edit" | "clarify" | "unsupported"; reply?: string; ops: EditOp[] };
@@ -138,6 +139,7 @@ function opsReferenceClarification(ops: EditOp[], allowed: ReturnType<typeof all
         if (!allowed.slotIds.includes(slot.slotId)) return `I couldn't find collage slot “${slot.slotId}”. Which existing collage photo should I keep or change?`;
       }
     }
+    if (op.op === "mergeIntoCollage" && op.clipIds.some((id) => !allowed.clipIds.includes(id))) return "I couldn't find one of those moments in this film. Which moments should I combine?";
     if (op.op === "setSoundtrack" && !allowed.soundtrackIds.includes(op.soundtrackId)) return `I couldn't find soundtrack “${op.soundtrackId}” in the available music. Which soundtrack did you mean?`;
     if (op.op === "setMusicVolume" && !allowed.audioClipIds.includes(op.audioClipId)) return `I couldn't find audio clip “${op.audioClipId}” in this film. Which music or audio track did you mean?`;
   }
@@ -510,23 +512,6 @@ function timingEdit(req: InterpretEditRequest): InterpretEditResult | null {
   return { kind: "edit", reply: targetDuration !== null ? `I’ll set the ${scope.kind === "film" || isWholeFilmRequest(text) ? "film" : "selected moment"} to about ${targetDuration} seconds.` : `I’ll make the selected ${scope.kind === "film" || isWholeFilmRequest(text) ? "film" : "moments"} ${pace! < 1 ? "faster" : "slower"}.`, ops };
 }
 
-function collageAmountEdit(req: InterpretEditRequest): InterpretEditResult | null {
-  const text = req.text;
-  if (/^\s*add\s+more\s+collage\b/i.test(text) || !/\b(?:more|most|fewer|less|no)\s+collages?\b|\bmore\s+collage(?:\s+moments)?\b/i.test(text)) return null;
-  const collages = req.timeline.videoClips.filter((clip): clip is Extract<Timeline["videoClips"][number], { kind: "collage" }> => "kind" in clip);
-  const none = /\bno\s+collages?\b/i.test(text);
-  const fewer = /\b(?:fewer|less)\s+collages?\b/i.test(text);
-  if (none || fewer) {
-    const count = none ? collages.length : Math.max(1, Math.ceil(collages.length / 2));
-    const ops: EditOp[] = collages.slice(-count).map(clip => ({ op: "splitCollage", clipId: clip.clipId }));
-    if (!ops.length) return { kind: "clarify", reply: "There are no collages to split in this film.", ops: [] };
-    const applied = applyEdits(req.timeline, ops);
-    if (!applied.ok) return { kind: "unsupported", reply: "I couldn't reduce the collages because one of them has no photos to split.", ops: [] };
-    return { kind: "edit", reply: `Split ${ops.length} collage${ops.length === 1 ? "" : "s"} into separate moments.`, ops };
-  }
-  return { kind: "unsupported", reply: "I couldn't add more collage moments because the editor has no operation for combining separate moments into a new collage.", ops: [] };
-}
-
 function splitIntents(text: string): string[] {
   return text.split(/\s+(?:and|with)\s+/i).map(part => part.trim().replace(/^[,;]+|[,;.!?]+$/g, "")).filter(Boolean);
 }
@@ -592,7 +577,7 @@ function appliedOpsReply(ops: EditOp[], timeline: Timeline): string {
   if (ops.some(op => op.op === "setPhotoDuration" || op.op === "setCollageDuration" || op.op === "trim")) actions.push("adjusted timing");
   if (ops.some(op => op.op === "setAspect")) actions.push(`changed framing to ${timeline.aspect === "16:9" ? "landscape" : "portrait"}`);
   if (ops.some(op => op.op === "setSoundtrack" || op.op === "setMusicVolume")) actions.push("updated the music");
-  if (ops.some(op => ["setCollageSpec", "setCollageLayout", "setCollageMotion", "setCollageEffect", "addCollageSlot", "removeCollageSlot", "splitCollage"].includes(op.op))) actions.push("updated collages");
+  if (ops.some(op => ["setCollageSpec", "setCollageLayout", "setCollageMotion", "setCollageEffect", "addCollageSlot", "removeCollageSlot", "splitCollage", "mergeIntoCollage"].includes(op.op))) actions.push("updated collages");
   if (ops.some(op => op.op === "swapShot" || op.op === "replaceCollageSlot")) actions.push("replaced a moment");
   if (ops.some(op => op.op === "add" || op.op === "duplicate")) actions.push("added a moment");
   return actions.length ? `Done — ${actions.join(" and ")}.` : "Done — applied the requested timeline changes.";
@@ -622,8 +607,6 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
   if (unavailableFeature(req.text)) return { kind: "unsupported", reply: unavailableFeatureReply, ops: [] };
   const collageAmount = collageAmountEdit(req);
   if (collageAmount) return collageAmount;
-  const asksCollageAmount = /\b(?:most|fewer|less|no)\s+collages?\b|\bmore\s+collages\b|\bmore\s+collage\s+moments\b|\bcollage\s+(?:amount|frequency)\b/i.test(req.text);
-  const collageAmountReply = "I couldn't change the collage amount because the editor can't create a collage from separate moments yet.";
   // Focus and pace/length are handled by bounded deterministic operations. Run
   // both and validate their combined batch so neither intent gets short-circuited.
   const hasTimingIntent = durationRequest(req.text) !== null || /\b(?:faster|quicker|speed(?:ier)? up|slower|more slowly|slow down|more relaxed)\b/i.test(req.text);
@@ -637,19 +620,18 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
         if (timing?.kind === "edit") {
           const ops = [...focus.ops, ...timing.ops];
           const combined = applyEdits(req.timeline, ops);
-          if (combined.ok) return { kind: "edit", reply: asksCollageAmount ? `${focus.reply.replace(/[.]$/, "")} ${timing.reply.replace(/[.]$/, "")}. ${collageAmountReply}` : `${focus.reply.replace(/[.]$/, "")} ${timing.reply}`, ops };
+          if (combined.ok) return { kind: "edit", reply: `${focus.reply.replace(/[.]$/, "")} ${timing.reply}`, ops };
         }
-        if (timing?.kind !== "edit") return { ...focus, reply: asksCollageAmount ? `${focus.reply.replace(/[.]$/, "")}. ${collageAmountReply}` : focus.reply };
+        if (timing?.kind !== "edit") return focus;
       }
     }
   }
-  if (asksCollageAmount && !hasTimingIntent && !hasFocusIntent) return { kind: "unsupported", reply: collageAmountReply, ops: [] };
   const focus = focusEdit(req);
-  if (focus) return asksCollageAmount && focus.kind === "edit" ? { ...focus, reply: `${focus.reply.replace(/[.]$/, "")}. ${collageAmountReply}` } : focus;
+  if (focus) return focus;
   const deterministic = deterministicTimelineIntent(req);
-  if (deterministic) return asksCollageAmount && deterministic.kind === "edit" ? { ...deterministic, reply: `${deterministic.reply.replace(/[.]$/, "")}. ${collageAmountReply}` } : deterministic;
+  if (deterministic) return deterministic;
   const timing = timingEdit(req);
-  if (timing) return asksCollageAmount && timing.kind === "edit" ? { ...timing, reply: `${timing.reply.replace(/[.]$/, "")}. ${collageAmountReply}` } : timing;
+  if (timing) return timing;
   if (req.groundedContext && hasAmbiguousPerson(req.text, req.groundedContext.people)) {
     return { kind: "clarify", reply: "Which person did you mean?", ops: [] };
   }

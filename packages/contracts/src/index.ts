@@ -78,6 +78,7 @@ export {
   type ReflowResult,
 } from "./reflow.js";
 
+export { planCollageGroups, planCollageMerges, type CollageGroup, type CollageGroupingInput } from "./collageGrouping.js";
 export { EditOpSchema, applyEdits, mergeOps, type EditOp, type EditResult } from "./edits.js";
 export { finalMusicFadeOutSec, refitSoundtrackToDuration } from "./soundtrack.js";
 export { RenderResolutionSchema, type RenderResolution } from "./render.js";
