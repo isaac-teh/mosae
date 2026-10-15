@@ -89,7 +89,7 @@ export function useAiEdits(options: {
       await options.repository.acknowledgeEditInterpretation(options.projectId, options.generationId, request.requestId, appliedRevision);
       if (epoch.current !== activeEpoch) return;
       pendingRetry.current = null;
-      updateMessage({ requestId: request.requestId, text, reply: `Applied ${result.ops.length} ${result.ops.length === 1 ? "change" : "changes"}.`, status: "applied", ops: result.ops });
+      updateMessage({ requestId: request.requestId, text, reply: result.reply, status: "applied", ops: result.ops });
       options.onApplied?.(result.ops, result.reply, text, scope);
     } catch (cause) {
       if (epoch.current !== activeEpoch) return;

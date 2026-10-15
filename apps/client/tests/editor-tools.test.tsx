@@ -689,13 +689,13 @@ describe("editor tool operations", () => {
         { requestId: "old-1", user: "Make it faster", reply: "Done", status: "applied" as const, kind: "edit" as const, revision: 1 },
         { requestId: "old-2", user: "Change music", reply: "Done", status: "applied" as const, kind: "edit" as const, revision: 2 },
       ]), acknowledgeEditInterpretation: vi.fn(async () => {}),
-      interpretEdit: vi.fn(async () => ({ kind: "edit" as const, baseRevision: 0, requestId: "r1", reply: "Move the second photo earlier.", ops: [{ op: "move" as const, clipId: "b", toIndex: 0 }] })),
+      interpretEdit: vi.fn(async () => ({ kind: "edit" as const, baseRevision: 0, requestId: "r1", reply: "Done — reordered moments.", ops: [{ op: "move" as const, clipId: "b", toIndex: 0 }] })),
     };
     await render(<AskSheet visible projectId="p1" generationId="g1" repository={askRepository} scope={{ kind: "film" }} savePending={async () => true} getSnapshotKey={() => snapshot.key} getSavedRevision={() => 0} applyMany={(ops) => { apply(ops); snapshot.key = "after"; return true; }} undo={() => {}} onPlayAt={() => {}} initialRequest="move this earlier" onClose={() => {}} />);
     expect((host.querySelector('[aria-label="Ask for an edit"]') as HTMLInputElement).value).toBe("move this earlier");
     await click("Suggest edit");
     expect(askRepository.interpretEdit).toHaveBeenCalledWith("p1", "g1", "move this earlier", 0, expect.objectContaining({ scope: { kind: "film" } }));
-    expect(host.textContent).toContain("Applied 1 change.");
+    expect(host.textContent).toContain("Done — reordered moments.");
     expect(host.textContent).toContain("✓ Applied");
     expect(host.querySelector('[aria-label="Earlier edits (2)"]')).not.toBeNull();
     expect(host.querySelector('[class*="self-end"]')).not.toBeNull();

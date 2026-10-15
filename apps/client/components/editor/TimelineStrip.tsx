@@ -289,7 +289,7 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
       if (drag.button) drag.button.style.width = `${width}px`;
       drag.raf = null;
       const now = performance.now();
-      if (now - drag.lastPreviewAt >= 100) {
+      if (drag.lastPreviewAt === 0 || now - drag.lastPreviewAt >= 100) {
         drag.lastPreviewAt = now;
         onScrub(Math.max(0, Math.min(timeline.durationSec, drag.edgeTime + drag.pendingDelta)));
       }

@@ -304,7 +304,7 @@ describe("film editor", () => {
     await click("Suggest edit");
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip c", "Select clip a", "Select clip b"]);
     expect(boundary.repository.acknowledgeEditInterpretation).toHaveBeenCalled();
-    expect(host.querySelector('[aria-label="Ask for an edit"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Ask for an edit"]')).not.toBeNull();
     expect(host.querySelector('[role="status"]')?.textContent).toContain("Moved 1 moment earlier");
     await click("Undo");
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
@@ -394,11 +394,14 @@ describe("film editor", () => {
       Object.defineProperty(event, "pointerId", { value: 1 });
       return event;
     };
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => { callback(performance.now()); return 1; }) as typeof requestAnimationFrame;
     await act(async () => startHandle!.dispatchEvent(pointer("pointerdown", 100)));
     await act(async () => startHandle!.dispatchEvent(pointer("pointermove", 140)));
     await advance(20);
     expect(host.querySelector('[data-testid="preview"]')?.getAttribute("data-playhead-sec")).toBe("1");
     await act(async () => startHandle!.dispatchEvent(pointer("pointerup", 140)));
+    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     expect(host.textContent).toContain("0:01 / 0:08");
 
     await click("Undo");

@@ -169,7 +169,6 @@ export default function EditorScreen() {
     setAskToast(askEditSummary(ops, editor.timeline?.durationSec, soundtrackName ?? undefined, requestText));
     setAskToastSnapshotKey(editor.getSnapshotKey());
     setAskToastNonce((n) => n + 1);
-    setTool(null);
     if (ids.length) {
       const start = Math.min(...(editor.timeline?.videoClips.filter((clip) => ids.includes(idOf(clip))).map((clip) => clip.startSec) ?? []));
       if (Number.isFinite(start)) {

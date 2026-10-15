@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseTimeline } from "@mosae/contracts";
-import { getEditDocument, saveEditDocument, validateEditRequest } from "./editStore.js";
+import { expectedAcknowledgedOps, getEditDocument, saveEditDocument, validateEditRequest } from "./editStore.js";
 
 const timeline = parseTimeline({
   schemaVersion: 1, projectId: "p1", mode: "memory", aspect: "9:16", fps: 30,
@@ -26,6 +26,15 @@ describe("validateEditRequest", () => {
   it("rejects malformed revision and operation bodies", () => {
     expect(validateEditRequest(timeline, { revision: 0, ops: [] })).toMatchObject({ ok: false, opIndex: -1 });
     expect(validateEditRequest(timeline, { revision: 1, ops: [{}] })).toMatchObject({ ok: false, opIndex: 0 });
+  });
+});
+
+describe("edit interpretation acknowledgements", () => {
+  it("compares the same merged operation list the editor persists", () => {
+    expect(expectedAcknowledgedOps(
+      [{ op: "setPhotoDuration", clipId: "clip-1", sec: 4 }],
+      [{ op: "setPhotoDuration", clipId: "clip-1", sec: 5 }],
+    )).toEqual([{ op: "setPhotoDuration", clipId: "clip-1", sec: 5 }]);
   });
 });
 

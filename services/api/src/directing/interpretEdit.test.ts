@@ -19,6 +19,73 @@ function collageFixture(): Timeline {
 }
 
 describe("interpretEdit", () => {
+  it.each([
+    {
+      request: "Make it 10s with most collage", fixture: timeline,
+      outputs: [], expectedOps: [
+        { op: "setPhotoDuration", clipId: "monkeys", sec: 5 },
+        { op: "setPhotoDuration", clipId: "temple", sec: 5 },
+      ], reply: /adjusted timing.*skipped most collage.*couldn't add/i, duration: 10,
+    },
+    {
+      request: "Make it 10s with more collage", fixture: timeline,
+      outputs: [], expectedOps: [
+        { op: "setPhotoDuration", clipId: "monkeys", sec: 5 },
+        { op: "setPhotoDuration", clipId: "temple", sec: 5 },
+      ], reply: /adjusted timing.*skipped more collage.*couldn't add/i, duration: 10,
+    },
+    {
+      request: "focus on Jamie and make it faster", fixture: timeline,
+      outputs: [], expectedOps: [{ op: "move", clipId: "temple", toIndex: 0 }], reply: /adjusted timing/i,
+    },
+    {
+      request: "landscape and change the music", fixture: timeline,
+      outputs: [{ kind: "edit", ops: [{ op: "setAspect", aspect: "16:9" }] }],
+      expectedOps: [{ op: "setAspect", aspect: "16:9" }, { op: "setSoundtrack", soundtrackId: "new-track" }], reply: /framing.*music|music.*framing/i,
+    },
+    {
+      request: "remove the 2nd moment and make the first one longer", fixture: timeline,
+      outputs: [],
+      expectedOps: [{ op: "remove", clipId: "temple" }, { op: "setPhotoDuration", clipId: "monkeys", sec: 4 }], reply: /removed.*timing|timing.*removed/i,
+    },
+    {
+      request: "Make it 10s with no collages", fixture: collageFixture(),
+      outputs: [], expectedOps: [{ op: "splitCollage", clipId: "collage" }], reply: /adjusted timing.*collages/i, duration: 10,
+    },
+  ])("decomposes and applies every doable request part in one batch: $request", async ({ request, fixture, outputs, expectedOps, reply, duration }) => {
+    const modelCalls = outputs.length;
+    const generate = vi.fn(async () => outputs.shift() ?? { kind: "edit", ops: [] });
+    const context = {
+      scope: { kind: "film" as const }, storyIntent: null, constraints: {},
+      people: [{ personId: "jamie", name: "Jamie", role: "friend", focused: false }], selected: null,
+      candidates: ["monkeys", "temple"].map(id => ({ shotId: `shot-${id}`, assetId: `asset-${id}`, kind: "photo" as const, caption: id, personIds: [id === "temple" ? "jamie" : "other"], sourceStartSec: null, sourceEndSec: null })),
+      soundtracks: [{ id: "new-track", name: "New music", description: "Warm", cadence: "gentle", durationSec: 60, storagePath: "new.mp3" }], conversation: [],
+    };
+    const result = await interpretEdit({ text: request, timeline: fixture, groundedContext: context }, { generate });
+    expect(result.kind).toBe("edit");
+    if (result.kind !== "edit") return;
+    for (const expected of expectedOps) expect(result.ops).toContainEqual(expected);
+    expect(reply.test(result.reply)).toBe(true);
+    const applied = applyEdits(fixture, result.ops);
+    expect(applied.ok).toBe(true);
+    if (applied.ok && duration) expect(applied.timeline.durationSec).toBeCloseTo(duration, 1);
+    if (applied.ok && request === "focus on Jamie and make it faster") expect(applied.timeline.durationSec).toBeLessThan(fixture.durationSec);
+    expect(generate).toHaveBeenCalledTimes(modelCalls);
+  });
+
+  it("reduces collage count by splitting existing collages for fewer-collage requests", async () => {
+    const first = collageFixture().videoClips[0]!;
+    const second = { ...first, clipId: "collage-2", startSec: 6 };
+    const fixture: Timeline = { ...timeline, schemaVersion: 2, durationSec: 12, videoClips: [first, second] };
+    const result = await interpretEdit({ text: "Show fewer collages", timeline: fixture }, { generate: vi.fn() });
+    expect(result).toMatchObject({ kind: "edit", ops: [{ op: "splitCollage", clipId: "collage-2" }] });
+    if (result.kind === "edit") {
+      const applied = applyEdits(fixture, result.ops);
+      expect(applied.ok).toBe(true);
+      if (applied.ok) expect(applied.timeline.videoClips.filter(clip => "kind" in clip)).toHaveLength(1);
+    }
+  });
+
   const operationCases: { request: string; timeline: Timeline; op: EditOp | EditOp[]; candidates?: any[]; soundtracks?: any[] }[] = [
     { request: "Replace the monkeys photo", timeline, op: { op: "swapShot", clipId: "monkeys", shotId: "replacement", kind: "photo" }, candidates: [{ shotId: "replacement", assetId: "asset-r", kind: "photo", caption: "A lake", personIds: [], sourceStartSec: null, sourceEndSec: null }] },
     { request: "Trim the video from two to four seconds", timeline: { ...timeline, videoClips: [{ id: "video", source: { kind: "video", shotId: "video-source", sourceInSec: 0, sourceOutSec: 6, sourceDurationSec: 6 }, startSec: 0, durationSec: 6, transitionIn: { kind: "cut", durationSec: 0 } }] }, op: { op: "trim", clipId: "video", inSec: 2, outSec: 4 } },
@@ -667,14 +734,14 @@ describe("interpretEdit", () => {
     expect(result).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/foreign-shot|clip/i), ops: [] });
   });
 
-  it("rejects operations that escape the selected clip or collage slot", async () => {
+  it("retimes the requested selected moment and rejects collage operations that escape a slot", async () => {
     const clipResult = await interpretEdit({ text: "make this longer", timeline, scope: { kind: "clip", clipId: "monkeys" } }, {
       generate: async () => ({ kind: "edit", ops: [{ op: "setPhotoDuration", clipId: "temple", sec: 4 }] }),
     });
     const slotResult = await interpretEdit({ text: "replace this photo", timeline, scope: { kind: "slot", clipId: "collage", slotId: "slot-1" } }, {
       generate: async () => ({ kind: "edit", ops: [{ op: "setCollageDuration", clipId: "collage", sec: 5 }] }),
     });
-    expect(clipResult).toMatchObject({ kind: "unsupported", ops: [] });
+    expect(clipResult).toMatchObject({ kind: "edit", ops: [{ op: "setPhotoDuration", clipId: "monkeys", sec: 4 }] });
     expect(slotResult).toMatchObject({ kind: "clarify", reply: expect.stringMatching(/collage|clip/i), ops: [] });
   });
 
