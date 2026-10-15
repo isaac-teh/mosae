@@ -131,7 +131,7 @@ export default function DirectorScreen() {
   const [uploadFailuresAcknowledged, setUploadFailuresAcknowledged] = useState(false);
   const localMediaPending = Boolean(preparationProgress) || Boolean(uploadProgress && (uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles || uploadProgress.finishedFiles === 0)) || Boolean((uploadFailure || uploadProgress?.failedFiles) && !uploadFailuresAcknowledged);
   const localUpload = uploadProgress || preparationProgress ? { total: uploadProgress?.totalFiles ?? preparationProgress!.totalFiles, settled: uploadProgress?.finishedFiles ?? 0, failed: uploadProgress?.failedFiles ?? 0, photos: pendingPhotos.length, clips: (ownsPendingMedia ? pendingMedia : []).length - pendingPhotos.length } : undefined;
-  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people, proceededPersonIds } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged, ...(localUpload ? { localUpload } : {}), ...(params.completedPersonId && params.completedSampleUri ? { taggedPerson: { personId: params.completedPersonId, name: params.completedPersonName ?? "", photos: [params.completedSampleUri] } } : {}) });
+  const { state, actions, error, retry, pendingInterpret, saving, summary: projectSummary, plan, directionOptions, directionSelection, people, proceededPersonIds, peopleSummaryCount: confirmedPeopleSummaryCount } = useDirectorChat(projectId, story.repository, story.flow, { localMediaPending, uploadFailuresAcknowledged, ...(localUpload ? { localUpload } : {}), ...(params.completedPersonId && params.completedSampleUri ? { taggedPerson: { personId: params.completedPersonId, name: params.completedPersonName ?? "", photos: [params.completedSampleUri] } } : {}) });
   const tagActions = useRef(actions);
   tagActions.current = actions;
   useFocusEffect(useCallback(() => {
@@ -310,14 +310,16 @@ export default function DirectorScreen() {
   const canRetryLocal = hasPendingMediaRetry(projectId) && (!recoveryOwner || Boolean(recoveryOwner.closeRetry) || recoveryOwner.entries.some((entry) => entry.status !== "uploaded"));
   const uploadBusy = Boolean(preparationProgress || recoveryOwner?.initialUploadInFlight || recoveryOwner?.retryInFlight || (!recoveryOwner && uploadProgress && uploadProgress.finishedFiles + uploadProgress.failedFiles < uploadProgress.totalFiles));
   const chatPeople = mainPeople(people, projectSummary?.photos ?? 0);
+  const taggedMissedPeople = people.filter((person) => person.personId.startsWith("p-missed-") && !person.skipped && person.momentCount > 0);
+  const headerPeople = [...new Map([...chatPeople, ...taggedMissedPeople].map((person) => [person.personId, person])).values()];
   const currentPeopleSummary = [...state.items].reverse().find((item) => item.kind === "people-summary");
   const summaryPeopleIds = new Set(currentPeopleSummary?.kind === "people-summary" ? currentPeopleSummary.people.map(({ personId }) => personId) : []);
   const taggedMissedCount = state.items.filter((item) => item.kind === "missed-person" && !item.skipped && item.momentCount > 0 && !summaryPeopleIds.has(item.personId)).length;
-  const summaryPeopleCount = (currentPeopleSummary?.kind === "people-summary" ? currentPeopleSummary.people.length : 0) + taggedMissedCount;
+  const summaryPeopleCount = Math.max((currentPeopleSummary?.kind === "people-summary" ? currentPeopleSummary.people.length : 0) + taggedMissedCount, confirmedPeopleSummaryCount ?? 0);
   const peopleProgress = summaryPeopleCount > 0
     ? { confirmed: summaryPeopleCount, total: summaryPeopleCount }
-    : chatPeople.length > 0
-      ? { confirmed: Math.min(chatPeople.length, proceededPersonIds.filter((id) => chatPeople.some((person) => person.personId === id)).length + chatPeople.filter((person) => person.personId.startsWith("p-missed-") && person.momentCount > 0).length), total: chatPeople.length }
+    : headerPeople.length > 0
+      ? { confirmed: Math.min(headerPeople.length, proceededPersonIds.filter((id) => headerPeople.some((person) => person.personId === id)).length + taggedMissedPeople.length), total: headerPeople.length }
     : undefined;
   const uploadFailureAlert = hasUploadFailure ? <View key="upload-failure-alert" accessibilityRole="alert" className="gap-2 rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure ?? (missingPending ? `${failedUploads} files failed and ${missingPending} still need to upload.` : `${failedUploads} files could not upload.`)}</Text>
     <Button label={canRetryLocal ? "Retry uploads" : "Pick the missing files again"} variant="secondary" disabled={uploadBusy} onPress={() => { if (canRetryLocal) { setUploadFailuresAcknowledged(false); void retryPendingMedia(projectId); } else mediaPicker.current?.open(); }} />

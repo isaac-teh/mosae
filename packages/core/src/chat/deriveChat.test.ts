@@ -1032,11 +1032,11 @@ describe("contextual direction copy", () => {
 describe("canonical people-to-film transcript", () => {
   const flowPeople = (people: NonNullable<ChatInput["people"]>) => people!.map(({ personId, name, role, skipped }) => ({ personId, name, role, confirmed: true, skipped, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null }));
   const tagged = [
-    { personId: "p1", name: "Kara", role: "parent", skipped: false, momentCount: 4, sampleShotIds: [], days: [] },
-    { personId: "p2", name: "Jamie", role: "child", skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
+    { personId: "p1", name: "Kara", role: "parent", skipped: false, momentCount: 4, sampleShotIds: ["kara-shot"], sampleFaces: [{ shotId: "kara-shot", uri: "kara-own-face.jpg", bbox: [0.1, 0.2, 0.3, 0.4] as [number, number, number, number] }], days: [] },
+    { personId: "p2", name: "Jamie", role: "child", skipped: false, momentCount: 3, sampleShotIds: ["jamie-shot"], sampleFaces: [{ shotId: "jamie-shot", uri: "jamie-own-face.jpg", bbox: [0.4, 0.3, 0.2, 0.1] as [number, number, number, number] }], days: [] },
   ];
   const makeInput = (scenario: string): ChatInput => {
-    const common: ChatInput = { ...base(), people: tagged, peopleConfirmed: true, proceededPersonIds: ["p1", "p2"], missedPeopleConfirmed: true,
+    const common: ChatInput = { ...base(), people: tagged, peopleConfirmed: true, proceededPersonIds: ["p1", "p2"], missedPeopleConfirmed: true, missedAnswer: "That's everyone",
       flow: { revision: 7, story: { answer: "Our Japan trip", storySummary: "Japan trip", mentionedPeople: [] }, people: flowPeople(tagged), peopleProgress: { askedPersonIds: ["p1", "p2"], completedPersonIds: ["p1", "p2"] }, missedPeopleConfirmed: true, peopleSummaryConfirmed: false },
       plan, momentsConfirmed: true, direction: { confirmed: false, pace: "lively", lengthSec: 60, focus: "everyone" } };
     if (scenario === "missed people added") return { ...common, missedAnswer: "Grandma", missedPeople: [{ personId: "p-missed-grandma", name: "Grandma", momentCount: 2, sampleUris: ["grandma.jpg"] }], flow: { ...common.flow!, missedPeople: [{ personId: "p-missed-grandma", name: "Grandma" }] } };
@@ -1080,21 +1080,21 @@ describe("canonical people-to-film transcript", () => {
     return common;
   };
   const scenarios = [
-    ["no missed people", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["missed people added", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "missed-select-p-missed-grandma", "missed-person-p-missed-grandma", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["none", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["no", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["skip", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["summary follow-up add person", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "people-summary-history-message-1", "people-summary-history-1", "summary-followup-1", "summary-followup-reply-1", "summary-followup-2", "missed-select-p-missed-grandma", "missed-person-p-missed-grandma", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["typed name merge: that's Kara again", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "merge-p2-ack", "anyone-else", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["exclude: this person don't exist", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "person-question-p3", "person-answer-p3", "anyone-else", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["zero-photo person", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "person-question-p0", "person-answer-p0", "person-tagged-p0", "anyone-else", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["short names", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["culled-only person", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "people-summary-message", "people-summary", "set-aside-message", "moments-answer", "direction-question", "direction", "direction-answer", "film"]],
-    ["background stranger", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["same photo faces", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "person-question-p3", "person-answer-p3", "person-tagged-p3", "anyone-else", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film"]],
-    ["post-confirmation typing", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "people-summary-message", "people-summary", "direction-question", "direction", "direction-answer", "film", "post-confirmation-question-1", "post-confirmation-reply-1"]],
-    ["page reload mid-flow", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "people-summary-history-message-1", "people-summary-history-1", "summary-followup-1", "summary-followup-reply-1", "summary-followup-2", "missed-select-p-missed-grandma", "missed-person-p-missed-grandma"]],
+    ["no missed people", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["missed people added", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "missed-select-p-missed-grandma", "missed-person-p-missed-grandma", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["none", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["no", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["skip", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["summary follow-up add person", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-history-message-1", "people-summary-history-1", "summary-followup-1", "summary-followup-reply-1", "summary-followup-2", "missed-select-p-missed-grandma", "missed-person-p-missed-grandma", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["typed name merge: that's Kara again", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "merge-p2-ack", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["exclude: this person don't exist", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "person-question-p3", "person-answer-p3", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["zero-photo person", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "person-question-p0", "person-answer-p0", "person-tagged-p0", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["short names", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["culled-only person", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "set-aside-message", "moments-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["background stranger", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["same photo faces", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "person-question-p3", "person-answer-p3", "person-tagged-p3", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film"]],
+    ["post-confirmation typing", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "people-intro", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-message", "people-summary", "people-summary-answer", "direction-question", "direction", "direction-answer", "film", "post-confirmation-question-1", "post-confirmation-reply-1"]],
+    ["page reload mid-flow", ["upload-intro", "upload-status", "occasion-message", "occasion-answer", "story-acknowledgement", "person-question-p1", "person-answer-p1", "person-tagged-p1", "person-question-p2", "person-answer-p2", "person-tagged-p2", "anyone-else", "missed-answer", "people-summary-history-message-1", "people-summary-history-1", "summary-followup-1", "summary-followup-reply-1", "summary-followup-2", "missed-select-p-missed-grandma", "missed-person-p-missed-grandma"]],
   ] as const;
 
   it.each(scenarios)("keeps the full transcript in canonical order for %s", (scenario, expectedTranscript) => {
@@ -1107,7 +1107,7 @@ describe("canonical people-to-film transcript", () => {
     expect(unconfirmedIds).not.toContain("direction-answer");
     expect(summaryIds.every((id) => unconfirmedIds.includes(id))).toBe(true);
 
-    const accepted = deriveChat({ ...input, peopleSummaryConfirmed: true, flow: { ...input.flow!, peopleSummaryConfirmed: true } });
+    const accepted = deriveChat({ ...input, peopleSummaryConfirmed: true, peopleSummaryAnswer: scenario === "page reload mid-flow" ? undefined : "Looks right", flow: { ...input.flow!, peopleSummaryConfirmed: true, peopleSummaryAnswer: scenario === "page reload mid-flow" ? undefined : "Looks right" } });
     const acceptedIds = accepted.items.map(({ id }) => id);
     expect(accepted.items.filter((item) => item.kind === "people-summary")).toHaveLength(scenario === "summary follow-up add person" ? 2 : 1);
     if (scenario === "page reload mid-flow") {
@@ -1117,11 +1117,33 @@ describe("canonical people-to-film transcript", () => {
       expect(accepted.items.find((item) => item.kind === "direction")).toBeTruthy();
     }
 
-    const finished = deriveChat({ ...input, peopleSummaryConfirmed: true, flow: { ...input.flow!, peopleSummaryConfirmed: true },
+    const finished = deriveChat({ ...input, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right", flow: { ...input.flow!, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right" },
       direction: { confirmed: true, pace: "lively", lengthSec: 60, focus: "everyone" }, generation: { status: "done", stage: "saved", progress: 1, stepsDone: 3, film } });
     const completeIds = finished.items.map(({ id }) => id);
     const fullTranscript = scenario === "page reload mid-flow" ? unconfirmedIds : completeIds;
     expect(fullTranscript).toEqual(expectedTranscript);
+    const currentSummary = awaitingConfirmation.items.find((item) => item.kind === "people-summary" && item.id === "people-summary");
+    if (currentSummary?.kind === "people-summary") {
+      for (const row of currentSummary.people) {
+        const sourcePerson = input.people?.find((person) => person.personId === row.personId);
+        const taggedCard = awaitingConfirmation.items.find((item) => item.kind === "person-tagged" && item.personId === row.personId);
+        if (sourcePerson?.sampleFaces?.[0]) expect(row.sampleFace).toEqual(sourcePerson.sampleFaces[0]);
+        if (taggedCard?.kind === "person-tagged") expect(row.sampleFace).toEqual(taggedCard.sampleFace);
+      }
+    }
+    const missedAnswer = awaitingConfirmation.items.findIndex((item) => item.id === "missed-answer");
+    const anyoneElse = awaitingConfirmation.items.findIndex((item) => item.id === "anyone-else");
+    if (missedAnswer >= 0) {
+      const missedText = scenario === "missed people added" ? "Grandma" : scenario === "none" ? "None" : scenario === "no" ? "No" : scenario === "skip" ? "Skip" : "That's everyone";
+      expect(awaitingConfirmation.items[missedAnswer]).toMatchObject({ kind: "you", text: missedText });
+      expect(missedAnswer).toBeGreaterThan(anyoneElse);
+    }
+    const summaryAnswer = finished.items.findIndex((item) => item.id === "people-summary-answer");
+    if (scenario !== "page reload mid-flow") {
+      expect(finished.items[summaryAnswer]).toMatchObject({ kind: "you", text: "Looks right" });
+      expect(summaryAnswer).toBeGreaterThan(completeIds.indexOf("people-summary"));
+      expect(summaryAnswer).toBeLessThan(completeIds.indexOf("direction-question"));
+    }
     if (scenario === "zero-photo person") {
       const summaryCard = awaitingConfirmation.items.find((item) => item.kind === "people-summary");
       expect(summaryCard?.kind === "people-summary" && summaryCard.people.some((person) => person.personId === "p0")).toBe(false);
@@ -1156,5 +1178,15 @@ describe("canonical people-to-film transcript", () => {
       expect(finished.items.filter((item) => item.kind === "film")).toHaveLength(1);
     }
     if (scenario !== "page reload mid-flow") expect(unconfirmedIds).toContain("people-summary-message");
+  });
+
+  it("keeps the accepted summary and Looks right bubble when a refresh reports people as unconfirmed", () => {
+    const input = makeInput("no missed people");
+    const state = deriveChat({ ...input, peopleConfirmed: false, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right", flow: { ...input.flow!, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right" } });
+    const ids = state.items.map(({ id }) => id);
+    expect(state.items.filter((item) => item.kind === "people-summary")).toHaveLength(1);
+    expect(state.items.find((item) => item.id === "people-summary-answer")).toMatchObject({ kind: "you", text: "Looks right" });
+    expect(ids.indexOf("people-summary")).toBeLessThan(ids.indexOf("people-summary-answer"));
+    expect(state.items.some((item) => item.kind === "person")).toBe(false);
   });
 });

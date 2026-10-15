@@ -198,6 +198,7 @@ export function deriveChat(input: ChatInput): ChatState {
   if (input.flow?.missedPeopleConfirmed !== undefined) input = { ...input, missedPeopleConfirmed: input.flow.missedPeopleConfirmed };
   if (input.peopleSummaryConfirmed === undefined && input.flow?.peopleSummaryConfirmed !== undefined) input = { ...input, peopleSummaryConfirmed: input.flow.peopleSummaryConfirmed };
   if (input.missedAnswer === undefined && input.flow?.missedAnswer !== undefined) input = { ...input, missedAnswer: input.flow.missedAnswer };
+  if (input.peopleSummaryAnswer === undefined && input.flow?.peopleSummaryAnswer !== undefined) input = { ...input, peopleSummaryAnswer: input.flow.peopleSummaryAnswer };
   if (input.missedReply === undefined && input.flow?.missedReply !== undefined) input = { ...input, missedReply: input.flow.missedReply };
   if (input.missedPeople === undefined && input.flow?.missedPeople) input = { ...input, missedPeople: input.flow.missedPeople.map((person) => {
     const stored = input.flow!.people.find((entry) => entry.personId === person.personId);
@@ -320,7 +321,7 @@ export function deriveChat(input: ChatInput): ChatState {
   const allNamedPeopleProceeded = !tracksProceedActions || announcedPeople(input).filter((person) => !missedPersonIds.has(person.personId)).every((person) => person.skipped || !person.name || completedPersonIds?.includes(person.personId));
   const missedPeople = input.missedPeople ?? [];
   const missedSelectionsResolved = missedPeople.length > 0 && missedPeople.every((person) => person.skipped || person.momentCount > 0 || Boolean(person.sampleUri || person.sampleUris?.length));
-  const peopleResolved = input.peopleConfirmed && allNamedPeopleProceeded || allNamedPeopleProceeded && missedSelectionsResolved || (facesReady && input.people?.length === 0);
+  const peopleResolved = input.peopleSummaryConfirmed === true || input.peopleConfirmed && allNamedPeopleProceeded || allNamedPeopleProceeded && missedSelectionsResolved || (facesReady && input.people?.length === 0);
   if (!peopleResolved) {
     step = "people";
     if (!facesReady || input.people === null) {
@@ -426,7 +427,7 @@ export function deriveChat(input: ChatInput): ChatState {
   // Once names have been supplied, completing or skipping every photo card is
   // the confirmation to continue; waiting for another answer leaves chat stuck.
   const showPeopleSummary = (input.peopleConfirmed || allNamedPeopleProceeded && missedSelectionsResolved) && input.peopleSummaryConfirmed !== true && !hasUntaggedMissedPeople && (input.missedPeopleConfirmed === true || missedPeople.length > 0 || input.missedPeopleConfirmed === undefined && input.peopleSummaryConfirmed === false) && !(hasSummaryHistory && input.flow?.peopleSummaryFollowupActive);
-  const keepPeopleSummary = showPeopleSummary || input.peopleConfirmed && input.peopleSummaryConfirmed === true;
+  const keepPeopleSummary = showPeopleSummary || input.peopleSummaryConfirmed === true;
   const mergeEvents = input.mergeEvents ?? [];
   if (showPeopleSummary) {
     step = "people";
@@ -460,6 +461,7 @@ export function deriveChat(input: ChatInput): ChatState {
     }
   };
   const addSummaryHistory = () => {
+    if (input.missedAnswer) add({ kind: "you", id: "missed-answer", text: input.missedAnswer });
     const history = input.flow?.peopleSummaryHistory ?? [];
     history.forEach((people, index) => {
       const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
@@ -559,10 +561,11 @@ export function deriveChat(input: ChatInput): ChatState {
     const summaryPeople = summarySource.filter((person) => !person.skipped && person.name && person.momentCount > 0);
     const asked = announcedPeople(input).filter((person) => !person.skipped && person.name && person.momentCount > 0 && !summaryPeople.some((known) => known.personId === person.personId));
     const announced = orderByProgress([...summaryPeople, ...asked], input);
-    const peopleById = new Map(announced.map((person) => [person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri, sampleFace: person.sampleFaces?.[0] }]));
+    const taggedCardFaceByPersonId = new Map(items.flatMap((item) => item.kind === "person-tagged" && item.sampleFace ? [[item.personId, item.sampleFace] as const] : []));
+    const peopleById = new Map(announced.map((person) => [person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: taggedCardFaceByPersonId.get(person.personId)?.uri ?? person.sampleFaces?.[0]?.uri, sampleFace: taggedCardFaceByPersonId.get(person.personId) ?? person.sampleFaces?.[0] }]));
     const taggedMissed = (input.people ?? []).filter((person) => person.personId.startsWith("p-missed-") && !person.skipped && person.name && person.momentCount > 0);
     for (const person of taggedMissed) {
-      if (!peopleById.has(person.personId)) peopleById.set(person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: person.sampleFaces?.[0]?.uri, sampleFace: person.sampleFaces?.[0] });
+      if (!peopleById.has(person.personId)) peopleById.set(person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: taggedCardFaceByPersonId.get(person.personId)?.uri ?? person.sampleFaces?.[0]?.uri, sampleFace: taggedCardFaceByPersonId.get(person.personId) ?? person.sampleFaces?.[0] });
     }
     for (const person of missedPeople) {
       const momentCount = Math.max(person.momentCount, person.sampleUris?.length ?? 0, person.sampleUri ? 1 : 0);
@@ -574,6 +577,7 @@ export function deriveChat(input: ChatInput): ChatState {
     if (named.length === 1) add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged ${named[0]!.name} in your moments.` });
     else add({ kind: "mosae", id: "people-summary-message", text: `Thanks. I've tagged all ${words[named.length] ?? named.length} in your moments.` });
     add({ kind: "people-summary", id: "people-summary", people: named, ...(input.peopleSummaryConfirmed === true ? { canConfirm: false } : {}) });
+    if (input.peopleSummaryConfirmed === true && input.peopleSummaryAnswer) add({ kind: "you", id: "people-summary-answer", text: input.peopleSummaryAnswer });
     if (showPeopleSummary) return { items, step, confirmed, placeholder };
   }
   confirmed = 2;

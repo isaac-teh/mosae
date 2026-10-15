@@ -35,6 +35,8 @@ export type ChatInput = {
   intent: { text: string } | null;
   mentionedPeople?: string[];
   missedAnswer?: string;
+  peopleSummaryAnswer?: string;
+  peopleSummaryCount?: number;
   missedReply?: string;
   storySummary?: string;
   people: { personId: string; name: string | null; role: string | null; answerText?: string; ageBand?: PersonAgeBand; skipped: boolean; forceShow?: boolean; momentCount: number; sampleShotIds: string[]; shotIds?: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;

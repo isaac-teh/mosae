@@ -282,6 +282,9 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy();
     expect(mocks.repo.mutateFlow.mock.calls.filter(([, , action]: [string, string, any]) => action.type === "missed-person-completed").map(([, , action]: [string, string, any]) => action.personId)).toEqual([grandpaId, grandmaId]);
     expect([...host.querySelectorAll('[data-from="you"]')].filter((item) => item.textContent === "Grandpa and Grandma")).toHaveLength(1);
+    await click("Looks right");
+    await waitFor(() => expect([...host.querySelectorAll('[data-from="you"]')].some((item) => item.textContent === "Looks right")).toBe(true));
+    expect([...host.querySelectorAll('[data-from="you"]')].filter((item) => item.textContent === "Looks right")).toHaveLength(1);
   });
 
   it("appends a summary name response after the historical summary and clarification", async () => {
@@ -303,6 +306,7 @@ describe("Director chat", () => {
       const changes = action.type === "batch" ? action.actions : [action];
       for (const change of changes) {
         if (change.type === "people-summary-snapshot") { flow.peopleSummaryHistory = [...(flow.peopleSummaryHistory ?? []), change.people]; flow.peopleSummaryFollowupActive = true; }
+        if (change.type === "people-summary-confirmed") { flow.peopleSummaryConfirmed = change.confirmed; flow.peopleSummaryAnswer = change.answer; flow.peopleSummaryCount = change.peopleCount; }
         if (change.type === "people-summary-followup") flow.peopleSummaryFollowups = [...(flow.peopleSummaryFollowups ?? []), { question: change.question, ...(change.reply ? { reply: change.reply } : {}) }];
         if (change.type === "missed-person-added") flow.missedPeople = [...(flow.missedPeople ?? []), { personId: change.personId, name: change.name }];
         if (change.type === "missed-people-confirmed") flow.missedPeopleConfirmed = change.confirmed;
@@ -440,7 +444,7 @@ describe("Director chat", () => {
     const personFlow = (personId: string, name: string) => ({ personId, name, role: "child", confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null });
     let flow: any = { revision: 7, story: { answer: "Japan trip", storySummary: "Japan", mentionedPeople: [] }, people: people.map((person) => personFlow(person.personId, "Mia")), peopleSummaryConfirmed: false };
     mocks.repo.getFlow = vi.fn(async () => flow);
-    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, peopleSummaryConfirmed: action.confirmed }; return flow; });
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => { flow = { ...flow, revision: flow.revision + 1, peopleSummaryConfirmed: action.confirmed, peopleSummaryAnswer: action.answer, peopleSummaryCount: action.peopleCount }; return flow; });
     await renderScreen();
     await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
     expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
@@ -451,12 +455,13 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="My daughter"]')).toBeNull();
     expect(mocks.repo.mutateFlow.mock.calls.some(([, , action]: [string, string, any]) => action.type === "batch" && action.actions.some((change: any) => change.type === "person" && change.personId === "person-1" && change.name === null))).toBe(false);
     await click("Looks right");
-    await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), { type: "people-summary-confirmed", confirmed: true }));
+    await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledWith("project-1", expect.any(String), { type: "people-summary-confirmed", confirmed: true, answer: "Looks right", peopleCount: 2 }));
     await act(async () => root.unmount());
     root = createRoot(host);
     await renderScreen();
     await waitFor(() => expect(mocks.repo.getPlan).toHaveBeenCalledWith("proposal-1"));
     expect(host.querySelector('button[aria-label="Confirm"]')).toBeNull();
+    expect(hasText("Looks right")).toBe(true);
     expect(hasText("Thanks. I've tagged all")).toBe(true);
     expect(host.querySelector('[aria-label="Filtered photos"]')).toBeTruthy();
   });

@@ -11,7 +11,12 @@ describe("flow action application", () => {
       peopleSummaryConfirmed: false,
     };
     expect(applyFlowAction(flow, { type: "people-summary-confirmed", confirmed: true })).toEqual({ ...flow, peopleSummaryConfirmed: true });
+    expect(applyFlowAction(flow, { type: "people-summary-confirmed", confirmed: true, answer: "Looks right", peopleCount: 4 })).toEqual({ ...flow, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right", peopleSummaryCount: 4 });
     expect(applyFlowAction(flow, { type: "people-summary-confirmed", confirmed: false })).toEqual(flow);
+  });
+  it("persists chosen no-missed-people answers in the flow transcript", () => {
+    const flow: DirectorFlow = { revision: 0, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: [] };
+    expect(applyFlowAction(flow, { type: "missed-people-confirmed", confirmed: true, answer: "That's everyone" })).toEqual({ ...flow, missedPeopleConfirmed: true, missedAnswer: "That's everyone" });
   });
   it("persists proceeded identities and preserves old flows without progress state", () => {
     const old: DirectorFlow = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [] };

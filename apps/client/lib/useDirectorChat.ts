@@ -215,6 +215,8 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       ...(acceptedFlow.story.storySummary ? { storySummary: acceptedFlow.story.storySummary } : {}),
       ...(acceptedFlow.story.mentionedPeople.length ? { mentionedPeople: acceptedFlow.story.mentionedPeople } : {}),
       missedAnswer: current.missedAnswer ?? acceptedFlow.missedAnswer,
+      peopleSummaryAnswer: current.peopleSummaryAnswer ?? acceptedFlow.peopleSummaryAnswer,
+      peopleSummaryCount: current.peopleSummaryCount ?? acceptedFlow.peopleSummaryCount,
       missedReply: current.missedReply ?? acceptedFlow.missedReply,
       summaryFollowups: acceptedFlow.peopleSummaryFollowups ?? current.summaryFollowups,
       interpTurns: [...(current.interpTurns ?? []).filter((turn) => turn.stage !== "missed"), ...historyTurns],
@@ -598,11 +600,11 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     },
     async confirmMissedPeople() {
       try {
-        await commitFlowAction({ type: "missed-people-confirmed", confirmed: true });
+        await commitFlowAction({ type: "missed-people-confirmed", confirmed: true, answer: "That's everyone" });
       } catch (cause) {
         setError(reportFailure(cause));
       }
-      setInput((current) => ({ ...current, flow: current.flow ? { ...current.flow, missedPeopleConfirmed: true } : current.flow, peopleConfirmed: true, missedPeopleConfirmed: true, peopleSummaryConfirmed: false }));
+      setInput((current) => ({ ...current, missedAnswer: "That's everyone", flow: current.flow ? { ...current.flow, missedPeopleConfirmed: true, missedAnswer: "That's everyone" } : current.flow, peopleConfirmed: true, missedPeopleConfirmed: true, peopleSummaryConfirmed: false }));
     },
     reopenPerson(personId: string) {
       const person = input.people?.find((entry) => entry.personId === personId && !entry.skipped);
@@ -697,10 +699,12 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     beginMissedPersonTagging(personId: string, name: string) { setInput((current) => ({ ...current, missedPersonTagging: { personId, name } })); },
     async confirmPeopleSummary() {
       if (input.peopleSummaryConfirmed) return;
+      const currentSummary = [...state.items].reverse().find((item) => item.kind === "people-summary" && item.id === "people-summary");
+      const peopleCount = currentSummary?.kind === "people-summary" ? currentSummary.people.length : input.peopleSummaryCount ?? 0;
       // Advance on the first tap. The previous identity save can still be
       // completing its cast refresh when the summary appears, so serialize the
       // final cast confirmation behind it instead of silently dropping input.
-      setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true }));
+      setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right", peopleSummaryCount: peopleCount }));
       peopleSummaryConfirming.current = true;
       let summaryPersisted = false;
       setError(null);
@@ -711,14 +715,14 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
         if (result?.proposalId) proposalId.current = result.proposalId;
-        try { await commitFlowAction({ type: "people-summary-confirmed", confirmed: true }); }
-        catch { await commitFlowAction({ type: "people-summary-confirmed", confirmed: true }); }
+        try { await commitFlowAction({ type: "people-summary-confirmed", confirmed: true, answer: "Looks right", peopleCount }); }
+        catch { await commitFlowAction({ type: "people-summary-confirmed", confirmed: true, answer: "Looks right", peopleCount }); }
         summaryPersisted = true;
         const setAside = revisedPlan ? getSetAsideSummary(revisedPlan) : null;
         const momentsConfirmed = setAside
           ? setAside.blurry + setAside.duplicates === 0
           : input.momentsConfirmed;
-        setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, momentsConfirmed, ...(revisedPlan ? { plan: revisedPlan } : {}) }));
+        setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: true, peopleSummaryAnswer: "Looks right", peopleSummaryCount: peopleCount, momentsConfirmed, ...(revisedPlan ? { plan: revisedPlan } : {}) }));
         const nextPlan = revisedPlan ?? input.plan;
         if (momentsConfirmed && nextPlan && input.summary?.ready.plan) await loadDirectionOptions(nextPlan.planId);
       } catch (cause) {
@@ -1042,5 +1046,5 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
     else if (activeFilmId.current) void pollFilm(activeFilmId.current);
     else if (pendingDirectionOptions.current) void recoverDirectionOptions(pendingDirectionOptions.current);
     else void refresh().catch(cause => { if (isCurrentProject()) setError(reportFailure(cause)); });
-  }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection: { ...directionSelection, aspect: effectiveAspect }, people: input.people ?? [], proceededPersonIds: input.proceededPersonIds ?? [], missedPeopleConfirmed: input.missedPeopleConfirmed };
+  }, pendingInterpret, saving, summary, plan: input.plan, directionOptions, directionSelection: { ...directionSelection, aspect: effectiveAspect }, people: input.people ?? [], proceededPersonIds: input.proceededPersonIds ?? [], missedPeopleConfirmed: input.missedPeopleConfirmed, peopleSummaryCount: input.peopleSummaryCount ?? input.flow?.peopleSummaryCount };
 }
