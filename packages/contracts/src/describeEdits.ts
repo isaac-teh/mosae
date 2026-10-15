@@ -12,7 +12,7 @@ function joinClauses(clauses: string[]): string {
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }
 
-export function describeApplied(text: string, ops: EditOp[], after: Timeline, soundtracks: { id: string; name: string }[] = []): string {
+export function describeApplied(text: string, ops: EditOp[], after: Timeline, soundtracks: { id: string; name: string }[] = [], before?: Timeline): string {
   const has = (...names: string[]) => ops.some(op => names.includes(op.op));
   const clauses: string[] = [];
   const timing = has("setPhotoDuration", "setCollageDuration", "trim");
@@ -20,7 +20,11 @@ export function describeApplied(text: string, ops: EditOp[], after: Timeline, so
   const pace = /\b(?:faster|quicker|speed(?:ier)? up)\b/i.test(text) ? "faster" : /\b(?:slower|more slowly|slow down|more relaxed)\b/i.test(text) ? "slower" : null;
   const relative = /\b(first|second|third|fourth|last|final)\b[^,.]*?\b(longer|shorter)\b/i.exec(text);
   if (timing && targetSeconds) clauses.push(`made it ${Math.round(after.durationSec)} seconds`);
-  else if (timing && pace) clauses.push(`made it ${pace}`);
+  else if (timing && pace) {
+    const clock = (sec: number) => `${Math.floor(Math.round(sec) / 60)}:${String(Math.round(sec) % 60).padStart(2, "0")}`;
+    const range = before && Math.round(before.durationSec) !== Math.round(after.durationSec) ? `: ${clock(before.durationSec)} → ${clock(after.durationSec)}` : "";
+    clauses.push(`made it ${pace}${range}`);
+  }
   if (has("setAspect")) clauses.push(`switched to ${after.aspect === "16:9" ? "landscape" : "portrait"}`);
   const music = ops.find(op => op.op === "setSoundtrack");
   if (music?.op === "setSoundtrack") {

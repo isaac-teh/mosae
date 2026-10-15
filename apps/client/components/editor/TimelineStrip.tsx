@@ -50,10 +50,11 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
     </View>
     <View className="relative mt-1 h-[21px]">
       {timeline.chapters.map((chapter, index) => {
-        const endSec = chapter.durationSec !== undefined ? chapter.startSec + chapter.durationSec : timeline.chapters[index + 1]?.startSec ?? timeline.durationSec;
+        const nextStart = timeline.chapters[index + 1]?.startSec ?? timeline.durationSec;
+        const endSec = Math.min(chapter.durationSec !== undefined ? chapter.startSec + chapter.durationSec : nextStart, Math.max(nextStart, chapter.startSec));
         const width = Math.max(0, (endSec - chapter.startSec) * pixelsPerSecond);
         return width > 0 ? <View key={`${chapter.title}-${index}`} accessibilityLabel={`Chapter ${chapter.title}`} style={{ position: "absolute", left: timeToX(chapter.startSec, pixelsPerSecond, leadingPadding), width, height: 21, overflow: "hidden" }}>
-          {width >= 40 ? <Text numberOfLines={1} ellipsizeMode="tail" className="font-sans text-caption text-on-screen-muted">{chapter.title}</Text> : null}
+          {width >= 40 ? <Text numberOfLines={1} ellipsizeMode="tail" style={{ width: width - 4, maxWidth: width - 4, overflow: "hidden", ...({ whiteSpace: "nowrap", textOverflow: "ellipsis" } as object) }} className="font-sans text-caption text-on-screen-muted">{chapter.title}</Text> : null}
         </View> : null;
       })}
     </View>
