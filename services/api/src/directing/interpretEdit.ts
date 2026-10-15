@@ -8,6 +8,7 @@ export type InterpretEditRequest = { text: string; timeline: Timeline; groundedC
 export type InterpretEditModelResult = { kind?: "edit" | "clarify" | "unsupported"; reply?: string; ops: EditOp[] };
 export type InterpretEditResult = { kind: "edit" | "clarify" | "unsupported"; reply: string; ops: EditOp[] };
 const fallbackReply = "I can reorder or trim moments, swap photos, change framing or collage layout, and adjust the soundtrack. What would you like to change?";
+const unavailableFeatureReply = "I can reorder moments, retime photos or collages, change framing or collage layout, swap photos, or adjust music. Which would you like?";
 
 type ModelSchema = Record<string, any>;
 
@@ -160,9 +161,13 @@ function validate(value: unknown): InterpretEditModelResult {
   return { ...(typeof result.kind === "string" ? { kind: result.kind as InterpretEditModelResult["kind"] } : {}), ...(typeof result.reply === "string" ? { reply: result.reply } : {}), ops };
 }
 
+function mentionsPerson(text: string, name: string): boolean {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, "iu").test(text);
+}
+
 function hasAmbiguousPerson(text: string, people: NonNullable<NonNullable<InterpretEditRequest["groundedContext"]>["people"]>): boolean {
-  const normalizedText = text.toLocaleLowerCase();
-  return people.some((person) => person.name && normalizedText.includes(person.name.toLocaleLowerCase())
+  return people.some((person) => person.name && mentionsPerson(text, person.name)
     && people.filter((candidate) => candidate.name?.toLocaleLowerCase() === person.name!.toLocaleLowerCase()).length > 1);
 }
 
@@ -175,9 +180,9 @@ function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
   if (!context || !/\b(?:focus|feature|emphasize)\b/i.test(req.text)) return null;
   const people = context.people;
   if (!people.length) return { kind: "unsupported", reply: "I can reorder moments, change music or framing, and adjust clips. This film has no confirmed people to focus on yet.", ops: [] };
-  const text = req.text.toLocaleLowerCase();
+  const text = req.text;
   const everyone = /\b(?:everyone|everybody|family|all (?:the )?people|all of us)\b/i.test(text);
-  const matched = people.filter(person => person.name && text.includes(person.name.toLocaleLowerCase()));
+  const matched = people.filter(person => person.name && mentionsPerson(text, person.name));
   const requested = everyone ? people : matched;
   if (!requested.length) return { kind: "clarify", reply: `Who should I focus on? Choose Everyone or a confirmed person: ${people.map(person => person.name || person.role).join(", ")}.`, ops: [] };
   if (!everyone && matched.some(person => people.filter(candidate => candidate.name?.toLocaleLowerCase() === person.name!.toLocaleLowerCase()).length > 1)) {
@@ -191,7 +196,7 @@ function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
     const shotIds = "kind" in clip ? clip.spec.slots.flatMap(slot => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId];
     const peopleInClip = new Set(shotIds.flatMap(shotId => candidates.get(shotId)?.personIds ?? []));
     const matchedCount = [...wanted].filter(personId => peopleInClip.has(personId)).length;
-    return { id, shotIds, matchedCount };
+    return { id, shotIds, matchedCount, personIds: [...peopleInClip] };
   });
   if (context.scope.kind === "slot") {
     const candidate = context.candidates.find(item => item.kind === "photo" && item.personIds.some(id => wanted.has(id)) && !relevantIds?.has(item.shotId));
@@ -201,10 +206,16 @@ function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
   if (context.scope.kind === "clip") {
     const selectedScope = context.scope;
     const selected = clipMatches.find(clip => clip.id === selectedScope.clipId);
-    if (selected?.matchedCount) return { kind: "clarify", reply: "This moment already includes the requested focus. I can replace it with another matching moment if you want.", ops: [] };
+    if (selected?.matchedCount === wanted.size) return { kind: "clarify", reply: "This moment already includes the requested focus. I can replace it with another matching moment if you want.", ops: [] };
     const current = req.timeline.videoClips.find(clip => ("kind" in clip ? clip.clipId : clip.id) === selectedScope.clipId);
-    const candidate = context.candidates.find(item => item.personIds.some(id => wanted.has(id)) && (!current || item.kind === ("kind" in current ? "collage" : current.source.kind)));
+    const missing = new Set(requested.map(person => person.personId).filter(id => !selected?.personIds.includes(id)));
+    const candidate = context.candidates.filter(item => item.personIds.some(id => missing.has(id)) && (!current || ("kind" in current ? item.kind === "photo" : item.kind === current.source.kind)) && !selected?.shotIds.includes(item.shotId))
+      .sort((a, b) => b.personIds.filter(id => missing.has(id)).length - a.personIds.filter(id => missing.has(id)).length)[0];
     if (candidate && current && !("kind" in current)) return { kind: "edit", reply: `I'll use a moment featuring ${requested.map(person => person.name || person.role).join(" and ")}.`, ops: [{ op: "swapShot", clipId: selectedScope.clipId, shotId: candidate.shotId, kind: candidate.kind, ...(candidate.width ? { width: candidate.width } : {}), ...(candidate.height ? { height: candidate.height } : {}) }] };
+    if (candidate && current && "kind" in current) {
+      const slot = [...current.spec.slots].reverse().find(item => !item.empty && (!item.shotId || !candidates.get(item.shotId)?.personIds.some(id => missing.has(id))));
+      if (slot) return { kind: "edit", reply: `I'll add a photo featuring ${candidate.personIds.filter(id => missing.has(id)).map(id => requested.find(person => person.personId === id)?.name ?? "that person").join(" and ")} to this collage.`, ops: [{ op: "replaceCollageSlot", clipId: selectedScope.clipId, slotId: slot.slotId, shotId: candidate.shotId, kind: "photo", ...(candidate.width ? { width: candidate.width } : {}), ...(candidate.height ? { height: candidate.height } : {}) }] };
+    }
     return { kind: "clarify", reply: "I couldn't find a matching moment to use here. I can move matching moments toward the start of the whole film instead.", ops: [] };
   }
   const available = clipMatches.filter(clip => clip.matchedCount > 0);
@@ -227,6 +238,85 @@ function focusEdit(req: InterpretEditRequest): InterpretEditResult | null {
     : { kind: "clarify", reply: "The current order already brings the requested focus forward. Tell me if you want a different edit.", ops: [] };
 }
 
+function durationRequest(text: string): number | null {
+  const match = text.match(/\b(?:(?:to|at|of)\s+)?(\d+(?:\.\d+)?)\s*(seconds?|secs?|s|minutes?|mins?|m)\b/i);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return value * (/^(?:m|min|minute)/i.test(match[2]!) ? 60 : 1);
+}
+
+/** Handle duration and pace requests with bounded operations that the editor already applies. */
+function timingEdit(req: InterpretEditRequest): InterpretEditResult | null {
+  const text = req.text;
+  const targetDuration = durationRequest(text);
+  const pace = /\b(?:faster|quicker|speed(?:ier)? up|more upbeat)\b/i.test(text) ? 0.8
+    : /\b(?:slower|more slowly|slow down|more relaxed)\b/i.test(text) ? 1.2 : null;
+  if (targetDuration === null && pace === null) return null;
+
+  const scope = req.groundedContext?.scope ?? req.scope ?? { kind: "film" as const };
+  const allClips = req.timeline.videoClips;
+  const clips = scope.kind === "film" || isWholeFilmRequest(text) ? allClips : allClips.filter(clip =>
+    ("kind" in clip ? clip.clipId : clip.id) === scope.clipId);
+  const adjustable = clips.filter(clip => "kind" in clip || clip.source.kind === "photo");
+  if (!adjustable.length) return { kind: "clarify", reply: "I can retime photos and collages, but this selection has no adjustable moments. Select a photo or collage, or ask me to change the whole film.", ops: [] };
+  if (adjustable.length > 20) return { kind: "unsupported", reply: "I can retime up to 20 photos or collages in one edit. Select a smaller group or ask me to change a specific moment.", ops: [] };
+
+  const round = (n: number) => Math.round(n * 10) / 10;
+  let factor: number;
+  let desiredDuration: number | null = null;
+  let fixedDuration = 0;
+  if (targetDuration !== null) {
+    if (!Number.isFinite(targetDuration) || targetDuration <= 0 || targetDuration > 600) {
+      return { kind: "clarify", reply: "Choose a film length between 1 second and 10 minutes, and I can retime its photos and collages.", ops: [] };
+    }
+    if (scope.kind !== "film" && !isWholeFilmRequest(text)) {
+      factor = targetDuration / (adjustable[0]!.durationSec);
+      desiredDuration = targetDuration;
+    } else {
+      fixedDuration = allClips.filter(clip => !("kind" in clip) && clip.source.kind === "video").reduce((sum, clip) => sum + clip.durationSec, 0);
+      const adjustableDuration = adjustable.reduce((sum, clip) => sum + clip.durationSec, 0);
+      if (targetDuration <= fixedDuration) return { kind: "clarify", reply: "That length is shorter than the film’s video moments. I can retime its photos and collages to a longer target.", ops: [] };
+      factor = (targetDuration - fixedDuration) / adjustableDuration;
+      desiredDuration = targetDuration - fixedDuration;
+    }
+  } else factor = pace!;
+
+  const values = adjustable.map(clip => round(Math.max(0.5, Math.min("kind" in clip ? 600 : 6, clip.durationSec * factor))));
+  if (desiredDuration !== null) {
+    let difference = round(desiredDuration - values.reduce((sum, value) => sum + value, 0));
+    for (let index = values.length - 1; index >= 0 && Math.abs(difference) >= 0.1; index--) {
+      const clip = adjustable[index]!;
+      const min = 0.5, max = "kind" in clip ? 600 : 6;
+      while (Math.abs(difference) >= 0.1 && values[index]! + (difference > 0 ? 0.1 : -0.1) >= min && values[index]! + (difference > 0 ? 0.1 : -0.1) <= max) {
+        const adjustment = difference > 0 ? 0.1 : -0.1;
+        values[index] = round(values[index]! + adjustment);
+        difference = round(difference - adjustment);
+      }
+    }
+    if (Math.abs(difference) > 0.1) return { kind: "clarify", reply: "That total length can’t be reached within the supported photo and collage durations. Try a nearby film length, or ask me to retime a specific moment.", ops: [] };
+  }
+  const ops: EditOp[] = adjustable.map((clip, index) => {
+    const value = values[index]!;
+    return "kind" in clip ? { op: "setCollageDuration", clipId: clip.clipId, sec: value }
+      : { op: "setPhotoDuration", clipId: clip.id, sec: value };
+  });
+  if (ops.every((op, index) => "sec" in op && op.sec === adjustable[index]!.durationSec)) {
+    return { kind: "clarify", reply: "Those photos and collages are already at the closest supported timing. I can reorder moments, change framing or collage layout, or adjust music.", ops: [] };
+  }
+  if (targetDuration !== null && scope.kind !== "film" && !isWholeFilmRequest(text) && Math.abs(values[0]! - targetDuration) > 0.1) {
+    return { kind: "clarify", reply: "A photo can be 0.5–6 seconds and a collage can be at least 0.5 seconds. Choose a length within that range for this moment.", ops: [] };
+  }
+  const applied = applyEdits(req.timeline, ops);
+  if (!applied.ok || (targetDuration !== null && (scope.kind === "film" || isWholeFilmRequest(text)) && Math.abs(applied.timeline.durationSec - targetDuration) > 0.11)) {
+    return { kind: "clarify", reply: "That total length can’t be reached within the supported photo and collage durations. Try a nearby film length, or ask me to retime a specific moment.", ops: [] };
+  }
+  return { kind: "edit", reply: targetDuration !== null ? `I’ll set the ${scope.kind === "film" || isWholeFilmRequest(text) ? "film" : "selected moment"} to about ${targetDuration} seconds.` : `I’ll make the selected ${scope.kind === "film" || isWholeFilmRequest(text) ? "film" : "moments"} ${pace! < 1 ? "faster" : "slower"}.`, ops };
+}
+
+function unavailableFeature(text: string): boolean {
+  return /\b(?:captions?|subtitles?|transitions?|titles?|cover(?:s)?|filters?|color grade|colour grade)\b/i.test(text);
+}
+
 function violatesScope(op: EditOp, scope: InterpretEditRequest["scope"]): boolean {
   if (!scope || scope.kind === "film") return false;
   if (scope.kind === "clip") {
@@ -244,8 +334,11 @@ function violatesScope(op: EditOp, scope: InterpretEditRequest["scope"]): boolea
 export async function interpretEdit(req: InterpretEditRequest, deps: {
   generate: (options: GenerateOptions<InterpretEditModelResult>) => Promise<unknown>;
 }): Promise<InterpretEditResult> {
+  if (unavailableFeature(req.text)) return { kind: "unsupported", reply: unavailableFeatureReply, ops: [] };
   const focus = focusEdit(req);
   if (focus) return focus;
+  const timing = timingEdit(req);
+  if (timing) return timing;
   if (req.groundedContext && hasAmbiguousPerson(req.text, req.groundedContext.people)) {
     return { kind: "clarify", reply: "Which person did you mean?", ops: [] };
   }
