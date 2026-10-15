@@ -308,7 +308,7 @@ describe("interpretEdit", () => {
         return { reply: "Move the snow monkeys before the temple?", ops: [{ op: "move", clipId: "monkeys", toIndex: 0 }] } satisfies InterpretEditModelResult;
       }),
     });
-    expect(result).toEqual({ kind: "edit", reply: "Move the snow monkeys before the temple?", ops: [{ op: "move", clipId: "monkeys", toIndex: 0 }] });
+    expect(result).toEqual({ kind: "edit", reply: "Done — reordered moments.", ops: [{ op: "move", clipId: "monkeys", toIndex: 0 }] });
     expect(prompt).toContain('"clipIds":["monkeys","temple"]');
     expect(prompt).toContain('"chapter":"Snow monkeys"');
     expect(prompt).toContain('"caption":"Watching the snow monkeys"');

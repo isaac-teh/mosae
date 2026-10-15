@@ -490,6 +490,19 @@ function unavailableFeature(text: string): boolean {
   return /\b(?:captions?|subtitles?|transitions?|titles?|cover(?:s)?|filters?|color grade|colour grade)\b/i.test(text);
 }
 
+function appliedOpsReply(ops: EditOp[], timeline: Timeline): string {
+  const actions: string[] = [];
+  if (ops.some(op => op.op === "remove")) actions.push("removed moments");
+  if (ops.some(op => op.op === "move")) actions.push("reordered moments");
+  if (ops.some(op => op.op === "setPhotoDuration" || op.op === "setCollageDuration" || op.op === "trim")) actions.push("adjusted timing");
+  if (ops.some(op => op.op === "setAspect")) actions.push(`changed framing to ${timeline.aspect === "16:9" ? "landscape" : "portrait"}`);
+  if (ops.some(op => op.op === "setSoundtrack" || op.op === "setMusicVolume")) actions.push("updated the music");
+  if (ops.some(op => op.op.startsWith("setCollage") || op.op === "addCollageSlot" || op.op === "removeCollageSlot" || op.op === "splitCollage")) actions.push("updated collages");
+  if (ops.some(op => op.op === "swapShot" || op.op === "replaceCollageSlot")) actions.push("replaced a moment");
+  if (ops.some(op => op.op === "add" || op.op === "duplicate")) actions.push("added a moment");
+  return actions.length ? `Done — ${actions.join(" and ")}.` : "Done — applied the requested timeline changes.";
+}
+
 function violatesScope(op: EditOp, scope: InterpretEditRequest["scope"]): boolean {
   if (!scope || scope.kind === "film") return false;
   if (scope.kind === "clip") {
@@ -508,12 +521,34 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
   generate: (options: GenerateOptions<InterpretEditModelResult>) => Promise<unknown>;
 }): Promise<InterpretEditResult> {
   if (unavailableFeature(req.text)) return { kind: "unsupported", reply: unavailableFeatureReply, ops: [] };
+  const asksCollageAmount = /\b(?:most|fewer|less|no)\s+collages?\b|\bmore\s+collages\b|\bmore\s+collage\s+moments\b|\bcollage\s+(?:amount|frequency)\b/i.test(req.text);
+  const collageAmountReply = "I couldn't change the collage amount because the editor can't create a collage from separate moments yet.";
+  // Focus and pace/length are handled by bounded deterministic operations. Run
+  // both and validate their combined batch so neither intent gets short-circuited.
+  const hasTimingIntent = durationRequest(req.text) !== null || /\b(?:faster|quicker|speed(?:ier)? up|slower|more slowly|slow down|more relaxed)\b/i.test(req.text);
+  const hasFocusIntent = /\b(?:focus|feature|emphasize)\b/i.test(req.text);
+  if (hasTimingIntent && hasFocusIntent) {
+    const focus = focusEdit(req);
+    if (focus?.kind === "edit") {
+      const focused = applyEdits(req.timeline, focus.ops);
+      if (focused.ok) {
+        const timing = timingEdit({ ...req, timeline: focused.timeline });
+        if (timing?.kind === "edit") {
+          const ops = [...focus.ops, ...timing.ops];
+          const combined = applyEdits(req.timeline, ops);
+          if (combined.ok) return { kind: "edit", reply: asksCollageAmount ? `${focus.reply.replace(/[.]$/, "")} ${timing.reply.replace(/[.]$/, "")}. ${collageAmountReply}` : `${focus.reply.replace(/[.]$/, "")} ${timing.reply}`, ops };
+        }
+        if (timing?.kind !== "edit") return { ...focus, reply: asksCollageAmount ? `${focus.reply.replace(/[.]$/, "")}. ${collageAmountReply}` : focus.reply };
+      }
+    }
+  }
+  if (asksCollageAmount && !hasTimingIntent && !hasFocusIntent) return { kind: "unsupported", reply: collageAmountReply, ops: [] };
   const focus = focusEdit(req);
-  if (focus) return focus;
+  if (focus) return asksCollageAmount && focus.kind === "edit" ? { ...focus, reply: `${focus.reply.replace(/[.]$/, "")}. ${collageAmountReply}` } : focus;
   const deterministic = deterministicTimelineIntent(req);
-  if (deterministic) return deterministic;
+  if (deterministic) return asksCollageAmount && deterministic.kind === "edit" ? { ...deterministic, reply: `${deterministic.reply.replace(/[.]$/, "")}. ${collageAmountReply}` } : deterministic;
   const timing = timingEdit(req);
-  if (timing) return timing;
+  if (timing) return asksCollageAmount && timing.kind === "edit" ? { ...timing, reply: `${timing.reply.replace(/[.]$/, "")}. ${collageAmountReply}` } : timing;
   if (req.groundedContext && hasAmbiguousPerson(req.text, req.groundedContext.people)) {
     return { kind: "clarify", reply: "Which person did you mean?", ops: [] };
   }
@@ -605,7 +640,7 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
       console.warn("Ask AI edit could not be applied", { error: applied.error, opIndex: applied.opIndex });
       return { kind: "unsupported", reply: "I couldn't apply that combination. I can reorder or retime clips, change framing or collage layout, swap a project photo, or adjust music.", ops: [] };
     }
-    return { kind: "edit", reply: result.reply?.trim() || "Here are the edits I suggest.", ops: fittedOps };
+    return { kind: "edit", reply: appliedOpsReply(fittedOps, applied.timeline), ops: fittedOps };
   } catch (error) {
     if (error instanceof DemoLimitReached) throw error;
     if (error instanceof InvalidEditReply) return { kind: error.kind, reply: error.reply, ops: [] };
