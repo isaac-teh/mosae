@@ -48,16 +48,7 @@ const TimelineRows = memo(function TimelineRows({ timeline, sources, thumbnails,
         {second % 2 === 0 ? <Text accessibilityLabel={`Timeline ruler label ${secondsLabel(second)}`} numberOfLines={1} style={{ position: "absolute", left: timeToX(second, pixelsPerSecond, leadingPadding) + 3, top: 8, width: 40 }} className="font-sans text-[10px] text-on-screen-muted">{secondsLabel(second)}</Text> : null}
       </React.Fragment>)}
     </View>
-    <View className="relative mt-1 h-[21px]">
-      {timeline.chapters.map((chapter, index) => {
-        const nextStart = timeline.chapters[index + 1]?.startSec ?? timeline.durationSec;
-        const endSec = Math.min(chapter.durationSec !== undefined ? chapter.startSec + chapter.durationSec : nextStart, Math.max(nextStart, chapter.startSec));
-        const width = Math.max(0, (endSec - chapter.startSec) * pixelsPerSecond);
-        return width > 0 ? <View key={`${chapter.title}-${index}`} accessibilityLabel={`Chapter ${chapter.title}`} style={{ position: "absolute", left: timeToX(chapter.startSec, pixelsPerSecond, leadingPadding), width, height: 21, overflow: "hidden" }}>
-          {width >= 40 ? <Text numberOfLines={1} ellipsizeMode="tail" style={{ width: width - 4, maxWidth: width - 4, overflow: "hidden", ...({ whiteSpace: "nowrap", textOverflow: "ellipsis" } as object) }} className="font-sans text-caption text-on-screen-muted">{chapter.title}</Text> : null}
-        </View> : null;
-      })}
-    </View>
+    <View data-chapter-label-spacer="true" style={{ height: timeline.chapters.length ? 18 : 0 }} />
     <View className="relative mt-1 h-[36px]">
       {selectedClipId || selectedAudioClipId ? <Pressable role="button" accessibilityLabel="Deselect selected audio" onPress={onDeselect} style={{ position: "absolute", zIndex: 0, left: 0, right: 0, top: 0, height: 32 }} /> : null}
       {music ? <Pressable role="button" accessibilityLabel={`Music track ${soundtrackName ?? "Soundtrack"}`} aria-pressed={selectedAudioClipId === music.id} onPress={() => onSelectAudio(music.id)}
@@ -513,6 +504,12 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
         slideToTime(seekSec);
       }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} onSelectAudio={onSelectAudio} onAddClip={onAddClip} />
       </ScrollView>
+      {timeline.chapters.length ? (() => {
+        const chapter = timeline.chapters.filter((item) => item.startSec <= playheadSec).at(-1) ?? timeline.chapters[0]!;
+        return <View pointerEvents="none" accessibilityLabel="Chapter label row" style={{ position: "absolute", zIndex: 22, left: 0, right: 0, top: 27, height: 18, overflow: "hidden" }}>
+          <Text accessibilityLabel={`Current chapter ${chapter.title}`} numberOfLines={1} ellipsizeMode="tail" style={{ height: 18, lineHeight: 18, maxWidth: viewportWidth || "100%", paddingRight: 8, backgroundColor: "#111d26" }} className="font-sans text-caption text-on-screen-muted">{chapter.title}</Text>
+        </View>;
+      })() : null}
 
       <Pressable role="button" accessibilityLabel="Add clip" onPress={onAddClip} style={{ position: "absolute", zIndex: 21, right: 8, top: 105, width: 44, height: 44, borderRadius: 22, backgroundColor: "#F7F6F2", alignItems: "center", justifyContent: "center", boxShadow: "0px 4px 12px rgba(0,0,0,0.45)", elevation: 8 }}><Text className="font-sans text-[25px] leading-[28px] text-[#172027]">+</Text></Pressable>
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />

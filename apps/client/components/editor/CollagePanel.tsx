@@ -47,7 +47,6 @@ function thumbnailRects(layoutId: string, count: number): { x: number; y: number
   const gridVariant = COLLAGE_GRID_VARIANTS.find((variant) => variant.id === layoutId)?.id;
   if (gridVariant) return collageGridRects(gridVariant, count);
   if (layoutId === "travel-story" && count === 5) return [{ x: 0, y: 0, w: 65, h: 32 }, { x: 67, y: 0, w: 33, h: 66 }, { x: 0, y: 34, w: 32, h: 66 }, { x: 34, y: 34, w: 32, h: 32 }, { x: 34, y: 68, w: 66, h: 32 }];
-  if (layoutId === "travel-mosaic" && count === 8) return [{ x: 0, y: 0, w: 24, h: 32 }, { x: 25.5, y: 0, w: 24, h: 32 }, { x: 51, y: 0, w: 49, h: 32 }, { x: 0, y: 33.5, w: 49.5, h: 32 }, { x: 82, y: 33.5, w: 18, h: 32 }, { x: 0, y: 67, w: 24, h: 33 }, { x: 25.5, y: 67, w: 24, h: 33 }, { x: 51, y: 67, w: 49, h: 33 }];
   if (layoutId === "botanical-scrapbook" && count >= 3) return count <= 4
     ? [{ x: 10, y: 10, w: 39, h: 43 }, { x: 47, y: 10, w: 41, h: 39 }, { x: 10, y: 55, w: 38.5, h: 34 }, { x: 50, y: 47.5, w: 38, h: 40 }].slice(0, count)
     : Array.from({ length: count }, (_, index) => ({ x: 10 + index % 2 * 40, y: 9 + Math.floor(index / 2) * 25, w: 39, h: 25 }));
@@ -59,16 +58,6 @@ function thumbnailRects(layoutId: string, count: number): { x: number; y: number
     "route-map": [[28,28,47],[72,43,47],[33,66,46],[72,78,42],[52,52,41]],
   };
   if (designedPositions[layoutId]) return designedPositions[layoutId]!.slice(0, count).map(([cx, cy, width]) => ({ x: cx! - width! / 2, y: cy! - width! * .77 * .56 / 2, w: width!, h: width! * .77 * .56 }));
-  if (layoutId === "travel-mosaic" && count >= 3) {
-    const total = count + 1, columns = total === 9 ? 3 : Math.min(3, Math.ceil(Math.sqrt(total))), rows = Math.ceil(total / columns), gap = 2;
-    const titleOrder = Math.floor(total / 2), rowH = (100 - gap * (rows - 1)) / rows;
-    const rects: { x: number; y: number; w: number; h: number }[] = [];
-    for (let row = 0, next = 0; row < rows; row++) {
-      const rowCount = Math.min(columns, total - row * columns), cellW = (100 - gap * (rowCount - 1)) / rowCount;
-      for (let col = 0; col < rowCount; col++, next++) if (next !== titleOrder) rects.push({ x: col * (cellW + gap), y: row * (rowH + gap), w: cellW, h: rowH });
-    }
-    return rects;
-  }
   if (layoutId === "nine-photo-grid") {
     const columns = Math.ceil(Math.sqrt(count)), rows = Math.ceil(count / columns), margin = 5.1, gap = 2.3, cellH = (100 - margin * 2 - gap * (rows - 1)) / rows;
     return Array.from({ length: count }, (_, index) => {
@@ -85,15 +74,6 @@ function thumbnailRects(layoutId: string, count: number): { x: number; y: number
     const rowCount = Math.min(columns, count - row * columns);
     return { x: col * (100 + gap) / rowCount, y: row * (100 + gap) / rows, w: (100 - gap * (rowCount - 1)) / rowCount, h: (100 - gap * (rows - 1)) / rows };
   });
-}
-
-function thumbnailTitleRect(layoutId: string, count: number): { x: number; y: number; w: number; h: number } | null {
-  if (layoutId === "travel-mosaic" && count === 8) return { x: 51, y: 33.5, w: 29.5, h: 32 };
-  if (layoutId !== "travel-mosaic" || count < 3) return null;
-  const total = count + 1, columns = total === 9 ? 3 : Math.min(3, Math.ceil(Math.sqrt(total))), rows = Math.ceil(total / columns), gap = 2;
-  const index = Math.floor(total / 2), row = Math.floor(index / columns), col = index % columns;
-  const rowCount = Math.min(columns, total - row * columns), cellW = (100 - gap * (rowCount - 1)) / rowCount, cellH = (100 - gap * (rows - 1)) / rows;
-  return { x: col * (cellW + gap), y: row * (cellH + gap), w: cellW, h: cellH };
 }
 
 export function CollagePanel({ clip, section, aspect = "9:16", timeline, moments = [], onApply, onClose }: {
@@ -220,14 +200,12 @@ export function CollagePanel({ clip, section, aspect = "9:16", timeline, moments
             <View className="flex-row flex-wrap gap-2">{layouts.map((entry) => {
               const layout = COLLAGE_LAYOUTS.find((candidate) => candidate.id === entry.id)!;
               const simpleRects = thumbnailRects(entry.id, count);
-              const titleRect = thumbnailTitleRect(entry.id, count);
               const current = nearestCollageOption(layoutId, count);
               const designed = !entry.id.startsWith("simple-");
               const paper = entry.id === "polaroid-garland" || entry.id === "postcard-stack";
               return <Pressable key={entry.id} accessibilityRole="button" accessibilityLabel={`Layout ${entry.label}`} aria-pressed={current === entry.id} onPress={() => chooseLayout(entry.id as typeof COLLAGE_LAYOUTS[number]["id"])} className={`h-[118px] w-[31%] rounded-[14px] bg-[#050a0e] p-2 ${current === entry.id ? "border-2 border-white" : "border-2 border-transparent"}`}>
                 <View className={`relative flex-1 overflow-hidden rounded-md ${entry.id === "route-map" ? "bg-[#d6d8c7]" : entry.id === "botanical-scrapbook" ? "bg-[#e7c9a8]" : entry.id === "photo-table" ? "bg-[#795638]" : entry.id === "torn-paper" || entry.id === "postcard-stack" ? "bg-[#eee3cc]" : entry.id === "polaroid-garland" ? "bg-[#b7c7bf]" : "bg-[#20252a]"}`}>
                   {simpleRects.map(({ x, y, w, h }, i) => <View key={i} className={`absolute rounded-[3px] ${paper ? "border-[2px] border-b-[5px] border-[#f6f2e6] bg-[#71879a]" : entry.id === "torn-paper" ? "border-2 border-[#efe5d0] bg-[#9d765b]" : entry.id === "botanical-scrapbook" ? "border border-[#d1c79c] bg-[#778967]" : "border border-white bg-[#71879a]"}`} style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%`, transform: paper ? `rotate(${i % 2 ? 4 : -4}deg)` : undefined }} />)}
-                  {titleRect ? <View className="absolute items-center justify-center bg-[#201d20]" style={{ left: `${titleRect.x}%`, top: `${titleRect.y}%`, width: `${titleRect.w}%`, height: `${titleRect.h}%` }}><View className="h-[2px] w-2/3 bg-[#d8cbb9]" /></View> : null}
                   {entry.id === "route-map" ? <View className="absolute left-[14%] top-[48%] h-[35%] w-[52%] border-b-2 border-dashed border-[#a34e36]" /> : null}
                   {entry.id === "postcard-stack" ? <View className="absolute right-[5%] top-[5%] h-[15%] w-[18%] border border-[#b88852]" /> : null}
                   {designed && entry.id === "photo-table" ? <View className="absolute inset-0 border-[5px] border-[#8e7959]" /> : null}

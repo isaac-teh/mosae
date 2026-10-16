@@ -4,11 +4,13 @@ import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const mockVideoConfig = vi.hoisted(() => ({ width: 360, height: 640 }));
+
 vi.mock("remotion", () => ({
   AbsoluteFill: ({ children, style }: React.PropsWithChildren<{ style?: React.CSSProperties }>) => <div style={style}>{children}</div>,
   Img: (props: React.ImgHTMLAttributes<HTMLImageElement>) => <img {...props} />,
   useCurrentFrame: () => 14,
-  useVideoConfig: () => ({ fps: 30, width: 360, height: 640, durationInFrames: 90 }),
+  useVideoConfig: () => ({ fps: 30, ...mockVideoConfig, durationInFrames: 90 }),
   interpolate: (value: number, input: number[], output: number[]) => {
     const progress = Math.min(1, Math.max(0, (value - input[0]) / (input[input.length - 1] - input[0] || 1)));
     const index = Math.min(output.length - 2, Math.floor(progress * (output.length - 1)));
@@ -26,6 +28,8 @@ import { focusRelayInputRange } from "./CollageBase";
 import { ALLOWED_COMBOS, ALLOWED_COMBO_KEYS } from "./allowedCombos";
 import { CollageSpecSchema, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, COLLAGE_EFFECTS, COLLAGE_GRID_VARIANTS, collageGridRects, slotCountForLayout } from "./schema";
 import { createCollageSpec } from "./fixtures";
+
+beforeEach(() => { vi.clearAllMocks(); mockVideoConfig.width = 360; mockVideoConfig.height = 640; });
 
 describe("CollageSpec", () => {
   it("uses six distinct normalized non-overlapping grid geometries at 2, 3, and 4 photos", () => {
@@ -66,6 +70,33 @@ describe("CollageSpec", () => {
       expect((markup.match(/<img /g) ?? []).length).toBe(count);
     }
   });
+  it("uses a full 3×2 photo grid for a six-photo landscape mosaic, even with a caption", () => {
+    const base = createCollageSpec("travel-mosaic");
+    const slots = base.slots.slice(0, 6);
+    const spec = { ...base, slots, caption: { place: "Sentosa" } };
+    mockVideoConfig.width = 1280;
+    mockVideoConfig.height = 720;
+    const markup = renderToStaticMarkup(<Collage spec={spec} />);
+    expect((markup.match(/data-collage-layout-cell="true"/g) ?? [])).toHaveLength(6);
+    expect(markup).not.toContain('data-collage-title-cell="true"');
+    const positions = [...markup.matchAll(/data-collage-layout-cell="true" style="position:absolute;left:([^;]+);top:([^;]+)/g)].map((match) => [match[1], match[2]]);
+    expect(positions).toEqual([["0%", "0%"], ["34%", "0%"], ["68%", "0%"], ["0%", "51%"], ["34%", "51%"], ["68%", "51%"]]);
+  });
+
+  it("fills all six travel mosaic photo cells in portrait without a blank title cell", () => {
+    const base = createCollageSpec("travel-mosaic");
+    const spec = { ...base, slots: base.slots.slice(0, 6), caption: undefined };
+    const markup = renderToStaticMarkup(<Collage spec={spec} />);
+    expect((markup.match(/data-collage-layout-cell="true"/g) ?? [])).toHaveLength(6);
+    expect(markup).not.toContain('data-collage-title-cell="true"');
+  });
+
+  it("keeps the mosaic title tile only when it has caption content", () => {
+    const spec = { ...createCollageSpec("travel-mosaic"), slots: createCollageSpec("travel-mosaic").slots.slice(0, 6), caption: { place: "Sentosa" } };
+    const markup = renderToStaticMarkup(<Collage spec={spec} />);
+    expect(markup).toContain('data-collage-title-cell="true"');
+  });
+
   it("renders one-photo and two-photo layouts without changing their slot counts", () => {
     for (const [id, count] of [["single-photo", 1], ["two-photo-diptych", 2]] as const) {
       const spec = createCollageSpec(id);
@@ -135,8 +166,6 @@ describe("CollageSpec", () => {
 });
 
 describe("Collage", () => {
-  beforeEach(() => vi.clearAllMocks());
-
   it("renders every approved combination and effect to markup", () => {
     for (const combo of ALLOWED_COMBOS) for (const effect of COLLAGE_EFFECTS) {
       const spec = { ...createCollageSpec(combo.layoutId), motionId: combo.motionId, effectId: effect.id };
@@ -161,7 +190,7 @@ describe("Collage", () => {
       for (let count = layout.minSlots; count <= layout.maxSlots; count++) {
         const base = createCollageSpec(layout.id, { motionId });
         const slots = Array.from({ length: count }, (_, index) => base.slots[index] ?? { slotId: `${layout.id}-${index}`, src: "/photo.svg" });
-        const spec = { ...base, slots };
+        const spec = { ...base, slots, caption: undefined };
         expect(CollageSpecSchema.safeParse(spec).success, `${layout.id}/${count}`).toBe(true);
         expect((renderToStaticMarkup(<Collage spec={spec} />).match(/data-collage-media=/g) ?? [])).toHaveLength(count);
       }
