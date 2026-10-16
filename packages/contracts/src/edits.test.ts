@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyEdits, mergeOps, type EditOp } from "./edits.js";
 import { parseTimeline, type Timeline } from "./timeline.js";
 import { finalMusicFadeOutSec, refitSoundtrackToDuration } from "./soundtrack.js";
+import { collageLayoutForCount } from "./collageGeometry.js";
 
 const cut = { kind: "cut" as const, durationSec: 0 };
 const firstCut: Timeline = parseTimeline({
@@ -51,6 +52,22 @@ const apply = (ops: EditOp[]) => {
 };
 
 describe("applyEdits", () => {
+  it("re-picks safe count-matched layouts when switching portrait collages to landscape", () => {
+    for (let count = 2; count <= 6; count++) {
+      const original = firstCut.videoClips[3]!;
+      if (!("kind" in original)) throw new Error("expected collage fixture");
+      const slots = original.spec.slots.slice(0, Math.min(count, original.spec.slots.length));
+      for (let index = slots.length; index < count; index++) slots.push({ slotId: `empty:${index}`, kind: "photo", empty: true });
+      const portrait: Timeline = { ...firstCut, videoClips: firstCut.videoClips.map((clip, index) => index === 3 ? { ...original, spec: { ...original.spec, layoutId: collageLayoutForCount(count, "9:16"), slots } } : clip) as Timeline["videoClips"] };
+      const result = applyEdits(portrait, [{ op: "setAspect", aspect: "16:9" }]);
+      expect(result.ok, `count ${count}: ${result.ok ? "" : result.error}`).toBe(true);
+      if (!result.ok) continue;
+      const collage = result.timeline.videoClips[3]!;
+      expect("kind" in collage && collage.spec.layoutId).toBe(collageLayoutForCount(count, "16:9"));
+      expect("kind" in collage && collage.spec.slots).toHaveLength(count);
+    }
+  });
+
   it("remaps portrait-only collages to landscape and keeps each slot through a round trip", () => {
     for (const layoutId of ["polaroid-garland", "postcard-stack", "route-map"] as const) {
       const portraitOnly: Timeline = { ...firstCut, videoClips: firstCut.videoClips.map((clip) => "kind" in clip ? { ...clip, spec: { ...clip.spec, layoutId, motionId: layoutId === "polaroid-garland" ? "page-turn" as const : "stack-deal" as const } } : clip) };

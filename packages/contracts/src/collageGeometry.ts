@@ -1,8 +1,20 @@
 import { COLLAGE_GRID_VARIANTS } from "./collage.js";
 
 export type CollageGridVariant = typeof COLLAGE_GRID_VARIANTS[number]["id"];
+export type CollageAspect = "9:16" | "16:9";
 export type CollageGridRect = { x: number; y: number; w: number; h: number };
 const r = (x: number, y: number, w: number, h: number): CollageGridRect => ({ x, y, w, h });
+
+const COUNT_LAYOUTS: Record<CollageAspect, readonly CollageGridVariant[]> = {
+  "9:16": ["simple-full", "simple-stacked", "simple-three-stacked", "simple-grid-2x2", "simple-five-top", "simple-grid-2x3"],
+  "16:9": ["simple-full", "simple-offset", "simple-three-top", "simple-grid-2x2", "simple-five-middle", "simple-grid-2x3"],
+};
+
+/** The safe, count-matched default layout for a frame orientation. */
+export function collageLayoutForCount(count: number, aspect: CollageAspect): CollageGridVariant {
+  if (!Number.isInteger(count) || count < 1 || count > 6) throw new RangeError("default collage layout supports 1–6 photos");
+  return COUNT_LAYOUTS[aspect][count - 1]!;
+}
 
 const threePhoto: Partial<Record<CollageGridVariant, CollageGridRect[]>> = {
   "grid-wide-top": [r(0, 0, 100, 49), r(0, 51, 49, 49), r(51, 51, 49, 49)],
@@ -53,8 +65,15 @@ function splitLargest(rects: CollageGridRect[], variant: CollageGridVariant): Co
 }
 
 /** Normalized, non-overlapping photo rectangles shared by the drawer and renderer. */
-export function collageGridRects(variant: CollageGridVariant, count: number): CollageGridRect[] {
+export function collageGridRects(variant: CollageGridVariant, count: number, aspect?: CollageAspect): CollageGridRect[] {
   if (!Number.isInteger(count) || count < 1 || count > 9) throw new RangeError("grid photo count must be 1–9");
+  if (aspect === "16:9") {
+    if (variant === "simple-stacked" && count === 2) return [r(0, 0, 49, 100), r(51, 0, 49, 100)];
+    if (variant === "simple-offset" && count === 2) return [r(0, 0, 49, 100), r(51, 0, 49, 100)];
+    if (variant === "simple-three-stacked" && count === 3) return [r(0, 0, 60, 100), r(62, 0, 38, 49), r(62, 51, 38, 49)];
+    if (variant === "simple-five-middle" && count === 5) return [r(0, 0, 49, 48), r(51, 0, 49, 48), r(0, 50, 32, 50), r(34, 50, 32, 50), r(68, 50, 32, 50)];
+    if (variant === "simple-grid-2x3" && count === 6) return [r(0, 0, 32, 49), r(34, 0, 32, 49), r(68, 0, 32, 49), r(0, 51, 32, 49), r(34, 51, 32, 49), r(68, 51, 32, 49)];
+  }
   const simple: Record<string, CollageGridRect[]> = {
     "simple-full": [r(0, 0, 100, 100)], "simple-centered": [r(12, 24, 76, 52)],
     "simple-stacked": [r(0, 0, 100, 49), r(0, 51, 100, 49)],
@@ -81,7 +100,7 @@ export function collageGridRects(variant: CollageGridVariant, count: number): Co
 export function collageSlotAspects(layoutId: string, variant: string, slotCount: number, frameAspect: number): number[] {
   if (!(frameAspect > 0) || !Number.isInteger(slotCount) || slotCount < 1) return [];
   if ((COLLAGE_GRID_VARIANTS as readonly { id: string }[]).some((item) => item.id === variant)) {
-    return collageGridRects(variant as CollageGridVariant, slotCount).map((rect) => frameAspect * rect.w / rect.h);
+    return collageGridRects(variant as CollageGridVariant, slotCount, frameAspect > 1 ? "16:9" : "9:16").map((rect) => frameAspect * rect.w / rect.h);
   }
   const wide = frameAspect > 1;
   let cells: Array<{ w: number; h: number }>;

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { COLLAGE_LAYOUTS, CollageSpecSchema } from "./collage.js";
 import { ALLOWED_COMBOS } from "./collageCombos.js";
-import { collageSlotAspects, assignCollageSlots } from "./collageGeometry.js";
+import { collageLayoutForCount, collageSlotAspects, assignCollageSlots } from "./collageGeometry.js";
 import { safeParseTimeline, type AudioClip, type Caption, type CollageClip, type Timeline, type VideoClip } from "./timeline.js";
 import { finalMusicFadeOutSec, refitSoundtrackToDuration } from "./soundtrack.js";
 
@@ -309,7 +309,8 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
         const frameAspect = aspect === "16:9" ? 16 / 9 : 9 / 16;
         const sources = photos.map((photo) => photo.source.width && photo.source.height ? photo.source.width / photo.source.height : frameAspect);
         const sizesKnown = photos.every((photo) => photo.source.width && photo.source.height);
-        const candidates = COLLAGE_LAYOUTS.filter((layout) => layout.id.startsWith("simple-") && layout.minSlots <= photos.length && layout.maxSlots >= photos.length
+        const safeLayout = aspect === "16:9" && photos.length <= 6 ? collageLayoutForCount(photos.length, aspect) : undefined;
+        const candidates = COLLAGE_LAYOUTS.filter((layout) => (!safeLayout || layout.id === safeLayout) && layout.id.startsWith("simple-") && layout.minSlots <= photos.length && layout.maxSlots >= photos.length
           && layout.aspect.some((supported: string) => supported === aspect) && ALLOWED_COMBOS.some((combo) => combo.layoutId === layout.id && combo.motionId === "print-drop"))
           .map((layout) => {
             // Without known photo sizes every layout fits equally; keep the library order (first simple layout).
@@ -351,8 +352,9 @@ export function applyEdits(firstCut: Timeline, ops: EditOp[]): EditResult {
           if (!("kind" in entry.clip)) return entry;
           const spec = entry.clip.spec;
           const oldLayout = COLLAGE_LAYOUTS.find((layout) => layout.id === spec.layoutId)!;
-          if (oldLayout.aspect.some((supported: string) => supported === aspect)) return entry;
-          const candidates = COLLAGE_LAYOUTS.filter((layout) => layout.aspect.some((supported: string) => supported === aspect) && spec.slots.length >= layout.minSlots && spec.slots.length <= layout.maxSlots)
+          const safeLayout = aspect === "16:9" && spec.slots.length <= 6 ? collageLayoutForCount(spec.slots.length, aspect) : undefined;
+          if (!safeLayout && oldLayout.aspect.some((supported: string) => supported === aspect)) return entry;
+          const candidates = COLLAGE_LAYOUTS.filter((layout) => (!safeLayout || layout.id === safeLayout) && layout.aspect.some((supported: string) => supported === aspect) && spec.slots.length >= layout.minSlots && spec.slots.length <= layout.maxSlots)
             .sort((a, b) => Number(b.preferredSlots === spec.slots.length) - Number(a.preferredSlots === spec.slots.length));
           const replacement = candidates.flatMap((layout) => ALLOWED_COMBOS.filter((combo) => combo.layoutId === layout.id).map((combo) => ({ ...entry.clip as CollageClip, spec: { ...spec, layoutId: layout.id, motionId: combo.motionId } }))).at(0);
           return replacement ? { ...entry, clip: replacement } : entry;

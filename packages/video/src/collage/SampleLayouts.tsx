@@ -17,8 +17,9 @@ const box = ({ x, y, w, h }: Rect): React.CSSProperties => ({ position: "absolut
 // collages get a complete grid without duplicating or dropping their photos.
 function geometry(spec: CollageSpec, wide: boolean): { cells: Rect[]; title?: Rect; titleOrder?: number } {
   const count = spec.slots.length;
-  if (COLLAGE_GRID_VARIANTS.some(({ id }) => id === spec.layoutId)) return { cells: collageGridRects(spec.layoutId as typeof COLLAGE_GRID_VARIANTS[number]["id"], count) };
-  if (spec.layoutId === "travel-mosaic" && count === 8) return {
+  if (COLLAGE_GRID_VARIANTS.some(({ id }) => id === spec.layoutId)) return { cells: collageGridRects(spec.layoutId as typeof COLLAGE_GRID_VARIANTS[number]["id"], count, wide ? "16:9" : "9:16") };
+  const hasTitle = !wide && spec.layoutId === "travel-mosaic" && Boolean(spec.caption?.headline || spec.caption?.place || spec.caption?.subline || spec.caption?.date);
+  if (hasTitle && count === 8) return {
     cells: [rect(0,0,24,32),rect(25.5,0,24,32),rect(51,0,49,32),rect(0,33.5,49.5,32),rect(82,33.5,18,32),rect(0,67,24,33),rect(25.5,67,24,33),rect(51,67,49,33)],
     title: rect(51,33.5,29.5,32), titleOrder: 4,
   };
@@ -27,7 +28,6 @@ function geometry(spec: CollageSpec, wide: boolean): { cells: Rect[]; title?: Re
       ? [rect(0,0,49,32),rect(50.5,0,49.5,65.5),rect(0,33.5,24,66.5),rect(25.5,33.5,23.5,32),rect(25.5,67,74.5,33)]
       : [rect(0,0,65.5,32),rect(67,0,33,65.5),rect(0,33.5,32,66.5),rect(33.5,33.5,32,32),rect(33.5,67,66.5,33)],
   };
-  const hasTitle = spec.layoutId === "travel-mosaic";
   const total = count + Number(hasTitle);
   const columns = total === 9 ? 3 : wide ? Math.min(4, Math.ceil(total / 2)) : Math.min(3, Math.ceil(Math.sqrt(total)));
   const rows = Math.ceil(total / columns);
@@ -75,12 +75,12 @@ export const SampleLayouts: React.FC<{ spec: CollageSpec; sources?: Record<strin
       const relay = Math.sin(Math.PI * interpolate(seconds, [index * .35,index * .35 + 1.4], [0,1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })) * .035;
       const order = titleOrder !== undefined && index >= titleOrder ? index + 1 : index;
       const designRect = cells[index]!;
-      return <div key={slot.slotId} style={{ ...box(designRect), zIndex: index + 1, ...(mosaic ? entranceStyle(cells[index]!, order) : { opacity: settled }), background: "transparent", padding: "1%", boxSizing: "border-box", overflow: "hidden" }}>
+      return <div key={slot.slotId} data-collage-layout-cell="true" style={{ ...box(designRect), zIndex: index + 1, ...(mosaic ? entranceStyle(cells[index]!, order) : { opacity: settled }), background: "transparent", padding: "1%", boxSizing: "border-box", overflow: "hidden" }}>
         <div style={{ height: "100%", overflow: "hidden", position: "relative" }}><SampleMedia slot={slot} sources={sources} scale={mosaic ? 1 : 1 + relay} /></div>
         <CellInteraction clipId={clipId} slotId={slot.slotId} crop={slot.crop} selected={selectedCollageCellId === `${clipId}:${slot.slotId}`} onSelect={onSelectCollageCell} onCommit={onCommitCollageCrop} />
       </div>;
     })}
-    {title && <div style={{ ...box(title), ...entranceStyle(title, titleOrder!), background: "#201d20", zIndex: 10, display: "grid", placeItems: "center" }}>
+    {title && <div data-collage-title-cell="true" style={{ ...box(title), ...entranceStyle(title, titleOrder!), background: "#201d20", zIndex: 10, display: "grid", placeItems: "center" }}>
       <div style={{ padding: "8%", textAlign: "center", color: "#fffdf7", fontFamily: "Figtree,sans-serif", fontSize: wide ? "2cqw" : "4cqw", lineHeight: 1.35, letterSpacing: ".02em", overflowWrap: "anywhere" }}>{headline}{subline && <div style={{ marginTop: "1em", fontSize: ".5em", letterSpacing: ".08em" }}>{subline}</div>}</div>
     </div>}
   </AbsoluteFill>;
