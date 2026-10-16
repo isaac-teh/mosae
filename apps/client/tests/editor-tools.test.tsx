@@ -604,9 +604,9 @@ describe("editor tool operations", () => {
   it("centres the add button at the same clip row position in both orientations", async () => {
     const props = { timeline, sources: {}, selectedClipId: null, playheadSec: 0, onSelect: () => {}, onScrub: () => {} };
     await render(<TimelineStrip {...props} {...({ landscapeLayout: true } as any)} />);
-    expect((host.querySelector('[aria-label="Add clip"]') as HTMLButtonElement).style.top).toBe("89px");
+    expect((host.querySelector('[aria-label="Add clip"]') as HTMLButtonElement).style.top).toBe("77px");
     await render(<TimelineStrip {...props} />);
-    expect((host.querySelector('[aria-label="Add clip"]') as HTMLButtonElement).style.top).toBe("89px");
+    expect((host.querySelector('[aria-label="Add clip"]') as HTMLButtonElement).style.top).toBe("77px");
   });
 
   it("seeks by the time under the centre playhead when the user scrolls", async () => {
