@@ -1,7 +1,27 @@
 # Mosaé
 
-Mosaé turns a messy album of photos and videos into a directed story film.
-You pick your memories, tell the AI what the story is about, review the moments it curated, direct the film, and save it.
+**Many moments. One story.** Mosaé turns a family's camera roll into a story-driven film in minutes, directed by chatting.
+
+Upload your trip photos and videos, name the people Mosaé finds, tell it what the trip was about, and it directs a film around them. Then keep shaping it in plain language, like "focus on Grandma", "make it 30 seconds" or "more collages". Every change is validated against the film's timeline before it is applied, with one-tap Undo.
+
+## How it uses Google
+
+| Service | Role in Mosaé |
+|---|---|
+| Gemini 3.1 Flash-Lite | Understands photos, video and speech; composes the film timeline; interprets edit requests |
+| Gemini 3.5 Flash-Lite | Plans story chapters and selects moments |
+| Gemini Embedding 2 | Semantic search for relevant moments |
+| Cloud Run | API, face-matching service (InsightFace ArcFace) and private Remotion MP4 renderer |
+| Firebase Hosting + Authentication | Hosts the web app and signs users in |
+| Cloud Firestore | Projects, media analysis and editable timelines |
+| Cloud Storage | Uploaded media and exported films |
+| Cloud Tasks + Eventarc | Background upload processing and render jobs |
+
+Measured on dev with a 22-photo album: about 31 s from upload to the first person to name, about 7 s from "Looks right" to the first cut, about 0.8 s per AI edit, and roughly US$0.11–0.19 per finished film.
+
+## License
+
+Code is released under the [MIT License](LICENSE). The InsightFace face models are under their own non-commercial license; see [Face identity model license](#face-identity-model-license).
 
 ## Quick start
 
@@ -280,4 +300,4 @@ Firestore and Storage store tests run inside the emulators with `npm run test:em
 The Phase 3 manual `trip`-sample Gemini run was not made on 2026-09-23: `GEMINI_API_KEY` was unavailable in both the process environment and the repository-root `.env`. No API request, proposal, or charge was created. When a key is available, the production planner records estimated per-turn cost in the project's `geminiUsage` collection; the PoC writes equivalent call records to `poc/gemini/out/<set>/<model>/calls.jsonl`.
 # Face identity model license
 
-This hackathon project uses InsightFace `buffalo_l` (detection and recognition ONNX models) for face identity embeddings. The founder accepts the InsightFace model's non-commercial research license for this non-commercial hackathon use. Do not use or distribute the bundled weights for commercial purposes without obtaining the appropriate license from InsightFace.
+This project uses InsightFace `buffalo_l` (detection and recognition ONNX models) for face identity embeddings. The founder accepts the InsightFace model's non-commercial research license for non-commercial use. Do not use or distribute the bundled weights for commercial purposes without obtaining the appropriate license from InsightFace.
