@@ -4,6 +4,8 @@
 
 Upload your trip photos and videos, name the people Mosaé finds, tell it what the trip was about, and it directs a film around them. Then keep shaping it in plain language, like "focus on Grandma", "make it 30 seconds" or "more collages". Every change is validated against the film's timeline before it is applied, with one-tap Undo.
 
+Mosaé started as a 2026 AI hackathon project.
+
 ## How it uses Google
 
 | Service | Role in Mosaé |
