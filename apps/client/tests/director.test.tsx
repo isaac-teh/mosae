@@ -1060,37 +1060,23 @@ describe("Director chat", () => {
     expect(host.textContent?.match(/0 of 2 confirmed/g)).toHaveLength(1);
   });
 
-  it("interprets typed text and waits for an explicit confirmation before saving", async () => {
+  it("accepts a typed occasion answer once without a second confirmation", async () => {
     setup(); await renderScreen();
     const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "our family trip"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("→");
-    await waitFor(() => expect(hasText("I understood the Japan trip.")).toBe(true));
-    const typed = host.querySelector('[data-from="you"]');
-    const reply = [...host.querySelectorAll('[data-from="mosae"]')].find((item) => item.textContent?.includes("I understood the Japan trip."));
+    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("our family trip", []));
+    const typed = [...host.querySelectorAll('[data-from="you"]')].find((item) => item.textContent?.includes("our family trip"));
+    const reply = [...host.querySelectorAll('[data-from="mosae"]')].find((item) => item.textContent?.includes("— lovely!"));
     expect(typed).toBeTruthy();
     expect(reply).toBeTruthy();
     expect(typed!.compareDocumentPosition(reply!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(hasText("Did I get that right?")).toBe(false);
-    expect(hasText("Not quite")).toBe(true);
-    expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+    expect(hasText("I understood the Japan trip.")).toBe(false);
+    expect(hasText("Not quite")).toBe(false);
+    expect(hasText("Yes, that's right")).toBe(false);
+    expect(host.textContent?.match(/our family trip/g)).toHaveLength(1);
     expect(host.querySelector('button[aria-label="A trip"]')).toBeFalsy();
     expect(host.textContent?.match(/0 of 2 confirmed/g) ?? []).toHaveLength(1);
-    await click("Yes, that's right");
-    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("our family trip", []));
-  });
-
-  it("discards an interpretation with Not quite and returns to the original occasion chip", async () => {
-    setup(); await renderScreen();
-    const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
-    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "something different"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
-    await click("→");
-    await waitFor(() => expect(hasText("I understood the Japan trip.")).toBe(true));
-    await click("Not quite");
-    expect(hasText("I understood the Japan trip.")).toBe(false);
-    expect(hasText("something different")).toBe(false);
-    expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
-    expect(mocks.repo.createPlan).not.toHaveBeenCalled();
   });
 
   it("shows an early occasion answer immediately while plan creation continues", async () => {
@@ -1474,6 +1460,19 @@ describe("Director chat", () => {
     expect(chat.state.items.some(item => item.kind === "you" && item.id === "interp-question-1" && item.text === "how long will this take?")).toBe(true);
     expect(chat.state.items.some(item => item.kind === "mosae" && item.id === "interp-reply-1" && item.text === "Your photos are uploading — one moment.")).toBe(true);
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+  });
+
+  it("keeps an occasion answer given during analysis as one chronological answer and acknowledgement", async () => {
+    setup({ interpret: async () => ({ reply: "Weekend getaway — lovely! I'm looking through them now — almost there.", change: { kind: "occasion", storyText: "Weekend getaway" } }) });
+    mocks.repo.getSummary = vi.fn(async () => ({ ...summary(), ready: { ...summary().ready, story: false } }));
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.retry());
+    await act(async () => chat.actions.send("Weekend getaway"));
+    expect(chat.state.items.filter(item => item.kind === "you" && item.text === "Weekend getaway")).toHaveLength(1);
+    expect(chat.state.items.filter(item => item.kind === "mosae" && item.text.startsWith("Weekend getaway — lovely!"))).toHaveLength(1);
+    expect(chat.state.items.some(item => item.kind === "mosae" && item.text.includes("Make the story about your weekend getaway?"))).toBe(false);
   });
 
   it("shows Thinking before interpretation resolves and ignores overlapping sends", async () => {

@@ -263,7 +263,12 @@ export function deriveChat(input: ChatInput): ChatState {
   // inline (their question, then a "Thinking" bubble or the model's reply) without changing step.
   // Rendered in both !input.intent branches so questions answer during faces/confirm too.
   const addInterp = () => {
-    input.interpTurns?.filter((turn) => !turn.personId && !turn.stage && !missedFlowHistory).forEach((turn, i) => {
+    input.interpTurns?.filter((turn) => !turn.personId && !turn.stage && !missedFlowHistory
+      // Occasion answers are already emitted from intent / earlyOccasionAnswer
+      // with their canonical acknowledgement. Old snapshots may also retain
+      // the interpreted turn, so suppress that duplicate during reconstruction.
+      && turn.question.trim() !== input.intent?.text.trim()
+      && turn.question.trim() !== input.earlyOccasionAnswer?.trim()).forEach((turn, i) => {
       add({ kind: "you", id: `interp-question-${i + 1}`, text: turn.question });
       if (turn.reply) add({ kind: "mosae", id: `interp-reply-${i + 1}`, text: turn.reply });
       else if (input.interpReplying && i === input.interpTurns!.length - 1) {

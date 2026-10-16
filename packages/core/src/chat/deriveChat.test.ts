@@ -217,6 +217,18 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ text: "A Japan trip — lovely!" });
   });
 
+  it("does not replay an occasion answer from analysis turns after the canonical story acknowledgement", () => {
+    const state = deriveChat({ ...base(), intent: { text: "Weekend getaway" }, people: [
+      { personId: "p1", name: null, role: null, skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
+    ], peopleConfirmed: false, plan: null,
+    interpTurns: [{ question: "Weekend getaway", reply: "Weekend getaway — lovely! I'm looking through them now — almost there." }],
+    });
+    expect(state.items.filter((item) => item.kind === "you" && item.text === "Weekend getaway")).toHaveLength(1);
+    expect(state.items.filter((item) => item.kind === "mosae" && item.text.startsWith("Weekend getaway — lovely!"))).toHaveLength(1);
+    expect(state.items.some((item) => item.kind === "mosae" && item.text.includes("Make the story about your weekend getaway?"))).toBe(false);
+    expect(state.items.find((item) => item.kind === "person")?.kind).toBe("person");
+  });
+
   it("uses an answered flow snapshot to enter the people step before a plan exists", () => {
     const state = deriveChat({ ...base(), intent: null, plan: null, people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 2, sampleShotIds: [], days: [] }], peopleConfirmed: false, flow: { revision: 1, story: { answer: "Our Japan trip", storySummary: "Japan trip", mentionedPeople: ["Mia"] }, people: [] } });
     expect(state.step).toBe("people");

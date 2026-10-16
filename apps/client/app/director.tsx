@@ -313,14 +313,19 @@ export default function DirectorScreen() {
   const taggedMissedPeople = people.filter((person) => person.personId.startsWith("p-missed-") && !person.skipped && person.momentCount > 0);
   const headerPeople = [...new Map([...chatPeople, ...taggedMissedPeople].map((person) => [person.personId, person])).values()];
   const currentPeopleSummary = [...state.items].reverse().find((item) => item.kind === "people-summary");
+  const peopleFlowVisible = state.items.some((item) => item.kind === "person" || item.kind === "person-tagged" || item.kind === "anyone-else" || item.kind === "people-summary");
   const summaryPeopleIds = new Set(currentPeopleSummary?.kind === "people-summary" ? currentPeopleSummary.people.map(({ personId }) => personId) : []);
   const taggedMissedCount = state.items.filter((item) => item.kind === "missed-person" && !item.skipped && item.momentCount > 0 && !summaryPeopleIds.has(item.personId)).length;
   const summaryPeopleCount = Math.max((currentPeopleSummary?.kind === "people-summary" ? currentPeopleSummary.people.length : 0) + taggedMissedCount, confirmedPeopleSummaryCount ?? 0);
-  const peopleProgress = summaryPeopleCount > 0
-    ? { confirmed: summaryPeopleCount, total: summaryPeopleCount }
-    : headerPeople.length > 0
-      ? { confirmed: Math.min(headerPeople.length, proceededPersonIds.filter((id) => headerPeople.some((person) => person.personId === id)).length + taggedMissedPeople.length), total: headerPeople.length }
-    : undefined;
+  const peopleProgress = peopleFlowVisible
+    ? summaryPeopleCount > 0
+      ? { confirmed: summaryPeopleCount, total: summaryPeopleCount }
+      : headerPeople.length > 0
+        ? { confirmed: Math.min(headerPeople.length, proceededPersonIds.filter((id) => headerPeople.some((person) => person.personId === id)).length + taggedMissedPeople.length), total: headerPeople.length }
+        : undefined
+    : state.step !== "occasion" && headerPeople.length === 0 && projectSummary?.ready.faces
+      ? { confirmed: state.confirmed, total: 4 }
+      : undefined;
   const uploadFailureAlert = hasUploadFailure ? <View key="upload-failure-alert" accessibilityRole="alert" className="gap-2 rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure ?? (missingPending ? `${failedUploads} files failed and ${missingPending} still need to upload.` : `${failedUploads} files could not upload.`)}</Text>
     <Button label={canRetryLocal ? "Retry uploads" : "Pick the missing files again"} variant="secondary" disabled={uploadBusy} onPress={() => { if (canRetryLocal) { setUploadFailuresAcknowledged(false); void retryPendingMedia(projectId); } else mediaPicker.current?.open(); }} />
     {Boolean(uploadProgress ? uploadProgress.finishedFiles : projectSummary && projectSummary.total > 0 && projectSummary.processed.understood > 0) && !uploadFailuresAcknowledged && <Button label="Continue with uploaded files" onPress={() => setUploadFailuresAcknowledged(true)} />}

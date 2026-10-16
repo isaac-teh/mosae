@@ -192,7 +192,7 @@ describe("director chat components", () => {
 
   it("renders the direction form labels, muted selected chips, and header progress", async () => {
     const onChange = vi.fn();
-    await render(<><ChatDirectionCard aspect="9:16" orientation={{ portrait: 8, landscape: 2, suggested: "9:16" }} pace="gentle" focus="family" collageAmount="few" motionFeel="calm" focusOptions={[{ id: "family", label: "Everyone" }, { id: "reactions", label: "Her reactions" }]} onChange={onChange} /><ChatHeader title="Japan, autumn" confirmed={3} ready={false} onBack={vi.fn()} /></>);
+    await render(<><ChatDirectionCard aspect="9:16" orientation={{ portrait: 8, landscape: 2, suggested: "9:16" }} pace="gentle" focus="family" collageAmount="few" motionFeel="calm" focusOptions={[{ id: "family", label: "Everyone" }, { id: "reactions", label: "Her reactions" }]} onChange={onChange} /><ChatHeader title="Japan, autumn" confirmed={3} peopleProgress={{ confirmed: 3, total: 4 }} ready={false} onBack={vi.fn()} /></>);
     expect(host.textContent).toContain("Orientation"); expect(host.textContent).not.toContain("Most of your photos"); expect(host.textContent).not.toContain("📱");
     expect(host.querySelector('[aria-label="Portrait"]')?.getAttribute("aria-pressed")).toBe("true");
     expect(host.querySelector('[aria-label="Portrait"]')?.textContent).toContain("✓ Portrait");
@@ -207,6 +207,12 @@ describe("director chat components", () => {
     await click("Lots"); expect(onChange).toHaveBeenCalledWith({ collageAmount: "lots" });
     expect(host.textContent).toContain("3 of 4 confirmed");
     await click("Lively"); expect(onChange).toHaveBeenCalled();
+  });
+
+  it("keeps the header neutral until the people list is known", async () => {
+    await render(<ChatHeader title="Your film" confirmed={0} ready={false} onBack={vi.fn()} />);
+    expect(host.textContent).toContain("Getting your photos ready");
+    expect(host.textContent).not.toMatch(/\d+ of \d+ confirmed/);
   });
 
   it("supports a multi-person focus and keeps Everyone exclusive", async () => {

@@ -907,21 +907,22 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
             return;
           }
           if (canConfirmStory({ ...input, ...confirmationState }) && result.change.kind === "occasion") {
-            // Ready to confirm: an occasion answer waits for explicit confirmation.
             setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).slice(0, -1), interpReplying: false }));
             const interpretedPeople = Array.isArray(result.change.mentionedPeople)
               ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
             const storySummary = typeof result.change.storyText === "string" ? result.change.storyText : undefined;
-            setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
-            return;
+            // The user answered the occasion question directly. Persist that
+            // answer once and let deriveChat add its canonical acknowledgement.
+            return actions.confirmOccasion(text.trim(), undefined, interpretedPeople, storySummary);
           }
           // Mid-flow question: answer inline, don't disrupt the flow.
-          const reply = result.change.kind === "unclear" ? (result.reply || UNCLEAR) : result.reply;
-          setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).map((turn, index, turns) => index === turns.length - 1 ? { ...turn, reply } : turn), interpReplying: false }));
           if (result.change.kind === "occasion") {
-            // User answered the occasion question mid-flow — capture it; confirmOccasion
-            // proceeds once a plan can be confirmed. Do not force a step change.
-            setInput((current) => ({ ...current, earlyOccasionAnswer: text.trim(), ...(typeof result.change.storyText === "string" ? { earlyOccasionStoryText: result.change.storyText } : {}) }));
+            // The answer and acknowledgement are derived from earlyOccasionAnswer.
+            // Keeping this as an interpTurn would replay both below the people flow.
+            setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).slice(0, -1), interpReplying: false, earlyOccasionAnswer: text.trim(), ...(typeof result.change.storyText === "string" ? { earlyOccasionStoryText: result.change.storyText } : {}) }));
+          } else {
+            const reply = result.change.kind === "unclear" ? (result.reply || UNCLEAR) : result.reply;
+            setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).map((turn, index, turns) => index === turns.length - 1 ? { ...turn, reply } : turn), interpReplying: false }));
           }
         } catch (cause) {
           setInput((current) => ({ ...current, interpReplying: false }));
