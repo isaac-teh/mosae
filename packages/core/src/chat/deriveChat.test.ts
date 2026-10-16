@@ -217,6 +217,18 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.id === "story-acknowledgement")).toMatchObject({ text: "A Japan trip — lovely!" });
   });
 
+  it("does not replay an occasion answer from analysis turns after the canonical story acknowledgement", () => {
+    const state = deriveChat({ ...base(), intent: { text: "Weekend getaway" }, people: [
+      { personId: "p1", name: null, role: null, skipped: false, momentCount: 3, sampleShotIds: [], days: [] },
+    ], peopleConfirmed: false, plan: null,
+    interpTurns: [{ question: "Weekend getaway", reply: "Weekend getaway — lovely! I'm looking through them now — almost there." }],
+    });
+    expect(state.items.filter((item) => item.kind === "you" && item.text === "Weekend getaway")).toHaveLength(1);
+    expect(state.items.filter((item) => item.kind === "mosae" && item.text.startsWith("Weekend getaway — lovely!"))).toHaveLength(1);
+    expect(state.items.some((item) => item.kind === "mosae" && item.text.includes("Make the story about your weekend getaway?"))).toBe(false);
+    expect(state.items.find((item) => item.kind === "person")?.kind).toBe("person");
+  });
+
   it("uses an answered flow snapshot to enter the people step before a plan exists", () => {
     const state = deriveChat({ ...base(), intent: null, plan: null, people: [{ personId: "p1", name: null, role: null, skipped: false, momentCount: 2, sampleShotIds: [], days: [] }], peopleConfirmed: false, flow: { revision: 1, story: { answer: "Our Japan trip", storySummary: "Japan trip", mentionedPeople: ["Mia"] }, people: [] } });
     expect(state.step).toBe("people");
@@ -311,7 +323,7 @@ describe("deriveChat state table", () => {
     }));
     const missedPeople = [
       { personId: "p-missed-grandpa", name: "Grandpa", momentCount: 2, sampleUris: ["same-photo-1.jpg", "same-photo-2.jpg"] },
-      { personId: "p-missed-grandma", name: "Grandma", momentCount: 2, sampleUris: ["same-photo-1.jpg", "same-photo-2.jpg"] },
+      { personId: "p-missed-grandma", name: "Grandma", momentCount: 2, sampleUris: ["same-photo-1.jpg", "same-photo-2.jpg"], sampleFace: { shotId: "same-shot-1", uri: "same-photo-1.jpg", bbox: [0.1, 0.2, 0.3, 0.4] as [number, number, number, number] } },
     ];
     const missedInPeople = missedPeople.map(({ personId, name, momentCount }) => ({ personId, name, role: "other", skipped: false, momentCount, sampleShotIds: ["same-shot-1", "same-shot-2"], days: [] }));
     const state = deriveChat({ ...base(), peopleConfirmed: true, peopleSummaryConfirmed: false, missedPeopleConfirmed: true,
@@ -319,7 +331,8 @@ describe("deriveChat state table", () => {
     expect(state.items.find((item) => item.id === "people-summary-message")).toMatchObject({ text: "Thanks. I've tagged all six in your moments." });
     expect(state.items.find((item) => item.kind === "people-summary")).toMatchObject({ people: [
       ...announced.map(({ personId, name, momentCount }) => ({ personId, name, momentCount })),
-      ...missedPeople.map(({ personId, name, momentCount }) => ({ personId, name, momentCount })),
+      { personId: "p-missed-grandpa", name: "Grandpa", momentCount: 2 },
+      { personId: "p-missed-grandma", name: "Grandma", momentCount: 2, sampleUri: "same-photo-1.jpg", sampleFace: { shotId: "same-shot-1", uri: "same-photo-1.jpg", bbox: [0.1, 0.2, 0.3, 0.4] } },
     ] });
   });
   it("reconciles stale missed-person UI state from the committed flow and summarizes every person", () => {
@@ -1151,7 +1164,7 @@ describe("canonical people-to-film transcript", () => {
     }
     if (scenario === "missed people added") {
       const summaryCard = awaitingConfirmation.items.find((item) => item.kind === "people-summary" && item.id === "people-summary");
-      expect(summaryCard?.kind === "people-summary" && summaryCard.people.find((person) => person.personId === "p-missed-grandma")).toMatchObject({ personId: "p-missed-grandma", sampleUri: undefined, sampleFace: undefined });
+      expect(summaryCard?.kind === "people-summary" && summaryCard.people.find((person) => person.personId === "p-missed-grandma")).toMatchObject({ personId: "p-missed-grandma", sampleUri: "grandma.jpg", sampleFace: undefined });
     }
     if (scenario === "culled-only person") {
       expect(awaitingConfirmation.items.some((item) => "personId" in item && item.personId === "culled")).toBe(false);

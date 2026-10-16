@@ -9,8 +9,9 @@ export function ChatHeader({ title, confirmed, peopleProgress, ready, onBack }: 
     <View className="flex-1 flex-col gap-1">
       <Text className="text-heading font-title text-ink">{title}</Text>
       {ready ? <Text className="text-caption font-sans-medium text-positive">✓ Film ready</Text> : <View className="flex-row items-center gap-2">
-        <View className="flex-row gap-1">{[0, 1, 2, 3].map((index) => <View key={index} className={`h-2 w-5 rounded-sm ${index < progress ? "bg-tile" : "bg-surface-sunken"}`} />)}</View>
-        <Text className="text-caption font-sans text-ink-muted">{peopleProgress ? `${peopleProgress.confirmed} of ${peopleProgress.total} confirmed` : `${progress} of 4 confirmed`}</Text>
+        {peopleProgress ? <><View className="flex-row gap-1">{[0, 1, 2, 3].map((index) => <View key={index} className={`h-2 w-5 rounded-sm ${index < progress ? "bg-tile" : "bg-surface-sunken"}`} />)}</View>
+          <Text className="text-caption font-sans text-ink-muted">{peopleProgress.confirmed} of {peopleProgress.total} confirmed</Text></>
+          : <Text className="text-caption font-sans text-ink-muted">Getting your photos ready</Text>}
       </View>}
     </View>
   </View>;

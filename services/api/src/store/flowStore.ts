@@ -123,14 +123,16 @@ export function applyFlowAction(flow: DirectorFlow, action: FlowAction): Directo
     return { ...withoutPriorReply, missedPeople: action.people, ...(action.answer !== undefined ? { missedAnswer: action.answer } : {}), ...(action.reply ? { missedReply: action.reply } : {}) };
   }
   if (action.type === "missed-person-completed") {
-    const missedPeople = flow.missedPeople ?? [];
+    const missedPeople = (flow.missedPeople ?? []).map((person) => person.personId === action.personId && action.sampleFace
+      ? { ...person, sampleFace: action.sampleFace }
+      : person);
     if (!missedPeople.some((person) => person.personId === action.personId)) return flow;
     const complete = (personId: string) => {
       const person = flow.people.find((entry) => entry.personId === personId);
       return Boolean(person && person.manualShotAdds.some((shotId) => !person.manualShotRemoves.includes(shotId)));
     };
     const allMissedPeopleResolved = missedPeople.length > 0 && missedPeople.every((person) => person.skipped || complete(person.personId));
-    return allMissedPeopleResolved ? { ...flow, missedPeopleConfirmed: true, peopleSummaryFollowupActive: false } : flow;
+    return { ...flow, missedPeople, ...(allMissedPeopleResolved ? { missedPeopleConfirmed: true, peopleSummaryFollowupActive: false } : {}) };
   }
   if (action.type === "missed-clarification-turn") return { ...flow, missedClarifications: [...(flow.missedClarifications ?? []), { question: action.question, reply: action.reply, ...(action.stage ? { stage: action.stage } : {}) }] };
   if (action.type === "people-summary-snapshot") return { ...flow, peopleSummaryHistory: [...(flow.peopleSummaryHistory ?? []), action.people], peopleSummaryFollowupActive: true };

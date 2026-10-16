@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState as useReactState, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
+import type { FaceSample } from "@mosae/contracts";
 import { directionFocus, deriveChat, mainPeople, canConfirmStory, getSetAsideSummary, getStoryRepository, matchExistingPersonAnswer, type ChatInput, type ChatState, type Direction, type DirectionOptions, type DurationChoice, type Film, type ProjectSummary, type StoryPlan, type StoryRepository } from "@mosae/core";
 import type { DirectorPerson } from "@mosae/core/src/story/repository";
 import { confirmCast } from "./characters";
@@ -206,7 +207,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const local = current.missedPeople?.find((entry) => entry.personId === person.personId);
         const storedCount = stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0;
         const sampleUris = stored?.samplePhotoUris?.length ? stored.samplePhotoUris : local?.sampleUris;
-        return { ...person, momentCount: storedCount, ...(sampleUris?.length ? { sampleUris } : {}), ...(person.skipped ? { skipped: true } : {}) };
+        return { ...person, momentCount: storedCount, ...(sampleUris?.length ? { sampleUris } : {}), ...(person.sampleFace ? { sampleFace: person.sampleFace } : {}), ...(person.skipped ? { skipped: true } : {}) };
       }) : current.missedPeople;
       const nextMissedPerson = missedPeople?.find((person) => !person.skipped && person.momentCount === 0);
       const historyTurns = acceptedFlow.missedClarifications?.map((turn) => ({ ...turn, stage: turn.stage ?? "missed" as const })) ?? current.interpTurns?.filter((turn) => turn.stage === "missed" || turn.stage === "summary") ?? [];
@@ -235,6 +236,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           ? await repository.getProjectResume(projectId)
           : { proposalId: null, storyText: null, generationId: null, generationStatus: null };
         if (!stillValid()) return;
+        if (resume.proposalId) proposalId.current = resume.proposalId;
         const [plan, film] = await Promise.all([
           resume.proposalId ? repository.getPlan(resume.proposalId).catch(() => null) : Promise.resolve(null),
           resume.generationId ? repository.getFilm(resume.generationId).catch(() => null) : Promise.resolve(null),
@@ -291,6 +293,14 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (stillValid()) { resumeProjectId.current = null; throw cause; }
       }
       return;
+    }
+    // A plan job may still be waiting for photo analysis when the director
+    // first resumes. In that case the initial resume has no proposal ID, and
+    // this screen must re-read resume once readiness says a plan can exist.
+    if (!proposalId.current && nextSummary.ready.plan && repository.getProjectResume) {
+      const resume = await repository.getProjectResume(projectId);
+      if (!stillValid()) return;
+      if (resume.proposalId) proposalId.current = resume.proposalId;
     }
     const requiresExplicitProceed = acceptedFlow?.peopleProgress !== undefined;
     const completedPeople = new Set(acceptedFlow?.peopleProgress?.completedPersonIds ?? []);
@@ -514,6 +524,7 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
           ...(shouldReconcile ? { reconcilePersonId: reconciliationTargetId, reconcilePendingPersonIds: reconciliationPendingIds } : {}),
           ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}),
         });
+        if (result?.proposalId) proposalId.current = result.proposalId;
         await commitFlowAction({ type: "batch", actions: [
           { type: "person", personId, name: role === "Skip" ? null : personName ?? null, role: roleValue, ...(answerText ? { answerText } : {}), confirmed: role !== "Skip", skipped: role === "Skip" },
           ...(automaticDuplicate && duplicate ? [{ type: "merge" as const, personId, targetPersonId: duplicate.personId }] : []),
@@ -627,9 +638,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         if (samePerson) {
           const castPeople = (input.people ?? []).filter((person) => person.personId !== event.personId);
           const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: castPeople.map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], merges: [{ fromPersonId: event.personId, toPersonId: event.targetPersonId }], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+          if (result?.proposalId) proposalId.current = result.proposalId;
           const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
           if (!isCurrentProject()) return;
-          if (result?.proposalId) proposalId.current = result.proposalId;
           setInput((current) => ({ ...current, people: castPeople, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: false, mergeEvents: current.mergeEvents?.map((item) => item.id === eventId ? { ...item, response } : item) }));
         } else {
           const duplicateName = (input.people ?? []).some((person) => person.personId === event.personId && person.name?.trim().replace(/^my\s+/i, "").toLocaleLowerCase() === event.answer.trim().replace(/^my\s+/i, "").toLocaleLowerCase());
@@ -638,9 +649,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
             : (input.people ?? []);
           if (duplicateName) peopleEdits.current.set(event.personId, { name: null, role: null, skipped: false });
           const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: updated.map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+          if (result?.proposalId) proposalId.current = result.proposalId;
           const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
           if (!isCurrentProject()) return;
-          if (result?.proposalId) proposalId.current = result.proposalId;
           setInput((current) => ({ ...current, ...(duplicateName ? { people: updated } : {}), ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), mergeEvents: current.mergeEvents?.map((item) => item.id === eventId ? { ...item, response } : item) }));
         }
       } catch (cause) { setError(reportFailure(cause)); }
@@ -663,22 +674,22 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         const skipped = (input.people ?? []).map((person) => ({ type: "person" as const, personId: person.personId, name: null, role: "other", confirmed: false, skipped: true }));
         if (skipped.length) await commitFlowAction({ type: "batch", actions: [...skipped, { type: "people-summary-confirmed", confirmed: false }] });
         const result = await confirmCast(projectId, { people: people.map((person) => ({ personId: person.personId, role: "other" as const, excluded: false })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        if (result.proposalId) proposalId.current = result.proposalId;
         const revisedPlan = result.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
-        if (result.proposalId) proposalId.current = result.proposalId;
         setInput((current) => ({ ...current, people, peopleSummaryConfirmed: false, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}), peopleConfirmed: true })); setError(null);
       } catch (cause) { setError(reportFailure(cause)); }
       finally { if (isCurrentProject()) personSaving.current = false; }
     },
-    async completeMissedPerson(personId: string, name: string, momentCount: number, sampleUri?: string, sampleUris?: string[]) {
-      try { await commitFlowAction({ type: "missed-person-completed", personId }); }
+    async completeMissedPerson(personId: string, name: string, momentCount: number, sampleUri?: string, sampleUris?: string[], sampleFace?: FaceSample) {
+      try { await commitFlowAction({ type: "missed-person-completed", personId, ...(sampleFace ? { sampleFace } : {}) }); }
       catch (cause) { setError(reportFailure(cause)); return; }
       setInput((current) => {
         const people = current.people ?? [];
         const updatedPeople = people.some((person) => person.personId === personId)
           ? people.map((person) => person.personId === personId ? { ...person, momentCount } : person)
           : [...people, { personId, name, role: "other", skipped: false, momentCount, sampleShotIds: [], days: [] }];
-        const missedPeople = (current.missedPeople ?? []).map((person) => person.personId === personId ? { ...person, momentCount, ...(sampleUris?.length ? { sampleUris: sampleUris.slice(0, 4) } : sampleUri ? { sampleUri } : {}) } : person);
+        const missedPeople = (current.missedPeople ?? []).map((person) => person.personId === personId ? { ...person, momentCount, ...(sampleUris?.length ? { sampleUris: sampleUris.slice(0, 4) } : sampleUri ? { sampleUri } : {}), ...(sampleFace ? { sampleFace } : {}) } : person);
         const next = missedPeople.find((person) => !person.skipped && person.momentCount === 0);
         return { ...current, people: updatedPeople, missedPeople, peopleConfirmed: true, peopleSummaryConfirmed: false, missedPersonTagging: next ? { personId: next.personId, name: next.name } : null };
       });
@@ -712,9 +723,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
         while (personSaving.current) await new Promise<void>((resolve) => setTimeout(resolve, 25));
         const people = input.people ?? [];
         const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: people.filter((person) => !person.personId.startsWith("p-missed-") || (input.missedPeople ?? []).some((missed) => missed.personId === person.personId)).map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        if (result?.proposalId) proposalId.current = result.proposalId;
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
-        if (result?.proposalId) proposalId.current = result.proposalId;
         try { await commitFlowAction({ type: "people-summary-confirmed", confirmed: true, answer: "Looks right", peopleCount }); }
         catch { await commitFlowAction({ type: "people-summary-confirmed", confirmed: true, answer: "Looks right", peopleCount }); }
         summaryPersisted = true;
@@ -737,9 +748,9 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
       try {
         const people = input.people ?? [];
         const result = storyFlow?.repository === "fixture" ? null : await confirmCast(projectId, { people: people.map((person) => ({ personId: person.personId, role: (person.role ?? "other") as "child" | "parent" | "other", name: person.name ?? undefined, excluded: person.skipped })), focus: [], ...(input.plan && proposalId.current ? { proposalId: proposalId.current } : {}) });
+        if (result?.proposalId) proposalId.current = result.proposalId;
         const revisedPlan = result?.proposalId ? { ...await repository.getPlan(result.proposalId), planId: result.proposalId } : undefined;
         if (!isCurrentProject()) return;
-        if (result?.proposalId) proposalId.current = result.proposalId;
         await commitFlowAction({ type: "people-summary-confirmed", confirmed: false });
         setInput((current) => ({ ...current, peopleConfirmed: true, peopleSummaryConfirmed: false, ...(revisedPlan ? { plan: revisedPlan, momentsConfirmed: getSetAsideSummary(revisedPlan).blurry + getSetAsideSummary(revisedPlan).duplicates === 0 } : {}) }));
       } catch (cause) { setError(reportFailure(cause)); }
@@ -907,21 +918,22 @@ export function useDirectorChat(projectId: string, repository: StoryRepository =
             return;
           }
           if (canConfirmStory({ ...input, ...confirmationState }) && result.change.kind === "occasion") {
-            // Ready to confirm: an occasion answer waits for explicit confirmation.
             setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).slice(0, -1), interpReplying: false }));
             const interpretedPeople = Array.isArray(result.change.mentionedPeople)
               ? result.change.mentionedPeople.filter((person): person is string => typeof person === "string") : [];
             const storySummary = typeof result.change.storyText === "string" ? result.change.storyText : undefined;
-            setPendingInterpret({ reply: result.reply, text, ...(interpretedPeople.length ? { mentionedPeople: interpretedPeople } : {}), ...(storySummary ? { storySummary } : {}) });
-            return;
+            // The user answered the occasion question directly. Persist that
+            // answer once and let deriveChat add its canonical acknowledgement.
+            return actions.confirmOccasion(text.trim(), undefined, interpretedPeople, storySummary);
           }
           // Mid-flow question: answer inline, don't disrupt the flow.
-          const reply = result.change.kind === "unclear" ? (result.reply || UNCLEAR) : result.reply;
-          setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).map((turn, index, turns) => index === turns.length - 1 ? { ...turn, reply } : turn), interpReplying: false }));
           if (result.change.kind === "occasion") {
-            // User answered the occasion question mid-flow — capture it; confirmOccasion
-            // proceeds once a plan can be confirmed. Do not force a step change.
-            setInput((current) => ({ ...current, earlyOccasionAnswer: text.trim(), ...(typeof result.change.storyText === "string" ? { earlyOccasionStoryText: result.change.storyText } : {}) }));
+            // The answer and acknowledgement are derived from earlyOccasionAnswer.
+            // Keeping this as an interpTurn would replay both below the people flow.
+            setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).slice(0, -1), interpReplying: false, earlyOccasionAnswer: text.trim(), ...(typeof result.change.storyText === "string" ? { earlyOccasionStoryText: result.change.storyText } : {}) }));
+          } else {
+            const reply = result.change.kind === "unclear" ? (result.reply || UNCLEAR) : result.reply;
+            setInput((current) => ({ ...current, interpTurns: (current.interpTurns ?? []).map((turn, index, turns) => index === turns.length - 1 ? { ...turn, reply } : turn), interpReplying: false }));
           }
         } catch (cause) {
           setInput((current) => ({ ...current, interpReplying: false }));

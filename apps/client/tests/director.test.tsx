@@ -274,12 +274,13 @@ describe("Director chat", () => {
     expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(1);
     expect(host.querySelector('button[aria-label="Change selected photos for Grandpa"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Tap to select"]')?.parentElement?.textContent).toContain("Grandma");
-    setTaggedPersonResult({ personId: grandmaId, name: "Grandma", momentCount: 3, isMissed: true, sampleUri: "grandma.jpg", sampleUris: ["grandma.jpg"] });
+    setTaggedPersonResult({ personId: grandmaId, name: "Grandma", momentCount: 3, isMissed: true, sampleUri: "grandma.jpg", sampleUris: ["grandma.jpg"], sampleFace: { shotId: "grandma-shot", uri: "grandma.jpg", bbox: [0.1, 0.2, 0.3, 0.4] } });
     await act(async () => mocks.focusCallback?.());
     await waitFor(() => expect(hasText("Thanks. I've tagged all four in your moments.")).toBe(true));
     expect(host.querySelectorAll('button[aria-label="Tap to select"]')).toHaveLength(0);
     expect(host.querySelector('button[aria-label="Change selected photos for Grandma"]')).toBeTruthy();
     expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy();
+    expect(host.querySelector('img[src="grandma.jpg"]')).toBeTruthy();
     expect(mocks.repo.mutateFlow.mock.calls.filter(([, , action]: [string, string, any]) => action.type === "missed-person-completed").map(([, , action]: [string, string, any]) => action.personId)).toEqual([grandpaId, grandmaId]);
     expect([...host.querySelectorAll('[data-from="you"]')].filter((item) => item.textContent === "Grandpa and Grandma")).toHaveLength(1);
     await click("Looks right");
@@ -365,6 +366,52 @@ describe("Director chat", () => {
     expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull();
     await waitFor(() => expect(mocks.repo.mutateFlow).toHaveBeenCalledTimes(2));
     expect(host.querySelector('button[aria-label="Looks right"]')).toBeNull();
+  });
+
+  it("re-reads project resume to recover a plan that finished after the page resumed", async () => {
+    const intervalSpy = vi.spyOn(globalThis, "setInterval");
+    setup();
+    let planReady = false;
+    mocks.repo.getSummary = vi.fn(async () => ({ ...summary(), ready: { summary: true, faces: true, plan: planReady } }));
+    const namedPeople = people.slice(0, 2).map((person, index) => ({ ...person, name: index ? "Son" : "Daughter", role: "child", skipped: false }));
+    const flow: any = {
+      revision: 3,
+      story: { answer: "A trip", storySummary: "Our trip", mentionedPeople: [] },
+      people: namedPeople.map(({ personId, name, role }) => ({ personId, name, role, answerText: name, confirmed: true, skipped: false, manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null })),
+      peopleProgress: { askedPersonIds: namedPeople.map(({ personId }) => personId), completedPersonIds: namedPeople.map(({ personId }) => personId) },
+      missedPeopleConfirmed: true, missedPeople: [], peopleSummaryConfirmed: false,
+    };
+    mocks.repo.getPeople = vi.fn(async () => namedPeople);
+    mocks.repo.getFlow = vi.fn(async () => flow);
+    mocks.repo.mutateFlow = vi.fn(async (_projectId: string, _actionId: string, action: any) => {
+      const changes = action.type === "batch" ? action.actions : [action];
+      for (const change of changes) if (change.type === "people-summary-confirmed") {
+        flow.peopleSummaryConfirmed = change.confirmed;
+        flow.peopleSummaryAnswer = change.answer;
+        flow.peopleSummaryCount = change.peopleCount;
+      }
+      flow.revision++;
+      return flow;
+    });
+    let proposalPublished = false;
+    mocks.repo.getProjectResume = vi.fn(async () => proposalPublished
+      ? ({ proposalId: "proposal-after-reload", storyText: "A trip", generationId: null, generationStatus: null })
+      : ({ proposalId: null, storyText: "A trip", generationId: null, generationStatus: null }));
+    mocks.confirmCast.mockResolvedValue({ cast: { people: [] } });
+    await renderScreen();
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks right"]')).toBeTruthy());
+    await click("Looks right");
+    await waitFor(() => expect(hasText("Picking the strongest moments")).toBe(true));
+
+    planReady = true;
+    proposalPublished = true;
+    const refreshPoll = intervalSpy.mock.calls.find(([, delay]) => delay === 10_000)?.[0] as () => void;
+    expect(refreshPoll).toBeTruthy();
+    await act(async () => { refreshPoll(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    await waitFor(() => expect(mocks.repo.getProjectResume).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.repo.getPlan).toHaveBeenCalledWith("proposal-after-reload"));
+    await waitFor(() => expect(host.querySelector('button[aria-label="Looks good"]')).toBeTruthy());
+    intervalSpy.mockRestore();
   });
 
   it("treats a missing API missed-people flag as waiting for That's everyone", async () => {
@@ -1060,37 +1107,29 @@ describe("Director chat", () => {
     expect(host.textContent?.match(/0 of 2 confirmed/g)).toHaveLength(1);
   });
 
-  it("interprets typed text and waits for an explicit confirmation before saving", async () => {
+  it("does not invent a four-person header count before any people are known", async () => {
+    setup({ faces: true, people: [] }); await renderScreen(); await click("A trip");
+    await waitFor(() => expect(hasText("A trip — lovely!")).toBe(true));
+    expect(host.textContent).not.toMatch(/\d+ of 4 confirmed/);
+  });
+
+  it("accepts a typed occasion answer once without a second confirmation", async () => {
     setup(); await renderScreen();
     const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "our family trip"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
     await click("→");
-    await waitFor(() => expect(hasText("I understood the Japan trip.")).toBe(true));
-    const typed = host.querySelector('[data-from="you"]');
-    const reply = [...host.querySelectorAll('[data-from="mosae"]')].find((item) => item.textContent?.includes("I understood the Japan trip."));
+    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("our family trip", []));
+    const typed = [...host.querySelectorAll('[data-from="you"]')].find((item) => item.textContent?.includes("our family trip"));
+    const reply = [...host.querySelectorAll('[data-from="mosae"]')].find((item) => item.textContent?.includes("— lovely!"));
     expect(typed).toBeTruthy();
     expect(reply).toBeTruthy();
     expect(typed!.compareDocumentPosition(reply!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(hasText("Did I get that right?")).toBe(false);
-    expect(hasText("Not quite")).toBe(true);
-    expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+    expect(hasText("I understood the Japan trip.")).toBe(false);
+    expect(hasText("Not quite")).toBe(false);
+    expect(hasText("Yes, that's right")).toBe(false);
+    expect(host.textContent?.match(/our family trip/g)).toHaveLength(1);
     expect(host.querySelector('button[aria-label="A trip"]')).toBeFalsy();
     expect(host.textContent?.match(/0 of 2 confirmed/g) ?? []).toHaveLength(1);
-    await click("Yes, that's right");
-    await waitFor(() => expect(mocks.repo.createPlan).toHaveBeenCalledWith("our family trip", []));
-  });
-
-  it("discards an interpretation with Not quite and returns to the original occasion chip", async () => {
-    setup(); await renderScreen();
-    const composer = host.querySelector('input[aria-label="Tell me anything about the story"]')!;
-    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(composer, "something different"); composer.dispatchEvent(new Event("input", { bubbles: true })); });
-    await click("→");
-    await waitFor(() => expect(hasText("I understood the Japan trip.")).toBe(true));
-    await click("Not quite");
-    expect(hasText("I understood the Japan trip.")).toBe(false);
-    expect(hasText("something different")).toBe(false);
-    expect(host.querySelector('button[aria-label="A trip"]')).toBeTruthy();
-    expect(mocks.repo.createPlan).not.toHaveBeenCalled();
   });
 
   it("shows an early occasion answer immediately while plan creation continues", async () => {
@@ -1245,7 +1284,8 @@ describe("Director chat", () => {
   async function openMoments(applyEdits?: (...args: any[]) => Promise<any>, getFilm?: (...args: any[]) => Promise<any>) {
     setup({ people: [], readyPlan: true, applyEdits, getFilm }); await renderScreen();
     await click("A trip");
-    await waitFor(() => expect(hasText("2 of 4 confirmed")).toBe(true));
+    await waitFor(() => expect(hasText("Got it. I've set aside 1 blurry shot and 120 near-duplicates, keeping the best of each burst. Your originals are untouched.") || hasText("Sounds good")).toBe(true));
+    expect(hasText("2 of 4 confirmed")).toBe(false);
   }
 
   it("shows filtered-photo counts and opens the existing full review list", async () => {
@@ -1474,6 +1514,19 @@ describe("Director chat", () => {
     expect(chat.state.items.some(item => item.kind === "you" && item.id === "interp-question-1" && item.text === "how long will this take?")).toBe(true);
     expect(chat.state.items.some(item => item.kind === "mosae" && item.id === "interp-reply-1" && item.text === "Your photos are uploading — one moment.")).toBe(true);
     expect(mocks.repo.createPlan).not.toHaveBeenCalled();
+  });
+
+  it("keeps an occasion answer given during analysis as one chronological answer and acknowledgement", async () => {
+    setup({ interpret: async () => ({ reply: "Weekend getaway — lovely! I'm looking through them now — almost there.", change: { kind: "occasion", storyText: "Weekend getaway" } }) });
+    mocks.repo.getSummary = vi.fn(async () => ({ ...summary(), ready: { ...summary().ready, story: false } }));
+    let chat!: ReturnType<typeof useDirectorChat>;
+    function Harness() { chat = useDirectorChat("project-1", mocks.repo); return null; }
+    await act(async () => root.render(<Harness />));
+    await act(async () => chat.retry());
+    await act(async () => chat.actions.send("Weekend getaway"));
+    expect(chat.state.items.filter(item => item.kind === "you" && item.text === "Weekend getaway")).toHaveLength(1);
+    expect(chat.state.items.filter(item => item.kind === "mosae" && item.text.startsWith("Weekend getaway — lovely!"))).toHaveLength(1);
+    expect(chat.state.items.some(item => item.kind === "mosae" && item.text.includes("Make the story about your weekend getaway?"))).toBe(false);
   });
 
   it("shows Thinking before interpretation resolves and ignores overlapping sends", async () => {
