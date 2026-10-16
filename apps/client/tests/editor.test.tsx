@@ -111,7 +111,7 @@ describe("film editor", () => {
   it("loads the first cut into a selectable clip strip", async () => {
     await render(<EditorScreen />);
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
-    expect(host.textContent).toContain("Opening");
+    expect(host.textContent).not.toContain("Opening");
     expect(host.textContent).toContain("Edit film");
   });
 

@@ -339,7 +339,7 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledWith({ op: "add", shotId: "shot-left", kind: "video", afterClipId: "b", durationSec: 6, sourceInSec: 2, sourceOutSec: 10 });
   });
 
-  it("keeps the current chapter label visible in a text-height row", async () => {
+  it("omits chapter labels and their spacer while retaining the music row", async () => {
     const chapterTimeline: Timeline = {
       ...timeline,
       chapters: [
@@ -348,15 +348,10 @@ describe("editor tool operations", () => {
       ],
     };
     await render(<TimelineStrip timeline={chapterTimeline} sources={{}} selectedClipId={null} playheadSec={4.5} onSelect={() => {}} onScrub={() => {}} />);
-    const row = host.querySelector('[aria-label="Chapter label row"]') as HTMLElement;
-    expect(row.style.height).toBe("18px");
-    expect(row.style.top).toBe("27px");
-    expect(host.querySelector('[aria-label="Current chapter Day 2 · Gardens by the Bay"]')?.textContent).toBe("Day 2 · Gardens by the Bay");
-  });
-
-  it("collapses the chapter label row when the timeline has no chapters", async () => {
-    await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} />);
-    expect((host.querySelector('[data-chapter-label-spacer="true"]') as HTMLElement).style.height).toBe("0px");
+    expect(host.querySelector('[aria-label="Chapter label row"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Current chapter Day 2 · Gardens by the Bay"]')).toBeNull();
+    expect(host.querySelector('[data-chapter-label-spacer="true"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Open soundtrack picker"]')).not.toBeNull();
   });
 
   it("renders video poster frames repeatedly across a timeline slot without a video element", async () => {
@@ -523,7 +518,7 @@ describe("editor tool operations", () => {
     await render(<TimelineStrip timeline={withRows} sources={{ "shot-a": "a.jpg" }} selectedClipId="a" playheadSec={0} soundtrackName="Sandcastle Days" onSelect={() => {}} onScrub={() => {}} onSoundtrack={() => {}} />);
     expect(host.querySelector('[aria-label="Timeline ruler tick 2 seconds"]')?.getAttribute("style")).toContain("left: 130px");
     expect(host.querySelector('[aria-label="Timeline ruler label 0:02"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Current chapter Zoo day"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Current chapter Zoo day"]')).toBeNull();
     expect(host.querySelector('[aria-label="Select clip a"]')?.parentElement?.getAttribute("style")).toContain("left: 50px");
     const musicTrack = host.querySelector('[aria-label="Music track Sandcastle Days"]')!;
     const photoClip = host.querySelector('[aria-label="Select clip a"]')!;

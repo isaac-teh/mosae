@@ -54,6 +54,20 @@ describe("web editor preview seeks", () => {
     expect(playerMock.play).toHaveBeenCalledOnce();
   });
 
+  it("shows a visible opening frame for a portrait collage while keeping the playhead at zero", async () => {
+    const collageTimeline: Timeline = {
+      ...timeline,
+      videoClips: [{
+        kind: "collage", clipId: "opening-collage", startSec: 0, durationSec: 4,
+        transitionIn: { kind: "cut", durationSec: 0 },
+        spec: { layoutId: "photo-table", motionId: "stack-deal", effectId: null, seed: "test", durationSec: 4, slots: [{ slotId: "s1", shotId: "one", kind: "photo" }] },
+      } as any],
+    };
+    await act(async () => root.render(<EditorPreview timeline={collageTimeline} sources={{ one: "one.jpg" }} />));
+    expect(host.querySelector('[data-testid="player"]')?.getAttribute("data-initial-frame")).toBe("30");
+    expect(host.querySelector('[aria-label="Play preview"]')?.getAttribute("data-current-time")).toBe("0");
+  });
+
   it("leaves the shared chat player seek and fullscreen lifecycle alone on mount", async () => {
     await act(async () => root.render(<EditorPreview timeline={timeline} sources={{}} controls="chat" />));
     expect(playerMock.seekTo).not.toHaveBeenCalled();
