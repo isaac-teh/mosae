@@ -33,4 +33,9 @@ describe("describeApplied", () => {
     expect(reply).toMatch(expected);
     expect(reply).not.toMatch(/^I(?:'ll| will)\b/);
   });
+  it("names a single library photo added by a broad more-media request", () => {
+    const op: EditOp = { op: "add", shotId: "unused", kind: "photo", afterClipId: "b", durationSec: 3 };
+    expect(describeApplied("Use more photos from the library", [op], timeline, [], timeline))
+      .toBe("Added 1 more photo from your library.");
+  });
 });

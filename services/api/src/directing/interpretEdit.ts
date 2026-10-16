@@ -3,8 +3,9 @@ import type { GenerateOptions } from "../gemini/client.js";
 import { MODELS } from "../gemini/pricing.js";
 import { DemoLimitReached } from "../gemini/errors.js";
 import type { EditContext } from "./editContext.js";
-import { describeApplied, describeSkipped } from "./editReply.js";
+import { describeApplied, describeSkipped, sanitizeEditReply } from "./editReply.js";
 import { collageAmountEdit } from "./collageAmount.js";
+import { mediaLibraryEdit } from "./mediaLibrary.js";
 
 export type InterpretEditRequest = { text: string; timeline: Timeline; groundedContext?: import("./loadEditContext.js").EditContext; intentRouting?: boolean } & Partial<EditContext>;
 export type InterpretEditModelResult = { kind?: "edit" | "clarify" | "unsupported"; reply?: string; ops: EditOp[] };
@@ -517,10 +518,11 @@ function timingEdit(req: InterpretEditRequest): InterpretEditResult | null {
 }
 
 function splitIntents(text: string): string[] {
-  return text.split(/\s+(?:and|with)\s+/i).map(part => part.trim().replace(/^[,;]+|[,;.!?]+$/g, "")).filter(Boolean);
+  return text.split(/\s+(?:and|with)\s+(?!photos?\b|videos?\b)/i).map(part => part.trim().replace(/^[,;]+|[,;.!?]+$/g, "")).filter(Boolean);
 }
 
 function intentGroup(text: string): string {
+  if (/\b(?:photos?|videos?|media|library|everything)\b/i.test(text) && /\b(?:add|use|more|all|everything)\b/i.test(text)) return "media";
   if (/\b(?:\d+(?:\.\d+)?\s*(?:seconds?|secs?|s|minutes?|mins?|m)|faster|quicker|speed(?:ier)? up|slower|slow down|more relaxed|longer|shorter)\b/i.test(text)) return "timing";
   if (/\b(?:focus|feature|emphasize)\b/i.test(text)) return "focus";
   if (/\b(?:most|fewer|less|no)\s+collages?\b|\bmore\s+collages?\b|\bmore\s+collage(?:\s+moments)?\b/i.test(text)) return "collage";
@@ -533,11 +535,11 @@ function intentGroup(text: string): string {
 async function interpretCombined(req: InterpretEditRequest, deps: { generate: (options: GenerateOptions<InterpretEditModelResult>) => Promise<unknown> }): Promise<InterpretEditResult | null> {
   const parts = splitIntents(req.text);
   const groups = new Set(parts.map(intentGroup));
-  if (parts.length < 2 || groups.size < 2 || !["timing", "focus", "music", "collage"].some(group => groups.has(group))) return null;
+  if (parts.length < 2 || groups.size < 2 || !["timing", "focus", "music", "collage", "media"].some(group => groups.has(group))) return null;
   // The requested structure is established first; explicit timing is last so it
   // targets the final set of clips and determines the final film duration.
   const ordered = [...parts].sort((a, b) => {
-    const order: Record<string, number> = { structure: 0, collage: 1, focus: 2, aspect: 3, music: 3, model: 4, timing: 5 };
+    const order: Record<string, number> = { structure: 0, media: 0, collage: 1, focus: 2, aspect: 3, music: 3, model: 4, timing: 5 };
     return order[intentGroup(a)]! - order[intentGroup(b)]!;
   });
   const grouped: string[] = [];
@@ -603,15 +605,18 @@ export async function interpretEdit(req: InterpretEditRequest, deps: {
 }): Promise<InterpretEditResult> {
   if (!req.intentRouting) {
     const combined = await interpretCombined(req, deps);
-    if (combined) return combined;
+    if (combined) return { ...combined, reply: sanitizeEditReply(combined.reply) };
   }
-  return pastTenseReply(req, await interpretSingle(req, deps));
+  const result = pastTenseReply(req, await interpretSingle(req, deps));
+  return { ...result, reply: sanitizeEditReply(result.reply) };
 }
 
 async function interpretSingle(req: InterpretEditRequest, deps: {
   generate: (options: GenerateOptions<InterpretEditModelResult>) => Promise<unknown>;
 }): Promise<InterpretEditResult> {
   if (unavailableFeature(req.text)) return { kind: "unsupported", reply: unavailableFeatureReply, ops: [] };
+  const mediaLibrary = mediaLibraryEdit(req);
+  if (mediaLibrary) return mediaLibrary;
   const collageAmount = collageAmountEdit(req);
   if (collageAmount) return collageAmount;
   // Focus and pace/length are handled by bounded deterministic operations. Run

@@ -10,7 +10,8 @@ import { getEditConversation, type EditConversationTurn } from "./editStore.js";
 export type EditSourceCandidate = {
   shotId: string; assetId: string; kind: "photo" | "video"; caption: string;
   personIds: string[]; sourceStartSec: number | null; sourceEndSec: number | null;
-  width?: number; height?: number;
+  width?: number; height?: number; localTime?: string | null; eventId?: string | null;
+  quality?: number; blurry?: boolean;
 };
 export type EditContext = {
   scope: EditScope;
@@ -19,6 +20,8 @@ export type EditContext = {
   people: { personId: string; name: string | null; role: string; focused: boolean }[];
   selected: { clipId: string; slotId?: string; shotIds: string[]; captions: string[] } | null;
   candidates: EditSourceCandidate[];
+  /** Full bounded owned-media catalog for deterministic "all library" edits. */
+  libraryCandidates?: EditSourceCandidate[];
   soundtracks: { id: string; name: string; description: string; cadence: string; durationSec: number; storagePath: string }[];
   conversation: EditConversationTurn[];
 };
@@ -76,14 +79,19 @@ export async function loadEditContext(db: Firestore, userId: string, projectId: 
       rankedCandidates.push(representative);
     }
   }
-  const candidates = rankedCandidates.map(shot => ({
+  const candidateFor = (shot: typeof allEligibleShots[number]) => ({
     shotId: shot.id, assetId: (shot as typeof working[number]).assetId, kind: shot.analysis!.kind,
     caption: (shot.analysis!.kind === "photo" ? shot.analysis!.caption : shot.analysis!.description).slice(0, 2000),
     personIds: shot.analysis!.kind === "photo" ? [...new Set((shot.analysis!.faces ?? []).flatMap(face => face.characterId && personIds.has(face.characterId) ? [face.characterId] : []))] : [],
     ...(assetMap.get((shot as typeof working[number]).assetId)?.media?.width ? { width: assetMap.get((shot as typeof working[number]).assetId)!.media!.width } : {}),
     ...(assetMap.get((shot as typeof working[number]).assetId)?.media?.height ? { height: assetMap.get((shot as typeof working[number]).assetId)!.media!.height } : {}),
     sourceStartSec: shot.sourceStartSec ?? null, sourceEndSec: shot.sourceEndSec ?? null,
-  }));
+    localTime: shot.localTime, eventId: shot.eventId,
+    quality: shot.analysis!.kind === "photo" ? shot.analysis!.keyMomentScore : shot.analysis!.quality,
+    blurry: assetMap.get((shot as typeof working[number]).assetId)?.quality?.blurry === true,
+  });
+  const candidates = rankedCandidates.map(candidateFor);
+  const libraryCandidates = allEligibleShots.map(candidateFor);
   const timeline = generation.get("timeline") as Timeline | undefined;
   const applied = timeline ? applyEdits(timeline, (edits.get("ops") ?? []) as EditOp[]) : null;
   const current = applied?.ok ? applied.timeline : timeline;
@@ -93,5 +101,5 @@ export async function loadEditContext(db: Firestore, userId: string, projectId: 
     shotIds: "kind" in clip ? clip.spec.slots.filter(slot => scope.kind !== "slot" || slot.slotId === scope.slotId).flatMap(slot => slot.shotId ? [slot.shotId] : []) : [clip.source.shotId],
     captions: current!.captions.filter(caption => caption.startSec < clip.startSec + clip.durationSec && caption.endSec > clip.startSec).map(caption => caption.text),
   } : null;
-  return { scope, storyIntent: intent && (intent.projectId === undefined || intent.projectId === projectId) && typeof intent.text === "string" ? { text: intent.text.slice(0, 2000), focus: intent.focus ?? [] } : null, constraints, people, selected, candidates, soundtracks: loadLibrary().filter(track => Number.isFinite(track.durationSec) && track.durationSec > 0).map(track => ({ id: track.id, name: track.name, description: track.description, cadence: track.cadence, durationSec: track.durationSec, storagePath: libraryPath(track) })), conversation: conversation ?? [] };
+  return { scope, storyIntent: intent && (intent.projectId === undefined || intent.projectId === projectId) && typeof intent.text === "string" ? { text: intent.text.slice(0, 2000), focus: intent.focus ?? [] } : null, constraints, people, selected, candidates, libraryCandidates, soundtracks: loadLibrary().filter(track => Number.isFinite(track.durationSec) && track.durationSec > 0).map(track => ({ id: track.id, name: track.name, description: track.description, cadence: track.cadence, durationSec: track.durationSec, storagePath: libraryPath(track) })), conversation: conversation ?? [] };
 }
