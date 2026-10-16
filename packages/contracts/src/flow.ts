@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export const FaceSampleSchema = z.object({
+  shotId: z.string().min(1),
+  uri: z.string().min(1),
+  bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+});
+export type FaceSample = z.infer<typeof FaceSampleSchema>;
+
 export const FlowPersonSchema = z.strictObject({
   personId: z.string().min(1),
   name: z.string().nullable(),
@@ -29,7 +36,7 @@ export const DirectorFlowSchema = z.strictObject({
   peopleSummaryConfirmed: z.boolean().optional(),
   peopleProgress: z.object({ askedPersonIds: z.array(z.string().min(1)).max(100).optional(), completedPersonIds: z.array(z.string().min(1)) }).optional(),
   missedPeopleConfirmed: z.boolean().optional(),
-  missedPeople: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional(), skipped: z.boolean().optional() })).optional(),
+  missedPeople: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional(), sampleFace: FaceSampleSchema.optional(), skipped: z.boolean().optional() })).optional(),
 });
 
 const AtomicFlowActionSchema = z.discriminatedUnion("type", [
@@ -45,7 +52,7 @@ const AtomicFlowActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("missed-person-added"), personId: z.string().min(1), name: z.string().min(1), answer: z.string().optional(), reply: z.string().nullable().optional() }),
   z.object({ type: z.literal("missed-person-skipped"), personId: z.string().min(1) }),
   z.object({ type: z.literal("missed-people"), people: z.array(z.object({ personId: z.string().min(1), name: z.string().min(1), samplePhotoUris: z.array(z.string()).optional(), skipped: z.boolean().optional() })).max(100), answer: z.string().optional(), reply: z.string().nullable().optional() }),
-  z.object({ type: z.literal("missed-person-completed"), personId: z.string().min(1) }),
+  z.object({ type: z.literal("missed-person-completed"), personId: z.string().min(1), sampleFace: FaceSampleSchema.optional() }),
   z.object({ type: z.literal("missed-clarification-turn"), question: z.string(), reply: z.string(), stage: z.enum(["missed", "summary", "post-confirmation"]).optional() }),
   z.object({ type: z.literal("people-summary-snapshot"), people: z.array(z.object({ personId: z.string(), name: z.string(), momentCount: z.number().nonnegative(), sampleUri: z.string().optional() })) }),
   z.object({ type: z.literal("people-summary-followup"), question: z.string(), reply: z.string().optional() }),

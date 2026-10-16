@@ -1,3 +1,5 @@
+import type { FaceSample } from "@mosae/contracts";
+
 export type TaggedPersonResult = {
   personId: string;
   name: string | null;
@@ -6,6 +8,7 @@ export type TaggedPersonResult = {
   shotIds?: string[];
   sampleUri?: string;
   sampleUris?: string[];
+  sampleFace?: FaceSample;
 };
 
 let pendingResult: TaggedPersonResult | null = null;

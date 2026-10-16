@@ -500,14 +500,17 @@ export function directingRouter(deps: {
       const urlStore = deps.thumbnails ?? firebaseThumbnailUrlStore(getStorage(getAdminApp()).bucket());
       const moments = await Promise.all(captures.map(async ({ doc, assetId, asset, day }) => {
         const path = asset!.derivatives!.thumbPath as string;
-        const faceIds = ((doc.get("analysis") as PhotoAnalysis | undefined)?.faces ?? []).filter((face) => face.prominence !== "background").map((face) => face.characterId).filter((id): id is string => Boolean(id));
+        const faces = ((doc.get("analysis") as PhotoAnalysis | undefined)?.faces ?? []).filter((face) => face.prominence !== "background");
+        const faceIds = faces.map((face) => face.characterId).filter((id): id is string => Boolean(id));
         const people = new Set(faceIds);
         for (const person of cast?.people ?? []) {
           if ((person.removedShots ?? []).includes(doc.id)) people.delete(person.personId);
           if ((person.manualShots ?? []).includes(doc.id) && !(person.removedShots ?? []).includes(doc.id)) people.add(person.personId);
         }
+        const thumbnailUrl = await cachedThumbnailUrl(urlStore, path, now());
         return {
-          shotId: doc.id, thumbnailUrl: await cachedThumbnailUrl(urlStore, path, now()),
+          shotId: doc.id, thumbnailUrl,
+          faceSamples: faces.slice(0, 4).map((face) => ({ shotId: doc.id, uri: thumbnailUrl, bbox: face.bbox })),
           kind: doc.get("mediaType") === "video" ? "video" as const : "photo" as const,
           durationSec: typeof asset!.media?.durationSec === "number" ? asset!.media.durationSec : null,
           dayIndex: dayIndexes.get(day) ?? 1, personIds: [...people], assetId,

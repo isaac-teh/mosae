@@ -202,7 +202,7 @@ export function deriveChat(input: ChatInput): ChatState {
   if (input.missedReply === undefined && input.flow?.missedReply !== undefined) input = { ...input, missedReply: input.flow.missedReply };
   if (input.missedPeople === undefined && input.flow?.missedPeople) input = { ...input, missedPeople: input.flow.missedPeople.map((person) => {
     const stored = input.flow!.people.find((entry) => entry.personId === person.personId);
-    return { personId: person.personId, name: person.name, momentCount: stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0, ...(person.samplePhotoUris ? { sampleUris: person.samplePhotoUris } : {}), ...(person.skipped ? { skipped: true } : {}) };
+    return { personId: person.personId, name: person.name, momentCount: stored ? Math.max(0, stored.manualShotAdds.length - stored.manualShotRemoves.length) : 0, ...(person.samplePhotoUris ? { sampleUris: person.samplePhotoUris } : {}), ...(person.sampleFace ? { sampleFace: person.sampleFace } : {}), ...(person.skipped ? { skipped: true } : {}) };
   }) };
   if (input.flow?.missedClarifications?.length) input = { ...input, interpTurns: [...(input.interpTurns ?? []).filter((turn) => turn.stage !== "missed" && turn.stage !== "summary"), ...input.flow.missedClarifications.map((turn) => ({ ...turn, stage: turn.stage ?? "missed" as const }))] };
   if (input.flow?.peopleSummaryFollowups?.length) input = { ...input, summaryFollowups: input.flow.peopleSummaryFollowups };
@@ -570,11 +570,14 @@ export function deriveChat(input: ChatInput): ChatState {
     const peopleById = new Map(announced.map((person) => [person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: taggedCardFaceByPersonId.get(person.personId)?.uri ?? person.sampleFaces?.[0]?.uri, sampleFace: taggedCardFaceByPersonId.get(person.personId) ?? person.sampleFaces?.[0] }]));
     const taggedMissed = (input.people ?? []).filter((person) => person.personId.startsWith("p-missed-") && !person.skipped && person.name && person.momentCount > 0);
     for (const person of taggedMissed) {
-      if (!peopleById.has(person.personId)) peopleById.set(person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: taggedCardFaceByPersonId.get(person.personId)?.uri ?? person.sampleFaces?.[0]?.uri, sampleFace: taggedCardFaceByPersonId.get(person.personId) ?? person.sampleFaces?.[0] });
+      if (!peopleById.has(person.personId)) {
+        const missedFace = missedPeople.find((missed) => missed.personId === person.personId)?.sampleFace;
+        peopleById.set(person.personId, { personId: person.personId, name: summaryPersonLabel(person.name!), momentCount: person.momentCount, sampleUri: taggedCardFaceByPersonId.get(person.personId)?.uri ?? person.sampleFaces?.[0]?.uri ?? missedFace?.uri, sampleFace: taggedCardFaceByPersonId.get(person.personId) ?? person.sampleFaces?.[0] ?? missedFace });
+      }
     }
     for (const person of missedPeople) {
       const momentCount = Math.max(person.momentCount, person.sampleUris?.length ?? 0, person.sampleUri ? 1 : 0);
-      if (!person.skipped && momentCount > 0 && !peopleById.has(person.personId)) peopleById.set(person.personId, { personId: person.personId, name: summaryPersonLabel(person.name), momentCount, sampleUri: undefined, sampleFace: undefined });
+      if (!person.skipped && momentCount > 0 && !peopleById.has(person.personId)) peopleById.set(person.personId, { personId: person.personId, name: summaryPersonLabel(person.name), momentCount, sampleUri: person.sampleUri ?? person.sampleUris?.[0], sampleFace: person.sampleFace });
     }
     const named = [...peopleById.values()];
     if (hasSummaryHistory && hasSummaryFollowup && !missedSelectionsResolved) return { items, step: "people", confirmed, placeholder };

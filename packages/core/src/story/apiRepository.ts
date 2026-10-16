@@ -73,7 +73,8 @@ const firebaseDeps: ApiStoryRepositoryDeps = {
     return new Promise((resolve, reject) => {
       let unsubscribe: (() => void) | undefined;
       const stop = () => queueMicrotask(() => unsubscribe?.());
-      unsubscribe = onSnapshot(doc(getFirestoreClient(), path), (snapshot) => {
+      unsubscribe = onSnapshot(doc(getFirestoreClient(), path), { includeMetadataChanges: true }, (snapshot) => {
+        if (snapshot.metadata.fromCache) return;
         if (!snapshot.exists()) {
           if (waitForExists) return;
           stop();
@@ -93,7 +94,8 @@ const firebaseDeps: ApiStoryRepositoryDeps = {
     return new Promise((resolve, reject) => {
       let unsubscribe: (() => void) | undefined;
       const stop = () => queueMicrotask(() => unsubscribe?.());
-      unsubscribe = onSnapshot(doc(getFirestoreClient(), path), (snapshot) => {
+      unsubscribe = onSnapshot(doc(getFirestoreClient(), path), { includeMetadataChanges: true }, (snapshot) => {
+        if (snapshot.metadata.fromCache) return;
         if (!snapshot.exists()) return;
         const value = snapshot.data();
         if (!accept(value)) return;

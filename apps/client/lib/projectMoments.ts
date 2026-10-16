@@ -1,7 +1,8 @@
 import { ensureSignedIn, getCoreConfig } from "@mosae/core";
+import type { FaceSample } from "@mosae/contracts";
 import { confirmCast, getCast, mutateProjectFlow, type ConfirmCastInput } from "./characters";
 
-export type ProjectMoment = { shotId: string; thumbnailUrl: string; kind: "photo" | "video"; durationSec: number | null; dayIndex: number; personIds: string[] };
+export type ProjectMoment = { shotId: string; thumbnailUrl: string; faceSamples?: FaceSample[]; kind: "photo" | "video"; durationSec: number | null; dayIndex: number; personIds: string[] };
 
 export async function getProjectMoments(projectId: string): Promise<ProjectMoment[]> {
   const user = await ensureSignedIn();

@@ -379,9 +379,10 @@ describe("createApiStoryRepository", () => {
       ],
       "projects/project-1/events": [{ id: "event-1", label: "Day 1, evening" }],
     };
-    firebaseMocks.onSnapshot.mockImplementation((path: string, onValue: (snapshot: unknown) => void) => {
+    firebaseMocks.onSnapshot.mockImplementation((path: string, optionsOrValue: unknown, maybeOnValue: (snapshot: unknown) => void) => {
+      const onValue = (typeof optionsOrValue === "function" ? optionsOrValue : maybeOnValue) as (snapshot: unknown) => void;
       queueMicrotask(() => {
-        if (path in documents) onValue({ exists: () => true, data: () => documents[path] });
+        if (path in documents) onValue({ exists: () => true, metadata: { fromCache: false }, data: () => documents[path] });
         else onValue({ docs: (collections[path] ?? []).map((value) => ({ data: () => value })) });
       });
       return vi.fn();
@@ -391,6 +392,32 @@ describe("createApiStoryRepository", () => {
 
     expect(plan.moments.map(({ imageKey }) => imageKey)).toEqual(["https://storage.test/asset-1?signed=true", "https://storage.test/asset-2?signed=true"]);
     expect(firebaseMocks.onSnapshot).toHaveBeenCalledTimes(5);
+  });
+
+  it("waits for a server generation snapshot instead of returning cached composing state", async () => {
+    const generationPath = "projects/project-1/generations/generation-1";
+    const values: Record<string, unknown> = {
+      [generationPath]: { id: "generation-1", proposalId: "proposal-1", status: "playable", timeline: { durationSec: 12, videoClips: [] } },
+      "projects/project-1/storyProposals/proposal-1": proposal,
+      "projects/project-1": { id: "project-1", title: "Family weekend" },
+    };
+    firebaseMocks.onSnapshot.mockImplementation((path: string, _options: unknown, onValue: (snapshot: unknown) => void) => {
+      const value = values[path];
+      queueMicrotask(() => {
+        if (path === generationPath) {
+          onValue({ exists: () => true, metadata: { fromCache: true }, data: () => ({ ...value as object, status: "composing" }) });
+          onValue({ exists: () => true, metadata: { fromCache: false }, data: () => value });
+        } else {
+          onValue({ exists: () => value !== undefined, metadata: { fromCache: false }, data: () => value });
+        }
+      });
+      return vi.fn();
+    });
+
+    const film = await createApiStoryRepository({ projectId: "project-1" }).getFilm("generation-1");
+
+    expect(film.generationStatus).toBe("playable");
+    firebaseMocks.onSnapshot.mockClear();
   });
 
   it("authenticates default API writes", async () => {

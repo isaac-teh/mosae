@@ -16,7 +16,7 @@ describe("flow action application", () => {
   });
   it("persists chosen no-missed-people answers in the flow transcript", () => {
     const flow: DirectorFlow = { revision: 0, story: { answer: "A trip", storySummary: null, mentionedPeople: [] }, people: [] };
-    expect(applyFlowAction(flow, { type: "missed-people-confirmed", confirmed: true, answer: "That's everyone" })).toEqual({ ...flow, missedPeopleConfirmed: true, missedAnswer: "That's everyone" });
+    expect(applyFlowAction(flow, { type: "missed-people-confirmed", confirmed: true, answer: "That's everyone" })).toEqual({ ...flow, missedPeopleConfirmed: true, missedAnswer: "That's everyone", peopleSummaryFollowupActive: false });
   });
   it("persists proceeded identities and preserves old flows without progress state", () => {
     const old: DirectorFlow = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [] };
@@ -87,12 +87,13 @@ describe("flow action application", () => {
       { type: "missed-person-completed", personId: "g1" },
     ] });
     expect(grandpaDone.missedPeopleConfirmed).toBe(false);
+    const sampleFace = { shotId: "s2", uri: "https://thumb/s2", bbox: [0.1, 0.2, 0.3, 0.4] as [number, number, number, number] };
     const bothDone = applyFlowAction(grandpaDone, { type: "batch", actions: [
       { type: "manual-shot", personId: "g2", shotId: "s2", included: true },
-      { type: "missed-person-completed", personId: "g2" },
+      { type: "missed-person-completed", personId: "g2", sampleFace },
     ] });
     expect(bothDone.missedPeopleConfirmed).toBe(true);
-    expect(bothDone.missedPeople?.map(({ personId }) => personId)).toEqual(["g1", "g2"]);
+    expect(bothDone.missedPeople).toEqual([{ personId: "g1", name: "Grandpa" }, { personId: "g2", name: "Grandma", sampleFace }]);
   });
   it("appends and skips missed people by ID without replacing concurrent entries", () => {
     const flow: DirectorFlow = { revision: 0, story: { answer: null, storySummary: null, mentionedPeople: [] }, people: [], missedPeople: [{ personId: "g1", name: "Grandpa" }] };

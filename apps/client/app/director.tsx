@@ -137,7 +137,7 @@ export default function DirectorScreen() {
   useFocusEffect(useCallback(() => {
     const result = consumeTaggedPersonResult();
     if (!result) return;
-    if (result.isMissed) void tagActions.current.completeMissedPerson(result.personId, result.name ?? "", result.momentCount, result.sampleUri, result.sampleUris);
+    if (result.isMissed) void tagActions.current.completeMissedPerson(result.personId, result.name ?? "", result.momentCount, result.sampleUri, result.sampleUris, result.sampleFace);
     else tagActions.current.updatePersonTagCount(result.personId, result.momentCount, result.sampleUri, result.name, result.shotIds);
   }, []));
   useEffect(() => {
@@ -323,9 +323,7 @@ export default function DirectorScreen() {
       : headerPeople.length > 0
         ? { confirmed: Math.min(headerPeople.length, proceededPersonIds.filter((id) => headerPeople.some((person) => person.personId === id)).length + taggedMissedPeople.length), total: headerPeople.length }
         : undefined
-    : state.step !== "occasion" && headerPeople.length === 0 && projectSummary?.ready.faces
-      ? { confirmed: state.confirmed, total: 4 }
-      : undefined;
+    : undefined;
   const uploadFailureAlert = hasUploadFailure ? <View key="upload-failure-alert" accessibilityRole="alert" className="gap-2 rounded-md bg-critical/10 p-3"><Text className="font-sans text-caption text-critical">{uploadFailure ?? (missingPending ? `${failedUploads} files failed and ${missingPending} still need to upload.` : `${failedUploads} files could not upload.`)}</Text>
     <Button label={canRetryLocal ? "Retry uploads" : "Pick the missing files again"} variant="secondary" disabled={uploadBusy} onPress={() => { if (canRetryLocal) { setUploadFailuresAcknowledged(false); void retryPendingMedia(projectId); } else mediaPicker.current?.open(); }} />
     {Boolean(uploadProgress ? uploadProgress.finishedFiles : projectSummary && projectSummary.total > 0 && projectSummary.processed.understood > 0) && !uploadFailuresAcknowledged && <Button label="Continue with uploaded files" onPress={() => setUploadFailuresAcknowledged(true)} />}
@@ -439,7 +437,7 @@ export default function DirectorScreen() {
         if (item.kind === "people-summary") return <View key={item.id} className="gap-3">
           <View className="overflow-hidden rounded-md border border-line bg-surface-raised">{item.people.map((person) => <View key={person.personId} className="flex-row items-center gap-2 border-b border-line p-3">
             <Pressable role="button" accessibilityLabel={`Review ${person.name}`} onPress={() => router.push({ pathname: "/tag-moments", params: { projectId, repository: story.flow.repository, personId: person.personId, name: person.name } } as any)} style={({ pressed }) => ({ opacity: pressed ? 0.8 : undefined, transform: [{ scale: pressed ? 0.97 : 1 }] })} className="active:scale-[0.97] active:bg-surface-sunken flex-1 flex-row items-center gap-3">
-              {person.sampleFace && !person.personId.startsWith("p-missed-") ? <FacePreviewStrip samples={[person.sampleFace]} limit={1} size={48} rounded /> : person.sampleUri && !person.personId.startsWith("p-missed-") ? <StableUriImage uri={person.sampleUri} accessibilityLabel={`${person.name} face`} className="size-12 rounded-full" /> : <View className="size-12 items-center justify-center rounded-full bg-surface-sunken"><Text className="font-sans-semibold text-label text-ink-muted">{person.name.slice(0, 1).toLocaleUpperCase()}</Text></View>}
+              {person.sampleFace ? <FacePreviewStrip samples={[person.sampleFace]} limit={1} size={48} rounded /> : person.sampleUri && !person.personId.startsWith("p-missed-") ? <StableUriImage uri={person.sampleUri} accessibilityLabel={`${person.name} face`} className="size-12 rounded-full" /> : <View className="size-12 items-center justify-center rounded-full bg-surface-sunken"><Text className="font-sans-semibold text-label text-ink-muted">{person.name.slice(0, 1).toLocaleUpperCase()}</Text></View>}
               <View className="flex-1"><Text className="font-sans-semibold text-label text-ink">{person.name}</Text><Text className="font-sans text-caption text-ink-muted">Tagged in {person.momentCount} {person.momentCount === 1 ? "moment" : "moments"}</Text></View><Text className="text-heading text-ink-muted">›</Text>
             </Pressable>
           </View>)}</View>

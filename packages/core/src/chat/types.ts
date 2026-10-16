@@ -1,6 +1,6 @@
 import type { Film, StoryPlan } from "../story/types.js";
 import type { PersonAgeBand } from "./personChips.js";
-import type { DirectorFlow } from "@mosae/contracts";
+import type { DirectorFlow, FaceSample } from "@mosae/contracts";
 
 export type ProjectSummary = {
   flowRevision?: number;
@@ -41,7 +41,7 @@ export type ChatInput = {
   storySummary?: string;
   people: { personId: string; name: string | null; role: string | null; answerText?: string; ageBand?: PersonAgeBand; skipped: boolean; forceShow?: boolean; momentCount: number; sampleShotIds: string[]; shotIds?: string[]; sampleFaces?: { shotId: string; uri: string; bbox: [number, number, number, number] }[]; days: number[]; similarPersonId?: string; similarity?: number }[] | null;
   peopleConfirmed: boolean;
-  missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleUris?: string[]; skipped?: boolean }[];
+  missedPeople?: { personId: string; name: string; momentCount: number; sampleUri?: string; sampleUris?: string[]; sampleFace?: FaceSample; skipped?: boolean }[];
   missedPersonTagging?: { personId: string; name: string } | null;
   taggedPerson?: { personId: string; name: string; photos: string[] };
   peopleSummaryConfirmed?: boolean;
