@@ -46,7 +46,9 @@ export function describeApplied(text: string, ops: EditOp[], after: Timeline, so
   const merges = ops.filter((op): op is Extract<EditOp, { op: "mergeIntoCollage" }> => op.op === "mergeIntoCollage");
   if (merges.length) {
     const photos = merges.reduce((sum, op) => sum + op.clipIds.length, 0);
-    clauses.push(`grouped ${photos} photos into ${merges.length === 1 ? "a collage" : `${merges.length} collages`}`);
+    const allMedia = /\b(?:all|everything)\b/i.test(text) && /\b(?:photos?|videos?|media|library|everything)\b/i.test(text);
+    clauses.push(allMedia ? `grouped ${photos} into ${merges.length === 1 ? "a collage" : `${merges.length} collages`}`
+      : `grouped ${photos} photos into ${merges.length === 1 ? "a collage" : `${merges.length} collages`}`);
   }
   const splits = ops.filter(op => op.op === "splitCollage").length;
   if (splits) {
@@ -57,7 +59,23 @@ export function describeApplied(text: string, ops: EditOp[], after: Timeline, so
   const focusTarget = /\b(?:focus|feature|emphasize)\s+(?:on\s+)?(everyone|[^,.;]+?)(?=\s+(?:and|with)\b|[,.;]|$)/i.exec(text)?.[1]?.trim();
   if (has("setPhotoCrop", "setCollageCrop")) clauses.push("adjusted the framing");
   if (has("swapShot", "replaceCollageSlot")) clauses.push(focusTarget && !has("move") ? `used a moment featuring ${focusTarget}` : "replaced a photo");
-  if (has("add")) clauses.push(focusTarget && !has("move") ? `added a photo featuring ${focusTarget}` : "added a moment");
+  const adds = ops.filter((op): op is Extract<EditOp, { op: "add" }> => op.op === "add");
+  if (adds.length) {
+    const mediaIntent = /\b(?:photos?|videos?|media|library|everything)\b/i.test(text);
+    const allIntent = /\b(?:all|everything)\b/i.test(text);
+    const requestedPerson = /\badd\s+(?:more\s+)?photos?\s+of\s+([^,.;]+?)(?=\s+and\s+(?:make|set|keep)\b|[,.;]|$)/i.exec(text)?.[1]?.trim();
+    if (mediaIntent && allIntent) {
+      const noun = adds.every(op => op.kind === "photo") ? "photos" : adds.every(op => op.kind === "video") ? "videos" : "photos and videos";
+      clauses.unshift(`added all ${adds.length} unused ${noun}`);
+    } else if (mediaIntent && adds.length > 1) {
+      const noun = adds.every(op => op.kind === "photo") ? "photos" : adds.every(op => op.kind === "video") ? "videos" : "photos and videos";
+      clauses.unshift(`added ${adds.length} more ${noun} from your library`);
+    } else if (requestedPerson) clauses.unshift(adds.length === 1 ? `added a photo of ${requestedPerson} from your library` : `added ${adds.length} photos of ${requestedPerson} from your library`);
+    else if (mediaIntent && /\b(?:use\s+more|add\s+more|more\s+of)\b/i.test(text)) {
+      const noun = adds.every(op => op.kind === "photo") ? "photo" : adds.every(op => op.kind === "video") ? "video" : "photo or video";
+      clauses.unshift(`added ${adds.length} more ${noun}${adds.length === 1 ? "" : "s"} from your library`);
+    } else clauses.unshift(focusTarget && !has("move") ? `added a photo featuring ${focusTarget}` : adds.length === 1 ? "added a moment" : `added ${adds.length} moments`);
+  }
   else if (has("duplicate")) clauses.push("duplicated a moment");
   return joinClauses(clauses) || "Made the change.";
 }
