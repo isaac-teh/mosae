@@ -16,7 +16,7 @@ export function describeSkipped(part: string, reply: string, kind: string, peopl
 export function sanitizeEditReply(reply: string): string {
   return reply
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, "that item")
-    .replace(/\b(?=[A-Za-z0-9_-]*[_-])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9][A-Za-z0-9_-]{15,}\b/g, "that item")
+    .replace(/\b(?=[A-Za-z0-9_-]*[_-])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9][A-Za-z0-9_-]{15,}(?:[#@][A-Za-z0-9_-]+)*/g, "that item")
     .replace(/\b(?=[A-Za-z0-9]{16,}\b)(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Z])[A-Za-z0-9]+\b/g, "that item")
     .replace(/\s{2,}/g, " ");
 }

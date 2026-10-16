@@ -25,6 +25,8 @@ describe("interpretEdit", () => {
       .toBe("I couldn't find clip “that item” to add after. Which clip did you mean?");
     expect(sanitizeEditReply("Unknown clip 550e8400-e29b-41d4-a716-446655440000."))
       .toBe("Unknown clip that item.");
+    expect(sanitizeEditReply("I couldn't find clip “0keGo4Yo8BVsLkq3ddWK-moment-14#still@c2” in this film."))
+      .toBe("I couldn't find clip “that item” in this film.");
   });
   it("sanitizes identifiers returned in model clarification text", async () => {
     const result = await interpretEdit({ text: "change something", timeline }, { generate: async () => ({
