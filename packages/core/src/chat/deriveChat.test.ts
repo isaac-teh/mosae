@@ -1203,3 +1203,40 @@ describe("canonical people-to-film transcript", () => {
     expect(state.items.some((item) => item.kind === "person")).toBe(false);
   });
 });
+
+describe("persisted missed-people confirmation recovery", () => {
+  it("shows the people summary after reload when all five people were proceeded and That's everyone was saved", () => {
+    const ids = ["p1", "p2", "p3", "p4", "p5"];
+    const names = ["Lyla", "Linda", "Jessy", "Tommy", "Brandon"];
+    const people = ids.map((personId, index) => ({
+      personId, name: names[index]!, role: "other", skipped: false,
+      momentCount: index === 4 ? 7 : index === 0 ? 1 : 2,
+      sampleShotIds: [], sampleFaces: [], days: [], answerText: names[index],
+    }));
+    const flow = {
+      revision: 25,
+      story: { answer: "Weekend getaway", storySummary: null, mentionedPeople: [] },
+      people: people.map(({ personId, name, role, answerText }) => ({
+        personId, name, role, answerText, confirmed: true, skipped: false,
+        manualShotAdds: [], manualShotRemoves: [], faceIds: [], mergedInto: null,
+      })),
+      peopleProgress: { askedPersonIds: ids, completedPersonIds: ids },
+      missedAnswer: "That's everyone",
+      missedPeopleConfirmed: true,
+      peopleSummaryConfirmed: false,
+    };
+    const state = deriveChat({
+      ...base(), intent: null, flow, people, peopleConfirmed: false,
+      proceededPersonIds: ids, missedAnswer: "That's everyone",
+      missedPeopleConfirmed: true, peopleSummaryConfirmed: false,
+      missedPeople: [],
+    });
+
+    expect(state.items.find((item) => item.id === "missed-answer")).toMatchObject({ kind: "you", text: "That's everyone" });
+    expect(state.items.find((item) => item.kind === "people-summary")).toMatchObject({
+      id: "people-summary",
+      people: expect.arrayContaining([expect.objectContaining({ personId: "p5", name: "Brandon", momentCount: 7 })]),
+    });
+    expect(state.items.find((item) => item.id === "people-summary-message")).toMatchObject({ kind: "mosae" });
+  });
+});
