@@ -172,7 +172,7 @@ export default function EditorScreen() {
     if (applied && before && result?.ok) { askChangedIdsRef.current = changedClipIds(before, result.timeline); askAfterRef.current = result.timeline; }
     return applied;
   };
-  const onAskApplied = (ops: EditOp[], _reply: string, requestText: string, _scope?: unknown, requestId?: string) => {
+  const onAskApplied = (ops: EditOp[], reply: string, requestText: string, _scope?: unknown, requestId?: string) => {
     // Every applied edit closes the sheet; the film plays and the toast carries Undo.
     setTool(null); setAskSeed("");
     if (requestId) setAskLastApplied({ requestId, snapshotKey: editor.getSnapshotKey() });
@@ -181,7 +181,8 @@ export default function EditorScreen() {
     setAskHighlightIds(ids);
     const finalTimeline = askAfterRef.current ?? editor.timeline ?? undefined;
     askAfterRef.current = null;
-    setAskToast(askEditSummary(ops, finalTimeline?.durationSec, soundtrackName ?? undefined, requestText, finalTimeline));
+    // The soundtrack name in editor state is the old track here, so the reply (built from the applied op) names the new one.
+    setAskToast(ops.some((item) => item.op === "setSoundtrack") && reply ? reply.replace(/\.$/, "") : askEditSummary(ops, finalTimeline?.durationSec, soundtrackName ?? undefined, requestText, finalTimeline));
     setAskToastSnapshotKey(editor.getSnapshotKey());
     setAskToastNonce((n) => n + 1);
     if (ids.length) {
