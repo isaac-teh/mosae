@@ -25,6 +25,7 @@ vi.mock("react-native-svg", () => ({
   Path: (props: any) => React.createElement("path", props),
 }));
 
+import { includeTimelineMedia } from "../lib/inFilm";
 import { SwapSheet } from "../components/editor/SwapSheet";
 import { TrimControl } from "../components/editor/TrimControl";
 import { MoveMode } from "../components/editor/MoveMode";
@@ -63,6 +64,15 @@ async function render(element: React.ReactNode) { await act(async () => root.ren
 async function click(label: string) { const target = host.querySelector(`[aria-label="${label}"]`) as HTMLElement | null; expect(target, `missing control: ${label}`).not.toBeNull(); await act(async () => target!.click()); }
 
 describe("editor tool operations", () => {
+  it("includes timeline-only uploads and video posters in the replacement library", () => {
+    const film: Timeline = { ...timeline, videoClips: [clips[0]!, videoClip, collage] };
+    const library = includeTimelineMedia(moments, film, { "shot-a": "uploaded.jpg", "video-shot": "movie.mp4" }, { "video-shot": "poster.jpg" });
+    expect(library.find(item => item.shotId === "shot-a")?.imageKey).toBe("uploaded.jpg");
+    expect(library.find(item => item.shotId === "video-shot")?.imageKey).toBe("poster.jpg");
+    expect(library.find(item => item.shotId === "shot-2")?.kind).toBe("photo");
+    expect(library.filter(item => item.shotId === "shot-left")).toHaveLength(1);
+  });
+
   it("expands and collapses the collage sheet from taps and vertical drags", () => {
     expect(transitionCollageSheet("collapsed")).toBe("expanded");
     expect(transitionCollageSheet("expanded")).toBe("collapsed");
@@ -78,6 +88,40 @@ describe("editor tool operations", () => {
     expect(repo.getAlternatives).toHaveBeenCalledWith("proposal-1", "m1");
     expect(apply).toHaveBeenCalledWith({ op: "swapShot", clipId: "a", shotId: "shot-alt", kind: "photo" });
     expect(onSource).toHaveBeenCalledWith("shot-alt", "alt.jpg");
+  });
+
+  it.each(["photo", "video"] as const)("pins the current %s with a badge and prevents a no-op replacement", async (kind) => {
+    const current = { ...moments[0]!, id: "current", shotId: "current-shot", title: "Current source", kind, imageKey: "current-poster.jpg" };
+    await render(<SwapSheet visible clipId="a" currentShotId="current-shot" inFilmShotIds={new Set(["shot-left", "current-shot"])} moments={[...moments, current, current]} sources={{ "current-shot": "current.mp4" }} planId={null} momentId={null} repository={repo} onApply={apply} onSource={onSource} onClose={() => {}} />);
+    const tiles = host.querySelectorAll('[aria-label^="Replace with "]');
+    expect(tiles).toHaveLength(2);
+    expect(tiles[0]?.getAttribute("aria-label")).toBe("Replace with Current source");
+    expect(tiles[0]?.textContent).toContain("Current");
+    expect(tiles[0]?.className).toContain("border-[#d5eee5]");
+    expect(tiles[0]?.querySelector('img')?.getAttribute("src")).toBe("current-poster.jpg");
+    expect(tiles[1]?.textContent).toContain("In film");
+    await click("Replace with Current source");
+    expect(apply).not.toHaveBeenCalled();
+    expect(onSource).not.toHaveBeenCalled();
+    await click("Replace with Left out moment");
+    expect(apply).toHaveBeenCalledWith(expect.objectContaining({ shotId: "shot-left" }));
+  });
+
+  it.each(["photo", "video"] as const)("pins the selected collage %s cell and labels the other cells without blocking replacement", async (kind) => {
+    const cellClip = { ...collage, spec: { ...collage.spec, slots: collage.spec.slots.map(slot => slot.slotId === "s2" ? { ...slot, kind } : slot) } };
+    const cells = cellClip.spec.slots.map((slot) => ({ ...moments[0]!, id: slot.slotId, shotId: slot.shotId, title: slot.slotId, kind: slot.kind }));
+    await render(<CollageCellSheet mode="replace" clip={cellClip} slotId="s2" moments={[...cells, ...moments]} inFilmShotIds={new Set(["shot-left"])} personTagsByShot={{ "shot-2": ["Mia"] }} onSource={onSource} onApply={apply} onClose={() => {}} />);
+    const tiles = host.querySelectorAll('[aria-label^="Replace with "]');
+    expect(tiles[0]?.getAttribute("aria-label")).toBe("Replace with s2");
+    expect(tiles[0]?.textContent).toContain("Current");
+    expect(tiles[0]?.textContent).toContain("Mia");
+    expect(tiles[1]?.textContent).toContain("In collage");
+    expect(tiles[4]?.textContent).toContain("In film");
+    await click("Replace with s2");
+    expect(apply).not.toHaveBeenCalled();
+    expect(onSource).not.toHaveBeenCalled();
+    await click("Replace with s1");
+    expect(apply).toHaveBeenCalledWith(expect.objectContaining({ op: "replaceCollageSlot", slotId: "s2", shotId: "shot-1" }));
   });
 
   it("replaces a photo from already-uploaded project media", async () => {

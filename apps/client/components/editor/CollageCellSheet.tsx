@@ -5,14 +5,17 @@ import { COLLAGE_LAYOUTS, type EditOp, type Timeline } from "@mosae/contracts";
 import type { Moment } from "@mosae/core";
 
 type Collage = Extract<Timeline["videoClips"][number], { kind: "collage" }>;
-export function CollageCellSheet({ mode, clip, slotId, moments, inFilmShotIds = new Set(), sources = {}, uploading = false, uploadProgress, uploadError = null, onUploadFile, onSource, onApply, onClose }: {
+export function CollageCellSheet({ mode, clip, slotId, moments, personTagsByShot = {}, inFilmShotIds = new Set(), sources = {}, uploading = false, uploadProgress, uploadError = null, onUploadFile, onSource, onApply, onClose }: {
   mode: "add" | "replace"; clip: Collage; slotId?: string; moments: Moment[]; inFilmShotIds?: ReadonlySet<string>; sources?: Record<string, string>;
+  personTagsByShot?: Record<string, string[]>;
   uploading?: boolean; uploadProgress?: { totalFiles: number; finishedFiles: number; failedFiles: number } | null; uploadError?: string | null;
   onUploadFile?: (file: File, clipId: string, slotId: string) => void; onSource?: (shotId: string, source: string) => void;
   onApply: (op: EditOp) => void; onClose: () => void;
 }) {
   const layout = COLLAGE_LAYOUTS.find((candidate) => candidate.id === clip.spec.layoutId)!;
   const activeSlot = clip.spec.slots.find((slot) => slot.slotId === slotId);
+  const currentShotId = mode === "replace" ? activeSlot?.shotId : undefined;
+  const inCollageShotIds = new Set(clip.spec.slots.flatMap(slot => slot.shotId ? [slot.shotId] : []));
   const count = clip.spec.slots.length;
   const videoCount = clip.spec.slots.filter((slot) => slot.kind === "video").length;
   const full = mode === "add" && !slotId && count >= layout.maxSlots;
@@ -20,6 +23,7 @@ export function CollageCellSheet({ mode, clip, slotId, moments, inFilmShotIds = 
   const candidates = moments.filter((moment) => moment.shotId);
   const dimensions = (moment: Moment) => ({ ...(moment.width !== undefined ? { width: moment.width } : {}), ...(moment.height !== undefined ? { height: moment.height } : {}) });
   const applyChoice = (moment: Moment) => {
+    if (moment.shotId === currentShotId) return;
     const kind = moment.kind === "video" ? "video" : "photo";
     if (mode === "add" && slotId) {
       const source = sources[moment.shotId!] ?? moment.imageKey;
@@ -39,6 +43,6 @@ export function CollageCellSheet({ mode, clip, slotId, moments, inFilmShotIds = 
     <View className="mb-3 flex-row items-center justify-between"><Text className="font-sans-semibold text-[18px] text-on-screen">{mode === "add" ? (slotId ? "Add photo" : "Add cell") : "Replace cell"}</Text><Pressable accessibilityLabel="Close cell picker" onPress={onClose}><Text className="text-[24px] text-on-screen">×</Text></Pressable></View>
     {(mode === "add" && Boolean(slotId) || mode === "replace") && clip.spec.slots.find((slot) => slot.slotId === slotId)?.kind !== "video" && Platform.OS === "web" && onUploadFile && slotId ? <DeviceUploadControl uploading={uploading} uploadProgress={uploadProgress} uploadError={uploadError} onFiles={(files) => { if (files[0]) onUploadFile(files[0], clip.clipId, slotId); }} /> : null}
     {full ? <Text className="mb-3 font-sans text-caption text-on-screen-muted">This layout holds up to {layout.maxSlots} photos.</Text> : null}
-    {candidates.length ? <MediaGridPicker moments={candidates} inFilmShotIds={inFilmShotIds} labelFor={(moment) => `${mode === "add" ? "Add cell" : "Replace with"} ${moment.title}`} disabled={(moment) => full || (moment.kind === "video" && !canVideo)} onSelect={applyChoice} /> : <Text className="font-sans text-caption text-on-screen-muted">No photos or videos from this trip are available.</Text>}
+    {candidates.length ? <MediaGridPicker moments={candidates} currentShotId={currentShotId} inCollageShotIds={inCollageShotIds} tagsFor={(moment) => personTagsByShot[moment.shotId!] ?? []} inFilmShotIds={inFilmShotIds} labelFor={(moment) => `${mode === "add" ? "Add cell" : "Replace with"} ${moment.title}`} disabled={(moment) => full || (moment.kind === "video" && !canVideo)} onSelect={applyChoice} /> : <Text className="font-sans text-caption text-on-screen-muted">No photos or videos from this trip are available.</Text>}
   </View></View>;
 }

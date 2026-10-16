@@ -5,9 +5,9 @@ import type { EditOp } from "@mosae/contracts";
 import { DeviceUploadControl } from "./DeviceUploadControl";
 import { MediaGridPicker } from "./MediaGridPicker";
 
-export function SwapSheet({ visible, clipId, planId, momentId, kind = "photo", clipDurationSec = 3, moments = [], sources = {}, personTagsByShot = {}, repository, uploading = false, uploadProgress, uploadError = null, onUploadFile, onApply, onSource, onThumbnail, onDimensions, onClose }: {
+export function SwapSheet({ visible, clipId, currentShotId, inFilmShotIds, planId, momentId, kind = "photo", clipDurationSec = 3, moments = [], sources = {}, personTagsByShot = {}, repository, uploading = false, uploadProgress, uploadError = null, onUploadFile, onApply, onSource, onThumbnail, onDimensions, onClose }: {
   visible: boolean; clipId: string; planId: string | null; momentId: string | null;
-  clipDurationSec?: number;
+  clipDurationSec?: number; currentShotId?: string | null; inFilmShotIds?: ReadonlySet<string>;
   kind?: "photo" | "video"; moments?: Moment[]; sources?: Record<string, string>;
   personTagsByShot?: Record<string, string[]>;
   uploading?: boolean; uploadProgress?: UploadProgress | null; uploadError?: string | null; onUploadFile?: (file: File) => void;
@@ -34,6 +34,7 @@ export function SwapSheet({ visible, clipId, planId, momentId, kind = "photo", c
   const choices = [...libraryMoments, ...alternativeMoments];
   const applyMoment = (moment: Moment) => {
     const shotId = moment.shotId!;
+    if (shotId === currentShotId) return;
     const preview = sources[shotId] ?? (moment.kind === "photo" ? moment.imageKey : "");
     if (!preview) return;
     onSource(shotId, preview);
@@ -57,7 +58,7 @@ export function SwapSheet({ visible, clipId, planId, momentId, kind = "photo", c
       <View className="mb-4 flex-row items-center justify-between"><Text className="font-sans-semibold text-[18px] text-on-screen">Replace moment</Text><Pressable accessibilityLabel="Close swap" onPress={onClose}><Text className="text-[24px] text-on-screen">×</Text></Pressable></View>
       {Platform.OS === "web" && onUploadFile ? <DeviceUploadControl uploading={uploading} uploadProgress={uploadProgress} uploadError={uploadError} onFiles={(files) => { if (files[0]) onUploadFile(files[0]); }} /> : null}
       {error ? <Text className="font-sans text-caption text-on-screen">{error}</Text> : null}
-      {choices.length > 0 ? <><Text className="mb-2 mt-2 font-sans-medium text-caption text-on-screen-muted">Project photos</Text><MediaGridPicker moments={choices} labelFor={(moment) => `Replace with ${moment.title}`} tagsFor={(moment) => moment.shotId ? personTagsByShot[moment.shotId] ?? [] : []} disabled={(moment) => moment.kind === "video" && !sources[moment.shotId!]} onSelect={applyMoment} /></> : <Text className="mt-3 font-sans text-caption text-on-screen-muted">No project photos are available. Upload a photo from your phone.</Text>}
+      {choices.length > 0 ? <><Text className="mb-2 mt-2 font-sans-medium text-caption text-on-screen-muted">Project photos</Text><MediaGridPicker moments={choices} currentShotId={currentShotId} inFilmShotIds={inFilmShotIds} labelFor={(moment) => `Replace with ${moment.title}`} tagsFor={(moment) => moment.shotId ? personTagsByShot[moment.shotId] ?? [] : []} disabled={(moment) => moment.kind === "video" && !sources[moment.shotId!]} onSelect={applyMoment} /></> : <Text className="mt-3 font-sans text-caption text-on-screen-muted">No project photos are available. Upload a photo from your phone.</Text>}
     </View>
   </View>;
 }
