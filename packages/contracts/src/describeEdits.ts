@@ -63,12 +63,17 @@ export function describeApplied(text: string, ops: EditOp[], after: Timeline, so
   if (adds.length) {
     const mediaIntent = /\b(?:photos?|videos?|media|library|everything)\b/i.test(text);
     const allIntent = /\b(?:all|everything)\b/i.test(text);
+    const requestedPerson = /\badd\s+(?:more\s+)?photos?\s+of\s+([^,.;]+?)(?=\s+and\s+(?:make|set|keep)\b|[,.;]|$)/i.exec(text)?.[1]?.trim();
     if (mediaIntent && allIntent) {
       const noun = adds.every(op => op.kind === "photo") ? "photos" : adds.every(op => op.kind === "video") ? "videos" : "photos and videos";
       clauses.unshift(`added all ${adds.length} unused ${noun}`);
     } else if (mediaIntent && adds.length > 1) {
       const noun = adds.every(op => op.kind === "photo") ? "photos" : adds.every(op => op.kind === "video") ? "videos" : "photos and videos";
       clauses.unshift(`added ${adds.length} more ${noun} from your library`);
+    } else if (requestedPerson) clauses.unshift(adds.length === 1 ? `added a photo of ${requestedPerson} from your library` : `added ${adds.length} photos of ${requestedPerson} from your library`);
+    else if (mediaIntent && /\b(?:use\s+more|add\s+more|more\s+of)\b/i.test(text)) {
+      const noun = adds.every(op => op.kind === "photo") ? "photo" : adds.every(op => op.kind === "video") ? "video" : "photo or video";
+      clauses.unshift(`added ${adds.length} more ${noun}${adds.length === 1 ? "" : "s"} from your library`);
     } else clauses.unshift(focusTarget && !has("move") ? `added a photo featuring ${focusTarget}` : adds.length === 1 ? "added a moment" : `added ${adds.length} moments`);
   }
   else if (has("duplicate")) clauses.push("duplicated a moment");
