@@ -65,15 +65,18 @@ export const MosaeTimeline: React.FC<TimelineProps> = ({ timeline, sources, sour
   const fps = timeline.fps;
   return (
     <AbsoluteFill style={{ backgroundColor: "#15110f", overflow: "hidden" }}>
-      {timeline.videoClips.map((clip) => (
-        <Sequence
-          key={"kind" in clip ? clip.clipId : clip.id}
-          from={Math.round(clip.startSec * fps)}
-          durationInFrames={Math.max(1, Math.round(clip.durationSec * fps))}
+      {timeline.videoClips.map((clip, index) => {
+        const compositionClip = index === 0
+          ? { ...clip, transitionIn: { kind: "cut" as const, durationSec: 0 } }
+          : clip;
+        return <Sequence
+          key={"kind" in compositionClip ? compositionClip.clipId : compositionClip.id}
+          from={Math.round(compositionClip.startSec * fps)}
+          durationInFrames={Math.max(1, Math.round(compositionClip.durationSec * fps))}
         >
-          {"kind" in clip ? <Collage spec={clip.spec} sources={sources} clipId={clip.clipId} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} /> : <ClipBody clip={clip} sources={sources} sourceDimensions={sourceDimensions} aspect={timeline.aspect} selected={selectedClipId === clip.id} onSelect={onSelectClip} onCommitPhotoCrop={onCommitPhotoCrop} />}
-        </Sequence>
-      ))}
+          {"kind" in compositionClip ? <Collage spec={compositionClip.spec} sources={sources} clipId={compositionClip.clipId} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} /> : <ClipBody clip={compositionClip} sources={sources} sourceDimensions={sourceDimensions} aspect={timeline.aspect} selected={selectedClipId === compositionClip.id} onSelect={onSelectClip} onCommitPhotoCrop={onCommitPhotoCrop} />}
+        </Sequence>;
+      })}
       {timeline.audioClips.map((clip) => (
         <Sequence key={clip.id} from={Math.round(clip.startSec * fps)} durationInFrames={Math.max(1, Math.round((clip.source.sourceOutSec - clip.source.sourceInSec) * fps))}>
           <AudioTrack clip={clip} fps={fps} sources={sources} />

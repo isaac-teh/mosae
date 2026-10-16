@@ -178,12 +178,11 @@ export function EditorPreview({ timeline, sources, onTimeChange, seekRequest, pl
 
   const first = timeline.videoClips[0];
   const firstShotId = first && ("kind" in first ? first.spec.slots[0]?.shotId : first.source.shotId);
-  // Collage cells animate from opacity 0 at frame zero on a white canvas. A
-  // paused editor preview at frame zero therefore looks like a white player.
-  // Show a representative frame after the opening tile entrance while keeping
-  // the editor playhead and playback start at 0.
-  const posterFrame = first
-    ? Math.min(Math.max(0, Math.ceil(timeline.durationSec * timeline.fps) - 1), Math.round(("kind" in first ? Math.min(1, first.durationSec / 2) : first.transitionIn.durationSec) * timeline.fps))
+  // Collage cells animate from opacity 0 at frame zero on a white canvas, so a
+  // paused collage preview uses a representative frame after the tile entrance.
+  // Regular clips start at frame zero, matching the editor playhead.
+  const posterFrame = first && "kind" in first
+    ? Math.min(Math.max(0, Math.ceil(timeline.durationSec * timeline.fps) - 1), Math.round(Math.min(1, first.durationSec / 2) * timeline.fps))
     : 0;
   const loadingPoster = (poster ?? (firstShotId ? sources[firstShotId] : undefined));
   const previewContent = <>
