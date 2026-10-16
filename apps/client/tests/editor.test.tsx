@@ -12,6 +12,7 @@ vi.mock("@/components/editor/EditorPreview", () => ({ EditorPreview: ({ timeline
   return React.createElement("div", { "data-testid": "preview", "data-playhead-sec": playheadSec, "data-pause-request": pauseRequest, "data-toggle-play-request": togglePlayRequest }, collage ? React.createElement("button", { "aria-label": "Test select first collage cell", onClick: () => onSelectCollageCell(collage.clipId, collage.spec.slots[0].slotId) }) : null);
 } }));
 vi.mock("expo-asset", () => ({ Asset: { fromModule: () => ({ uri: "fixture.jpg" }) } }));
+vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }) }));
 vi.mock("react-native-svg", () => {
   const element = (tag: string) => ({ children, ...props }: any) => React.createElement(tag, props, children);
   return { default: element("svg"), Path: element("path"), Rect: element("rect"), Circle: element("circle"), G: element("g") };
@@ -110,9 +111,30 @@ describe("film editor", () => {
   });
   it("loads the first cut into a selectable clip strip", async () => {
     await render(<EditorScreen />);
+    expect(host.querySelector('[data-testid="editor-scroll-content"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="landscape-editor-layout"]')).toBeNull();
     expect([...host.querySelectorAll('[aria-label^="Select clip "]')].map((element) => element.getAttribute("aria-label"))).toEqual(["Select clip a", "Select clip b", "Select clip c"]);
     expect(host.textContent).not.toContain("Opening");
     expect(host.textContent).toContain("Edit film");
+  });
+
+  it("centers the preview above the bottom-pinned landscape controls", async () => {
+    const getFilmTimeline = boundary.repository.getFilmTimeline;
+    boundary.repository.getFilmTimeline = vi.fn(async (...args: any[]) => {
+      const result = await getFilmTimeline(...args);
+      return { ...result, timeline: { ...result.timeline, aspect: "16:9" } };
+    });
+    await render(<EditorScreen />);
+    expect(host.querySelector('[data-testid="landscape-editor-layout"]')).not.toBeNull();
+    const previewRegion = host.querySelector('[data-testid="landscape-preview-region"]') as HTMLElement;
+    const controlsPanel = host.querySelector('[data-testid="landscape-controls-panel"]') as HTMLElement;
+    expect(previewRegion.className).toContain("justify-center");
+    expect(controlsPanel.className).toContain("pb-4");
+    expect(Boolean(previewRegion.compareDocumentPosition(controlsPanel) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(host.querySelector('[data-testid="editor-scroll-content"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Ask AI"]')).not.toBeNull();
+    expect(host.querySelector('[aria-label="Unified timeline"]')).not.toBeNull();
+    expect(host.textContent).toContain("Tap on a clip to edit it");
   });
 
   it("pauses playback and follows the centre playhead when a timeline drag begins", async () => {
