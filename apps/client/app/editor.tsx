@@ -68,6 +68,7 @@ export default function EditorScreen() {
   const [playing, setPlaying] = useState(false);
   const [askHighlightIds, setAskHighlightIds] = useState<string[]>([]);
   const [askToast, setAskToast] = useState<string | null>(null);
+  const [askLastApplied, setAskLastApplied] = useState<{ requestId: string; snapshotKey: string } | null>(null);
   const [askToastNonce, setAskToastNonce] = useState(0);
   const [askToastSnapshotKey, setAskToastSnapshotKey] = useState<string | null>(null);
   const [askClipFocus, setAskClipFocus] = useState<{ clipId: string; nonce: number } | null>(null);
@@ -152,6 +153,12 @@ export default function EditorScreen() {
     } as Moment))];
     return [...new Map(listed.filter((moment) => moment.shotId).map((moment) => [moment.shotId!, moment])).values()];
   }, [plan, editor.unusedMedia]);
+  const askScopeThumbnail = (() => {
+    if (!selectedClip) return null;
+    const shot = "kind" in selectedClip ? selectedClip.spec.slots[0]?.shotId : selectedClip.source.shotId;
+    const video = !("kind" in selectedClip) && selectedClip.source.kind === "video";
+    return (shot && (video ? editor.thumbnails[shot] : editor.sources[shot])) || null;
+  })();
   const inFilmShotIds = useMemo(() => getInFilmShotIds(editor.timeline), [editor.timeline]);
   const applyPreparedOps = (op: EditOp | EditOp[]) => {
     const batch = Array.isArray(op) ? op : [op];
@@ -165,13 +172,17 @@ export default function EditorScreen() {
     if (applied && before && result?.ok) { askChangedIdsRef.current = changedClipIds(before, result.timeline); askAfterRef.current = result.timeline; }
     return applied;
   };
-  const onAskApplied = (ops: EditOp[], _reply: string, requestText: string) => {
+  const onAskApplied = (ops: EditOp[], reply: string, requestText: string, _scope?: unknown, requestId?: string) => {
+    // Every applied edit closes the sheet; the film plays and the toast carries Undo.
+    setTool(null); setAskSeed("");
+    if (requestId) setAskLastApplied({ requestId, snapshotKey: editor.getSnapshotKey() });
     const ids = askChangedIdsRef.current;
     askChangedIdsRef.current = [];
     setAskHighlightIds(ids);
     const finalTimeline = askAfterRef.current ?? editor.timeline ?? undefined;
     askAfterRef.current = null;
-    setAskToast(askEditSummary(ops, finalTimeline?.durationSec, soundtrackName ?? undefined, requestText, finalTimeline));
+    // The soundtrack name in editor state is the old track here, so the reply (built from the applied op) names the new one.
+    setAskToast(ops.some((item) => item.op === "setSoundtrack") && reply ? reply.replace(/\.$/, "") : askEditSummary(ops, finalTimeline?.durationSec, soundtrackName ?? undefined, requestText, finalTimeline));
     setAskToastSnapshotKey(editor.getSnapshotKey());
     setAskToastNonce((n) => n + 1);
     if (ids.length) {
@@ -422,7 +433,7 @@ export default function EditorScreen() {
     {(tool === "CollageLayout" || tool === "CollageMotion") && selectedClip && "kind" in selectedClip ? <CollagePanel clip={selectedClip} aspect={editor.timeline?.aspect} timeline={editor.timeline ?? undefined} moments={collageMoments} section={tool === "CollageLayout" ? "Layout" : "Motion"} onApply={onApplyCollage} onClose={closePicker} /> : null}
     {(tool === "CollageCellAdd" || (tool === "CollageCellReplace" && selectedCellSlotId)) && selectedClip && "kind" in selectedClip ? <CollageCellSheet mode={tool === "CollageCellAdd" ? "add" : "replace"} clip={selectedClip} slotId={selectedCellSlotId ?? undefined} moments={collageMoments} inFilmShotIds={inFilmShotIds} sources={editor.sources} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) ? uploadDeviceReplacement : undefined} onSource={editor.setSource} onApply={onApply} onClose={closePicker} /> : null}
     {tool === "Replace" && selectedClip && !("kind" in selectedClip) ? <SwapSheet visible clipId={clipId(selectedClip)} kind={selectedClip.source.kind} clipDurationSec={selectedClip.durationSec} moments={collageMoments} sources={editor.sources} personTagsByShot={personTagsByShot} planId={plan?.planId ?? null} momentId={selectedMoment?.id ?? null} repository={repository} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFile={story.flow.repository === "api" && Boolean(params.projectId) && selectedClip.source.kind === "photo" ? (file) => uploadDeviceReplacement(file, clipId(selectedClip)) : undefined} onApply={onApply} onSource={editor.setSource} onThumbnail={editor.setThumbnail} onDimensions={editor.setDimensions} onClose={closePicker} /> : null}
-    {tool === "Format" && editor.timeline ? <RatioSheet visible aspect={editor.timeline.aspect} onApply={onApply} onClose={() => setTool(null)} /> : null}{tool === "Ask" && editor.timeline ? <AskSheet visible projectId={params.projectId || "fixture"} generationId={params.generationId || "demo-film"} repository={repository} scope={selectedClip && selectedCellSlotId ? { kind: "slot", clipId: clipId(selectedClip), slotId: selectedCellSlotId } : selectedClip ? { kind: "clip", clipId: clipId(selectedClip) } : { kind: "film" }} people={[...new Set(Object.values(personTagsByShot).flat())]} aspect={editor.timeline.aspect} initialRequest={askSeed} savePending={editor.savePendingNow} getSnapshotKey={editor.getSnapshotKey} getSavedRevision={editor.getSavedRevision} applyMany={applyAiOps} undo={editor.undo} onPlayAt={playAiAt} onApplied={onAskApplied} onReplace={() => { if (selectedClip && "kind" in selectedClip && !selectedCellSlotId) { const slot = selectedClip.spec.slots.find((candidate) => !candidate.empty); if (slot) setSelectedCollageCellId(`${selectedClip.clipId}:${slot.slotId}`); } setTool(selectedClip && "kind" in selectedClip ? "CollageCellReplace" : "Replace"); }} onClose={() => setTool(null)} /> : null}
+    {tool === "Format" && editor.timeline ? <RatioSheet visible aspect={editor.timeline.aspect} onApply={onApply} onClose={() => setTool(null)} /> : null}{tool === "Ask" && editor.timeline ? <AskSheet visible projectId={params.projectId || "fixture"} generationId={params.generationId || "demo-film"} repository={repository} scope={selectedClip && selectedCellSlotId ? { kind: "slot", clipId: clipId(selectedClip), slotId: selectedCellSlotId } : selectedClip ? { kind: "clip", clipId: clipId(selectedClip) } : { kind: "film" }} people={[...new Set(Object.values(personTagsByShot).flat())]} aspect={editor.timeline.aspect} initialRequest={askSeed} savePending={editor.savePendingNow} getSnapshotKey={editor.getSnapshotKey} getSavedRevision={editor.getSavedRevision} applyMany={applyAiOps} undo={editor.undo} onPlayAt={playAiAt} onApplied={onAskApplied} lastApplied={askLastApplied} scopeThumbnail={askScopeThumbnail} onUndoLatest={() => { if (editor.getSnapshotKey() !== askLastApplied?.snapshotKey) return; editor.undo(); setAskToast(null); setAskHighlightIds([]); setAskLastApplied(null); }} onReplace={() => { if (selectedClip && "kind" in selectedClip && !selectedCellSlotId) { const slot = selectedClip.spec.slots.find((candidate) => !candidate.empty); if (slot) setSelectedCollageCellId(`${selectedClip.clipId}:${slot.slotId}`); } setTool(selectedClip && "kind" in selectedClip ? "CollageCellReplace" : "Replace"); }} onClose={() => setTool(null)} /> : null}
     {tool === "Soundtrack" ? <SoundtrackSheet visible soundtracks={directions?.soundtracks ?? []} currentSoundtrackId={soundtrackId} previewSourceForTrack={(track) => editor.sources[track.id] ?? null} onApply={onApply} onClose={() => setTool(null)} /> : null}
     {tool === "Volume" && soundtrack && selectedAudioClipId ? <AudioVolumeSheet visible audioClipId={selectedAudioClipId} gainDb={soundtrack.gainDb} onApply={onApply} onClose={() => setTool(null)} /> : null}
   </View>;
