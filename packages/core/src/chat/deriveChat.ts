@@ -326,7 +326,8 @@ export function deriveChat(input: ChatInput): ChatState {
   const allNamedPeopleProceeded = !tracksProceedActions || announcedPeople(input).filter((person) => !missedPersonIds.has(person.personId)).every((person) => person.skipped || !person.name || completedPersonIds?.includes(person.personId));
   const missedPeople = input.missedPeople ?? [];
   const missedSelectionsResolved = missedPeople.length > 0 && missedPeople.every((person) => person.skipped || person.momentCount > 0 || Boolean(person.sampleUri || person.sampleUris?.length));
-  const peopleResolved = input.peopleSummaryConfirmed === true || input.peopleConfirmed && allNamedPeopleProceeded || allNamedPeopleProceeded && missedSelectionsResolved || (facesReady && input.people?.length === 0);
+  const confirmedNoMissedPeople = input.missedPeopleConfirmed === true && missedPeople.length === 0;
+  const peopleResolved = input.peopleSummaryConfirmed === true || input.peopleConfirmed && allNamedPeopleProceeded || allNamedPeopleProceeded && (missedSelectionsResolved || confirmedNoMissedPeople) || (facesReady && input.people?.length === 0);
   if (!peopleResolved) {
     step = "people";
     if (!facesReady || input.people === null) {
@@ -431,7 +432,7 @@ export function deriveChat(input: ChatInput): ChatState {
   // An explicit answer is required only while the missed-people list is empty.
   // Once names have been supplied, completing or skipping every photo card is
   // the confirmation to continue; waiting for another answer leaves chat stuck.
-  const showPeopleSummary = (input.peopleConfirmed || allNamedPeopleProceeded && missedSelectionsResolved) && input.peopleSummaryConfirmed !== true && !hasUntaggedMissedPeople && (input.missedPeopleConfirmed === true || missedPeople.length > 0 || input.missedPeopleConfirmed === undefined && input.peopleSummaryConfirmed === false) && !(hasSummaryHistory && input.flow?.peopleSummaryFollowupActive);
+  const showPeopleSummary = (input.peopleConfirmed || allNamedPeopleProceeded && (missedSelectionsResolved || confirmedNoMissedPeople)) && input.peopleSummaryConfirmed !== true && !hasUntaggedMissedPeople && (input.missedPeopleConfirmed === true || missedPeople.length > 0 || input.missedPeopleConfirmed === undefined && input.peopleSummaryConfirmed === false) && !(hasSummaryHistory && input.flow?.peopleSummaryFollowupActive);
   const keepPeopleSummary = showPeopleSummary || input.peopleSummaryConfirmed === true;
   const mergeEvents = input.mergeEvents ?? [];
   if (showPeopleSummary) {
