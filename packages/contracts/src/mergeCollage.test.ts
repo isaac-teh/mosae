@@ -2,16 +2,17 @@ import { describe, expect, it } from "vitest";
 import { applyEdits, type EditOp } from "./edits.js";
 import { planCollageGroups, planCollageMerges } from "./collageGrouping.js";
 import { parseTimeline, type Timeline } from "./timeline.js";
+import { collageLayoutForCount } from "./collageGeometry.js";
 
 const cut = { kind: "cut" as const, durationSec: 0 };
 const photo = (id: string, durationSec = 2, extra: object = {}) => ({ id, source: { kind: "photo" as const, shotId: `shot-${id}`, ...extra }, startSec: 0, durationSec, transitionIn: cut });
 const video = (id: string) => ({ id, source: { kind: "video" as const, shotId: `shot-${id}`, sourceInSec: 0, sourceOutSec: 2 }, startSec: 0, durationSec: 2, transitionIn: cut });
 
-function film(clips: Array<ReturnType<typeof photo> | ReturnType<typeof video>>, chapterStarts = [0]): Timeline {
+function film(clips: Array<ReturnType<typeof photo> | ReturnType<typeof video>>, chapterStarts = [0], aspect: Timeline["aspect"] = "9:16"): Timeline {
   let at = 0;
   const placed = clips.map((clip) => { const next = { ...clip, startSec: at }; at += clip.durationSec; return next; });
   return parseTimeline({
-    schemaVersion: 2, projectId: "p", mode: "memory", aspect: "9:16", fps: 30, durationSec: at,
+    schemaVersion: 2, projectId: "p", mode: "memory", aspect, fps: 30, durationSec: at,
     chapters: chapterStarts.map((i, n) => ({ title: `Ch ${n}`, startSec: placed[i]!.startSec })),
     videoClips: placed, audioClips: [], captions: [{ text: "Hello", startSec: 0.2, endSec: 1 }],
   });
@@ -31,6 +32,15 @@ describe("mergeIntoCollage", () => {
     expect("kind" in collage && collage.spec.layoutId).toBe(layoutId);
     expect("kind" in collage && collage.spec.slots.map((slot) => slot.shotId).sort()).toEqual(ids.map((id) => `shot-${id}`));
     expect(result.timeline.videoClips).toHaveLength(5 - count + 1);
+  });
+
+  it.each([2, 3, 4])("uses the landscape-safe, count-matched layout for %i photos", (count) => {
+    const base = film([photo("a"), photo("b"), photo("c"), photo("d")], [0], "16:9");
+    const result = applyEdits(base, [merge(...["a", "b", "c", "d"].slice(0, count))]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const collage = result.timeline.videoClips[0]!;
+    expect("kind" in collage && collage.spec.layoutId).toBe(collageLayoutForCount(count, "16:9"));
   });
 
   it("is deterministic with stable ids and a sensible duration", () => {

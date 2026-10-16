@@ -339,23 +339,24 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenCalledWith({ op: "add", shotId: "shot-left", kind: "video", afterClipId: "b", durationSec: 6, sourceInSec: 2, sourceOutSec: 10 });
   });
 
-  it("keeps long chapter names to one line inside their chapter widths", async () => {
+  it("keeps the current chapter label visible in a text-height row", async () => {
     const chapterTimeline: Timeline = {
       ...timeline,
       chapters: [
-        { title: "A very long opening chapter title that needs truncating", startSec: 0, durationSec: 3 },
-        { title: "A second chapter title that also must stay on one line", startSec: 3, durationSec: 6 },
+        { title: "Day 1 · Sentosa", startSec: 0, durationSec: 3 },
+        { title: "Day 2 · Gardens by the Bay", startSec: 3, durationSec: 6 },
       ],
     };
-    await render(<TimelineStrip timeline={chapterTimeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} />);
-    const labels = [...host.querySelectorAll('[aria-label^="Chapter "] [data-number-of-lines="1"]')];
-    expect(labels).toHaveLength(2);
-    expect(labels.every((label) => Number.parseFloat((label.parentElement as HTMLElement).style.width) > 0)).toBe(true);
-    for (const label of labels) {
-      const chapterWidth = Number.parseFloat((label.parentElement as HTMLElement).style.width);
-      expect(Number.parseFloat((label as HTMLElement).style.width)).toBeLessThan(chapterWidth);
-      expect((label.parentElement as HTMLElement).style.overflow).toBe("hidden");
-    }
+    await render(<TimelineStrip timeline={chapterTimeline} sources={{}} selectedClipId={null} playheadSec={4.5} onSelect={() => {}} onScrub={() => {}} />);
+    const row = host.querySelector('[aria-label="Chapter label row"]') as HTMLElement;
+    expect(row.style.height).toBe("18px");
+    expect(row.style.top).toBe("27px");
+    expect(host.querySelector('[aria-label="Current chapter Day 2 · Gardens by the Bay"]')?.textContent).toBe("Day 2 · Gardens by the Bay");
+  });
+
+  it("collapses the chapter label row when the timeline has no chapters", async () => {
+    await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={() => {}} />);
+    expect((host.querySelector('[data-chapter-label-spacer="true"]') as HTMLElement).style.height).toBe("0px");
   });
 
   it("renders video poster frames repeatedly across a timeline slot without a video element", async () => {
@@ -522,7 +523,7 @@ describe("editor tool operations", () => {
     await render(<TimelineStrip timeline={withRows} sources={{ "shot-a": "a.jpg" }} selectedClipId="a" playheadSec={0} soundtrackName="Sandcastle Days" onSelect={() => {}} onScrub={() => {}} onSoundtrack={() => {}} />);
     expect(host.querySelector('[aria-label="Timeline ruler tick 2 seconds"]')?.getAttribute("style")).toContain("left: 130px");
     expect(host.querySelector('[aria-label="Timeline ruler label 0:02"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Chapter Zoo day"]')?.getAttribute("style")).toContain("left: 50px");
+    expect(host.querySelector('[aria-label="Current chapter Zoo day"]')).not.toBeNull();
     expect(host.querySelector('[aria-label="Select clip a"]')?.parentElement?.getAttribute("style")).toContain("left: 50px");
     const musicTrack = host.querySelector('[aria-label="Music track Sandcastle Days"]')!;
     const photoClip = host.querySelector('[aria-label="Select clip a"]')!;
@@ -654,6 +655,20 @@ describe("editor tool operations", () => {
     expect(host.querySelector('[aria-label="Layout Torn paper mosaic"]')).not.toBeNull();
     await click("Layout Torn paper mosaic");
     expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: collage.clipId, spec: { ...collage.spec, layoutId: "torn-paper", motionId: "print-drop" } });
+  });
+
+  it("defaults landscape layouts to the count-matched full-frame grid", () => {
+    expect(collageOptionsForPhotoCount(2, "16:9").simple.map(({ id }) => id)).toEqual(["simple-offset"]);
+    expect(nearestCollageOption("simple-stacked", 2, "16:9")).toBe("simple-offset");
+    expect(collageOptionsForPhotoCount(2, "9:16").simple.map(({ id }) => id)).toContain("simple-offset");
+  });
+
+  it("repairs an existing landscape collage to the safe default when opening Layout", async () => {
+    const two = { ...collage, spec: { ...collage.spec, layoutId: "simple-stacked" as const, motionId: "print-drop" as const, slots: collage.spec.slots.slice(0, 2) } };
+    await render(<CollagePanel clip={two} aspect="16:9" section="Layout" onApply={apply} onClose={() => {}} />);
+    expect(apply).toHaveBeenCalledWith({ op: "setCollageSpec", clipId: two.clipId, spec: { ...two.spec, layoutId: "simple-offset", slots: expect.any(Array) } });
+    expect(host.querySelector('[aria-label="Layout Two offset"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('[aria-label="Layout Two stacked"]')).toBeNull();
   });
 
   it("hides the designs section when no library layout supports the selected count", async () => {
