@@ -1,15 +1,17 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const frameState = vi.hoisted(() => ({ current: 14 }));
 import { fixtureTimeline } from "./fixtureTimeline";
 
 vi.mock("remotion", () => ({
-  AbsoluteFill: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
+  AbsoluteFill: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => <div {...props}>{children}</div>,
   Sequence: ({ children, from, durationInFrames }: React.PropsWithChildren<{ from: number; durationInFrames: number }>) => <section data-from={from} data-duration={durationInFrames}>{children}</section>,
   Img: ({ src, style, ...props }: { src: string; style?: React.CSSProperties; [key: string]: unknown }) => <img src={src} style={style} {...props} />,
   OffthreadVideo: ({ src, style }: { src: string; style?: React.CSSProperties }) => <video src={src} style={style} />,
   Audio: () => null,
-  useCurrentFrame: () => 14,
+  useCurrentFrame: () => frameState.current,
   useVideoConfig: () => ({ fps: 30, width: 360, height: 640, durationInFrames: 180 }),
   interpolate: (value: number, input: number[], output: number[]) => {
     const fraction = Math.min(1, Math.max(0, (value - input[0]) / (input.at(-1)! - input[0] || 1)));
@@ -21,6 +23,8 @@ vi.mock("remotion", () => ({
 
 import { MosaeTimeline } from "./Timeline";
 import { clipFitForSource } from "./timelineMetadata";
+
+beforeEach(() => { frameState.current = 14; });
 
 describe("clipFitForSource", () => {
   it("uses blurred fill for orientation mismatches and cover otherwise", () => {
@@ -35,6 +39,24 @@ describe("clipFitForSource", () => {
 });
 
 describe("MosaeTimeline", () => {
+  it.each(["9:16", "16:9"] as const)("ignores an incoming transition on the first clip at frame zero in %s", (aspect) => {
+    frameState.current = 0;
+    const timeline = {
+      ...fixtureTimeline,
+      aspect,
+      videoClips: [
+        { id: "opening", source: { kind: "photo" as const, shotId: "first" }, startSec: 0, durationSec: 3, transitionIn: { kind: "crossfade" as const, durationSec: 0.4 } },
+        { id: "next", source: { kind: "photo" as const, shotId: "second" }, startSec: 2.6, durationSec: 3, transitionIn: { kind: "crossfade" as const, durationSec: 0.4 } },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<MosaeTimeline timeline={timeline} sources={{ first: "/first.jpg", second: "/second.jpg" }} />);
+    const openingAndNextOpacity = [...html.matchAll(/<div style="opacity:([^\"]+)">/g)].map((match) => match[1]);
+
+    expect(openingAndNextOpacity).toEqual(["1", "0"]);
+    frameState.current = 14;
+  });
+
   it("renders video selection layers only when an editor selection handler is supplied", () => {
     const passive = renderToStaticMarkup(<MosaeTimeline timeline={fixtureTimeline} sources={{ film: "/film.mp4" }} />);
     expect(passive).not.toContain('aria-label="Select video clip"');

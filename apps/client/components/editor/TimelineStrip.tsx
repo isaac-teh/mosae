@@ -109,7 +109,7 @@ type TrimDragState = { clipId: string; edge: "start" | "end"; startX: number; ed
 type PendingSlotPress = { clipId: string; fromIndex: number; startX: number; startY: number; pointerId: number; target: any } | null;
 type ActiveSlotReorder = { clipId: string; fromIndex: number; toIndex: number; pointerId: number } | null;
 
-export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, selectedAudioClipId = null, playheadSec, soundtrackName = null, isPlaying = false, highlightedClipIds = [], focusClipRequest = null, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {}, onSelectAudio = () => {}, onAddClip = () => {} }: {
+export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClipId, selectedAudioClipId = null, playheadSec, soundtrackName = null, isPlaying = false, highlightedClipIds = [], focusClipRequest = null, landscapeLayout = false, onSelect, onScrub, onScrubStart = () => {}, onTrim = () => {}, onReorder = () => {}, onDeselect = () => {}, onSoundtrack = () => {}, onSelectAudio = () => {}, onAddClip = () => {} }: {
   timeline: Timeline;
   sources: Record<string, string>;
   thumbnails?: Record<string, string>;
@@ -120,6 +120,7 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
   isPlaying?: boolean;
   highlightedClipIds?: string[];
   focusClipRequest?: { clipId: string; nonce: number } | null;
+  landscapeLayout?: boolean;
   onSelect: (clipId: string, startSec: number) => void;
   onScrub: (seconds: number) => void;
   onScrubStart?: () => void;
@@ -503,7 +504,7 @@ export function TimelineStrip({ timeline, sources, thumbnails = {}, selectedClip
         slideToTime(seekSec);
       }} onTrimPointerDown={beginTrim} onTrimPointerMove={moveTrim} onTrimPointerUp={finishTrim} onDeselect={onDeselect} onSlotPointerDown={beginSlotPress} onSlotPointerMove={moveSlotPress} onSlotPointerUp={finishSlotPress} reorderPreview={reorderPreview} onSoundtrack={onSoundtrack} onSelectAudio={onSelectAudio} onAddClip={onAddClip} />
       </ScrollView>
-      <Pressable role="button" accessibilityLabel="Add clip" onPress={onAddClip} style={{ position: "absolute", zIndex: 21, right: 8, top: 105, width: 44, height: 44, borderRadius: 22, backgroundColor: "#F7F6F2", alignItems: "center", justifyContent: "center", boxShadow: "0px 4px 12px rgba(0,0,0,0.45)", elevation: 8 }}><Text className="font-sans text-[25px] leading-[28px] text-[#172027]">+</Text></Pressable>
+      <Pressable role="button" accessibilityLabel="Add clip" onPress={onAddClip} style={{ position: "absolute", zIndex: 21, right: 8, top: landscapeLayout ? 89 : 105, width: 44, height: 44, borderRadius: 22, backgroundColor: "#F7F6F2", alignItems: "center", justifyContent: "center", boxShadow: "0px 4px 12px rgba(0,0,0,0.45)", elevation: 8 }}><Text className="font-sans text-[25px] leading-[28px] text-[#172027]">+</Text></Pressable>
       <View pointerEvents="none" accessibilityLabel="Timeline playhead" style={{ position: "absolute", zIndex: 10, top: 0, bottom: 0, left: viewportWidth / 2 - 1, width: 2, backgroundColor: "#F1734F" }} />
     </View>
   </View>;

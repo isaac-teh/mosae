@@ -601,6 +601,14 @@ describe("editor tool operations", () => {
     expect(onAddClip).toHaveBeenCalledOnce();
   });
 
+  it("keeps the add button inside the landscape clip row without shifting portrait placement", async () => {
+    const props = { timeline, sources: {}, selectedClipId: null, playheadSec: 0, onSelect: () => {}, onScrub: () => {} };
+    await render(<TimelineStrip {...props} {...({ landscapeLayout: true } as any)} />);
+    expect((host.querySelector('[aria-label="Add clip"]') as HTMLButtonElement).style.top).toBe("89px");
+    await render(<TimelineStrip {...props} />);
+    expect((host.querySelector('[aria-label="Add clip"]') as HTMLButtonElement).style.top).toBe("105px");
+  });
+
   it("seeks by the time under the centre playhead when the user scrolls", async () => {
     const onScrub = vi.fn();
     await render(<TimelineStrip timeline={timeline} sources={{}} selectedClipId={null} playheadSec={0} onSelect={() => {}} onScrub={onScrub} />);
