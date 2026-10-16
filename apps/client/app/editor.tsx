@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Share, Text, View, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
 import { COLLAGE_LAYOUTS, applyEdits, type EditOp, type Timeline } from "@mosae/contracts";
 import { askEditSummary, changedClipIds, createReplacementGuard, duplicateClip, fitEditedCollageSlots, trimRange, uploadReplacement, videoTrimBounds, type ContextToolbarAction, type UploadProgress } from "@mosae/core";
@@ -58,6 +59,7 @@ export default function EditorScreen() {
   const story = useStoryFlow();
   const { repository } = story;
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const editor = useEditor(params.projectId || "fixture", params.generationId || "demo-film", repository);
   const selectEditorClip = editor.select;
@@ -97,6 +99,7 @@ export default function EditorScreen() {
     setSeekRequest({ seconds: target });
   }, [editor.timeline?.durationSec]);
   const previewAspect = editor.timeline?.aspect === "16:9" ? 16 / 9 : 9 / 16;
+  const landscapeLayout = editor.timeline?.aspect === "16:9";
   const previewHeight = Math.min(Math.max(280, Math.min(720, height - 440)), (width - 40) / previewAspect);
   const previewWidth = previewHeight * previewAspect;
   useEffect(() => {
@@ -394,6 +397,28 @@ export default function EditorScreen() {
     catch { setDownloadError("Could not prepare the film download. Try again."); }
   };
 
+  const preview = editor.timeline ? <View className="self-center overflow-hidden rounded-[14px] bg-tide-tile" style={{ width: previewWidth, height: previewHeight }}>
+    <EditorPreview timeline={editor.timeline} sources={editor.sources} onTimeChange={onTimeChange} seekRequest={seekRequest} playheadSec={playhead} pauseRequest={pauseRequest} togglePlayRequest={togglePlayRequest} onPlayingChange={setPlaying} selectedClipId={editor.selectedClipId} onSelectClip={chooseClip} onCommitPhotoCrop={onCommitPhotoCrop} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} />
+  </View> : null;
+  const playbackControls = <View className="mt-4 flex-row items-center justify-between">
+    <View className="flex-row items-center gap-3"><Pressable role="button" accessibilityLabel={playing ? "Pause film" : "Play film"} onPress={() => setTogglePlayRequest((request) => request + 1)} className="min-h-11 min-w-11 items-center justify-center rounded-full bg-black/35"><Text className="font-sans text-[18px] text-on-screen">{playing ? "Ⅱ" : "▶"}</Text></Pressable><Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline?.durationSec ?? 0)}</Text></View>
+    <View className="flex-row items-start gap-0">
+      <Pressable role="button" accessibilityLabel="Ask AI" onPress={() => openTool("Ask")} className="h-[40px] w-[40px] items-center justify-start"><View className="h-5 w-5 items-center justify-center"><Svg width={18} height={18} viewBox="0 0 24 24" accessibilityElementsHidden><Path d="m12 2 1.8 7.2L21 11l-7.2 1.8L12 20l-1.8-7.2L3 11l7.2-1.8L12 2Zm7 13 .8 3.2L23 19l-3.2.8L19 23l-.8-3.2L15 19l3.2-.8L19 15Z" fill="white" /></Svg></View><Text className="mt-0.5 font-sans text-[9px] leading-[11px] text-on-screen-muted">Ask AI</Text></Pressable>
+      <Pressable role="button" accessibilityLabel="Ratio" onPress={() => openTool("Format")} className="h-[40px] w-[40px] items-center justify-start"><View className="h-5 w-5 items-center justify-center"><RatioIcon size={18} /></View><Text className="mt-0.5 font-sans text-[9px] leading-[11px] text-on-screen-muted">Ratio</Text></Pressable>
+      <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="h-[40px] w-[40px] items-center justify-start"><View className="h-5 w-5 items-center justify-center"><UndoIcon size={18} disabled={!editor.canUndo} /></View><Text className={`mt-0.5 font-sans text-[9px] leading-[11px] text-on-screen-muted ${editor.canUndo ? "" : "opacity-50"}`}>Undo</Text></Pressable>
+      <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="h-[40px] w-[40px] items-center justify-start"><View className="h-5 w-5 items-center justify-center"><RedoIcon size={18} disabled={!editor.canRedo} /></View><Text className={`mt-0.5 font-sans text-[9px] leading-[11px] text-on-screen-muted ${editor.canRedo ? "" : "opacity-50"}`}>Redo</Text></Pressable>
+    </View>
+  </View>;
+  const timelineStrip = editor.timeline ? <TimelineStrip timeline={editor.timeline} sources={editor.sources} thumbnails={editor.thumbnails} selectedClipId={editor.selectedClipId} selectedAudioClipId={selectedAudioClipId} highlightedClipIds={askHighlightIds} focusClipRequest={askClipFocus} playheadSec={playhead} isPlaying={playing} soundtrackName={soundtrackName ? `${soundtrackName} · paced to the film` : null}
+    onSelect={onTimelineSelect} onScrub={seekTo} onScrubStart={() => setPauseRequest((request) => request + 1)}
+    onSelectAudio={onSelectAudio} onAddClip={onAddTimelineClip}
+    onTrim={(id, edge, delta) => {
+      const clip = editor.timeline?.videoClips.find((candidate) => idOf(candidate) === id);
+      const original = editor.firstCut?.videoClips.find((candidate) => idOf(candidate) === id);
+      if (clip && original && editor.firstCut) editor.apply(trimEdit(clip, original, edge, delta, editor.firstCut.durationSec));
+    }} onReorder={(id, toIndex) => editor.apply({ op: "move", clipId: id, toIndex })} onDeselect={() => { editor.select(null); setSelectedAudioClipId(null); setSelectedCollageCellId(null); }} onSoundtrack={openSoundtrackPicker} /> : null;
+  const toolBar = <ToolBar selection={toolbarSelection} onTool={openTool} disabledActions={disabledToolbarActions} statusMessage={askToast} statusUndoDisabled={editor.getSnapshotKey() !== askToastSnapshotKey} onStatusUndo={() => { if (editor.getSnapshotKey() !== askToastSnapshotKey) return; editor.undo(); setAskToast(null); setAskHighlightIds([]); }} emptyCollageCell={Boolean(selectedClip && "kind" in selectedClip && selectedCellSlotId && selectedClip.spec.slots.find((slot) => slot.slotId === selectedCellSlotId)?.empty)} hasEmptyCollageSlot={Boolean(selectedClip && "kind" in selectedClip && selectedClip.spec.slots.some((slot) => slot.empty))} />;
+
   return <View className="flex-1 bg-screen">
     <View className="h-[60px] flex-row items-center justify-between px-5">
       <Pressable role="button" accessibilityLabel="Back" onPress={() => { if (router.canGoBack()) router.back(); else router.replace("/"); }} className="min-h-11 min-w-11 justify-center"><Text className="font-sans text-[26px] text-on-screen">×</Text></Pressable>
@@ -405,28 +430,14 @@ export default function EditorScreen() {
     {editor.save.state === "ready" && editor.downloadUrl ? <View className="px-5 pb-2"><View className="flex-row gap-2"><Pressable role="button" accessibilityLabel="Download rendered film" disabled={preparingDownload || prefetchingDownload} onPress={() => void downloadRenderedFilm()} className="min-h-10 justify-center rounded-full bg-[#294655] px-4"><Text className="font-sans-medium text-caption text-on-screen">{preparingDownload || prefetchingDownload ? "Preparing download…" : "Download"}</Text></Pressable><Pressable role="button" accessibilityLabel="Share rendered film" onPress={() => void Share.share({ message: editor.downloadUrl! })} className="min-h-10 justify-center rounded-full border border-on-screen-muted px-4"><Text className="font-sans-medium text-caption text-on-screen">Share</Text></Pressable></View>{preparingDownload ? <Text accessibilityRole="progressbar" className="pt-1 font-sans text-caption text-on-screen-muted">Preparing your MP4…</Text> : null}{downloadError ? <Text accessibilityRole="alert" className="pt-1 font-sans text-caption text-critical">{downloadError}</Text> : null}</View> : null}
     {editor.error ? <View className="flex-1 items-center justify-center px-6"><Text className="text-center font-sans text-body text-on-screen">{editor.error}</Text></View>
       : !editor.timeline ? <View className="flex-1 items-center justify-center"><Text className="font-sans text-body text-on-screen-muted">Opening your film…</Text></View>
-      : <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4" showsVerticalScrollIndicator={false}>
-        <View className="self-center overflow-hidden rounded-[14px] bg-tide-tile" style={{ width: previewWidth, height: previewHeight }}>
-          <EditorPreview timeline={editor.timeline} sources={editor.sources} onTimeChange={onTimeChange} seekRequest={seekRequest} playheadSec={playhead} pauseRequest={pauseRequest} togglePlayRequest={togglePlayRequest} onPlayingChange={setPlaying} selectedClipId={editor.selectedClipId} onSelectClip={chooseClip} onCommitPhotoCrop={onCommitPhotoCrop} selectedCollageCellId={selectedCollageCellId} onSelectCollageCell={onSelectCollageCell} onCommitCollageCrop={onCommitCollageCrop} />
+      : landscapeLayout ? <View className="flex-1" data-testid="landscape-editor-layout">
+        <View className="flex-1 items-center justify-center px-5" data-testid="landscape-preview-region">{preview}</View>
+        <View className="px-5 pb-4" style={{ paddingBottom: Math.max(16, insets.bottom) }} data-testid="landscape-controls-panel">
+          {playbackControls}{timelineStrip}{toolBar}
         </View>
-        <View className="mt-4 flex-row items-center justify-between">
-          <View className="flex-row items-center gap-3"><Pressable role="button" accessibilityLabel={playing ? "Pause film" : "Play film"} onPress={() => setTogglePlayRequest((request) => request + 1)} className="min-h-11 min-w-11 items-center justify-center rounded-full bg-black/35"><Text className="font-sans text-[18px] text-on-screen">{playing ? "Ⅱ" : "▶"}</Text></Pressable><Text className="font-sans text-caption text-on-screen">{time(playhead)} / {time(editor.timeline.durationSec)}</Text></View>
-          <View className="flex-row items-start gap-0">
-            <Pressable role="button" accessibilityLabel="Ask AI" onPress={() => openTool("Ask")} className="h-[40px] w-[40px] items-center justify-start"><View className="h-5 w-5 items-center justify-center"><Svg width={18} height={18} viewBox="0 0 24 24" accessibilityElementsHidden><Path d="m12 2 1.8 7.2L21 11l-7.2 1.8L12 20l-1.8-7.2L3 11l7.2-1.8L12 2Zm7 13 .8 3.2L23 19l-3.2.8L19 23l-.8-3.2L15 19l3.2-.8L19 15Z" fill="white" /></Svg></View><Text className="mt-0.5 font-sans text-[9px] leading-[11px] text-on-screen-muted">Ask AI</Text></Pressable>
-            <Pressable role="button" accessibilityLabel="Ratio" onPress={() => openTool("Format")} className="h-[40px] w-[40px] items-center justify-start"><View className="h-5 w-5 items-center justify-center"><RatioIcon size={18} /></View><Text className="mt-0.5 font-sans text-[9px] leading-[11px] text-on-screen-muted">Ratio</Text></Pressable>
-            <Pressable role="button" accessibilityLabel="Undo" disabled={!editor.canUndo} onPress={editor.undo} className="h-[40px] w-[40px] items-center justify-start"><View className="h-5 w-5 items-center justify-center"><UndoIcon size={18} disabled={!editor.canUndo} /></View><Text className={`mt-0.5 font-sans text-[9px] leading-[11px] text-on-screen-muted ${editor.canUndo ? "" : "opacity-50"}`}>Undo</Text></Pressable>
-            <Pressable role="button" accessibilityLabel="Redo" disabled={!editor.canRedo} onPress={editor.redo} className="h-[40px] w-[40px] items-center justify-start"><View className="h-5 w-5 items-center justify-center"><RedoIcon size={18} disabled={!editor.canRedo} /></View><Text className={`mt-0.5 font-sans text-[9px] leading-[11px] text-on-screen-muted ${editor.canRedo ? "" : "opacity-50"}`}>Redo</Text></Pressable>
-          </View>
-        </View>
-        <TimelineStrip timeline={editor.timeline} sources={editor.sources} thumbnails={editor.thumbnails} selectedClipId={editor.selectedClipId} selectedAudioClipId={selectedAudioClipId} highlightedClipIds={askHighlightIds} focusClipRequest={askClipFocus} playheadSec={playhead} isPlaying={playing} soundtrackName={soundtrackName ? `${soundtrackName} · paced to the film` : null}
-          onSelect={onTimelineSelect} onScrub={seekTo} onScrubStart={() => setPauseRequest((request) => request + 1)}
-          onSelectAudio={onSelectAudio} onAddClip={onAddTimelineClip}
-          onTrim={(id, edge, delta) => {
-            const clip = editor.timeline?.videoClips.find((candidate) => idOf(candidate) === id);
-            const original = editor.firstCut?.videoClips.find((candidate) => idOf(candidate) === id);
-            if (clip && original && editor.firstCut) editor.apply(trimEdit(clip, original, edge, delta, editor.firstCut.durationSec));
-          }} onReorder={(id, toIndex) => editor.apply({ op: "move", clipId: id, toIndex })} onDeselect={() => { editor.select(null); setSelectedAudioClipId(null); setSelectedCollageCellId(null); }} onSoundtrack={openSoundtrackPicker} />
-        <ToolBar selection={toolbarSelection} onTool={openTool} disabledActions={disabledToolbarActions} statusMessage={askToast} statusUndoDisabled={editor.getSnapshotKey() !== askToastSnapshotKey} onStatusUndo={() => { if (editor.getSnapshotKey() !== askToastSnapshotKey) return; editor.undo(); setAskToast(null); setAskHighlightIds([]); }} emptyCollageCell={Boolean(selectedClip && "kind" in selectedClip && selectedCellSlotId && selectedClip.spec.slots.find((slot) => slot.slotId === selectedCellSlotId)?.empty)} hasEmptyCollageSlot={Boolean(selectedClip && "kind" in selectedClip && selectedClip.spec.slots.some((slot) => slot.empty))} />
+      </View>
+      : <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4" showsVerticalScrollIndicator={false} data-testid="editor-scroll-content">
+        {preview}{playbackControls}{timelineStrip}{toolBar}
       </ScrollView>}
     {tool === "Remove" && editor.selectedClipId ? <RemoveConfirm clipId={editor.selectedClipId} onApply={onApply} onUndo={() => { editor.undo(); setTool(null); }} /> : null}
     {tool === "Add" ? <AddSheet visible moments={collageMoments} inFilmShotIds={inFilmShotIds} selectedClipId={editor.selectedClipId} playheadSec={playhead} timeline={editor.timeline ?? undefined} uploading={replacementUploading} uploadProgress={replacementUploadProgress} uploadError={replacementUploadError} onUploadFiles={story.flow.repository === "api" && Boolean(params.projectId) ? uploadDeviceAdditions : undefined} onApply={onApply} onClose={() => setTool(null)} /> : null}
