@@ -3,6 +3,7 @@ import { applyEdits, type Timeline } from "@mosae/contracts";
 import { interpretEdit, type InterpretEditModelResult } from "./interpretEdit.js";
 import { EditOpSchema, type EditOp } from "@mosae/contracts";
 import { DemoLimitReached } from "../gemini/errors.js";
+import { sanitizeEditReply } from "./editReply.js";
 
 const timeline: Timeline = {
   schemaVersion: 1, projectId: "p1", mode: "memory", aspect: "9:16", fps: 30, durationSec: 6,
@@ -19,6 +20,56 @@ function collageFixture(): Timeline {
 }
 
 describe("interpretEdit", () => {
+  it("removes internal identifiers from clarification and unsupported replies", () => {
+    expect(sanitizeEditReply("I couldn't find clip “2AVclPhigexCMMUaAP0v_0000” to add after. Which clip did you mean?"))
+      .toBe("I couldn't find clip “that item” to add after. Which clip did you mean?");
+    expect(sanitizeEditReply("Unknown clip 550e8400-e29b-41d4-a716-446655440000."))
+      .toBe("Unknown clip that item.");
+  });
+  it("sanitizes identifiers returned in model clarification text", async () => {
+    const result = await interpretEdit({ text: "change something", timeline }, { generate: async () => ({
+      kind: "clarify", reply: "I couldn't find clip 2AVclPhigexCMMUaAP0v_0000 to add after.", ops: [],
+    }) });
+    expect(result.reply).not.toContain("2AVclPhigexCMMUaAP0v_0000");
+    expect(result.reply).toContain("that item");
+  });
+  it.each([
+    { text: "Use more photo in the media library", count: 6, reply: /^Added 6 more photos from your library\.$/ },
+    { text: "add more photos", count: 6, reply: /^Added 6 more photos from your library\.$/ },
+    { text: "use more of my media", count: 6, reply: /^Added 6 more photos from your library\.$/ },
+    { text: "use all my photos", count: 8, reply: /^Added all 8 unused photos and grouped 8 into 4 collages\.$/ },
+    { text: "use all my photos and videos", count: 8, reply: /^Added all 8 unused photos and grouped 8 into 4 collages\.$/ },
+    { text: "use everything", count: 8, reply: /^Added all 8 unused photos and grouped 8 into 4 collages\.$/ },
+  ])("deterministically handles library request: $text", async ({ text, count, reply }) => {
+    const candidates = Array.from({ length: 8 }, (_, i) => ({
+      shotId: `unused-${i}`, assetId: `asset-unused-${i}`, kind: "photo" as const,
+      caption: `photo ${i}`, personIds: i % 2 ? ["wife"] : [], sourceStartSec: null, sourceEndSec: null,
+      localTime: `2026-01-0${i + 1}T09:00:00`, quality: 8 - i / 10,
+    }));
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {},
+      people: [{ personId: "wife", name: "Wife", role: "parent", focused: false }], selected: null,
+      candidates: [...["monkeys", "temple"].map(id => ({ shotId: `shot-${id}`, assetId: `asset-${id}`, kind: "photo" as const, caption: id, personIds: [], sourceStartSec: null, sourceEndSec: null })), ...candidates], soundtracks: [], conversation: [] };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text, timeline, groundedContext }, { generate });
+    expect(result.kind).toBe("edit");
+    expect(result.ops.filter(op => op.op === "add")).toHaveLength(count);
+    expect(result.reply).toMatch(reply);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("adds photos of a confirmed person and combines that with requested timing", async () => {
+    const candidates = Array.from({ length: 4 }, (_, i) => ({ shotId: `wife-${i}`, assetId: `asset-wife-${i}`, kind: "photo" as const,
+      caption: "Wife at park", personIds: ["wife"], sourceStartSec: null, sourceEndSec: null, quality: 9, localTime: `2026-01-0${i + 1}T09:00:00` }));
+    const groundedContext = { scope: { kind: "film" as const }, storyIntent: null, constraints: {},
+      people: [{ personId: "wife", name: "Wife", role: "parent", focused: false }], selected: null,
+      candidates: [...["monkeys", "temple"].map(id => ({ shotId: `shot-${id}`, assetId: `asset-${id}`, kind: "photo" as const, caption: id, personIds: [], sourceStartSec: null, sourceEndSec: null })), ...candidates], soundtracks: [], conversation: [] };
+    const generate = vi.fn();
+    const result = await interpretEdit({ text: "add photos of Wife and make it 30 seconds", timeline, groundedContext }, { generate });
+    expect(result.kind).toBe("edit");
+    expect(result.ops.some(op => op.op === "add" && op.shotId === "wife-0")).toBe(true);
+    expect(result.reply).toContain("30 seconds");
+    expect(generate).not.toHaveBeenCalled();
+  });
   it.each([
     {
       request: "Make it 10s with most collage", fixture: timeline,
