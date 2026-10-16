@@ -17,7 +17,7 @@ const box = ({ x, y, w, h }: Rect): React.CSSProperties => ({ position: "absolut
 // collages get a complete grid without duplicating or dropping their photos.
 function geometry(spec: CollageSpec, wide: boolean): { cells: Rect[]; title?: Rect; titleOrder?: number } {
   const count = spec.slots.length;
-  if (COLLAGE_GRID_VARIANTS.some(({ id }) => id === spec.layoutId)) return { cells: collageGridRects(spec.layoutId as typeof COLLAGE_GRID_VARIANTS[number]["id"], count) };
+  if (COLLAGE_GRID_VARIANTS.some(({ id }) => id === spec.layoutId)) return { cells: collageGridRects(spec.layoutId as typeof COLLAGE_GRID_VARIANTS[number]["id"], count, wide ? "16:9" : "9:16") };
   const hasTitle = !wide && spec.layoutId === "travel-mosaic" && Boolean(spec.caption?.headline || spec.caption?.place || spec.caption?.subline || spec.caption?.date);
   if (hasTitle && count === 8) return {
     cells: [rect(0,0,24,32),rect(25.5,0,24,32),rect(51,0,49,32),rect(0,33.5,49.5,32),rect(82,33.5,18,32),rect(0,67,24,33),rect(25.5,67,24,33),rect(51,67,49,33)],

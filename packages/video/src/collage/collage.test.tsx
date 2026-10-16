@@ -26,12 +26,26 @@ import { PhotoInteraction } from "../PhotoInteraction";
 import { CellInteraction } from "./CellInteraction";
 import { focusRelayInputRange } from "./CollageBase";
 import { ALLOWED_COMBOS, ALLOWED_COMBO_KEYS } from "./allowedCombos";
-import { CollageSpecSchema, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, COLLAGE_EFFECTS, COLLAGE_GRID_VARIANTS, collageGridRects, slotCountForLayout } from "./schema";
+import { CollageSpecSchema, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, COLLAGE_EFFECTS, COLLAGE_GRID_VARIANTS, collageGridRects, collageLayoutForCount, slotCountForLayout } from "./schema";
 import { createCollageSpec } from "./fixtures";
 
 beforeEach(() => { vi.clearAllMocks(); mockVideoConfig.width = 360; mockVideoConfig.height = 640; });
 
 describe("CollageSpec", () => {
+  it.each(["9:16", "16:9"] as const)("renders count-matched full-frame cells for counts 2–6 in %s", (aspect) => {
+    const wide = aspect === "16:9";
+    mockVideoConfig.width = wide ? 1280 : 720;
+    mockVideoConfig.height = wide ? 720 : 1280;
+    for (let count = 2; count <= 6; count++) {
+      const layoutId = collageLayoutForCount(count, aspect);
+      const base = createCollageSpec(layoutId);
+      const markup = renderToStaticMarkup(<Collage spec={{ ...base, slots: base.slots.slice(0, count) }} />);
+      const cells = [...markup.matchAll(/data-collage-layout-cell="true" style="[^"]*left:([\d.]+)%;top:([\d.]+)%;width:([\d.]+)%;height:([\d.]+)%/g)];
+      expect(cells, `${aspect}/${count}/${layoutId}`).toHaveLength(count);
+      const area = cells.reduce((sum, match) => sum + Number(match[3]) * Number(match[4]), 0);
+      expect(area, `${aspect}/${count}/${layoutId}`).toBeGreaterThanOrEqual(9000);
+    }
+  });
   it("uses six distinct normalized non-overlapping grid geometries at 2, 3, and 4 photos", () => {
     for (const count of [2, 3, 4]) {
       const signatures = COLLAGE_GRID_VARIANTS.filter(({ id }) => !id.startsWith("simple-")).map(({ id }) => {

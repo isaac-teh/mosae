@@ -657,6 +657,20 @@ describe("editor tool operations", () => {
     expect(apply).toHaveBeenLastCalledWith({ op: "setCollageSpec", clipId: collage.clipId, spec: { ...collage.spec, layoutId: "torn-paper", motionId: "print-drop" } });
   });
 
+  it("defaults landscape layouts to the count-matched full-frame grid", () => {
+    expect(collageOptionsForPhotoCount(2, "16:9").simple.map(({ id }) => id)).toEqual(["simple-offset"]);
+    expect(nearestCollageOption("simple-stacked", 2, "16:9")).toBe("simple-offset");
+    expect(collageOptionsForPhotoCount(2, "9:16").simple.map(({ id }) => id)).toContain("simple-offset");
+  });
+
+  it("repairs an existing landscape collage to the safe default when opening Layout", async () => {
+    const two = { ...collage, spec: { ...collage.spec, layoutId: "simple-stacked" as const, motionId: "print-drop" as const, slots: collage.spec.slots.slice(0, 2) } };
+    await render(<CollagePanel clip={two} aspect="16:9" section="Layout" onApply={apply} onClose={() => {}} />);
+    expect(apply).toHaveBeenCalledWith({ op: "setCollageSpec", clipId: two.clipId, spec: { ...two.spec, layoutId: "simple-offset", slots: expect.any(Array) } });
+    expect(host.querySelector('[aria-label="Layout Two offset"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('[aria-label="Layout Two stacked"]')).toBeNull();
+  });
+
   it("hides the designs section when no library layout supports the selected count", async () => {
     const two = { ...collage, spec: { ...collage.spec, layoutId: "two-photo-diptych" as const, motionId: "print-drop" as const, slots: collage.spec.slots.slice(0, 2) } };
     await render(<CollagePanel clip={two} section="Layout" onApply={apply} onClose={() => {}} />);

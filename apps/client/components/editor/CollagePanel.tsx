@@ -1,18 +1,21 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { reassignCollageSlots, type Moment } from "@mosae/core";
-import { COLLAGE_GRID_VARIANTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, ALLOWED_COMBOS, LEGACY_DESIGN_MAPPINGS, collageGridRects, type CollageGridVariant, type EditOp, type Timeline } from "@mosae/contracts";
+import { COLLAGE_GRID_VARIANTS, COLLAGE_LAYOUTS, COLLAGE_MOTIONS, ALLOWED_COMBOS, LEGACY_DESIGN_MAPPINGS, collageGridRects, collageLayoutForCount, type CollageGridVariant, type EditOp, type Timeline } from "@mosae/contracts";
 
 const SIMPLE_LAYOUTS = COLLAGE_GRID_VARIANTS.filter(({ id }) => id.startsWith("simple-"));
 const DESIGNED_LAYOUT_IDS = ["botanical-scrapbook", "nine-photo-grid", "travel-mosaic", "travel-story", "photo-table", "torn-paper", "polaroid-garland", "postcard-stack", "route-map"] as const;
 const DESIGN_LAYOUTS = COLLAGE_LAYOUTS.filter(({ id }) => DESIGNED_LAYOUT_IDS.includes(id as typeof DESIGNED_LAYOUT_IDS[number]) && ALLOWED_COMBOS.some((combo) => combo.layoutId === id));
 export function collageOptionsForPhotoCount(count: number, aspect?: Timeline["aspect"]) {
+  const safeWideLayout = aspect === "16:9" && count <= 6 ? collageLayoutForCount(count, aspect) : undefined;
   return {
-    simple: SIMPLE_LAYOUTS.filter(({ id }) => COLLAGE_LAYOUTS.find((layout) => layout.id === id)?.preferredSlots === count),
+    simple: SIMPLE_LAYOUTS.filter(({ id }) => COLLAGE_LAYOUTS.find((layout) => layout.id === id)?.preferredSlots === count && (!safeWideLayout || id === safeWideLayout)),
     designs: DESIGN_LAYOUTS.filter(({ minSlots, maxSlots, aspect: supportedAspects }) => minSlots <= count && count <= maxSlots && (!aspect || (supportedAspects as readonly string[]).includes(aspect))),
   };
 }
-export function nearestCollageOption(layoutId: string, count: number): string {
+export function nearestCollageOption(layoutId: string, count: number, aspect: Timeline["aspect"] = "9:16"): string {
+  const safeWideLayout = aspect === "16:9" && count >= 1 && count <= 6 ? collageLayoutForCount(count, aspect) : undefined;
+  if (safeWideLayout && layoutId.startsWith("simple-") && layoutId !== safeWideLayout) return safeWideLayout;
   const legacyDesigns = Object.fromEntries(Object.entries(LEGACY_DESIGN_MAPPINGS ?? {
     "design-polaroid": { layoutId: "polaroid-garland", motionId: "page-turn" },
     "design-magazine": { layoutId: "travel-story", motionId: "focus-relay" },
@@ -43,9 +46,9 @@ export function transitionCollageSheet(state: CollageSheetState, dragDeltaY?: nu
   return dragDeltaY < 0 ? "expanded" : "collapsed";
 }
 
-function thumbnailRects(layoutId: string, count: number): { x: number; y: number; w: number; h: number }[] {
+function thumbnailRects(layoutId: string, count: number, aspect: Timeline["aspect"]): { x: number; y: number; w: number; h: number }[] {
   const gridVariant = COLLAGE_GRID_VARIANTS.find((variant) => variant.id === layoutId)?.id;
-  if (gridVariant) return collageGridRects(gridVariant, count);
+  if (gridVariant) return collageGridRects(gridVariant, count, aspect);
   if (layoutId === "travel-story" && count === 5) return [{ x: 0, y: 0, w: 65, h: 32 }, { x: 67, y: 0, w: 33, h: 66 }, { x: 0, y: 34, w: 32, h: 66 }, { x: 34, y: 34, w: 32, h: 32 }, { x: 34, y: 68, w: 66, h: 32 }];
   if (layoutId === "botanical-scrapbook" && count >= 3) return count <= 4
     ? [{ x: 10, y: 10, w: 39, h: 43 }, { x: 47, y: 10, w: 41, h: 39 }, { x: 10, y: 55, w: 38.5, h: 34 }, { x: 50, y: 47.5, w: 38, h: 40 }].slice(0, count)
@@ -87,6 +90,7 @@ export function CollagePanel({ clip, section, aspect = "9:16", timeline, moments
 }) {
   const [selection, setSelection] = useState({ clipId: clip.clipId, baseLayoutId: clip.spec.layoutId, baseMotionId: clip.spec.motionId, layoutId: clip.spec.layoutId, motionId: clip.spec.motionId });
   const [sheetState, setSheetState] = useState<CollageSheetState>("collapsed");
+  const normalizedWideClip = useRef<string | null>(null);
   const touchY = useRef<number | null>(null);
   const suppressHandleClick = useRef(false);
   const isCurrentSelection = selection.clipId === clip.clipId && selection.baseLayoutId === clip.spec.layoutId && selection.baseMotionId === clip.spec.motionId;
@@ -96,6 +100,22 @@ export function CollagePanel({ clip, section, aspect = "9:16", timeline, moments
   const minCount = 1;
   const maxCount = Math.max(6, count);
   const options = collageOptionsForPhotoCount(count, aspect);
+  useEffect(() => {
+    const normalizationKey = `${clip.clipId}:${aspect}`;
+    if (section !== "Layout" || aspect !== "16:9" || count < 1 || count > 6 || normalizedWideClip.current === normalizationKey) return;
+    normalizedWideClip.current = normalizationKey;
+    const layoutId = collageLayoutForCount(count, aspect);
+    if (clip.spec.layoutId === layoutId) return;
+    const motionId = ALLOWED_COMBOS.find((combo) => combo.layoutId === layoutId)?.motionId;
+    if (!motionId) return;
+    const frameAspect = 16 / 9;
+    const slots = reassignCollageSlots(clip.spec.slots, layoutId, frameAspect).map((slot) => {
+      if (slot.manualCrop) return slot;
+      const { crop: _automaticCrop, ...withoutAutomaticCrop } = slot;
+      return withoutAutomaticCrop;
+    });
+    onApply({ op: "setCollageSpec", clipId: clip.clipId, spec: { ...clip.spec, layoutId, motionId, slots } });
+  }, [aspect, clip, count, onApply, section]);
   const motionOptions = COLLAGE_MOTIONS.filter((motion) => ALLOWED_COMBOS.some((combo) => combo.layoutId === layoutId && combo.motionId === motion.id));
   const slotsForLayout = (layout: string, slots: Collage["spec"]["slots"]) => {
     const frameAspect = Number(aspect.split(":")[0]) / Number(aspect.split(":")[1]);
@@ -114,8 +134,8 @@ export function CollagePanel({ clip, section, aspect = "9:16", timeline, moments
   };
   const setPhotoCount = (nextCount: number) => {
     if (nextCount < minCount || nextCount > maxCount || nextCount === count) return;
-    const keepCurrentLayout = DESIGN_LAYOUTS.some(({ id, minSlots, maxSlots }) => id === layoutId && minSlots <= nextCount && nextCount <= maxSlots);
-    const fallbackLayoutId = nextCount === 1 ? "simple-full" : nextCount === 2 ? "simple-stacked" : nextCount === 3 ? "simple-three-stacked" : nextCount === 4 ? "simple-grid-2x2" : nextCount === 5 ? "simple-five-top" : "simple-grid-2x3";
+    const keepCurrentLayout = (aspect !== "16:9" || layoutId === collageLayoutForCount(count, aspect)) && DESIGN_LAYOUTS.some(({ id, minSlots, maxSlots }) => id === layoutId && minSlots <= nextCount && nextCount <= maxSlots);
+    const fallbackLayoutId = nextCount <= 6 ? collageLayoutForCount(nextCount, aspect) : nextCount === 1 ? "simple-full" : "simple-grid-2x3";
     const layout = COLLAGE_LAYOUTS.find((candidate) => candidate.id === (keepCurrentLayout ? layoutId : fallbackLayoutId))!;
     const allowedMotions = ALLOWED_COMBOS.filter((combo) => combo.layoutId === layout.id).map((combo) => combo.motionId);
     const nextMotionId = keepCurrentLayout && allowedMotions.includes(motionId) ? motionId : allowedMotions.includes(clip.spec.motionId) ? clip.spec.motionId : allowedMotions[0]!;
@@ -199,8 +219,8 @@ export function CollagePanel({ clip, section, aspect = "9:16", timeline, moments
             <Text className="mb-2 font-sans text-[11px] tracking-[1px] text-[#a9b7c2]">{sectionTitle}</Text>
             <View className="flex-row flex-wrap gap-2">{layouts.map((entry) => {
               const layout = COLLAGE_LAYOUTS.find((candidate) => candidate.id === entry.id)!;
-              const simpleRects = thumbnailRects(entry.id, count);
-              const current = nearestCollageOption(layoutId, count);
+              const simpleRects = thumbnailRects(entry.id, count, aspect);
+              const current = nearestCollageOption(layoutId, count, aspect);
               const designed = !entry.id.startsWith("simple-");
               const paper = entry.id === "polaroid-garland" || entry.id === "postcard-stack";
               return <Pressable key={entry.id} accessibilityRole="button" accessibilityLabel={`Layout ${entry.label}`} aria-pressed={current === entry.id} onPress={() => chooseLayout(entry.id as typeof COLLAGE_LAYOUTS[number]["id"])} className={`h-[118px] w-[31%] rounded-[14px] bg-[#050a0e] p-2 ${current === entry.id ? "border-2 border-white" : "border-2 border-transparent"}`}>
